@@ -22,6 +22,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
+import { OnboardingChecklist } from "../components/OnboardingChecklist";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -199,68 +200,11 @@ export default function Dashboard() {
 
         {/* 3. Onboarding checklist */}
         {showOnboarding && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Getting Started
-              </Text>
-              <Divider />
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="span" variant="bodyMd">
-                      {productCount > 0 ? "\u2705" : "\u2B1C"} 1. Fetch your
-                      products from Shopify
-                    </Text>
-                  </InlineStack>
-                  <Button
-                    onClick={() => navigate("/app/products")}
-                    size="slim"
-                  >
-                    Fetch Products
-                  </Button>
-                </InlineStack>
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="span" variant="bodyMd">
-                      {fitmentCount > 0 ? "\u2705" : "\u2B1C"} 2. Map fitment
-                      to your products
-                    </Text>
-                  </InlineStack>
-                  <Button
-                    onClick={() => navigate("/app/fitment")}
-                    size="slim"
-                  >
-                    Map Fitment
-                  </Button>
-                </InlineStack>
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="span" variant="bodyMd">
-                      {hasPushed ? "\u2705" : "\u2B1C"} 3. Push data to
-                      Shopify
-                    </Text>
-                  </InlineStack>
-                  <Button onClick={() => navigate("/app/push")} size="slim">
-                    Push to Shopify
-                  </Button>
-                </InlineStack>
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Text as="span" variant="bodyMd">
-                      {"\u2B1C"} 4. Add widgets to your theme
-                    </Text>
-                  </InlineStack>
-                  <Button onClick={() => navigate("/app/help")} size="slim">
-                    View Guide
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </BlockStack>
-          </Card>
+          <OnboardingChecklist
+            productCount={productCount}
+            fitmentCount={fitmentCount}
+            hasPushed={hasPushed}
+          />
         )}
 
         {/* 4. Quick Actions */}
