@@ -1,254 +1,391 @@
-import { useEffect } from "react";
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import { useFetcher } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import { useState } from "react";
+import type { LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
+import {
+  Page,
+  Layout,
+  Card,
+  BlockStack,
+  InlineStack,
+  InlineGrid,
+  Text,
+  Badge,
+  Button,
+  ProgressBar,
+  Banner,
+  Divider,
+  Box,
+  Icon,
+} from "@shopify/polaris";
+
 import { authenticate } from "../shopify.server";
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import db from "../lib/db.server";
+import { getPlanLimits } from "../lib/billing.server";
+import type { PlanTier } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
 
-  return null;
-};
+  // Get tenant data
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("*")
+    .eq("shop_id", shopId)
+    .single();
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
+  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const limits = getPlanLimits(plan);
+  const productCount: number = tenant?.product_count ?? 0;
+  const fitmentCount: number = tenant?.fitment_count ?? 0;
+  const isFirstTime = !tenant;
 
-  const product = responseJson.data!.productCreate!.product!;
-  const variantId = product.variants.edges[0]!.node!.id!;
+  // Get latest sync job status
+  const { data: recentJob } = await db
+    .from("sync_jobs")
+    .select("id, job_type, status, completed_at")
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
-
-  const variantResponseJson = await variantResponse.json();
+  // Check if push has ever been done
+  const { count: pushCount } = await db
+    .from("sync_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .eq("job_type", "push")
+    .eq("status", "completed");
 
   return {
-    product: responseJson!.data!.productCreate!.product,
-    variant:
-      variantResponseJson!.data!.productVariantsBulkUpdate!.productVariants,
+    shopId,
+    plan,
+    limits,
+    productCount,
+    fitmentCount,
+    isFirstTime,
+    recentJob,
+    hasPushed: (pushCount ?? 0) > 0,
   };
 };
 
-export default function Index() {
-  const fetcher = useFetcher<typeof action>();
+export default function Dashboard() {
+  const {
+    plan,
+    limits,
+    productCount,
+    fitmentCount,
+    isFirstTime,
+    hasPushed,
+  } = useLoaderData<typeof loader>();
 
-  const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+  const navigate = useNavigate();
+  const [showWelcome, setShowWelcome] = useState(true);
 
-  useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
-    }
-  }, [fetcher.data?.product?.id, shopify]);
+  const coverage =
+    productCount > 0
+      ? Math.round((fitmentCount / productCount) * 100)
+      : 0;
 
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  const productUsagePercent =
+    limits.products === Infinity
+      ? 0
+      : Math.min(100, Math.round((productCount / limits.products) * 100));
+
+  const fitmentUsagePercent =
+    limits.fitments === Infinity
+      ? 0
+      : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
+
+  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+
+  const showOnboarding = productCount < 1 || fitmentCount < 1;
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
-
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
+    <Page title="Dashboard">
+      <BlockStack gap="600">
+        {/* 1. First-time welcome banner */}
+        {isFirstTime && showWelcome && (
+          <Banner
+            title="Welcome to AutoSync!"
+            tone="info"
+            onDismiss={() => setShowWelcome(false)}
           >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references.
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
-          )}
-        </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
-
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
+            <p>
+              Get started by fetching your products from Shopify, mapping
+              fitment data, and pushing it back to your store.
+            </p>
+          </Banner>
         )}
-      </s-section>
 
-      <s-section slot="aside" heading="App template specs">
-        <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
-      </s-section>
+        {/* 2. Stats overview cards */}
+        <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm" tone="subdued">
+                Products
+              </Text>
+              <Text as="p" variant="headingXl">
+                {productCount.toLocaleString()}
+              </Text>
+              <Button
+                onClick={() => navigate("/app/products")}
+                variant="plain"
+              >
+                Fetch Products
+              </Button>
+            </BlockStack>
+          </Card>
 
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
-      </s-section>
-    </s-page>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm" tone="subdued">
+                Fitments Mapped
+              </Text>
+              <Text as="p" variant="headingXl">
+                {fitmentCount.toLocaleString()}
+              </Text>
+              <Button
+                onClick={() => navigate("/app/fitment")}
+                variant="plain"
+              >
+                Map Fitment
+              </Button>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm" tone="subdued">
+                Coverage
+              </Text>
+              <Text as="p" variant="headingXl">
+                {coverage}%
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Products with fitment data
+              </Text>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm" tone="subdued">
+                Current Plan
+              </Text>
+              <InlineStack gap="200" align="start" blockAlign="center">
+                <Text as="p" variant="headingXl">
+                  {planLabel}
+                </Text>
+                {plan === "free" && <Badge tone="warning">Free</Badge>}
+                {plan !== "free" && plan !== "enterprise" && (
+                  <Badge tone="success">Active</Badge>
+                )}
+                {plan === "enterprise" && (
+                  <Badge tone="info">Enterprise</Badge>
+                )}
+              </InlineStack>
+              {plan !== "enterprise" && (
+                <Button
+                  onClick={() => navigate("/app/plans")}
+                  variant="plain"
+                >
+                  Upgrade
+                </Button>
+              )}
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
+        {/* 3. Onboarding checklist */}
+        {showOnboarding && (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Getting Started
+              </Text>
+              <Divider />
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" variant="bodyMd">
+                      {productCount > 0 ? "\u2705" : "\u2B1C"} 1. Fetch your
+                      products from Shopify
+                    </Text>
+                  </InlineStack>
+                  <Button
+                    onClick={() => navigate("/app/products")}
+                    size="slim"
+                  >
+                    Fetch Products
+                  </Button>
+                </InlineStack>
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" variant="bodyMd">
+                      {fitmentCount > 0 ? "\u2705" : "\u2B1C"} 2. Map fitment
+                      to your products
+                    </Text>
+                  </InlineStack>
+                  <Button
+                    onClick={() => navigate("/app/fitment")}
+                    size="slim"
+                  >
+                    Map Fitment
+                  </Button>
+                </InlineStack>
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" variant="bodyMd">
+                      {hasPushed ? "\u2705" : "\u2B1C"} 3. Push data to
+                      Shopify
+                    </Text>
+                  </InlineStack>
+                  <Button onClick={() => navigate("/app/push")} size="slim">
+                    Push to Shopify
+                  </Button>
+                </InlineStack>
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" variant="bodyMd">
+                      {"\u2B1C"} 4. Add widgets to your theme
+                    </Text>
+                  </InlineStack>
+                  <Button onClick={() => navigate("/app/help")} size="slim">
+                    View Guide
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* 4. Quick Actions */}
+        <Text as="h2" variant="headingMd">
+          Quick Actions
+        </Text>
+        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Fetch Products
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Import your Shopify products into AutoSync for fitment mapping.
+              </Text>
+              <Button onClick={() => navigate("/app/products")}>
+                Go to Products
+              </Button>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Map Fitment
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Match vehicle fitment data to your products automatically or
+                manually.
+              </Text>
+              <Button onClick={() => navigate("/app/fitment")}>
+                Go to Fitment
+              </Button>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Push to Shopify
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Sync fitment tags, metafields, and collections to your Shopify
+                store.
+              </Text>
+              <Button onClick={() => navigate("/app/push")}>
+                Go to Push
+              </Button>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
+        {/* 5. Plan Usage Card */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">
+              Plan Usage
+            </Text>
+            <Divider />
+
+            {/* Product usage */}
+            <BlockStack gap="200">
+              <InlineStack align="space-between">
+                <Text as="span" variant="bodySm">
+                  Products
+                </Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {productCount.toLocaleString()} /{" "}
+                  {limits.products === Infinity
+                    ? "Unlimited"
+                    : limits.products.toLocaleString()}
+                </Text>
+              </InlineStack>
+              {limits.products !== Infinity && (
+                <ProgressBar
+                  progress={productUsagePercent}
+                  size="small"
+                  tone={productUsagePercent >= 90 ? "critical" : "primary"}
+                />
+              )}
+            </BlockStack>
+
+            {/* Fitment usage */}
+            <BlockStack gap="200">
+              <InlineStack align="space-between">
+                <Text as="span" variant="bodySm">
+                  Fitments
+                </Text>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {fitmentCount.toLocaleString()} /{" "}
+                  {limits.fitments === Infinity
+                    ? "Unlimited"
+                    : limits.fitments.toLocaleString()}
+                </Text>
+              </InlineStack>
+              {limits.fitments !== Infinity && (
+                <ProgressBar
+                  progress={fitmentUsagePercent}
+                  size="small"
+                  tone={fitmentUsagePercent >= 90 ? "critical" : "primary"}
+                />
+              )}
+            </BlockStack>
+
+            {plan === "free" && (
+              <>
+                <Divider />
+                <Banner
+                  title="Upgrade your plan"
+                  tone="warning"
+                  action={{
+                    content: "View Plans",
+                    onAction: () => navigate("/app/plans"),
+                  }}
+                >
+                  <p>
+                    You are on the Free plan with limited product and fitment
+                    capacity. Upgrade to unlock more features and higher limits.
+                  </p>
+                </Banner>
+              </>
+            )}
+          </BlockStack>
+        </Card>
+      </BlockStack>
+    </Page>
   );
 }
-
-export const headers: HeadersFunction = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
