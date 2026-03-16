@@ -1,0 +1,27 @@
+api_version = "2026-01"
+type = "theme_app_extension"
+name = "AutoSync Widgets"
+
+[[blocks]]
+name = "YMME Vehicle Search"
+template = "blocks/ymme-search.liquid"
+
+[[blocks]]
+name = "Fitment Badge"
+template = "blocks/fitment-badge.liquid"
+
+[[blocks]]
+name = "Vehicle Compatibility Table"
+template = "blocks/vehicle-compatibility.liquid"
+
+[[blocks]]
+name = "Floating Vehicle Bar"
+template = "blocks/floating-vehicle-bar.liquid"
+
+[[blocks]]
+name = "Plate Lookup"
+template = "blocks/plate-lookup.liquid"
+
+[[blocks]]
+name = "Wheel Finder"
+template = "blocks/wheel-finder.liquid"

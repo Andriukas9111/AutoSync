@@ -1,0 +1,94 @@
+{% comment %}
+  AutoSync Wheel Finder
+  Search wheels by PCD, offset, and diameter
+{% endcomment %}
+
+<div
+  class="autosync-wheel-finder"
+  data-autosync-wheel-finder
+  data-proxy-url="{{ shop.url }}/apps/autosync"
+  id="autosync-wheel-finder-{{ block.id }}"
+>
+  {% if block.settings.heading != blank %}
+    <h2 class="autosync-wheel-finder__heading">{{ block.settings.heading }}</h2>
+  {% endif %}
+
+  <div class="autosync-wheel-finder__fields">
+    <div class="autosync-wheel-finder__field">
+      <label for="autosync-pcd-{{ block.id }}">PCD (Bolt Pattern)</label>
+      <select id="autosync-pcd-{{ block.id }}" data-autosync-wheel-pcd>
+        <option value="">Select PCD</option>
+        <option value="4x100">4x100</option>
+        <option value="4x108">4x108</option>
+        <option value="4x114.3">4x114.3</option>
+        <option value="5x100">5x100</option>
+        <option value="5x108">5x108</option>
+        <option value="5x112">5x112</option>
+        <option value="5x114.3">5x114.3</option>
+        <option value="5x120">5x120</option>
+        <option value="5x130">5x130</option>
+      </select>
+    </div>
+
+    <div class="autosync-wheel-finder__field">
+      <label for="autosync-diameter-{{ block.id }}">Diameter</label>
+      <select id="autosync-diameter-{{ block.id }}" data-autosync-wheel-diameter>
+        <option value="">Select Diameter</option>
+        <option value="15">15"</option>
+        <option value="16">16"</option>
+        <option value="17">17"</option>
+        <option value="18">18"</option>
+        <option value="19">19"</option>
+        <option value="20">20"</option>
+        <option value="21">21"</option>
+        <option value="22">22"</option>
+      </select>
+    </div>
+
+    <div class="autosync-wheel-finder__field">
+      <label for="autosync-offset-{{ block.id }}">Offset (ET)</label>
+      <input
+        type="number"
+        id="autosync-offset-{{ block.id }}"
+        data-autosync-wheel-offset
+        placeholder="e.g. 35"
+        min="-30"
+        max="60"
+      />
+    </div>
+
+    <div class="autosync-wheel-finder__field autosync-wheel-finder__field--button">
+      <button type="button" data-autosync-wheel-search>
+        {{ block.settings.button_text | default: "Search Wheels" }}
+      </button>
+    </div>
+  </div>
+
+  <div class="autosync-wheel-finder__results autosync-wheel-finder--hidden" data-autosync-wheel-results>
+    <!-- Results populated by JS -->
+  </div>
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+{{ 'autosync-widgets.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Wheel Finder",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Find Wheels"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Search Wheels"
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,119 @@
+{% comment %}
+  AutoSync YMME Search Widget
+  Cascading dropdowns: Make → Model → Year → Engine → Search
+{% endcomment %}
+
+<div
+  class="autosync-ymme-search autosync-ymme--{{ block.settings.layout }}"
+  data-autosync-ymme
+  data-proxy-url="{{ shop.url }}/apps/autosync"
+  id="autosync-ymme-{{ block.id }}"
+  style="
+    --autosync-primary: {{ block.settings.primary_color }};
+    --autosync-bg: {{ block.settings.background_color }};
+    --autosync-text: {{ block.settings.text_color }};
+    --autosync-border-radius: {{ block.settings.border_radius }}px;
+  "
+>
+  {% if block.settings.heading != blank %}
+    <h2 class="autosync-ymme__heading">{{ block.settings.heading }}</h2>
+  {% endif %}
+
+  <div class="autosync-ymme__fields">
+    <div class="autosync-ymme__field">
+      <label for="autosync-make-{{ block.id }}">Make</label>
+      <select id="autosync-make-{{ block.id }}" data-autosync-level="make" disabled>
+        <option value="">Select Make</option>
+      </select>
+    </div>
+
+    <div class="autosync-ymme__field">
+      <label for="autosync-model-{{ block.id }}">Model</label>
+      <select id="autosync-model-{{ block.id }}" data-autosync-level="model" disabled>
+        <option value="">Select Model</option>
+      </select>
+    </div>
+
+    <div class="autosync-ymme__field">
+      <label for="autosync-year-{{ block.id }}">Year</label>
+      <select id="autosync-year-{{ block.id }}" data-autosync-level="year" disabled>
+        <option value="">Select Year</option>
+      </select>
+    </div>
+
+    <div class="autosync-ymme__field">
+      <label for="autosync-engine-{{ block.id }}">Engine</label>
+      <select id="autosync-engine-{{ block.id }}" data-autosync-level="engine" disabled>
+        <option value="">Select Engine (optional)</option>
+      </select>
+    </div>
+
+    <div class="autosync-ymme__field autosync-ymme__field--button">
+      <button type="button" data-autosync-search disabled>
+        {{ block.settings.button_text | default: "Find Parts" }}
+      </button>
+    </div>
+  </div>
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+{{ 'autosync-widgets.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "YMME Vehicle Search",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Find Parts for Your Vehicle"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Find Parts"
+    },
+    {
+      "type": "select",
+      "id": "layout",
+      "label": "Layout",
+      "options": [
+        { "value": "horizontal", "label": "Horizontal" },
+        { "value": "vertical", "label": "Vertical" }
+      ],
+      "default": "horizontal"
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Color",
+      "default": "#2c6ecb"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1a1a1a"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border Radius",
+      "min": 0,
+      "max": 16,
+      "step": 2,
+      "default": 8,
+      "unit": "px"
+    }
+  ]
+}
+{% endschema %}

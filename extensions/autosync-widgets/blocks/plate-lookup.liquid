@@ -1,0 +1,83 @@
+{% comment %}
+  AutoSync Plate Lookup (UK Registration)
+  Enterprise-only feature — calls DVLA VES + MOT APIs via App Proxy
+{% endcomment %}
+
+<div
+  class="autosync-plate-lookup"
+  data-autosync-plate-lookup
+  data-proxy-url="{{ shop.url }}/apps/autosync"
+  id="autosync-plate-lookup-{{ block.id }}"
+>
+  {% if block.settings.heading != blank %}
+    <h2 class="autosync-plate-lookup__heading">{{ block.settings.heading }}</h2>
+  {% endif %}
+
+  <div class="autosync-plate-lookup__form">
+    <div class="autosync-plate-lookup__input-group">
+      <span class="autosync-plate-lookup__flag">GB</span>
+      <input
+        type="text"
+        class="autosync-plate-lookup__input"
+        data-autosync-plate-input
+        placeholder="{{ block.settings.placeholder_text | default: 'Enter reg (e.g. AB12 CDE)' }}"
+        maxlength="8"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+    <button type="button" class="autosync-plate-lookup__btn" data-autosync-plate-submit>
+      {{ block.settings.button_text | default: "Look Up" }}
+    </button>
+  </div>
+
+  <div class="autosync-plate-lookup__result autosync-plate-lookup--hidden" data-autosync-plate-result>
+    <div class="autosync-plate-lookup__card">
+      <h3 data-autosync-plate-vehicle-name></h3>
+      <dl class="autosync-plate-lookup__details">
+        <dt>Colour</dt><dd data-autosync-plate-colour></dd>
+        <dt>Fuel</dt><dd data-autosync-plate-fuel></dd>
+        <dt>Year</dt><dd data-autosync-plate-year></dd>
+        <dt>Engine</dt><dd data-autosync-plate-engine></dd>
+        <dt>MOT Expiry</dt><dd data-autosync-plate-mot></dd>
+      </dl>
+      <button type="button" class="autosync-plate-lookup__find-parts" data-autosync-plate-find-parts>
+        Find Parts for This Vehicle
+      </button>
+    </div>
+  </div>
+
+  <div class="autosync-plate-lookup__error autosync-plate-lookup--hidden" data-autosync-plate-error>
+    <p data-autosync-plate-error-msg></p>
+  </div>
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+{{ 'autosync-widgets.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Plate Lookup (UK)",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Find Parts by Registration"
+    },
+    {
+      "type": "text",
+      "id": "placeholder_text",
+      "label": "Placeholder Text",
+      "default": "Enter reg (e.g. AB12 CDE)"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Look Up"
+    }
+  ]
+}
+{% endschema %}

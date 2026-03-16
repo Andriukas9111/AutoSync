@@ -1,0 +1,68 @@
+{% comment %}
+  AutoSync Vehicle Compatibility Table
+  Displays all vehicles a product fits
+{% endcomment %}
+
+<div
+  class="autosync-compat-table"
+  data-autosync-compat-table
+  data-product-id="{{ product.id }}"
+  data-metafield-vehicles="{{ product.metafields.autosync_fitment.vehicles.value }}"
+  id="autosync-compat-{{ block.id }}"
+>
+  {% if block.settings.heading != blank %}
+    <h3 class="autosync-compat-table__heading">{{ block.settings.heading }}</h3>
+  {% endif %}
+
+  <div class="autosync-compat-table__wrapper">
+    <table class="autosync-compat-table__table">
+      <thead>
+        <tr>
+          <th>Make</th>
+          <th>Model</th>
+          <th>Years</th>
+          {% if block.settings.show_engine %}
+            <th>Engine</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody data-autosync-compat-body>
+        <tr>
+          <td colspan="{{ block.settings.show_engine | ternary: 4, 3 }}">
+            Loading compatibility data...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+{{ 'autosync-widgets.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Vehicle Compatibility Table",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading",
+      "label": "Heading",
+      "default": "Vehicle Compatibility"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_engine",
+      "label": "Show Engine Column",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_years",
+      "label": "Show Year Range",
+      "default": true
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,63 @@
+{% comment %}
+  AutoSync Floating Vehicle Bar
+  Persistent bar showing the customer's selected vehicle
+{% endcomment %}
+
+<div
+  class="autosync-vehicle-bar autosync-vehicle-bar--{{ block.settings.position }} autosync-vehicle-bar--hidden"
+  data-autosync-vehicle-bar
+  id="autosync-vehicle-bar-{{ block.id }}"
+  style="
+    --autosync-bar-bg: {{ block.settings.background_color }};
+    --autosync-bar-text: {{ block.settings.text_color }};
+  "
+>
+  <div class="autosync-vehicle-bar__inner">
+    <span class="autosync-vehicle-bar__icon">&#128663;</span>
+    <span class="autosync-vehicle-bar__label">Your Vehicle:</span>
+    <span class="autosync-vehicle-bar__vehicle" data-autosync-bar-vehicle></span>
+
+    <div class="autosync-vehicle-bar__actions">
+      <button type="button" class="autosync-vehicle-bar__btn" data-autosync-bar-change>
+        Change Vehicle
+      </button>
+      <button type="button" class="autosync-vehicle-bar__btn autosync-vehicle-bar__btn--clear" data-autosync-bar-clear>
+        Clear
+      </button>
+    </div>
+  </div>
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+{{ 'autosync-widgets.js' | asset_url | script_tag }}
+
+{% schema %}
+{
+  "name": "Floating Vehicle Bar",
+  "target": "section",
+  "settings": [
+    {
+      "type": "select",
+      "id": "position",
+      "label": "Position",
+      "options": [
+        { "value": "top", "label": "Top" },
+        { "value": "bottom", "label": "Bottom" }
+      ],
+      "default": "top"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#1a1a1a"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#ffffff"
+    }
+  ]
+}
+{% endschema %}
