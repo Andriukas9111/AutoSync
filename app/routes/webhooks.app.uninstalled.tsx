@@ -1,17 +1,26 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
+import prisma from "../db.server";
+import db from "../lib/db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, session, topic } = await authenticate.webhook(request);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
+  console.log(`[webhook] ${topic}: ${shop}`);
 
-  // Webhook requests can trigger multiple times and after an app has already been uninstalled.
-  // If this webhook already ran, the session may have been deleted previously.
+  // Clean up Prisma sessions (Shopify session storage)
   if (session) {
-    await db.session.deleteMany({ where: { shop } });
+    await prisma.session.deleteMany({ where: { shop } });
   }
 
-  return new Response();
+  // Mark tenant as uninstalled in Supabase (preserve data — they might reinstall)
+  await db
+    .from("tenants")
+    .update({
+      uninstalled_at: new Date().toISOString(),
+      plan_status: "cancelled",
+    })
+    .eq("shop_id", shop);
+
+  return new Response("OK", { status: 200 });
 };
