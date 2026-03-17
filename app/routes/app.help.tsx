@@ -9,12 +9,14 @@ import {
   InlineStack,
   Text,
   Divider,
+  Icon,
   Button,
   Banner,
   Collapsible,
   TextField,
   Box,
 } from "@shopify/polaris";
+import { BookOpenIcon } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 
@@ -457,10 +459,9 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               How it works
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              AutoSync uses the NHTSA (National Highway Traffic Safety Administration) vPIC API —
-              a free US Government service — to decode VINs. The VIN is validated (17 characters,
-              no I/O/Q), decoded into 100+ vehicle attributes, and matched against your fitment
-              database to find compatible products.
+              AutoSync decodes VINs using industry-standard vehicle identification databases.
+              The VIN is validated (17 characters, no I/O/Q), decoded into 100+ vehicle
+              attributes, and matched against your fitment database to find compatible products.
             </Text>
           </BlockStack>
           <BlockStack gap="200">
@@ -479,7 +480,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
               VIN Decode is an Enterprise-exclusive feature ($299/mo). No additional API
-              credentials are needed — the NHTSA API is free and public.
+              credentials or setup are needed — it works out of the box.
             </Text>
           </BlockStack>
         </BlockStack>
@@ -651,9 +652,9 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Q: What vehicle databases does AutoSync support?
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              A: AutoSync maintains its own global vehicle database sourced from auto-data.net,
-              NHTSA (free US government data), and other providers. It covers makes and models
-              worldwide and is continuously expanding.
+              A: AutoSync maintains its own comprehensive global vehicle database covering
+              makes and models worldwide. The database is professionally curated and
+              continuously expanding with new vehicles and specifications.
             </Text>
           </BlockStack>
           <Divider />
@@ -662,7 +663,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Q: Does VIN Decode work for non-US vehicles?
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              A: The NHTSA database primarily covers vehicles sold in the US market. For UK
+              A: VIN Decode works best with vehicles sold in the US market. For UK
               vehicles, the DVLA plate lookup is more reliable. VINs from other markets may
               return partial data.
             </Text>
@@ -786,9 +787,20 @@ export default function Help() {
                         style={{ cursor: "pointer" }}
                       >
                         <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h2" variant="headingMd">
-                            {section.title}
-                          </Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <div style={{
+                              width: "28px", height: "28px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "var(--p-color-icon-emphasis)",
+                            }}>
+                              <Icon source={BookOpenIcon} />
+                            </div>
+                            <Text as="h2" variant="headingMd">
+                              {section.title}
+                            </Text>
+                          </InlineStack>
                           <Text as="span" variant="bodySm" tone="subdued">
                             {isOpen ? "\u25B2" : "\u25BC"}
                           </Text>
@@ -817,9 +829,20 @@ export default function Help() {
         {/* Support footer */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">
-              Need more help?
-            </Text>
+            <InlineStack gap="200" blockAlign="center">
+              <div style={{
+                width: "28px", height: "28px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: "var(--p-color-bg-surface-secondary)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--p-color-icon-emphasis)",
+              }}>
+                <Icon source={BookOpenIcon} />
+              </div>
+              <Text as="h2" variant="headingMd">
+                Need more help?
+              </Text>
+            </InlineStack>
             <Divider />
             <Text as="p" variant="bodySm" tone="subdued">
               If you cannot find what you are looking for, check the Plans page for feature

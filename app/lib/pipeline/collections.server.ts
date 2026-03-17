@@ -386,11 +386,12 @@ async function processCollectionTarget(
   // Always add SEO — proper SEO is critical for discoverability
   input.seo = buildCollectionSeo(target);
 
-  // Add brand logo as collection image if available (make-level only)
+  // Add brand logo as collection image for ALL collection levels
+  // Make-level ("BMW Parts") and model-level ("BMW 2 Series Parts") both get the make logo
   let logoUrl: string | null = null;
-  if (!target.model && target.ymme_make_id) {
+  if (target.ymme_make_id) {
     logoUrl = await getMakeLogoUrl(target.ymme_make_id);
-  } else if (!target.model && target.make) {
+  } else if (target.make) {
     logoUrl = await getMakeLogoUrlByName(target.make);
   }
 

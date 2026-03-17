@@ -23,7 +23,18 @@ import {
   Box,
   Divider,
   Button,
+  Icon,
 } from "@shopify/polaris";
+import {
+  GaugeIcon,
+  ProductIcon,
+  ChartVerticalIcon,
+  TargetIcon,
+  PackageIcon,
+  DatabaseIcon,
+  SearchIcon,
+  AlertTriangleIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -447,18 +458,40 @@ export default function AnalyticsPage() {
         {/* ── Fitment Coverage ──────────────────────────────── */}
         <Layout>
           <Layout.Section>
-            <Text as="h2" variant="headingLg">
-              Fitment Coverage
-            </Text>
+            <InlineStack gap="200" blockAlign="center">
+              <div style={{
+                width: "28px", height: "28px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: "var(--p-color-bg-surface-secondary)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--p-color-icon-emphasis)",
+              }}>
+                <Icon source={GaugeIcon} />
+              </div>
+              <Text as="h2" variant="headingLg">
+                Fitment Coverage
+              </Text>
+            </InlineStack>
           </Layout.Section>
 
           <Layout.Section>
             <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
               <Card>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Total Products
-                  </Text>
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ProductIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Total Products
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="headingXl">
                     {fitmentCoverage.total.toLocaleString()}
                   </Text>
@@ -467,9 +500,20 @@ export default function AnalyticsPage() {
 
               <Card>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    With Fitments
-                  </Text>
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={GaugeIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      With Fitments
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="headingXl">
                     {fitmentCoverage.withFitments.toLocaleString()}
                   </Text>
@@ -481,9 +525,20 @@ export default function AnalyticsPage() {
 
               <Card>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Without Fitments
-                  </Text>
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={AlertTriangleIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Without Fitments
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="headingXl">
                     {fitmentCoverage.withoutFitments.toLocaleString()}
                   </Text>
@@ -495,9 +550,20 @@ export default function AnalyticsPage() {
 
               <Card>
                 <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Coverage Progress
-                  </Text>
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ChartVerticalIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Coverage Progress
+                    </Text>
+                  </InlineStack>
                   <ProgressBar
                     progress={fitmentCoverage.coveragePercent}
                     tone="primary"
@@ -515,9 +581,20 @@ export default function AnalyticsPage() {
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Product Status Breakdown
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={ProductIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">
+                    Product Status Breakdown
+                  </Text>
+                </InlineStack>
                 <InlineStack gap="400" wrap>
                   {statusBreakdown.map(({ status, count }) => (
                     <InlineStack key={status} gap="200" blockAlign="center">
@@ -540,9 +617,20 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
-                    <Text as="h2" variant="headingMd">
-                      Popular Makes (Top 15)
-                    </Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={TargetIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Popular Makes (Top 15)
+                      </Text>
+                    </InlineStack>
                     <Text as="span" variant="bodySm" tone="subdued">
                       By fitment count
                     </Text>
@@ -567,9 +655,20 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
-                    <Text as="h2" variant="headingMd">
-                      Popular Models (Top 15)
-                    </Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={TargetIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Popular Models (Top 15)
+                      </Text>
+                    </InlineStack>
                     <Text as="span" variant="bodySm" tone="subdued">
                       By fitment count
                     </Text>
@@ -593,9 +692,20 @@ export default function AnalyticsPage() {
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Supplier Performance
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={PackageIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Supplier Performance
+                    </Text>
+                  </InlineStack>
                   {providerMetrics.length === 0 ? (
                     <Text as="p" variant="bodySm" tone="subdued">
                       No providers configured. Add a provider to see supplier metrics.
@@ -635,9 +745,20 @@ export default function AnalyticsPage() {
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Sync Job History
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ChartVerticalIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Sync Job History
+                    </Text>
+                  </InlineStack>
                   {syncJobSummary.length === 0 ? (
                     <Text as="p" variant="bodySm" tone="subdued">
                       No sync jobs have been run yet.
@@ -672,9 +793,20 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
-                    <Text as="h2" variant="headingMd">
-                      Popular Storefront Searches (Last 30 Days)
-                    </Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={SearchIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Popular Storefront Searches (Last 30 Days)
+                      </Text>
+                    </InlineStack>
                     <Text as="span" variant="bodySm" tone="subdued">
                       From YMME widget usage
                     </Text>
@@ -698,9 +830,20 @@ export default function AnalyticsPage() {
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Inventory Gap Analysis
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={AlertTriangleIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Inventory Gap Analysis
+                    </Text>
+                  </InlineStack>
                   <Divider />
                   <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
                     <BlockStack gap="100">

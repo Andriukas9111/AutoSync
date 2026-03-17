@@ -19,7 +19,17 @@ import {
   Box,
   Divider,
   IndexTable,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ExportIcon,
+  SettingsIcon,
+  CollectionIcon,
+  ChartVerticalIcon,
+  ProductIcon,
+  CheckIcon,
+  ClockIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -276,6 +286,32 @@ function formatJobType(type: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Icon badge helper (matches dashboard visual style)
+// ---------------------------------------------------------------------------
+
+const sectionIconStyle = {
+  width: "28px",
+  height: "28px",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--p-color-icon-emphasis)",
+} as const;
+
+const statIconStyle = {
+  width: "24px",
+  height: "24px",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--p-color-icon-emphasis)",
+} as const;
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -365,38 +401,61 @@ export default function Push() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Summary
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={sectionIconStyle}>
+                  <Icon source={ExportIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Summary</Text>
+              </InlineStack>
               <InlineStack gap="800" wrap>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {productsWithFitments}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={statIconStyle}>
+                      <Icon source={ProductIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {productsWithFitments}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Products ready to push
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {pushedCount}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={statIconStyle}>
+                      <Icon source={CheckIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {pushedCount}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Products already pushed
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {collectionCount}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={statIconStyle}>
+                      <Icon source={CollectionIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {collectionCount}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Collections created
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd">
-                    {formatDate(lastPushTime)}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={statIconStyle}>
+                      <Icon source={ClockIcon} />
+                    </div>
+                    <Text as="p" variant="bodyMd">
+                      {formatDate(lastPushTime)}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Last push
                   </Text>
@@ -410,9 +469,12 @@ export default function Push() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Push Options
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={sectionIconStyle}>
+                  <Icon source={SettingsIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Push Options</Text>
+              </InlineStack>
 
               {/* Push Tags */}
               <PlanGate
@@ -489,36 +551,35 @@ export default function Push() {
                   </BlockStack>
                 </Box>
               )}
+
+              <Divider />
+
+              <Form method="post">
+                <input type="hidden" name="_action" value="push" />
+                <input type="hidden" name="pushTags" value={String(pushTags)} />
+                <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
+                <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
+                <input type="hidden" name="strategy" value={strategy} />
+                <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
+
+                <InlineStack align="start" gap="300">
+                  <Button
+                    variant="primary"
+                    submit
+                    disabled={pushDisabled}
+                    loading={isSubmitting}
+                  >
+                    Push to Shopify
+                  </Button>
+                  {noProductsReady && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      No products with fitments to push. Map fitments first.
+                    </Text>
+                  )}
+                </InlineStack>
+              </Form>
             </BlockStack>
           </Card>
-        </Layout.Section>
-
-        {/* Push button */}
-        <Layout.Section>
-          <Form method="post">
-            <input type="hidden" name="_action" value="push" />
-            <input type="hidden" name="pushTags" value={String(pushTags)} />
-            <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
-            <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
-            <input type="hidden" name="strategy" value={strategy} />
-            <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
-
-            <InlineStack align="start" gap="300">
-              <Button
-                variant="primary"
-                submit
-                disabled={pushDisabled}
-                loading={isSubmitting}
-              >
-                Push to Shopify
-              </Button>
-              {noProductsReady && (
-                <Text as="p" variant="bodySm" tone="subdued">
-                  No products with fitments to push. Map fitments first.
-                </Text>
-              )}
-            </InlineStack>
-          </Form>
         </Layout.Section>
 
         {/* Progress section (during push) */}
@@ -545,9 +606,12 @@ export default function Push() {
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Push History
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={sectionIconStyle}>
+                    <Icon source={ChartVerticalIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Push History</Text>
+                </InlineStack>
                 <IndexTable
                   resourceName={{ singular: "job", plural: "jobs" }}
                   itemCount={pushHistory.length}

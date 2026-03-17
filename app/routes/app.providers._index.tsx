@@ -9,6 +9,7 @@ import {
   ResourceItem,
   Text,
   Badge,
+  Icon,
   InlineStack,
   BlockStack,
   EmptyState,
@@ -16,6 +17,7 @@ import {
   Box,
   ProgressBar,
 } from "@shopify/polaris";
+import { PackageIcon, GaugeIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
@@ -162,9 +164,20 @@ export default function Providers() {
           <Card>
             <BlockStack gap="200">
               <InlineStack align="space-between">
-                <Text variant="bodyMd" as="span">
-                  Providers used
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={GaugeIcon} />
+                  </div>
+                  <Text variant="bodyMd" as="span">
+                    Providers used
+                  </Text>
+                </InlineStack>
                 <Text variant="bodyMd" as="span" fontWeight="semibold">
                   {providerCount} / {limitLabel}
                 </Text>

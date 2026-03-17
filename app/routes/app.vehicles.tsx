@@ -25,7 +25,14 @@ import {
   Thumbnail,
   ProgressBar,
 } from "@shopify/polaris";
-import { SearchIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import {
+  SearchIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  DatabaseIcon,
+  CategoriesIcon,
+  GaugeIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -356,7 +363,18 @@ export default function Vehicles() {
         <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
+              <InlineStack gap="100" blockAlign="center">
+                <div style={{
+                  width: "20px", height: "20px",
+                  borderRadius: "var(--p-border-radius-100)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={DatabaseIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
+              </InlineStack>
               <Text as="p" variant="headingXl" fontWeight="bold">
                 {makes.length}
               </Text>
@@ -364,7 +382,18 @@ export default function Vehicles() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
+              <InlineStack gap="100" blockAlign="center">
+                <div style={{
+                  width: "20px", height: "20px",
+                  borderRadius: "var(--p-border-radius-100)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={CategoriesIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
+              </InlineStack>
               <Text as="p" variant="headingXl" fontWeight="bold">
                 {totalModels.toLocaleString()}
               </Text>
@@ -372,7 +401,18 @@ export default function Vehicles() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
+              <InlineStack gap="100" blockAlign="center">
+                <div style={{
+                  width: "20px", height: "20px",
+                  borderRadius: "var(--p-border-radius-100)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={GaugeIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
+              </InlineStack>
               <Text as="p" variant="headingXl" fontWeight="bold">
                 {totalEngines.toLocaleString()}
               </Text>
@@ -526,11 +566,7 @@ export default function Vehicles() {
                                 </Text>
                               )}
                             </InlineStack>
-                            {make.nhtsa_make_id && (
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                NHTSA ID: {make.nhtsa_make_id}
-                              </Text>
-                            )}
+                            {/* NHTSA ID hidden from merchants - admin only */}
                           </BlockStack>
                         </InlineStack>
 
@@ -579,9 +615,20 @@ export default function Vehicles() {
                             </InlineStack>
                           ) : models.length > 0 ? (
                             <BlockStack gap="200">
-                              <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                Models ({models.length})
-                              </Text>
+                              <InlineStack gap="200" blockAlign="center">
+                                <div style={{
+                                  width: "22px", height: "22px",
+                                  borderRadius: "var(--p-border-radius-100)",
+                                  background: "var(--p-color-bg-surface-secondary)",
+                                  display: "flex", alignItems: "center", justifyContent: "center",
+                                  color: "var(--p-color-icon-emphasis)",
+                                }}>
+                                  <Icon source={CategoriesIcon} />
+                                </div>
+                                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                  Models ({models.length})
+                                </Text>
+                              </InlineStack>
                               <Divider />
                               {models.map((model) => {
                                 const isModelExpanded = expandedModel === model.id;
@@ -651,9 +698,20 @@ export default function Vehicles() {
                                           </InlineStack>
                                         ) : engines.length > 0 ? (
                                           <BlockStack gap="200">
-                                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                                              Engines ({engines.length})
-                                            </Text>
+                                            <InlineStack gap="200" blockAlign="center">
+                                              <div style={{
+                                                width: "20px", height: "20px",
+                                                borderRadius: "var(--p-border-radius-100)",
+                                                background: "var(--p-color-bg-surface-secondary)",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                color: "var(--p-color-icon-emphasis)",
+                                              }}>
+                                                <Icon source={GaugeIcon} />
+                                              </div>
+                                              <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                                                Engines ({engines.length})
+                                              </Text>
+                                            </InlineStack>
                                             {engines.map((engine) => (
                                               <Box
                                                 key={engine.id}

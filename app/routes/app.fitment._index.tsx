@@ -19,7 +19,19 @@ import {
   Collapsible,
   Icon,
 } from "@shopify/polaris";
-import { ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ProductIcon,
+  ConnectIcon,
+  WandIcon,
+  TargetIcon,
+  AlertTriangleIcon,
+  AlertCircleIcon,
+  GaugeIcon,
+  SearchIcon,
+  ChartVerticalIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -201,10 +213,10 @@ function formatPercent(count: number, total: number): string {
 
 function formatYearRange(from: number | null, to: number | null): string {
   if (!from && !to) return "-";
-  if (from && !to) return `${from}–present`;
-  if (!from && to) return `–${to}`;
+  if (from && !to) return `${from}\u2013present`;
+  if (!from && to) return `\u2013${to}`;
   if (from === to) return `${from}`;
-  return `${from}–${to}`;
+  return `${from}\u2013${to}`;
 }
 
 const STATUS_TONE: Record<string, "default" | "info" | "success" | "warning" | "critical"> = {
@@ -221,6 +233,32 @@ const STATUS_LABEL: Record<string, string> = {
   manual_mapped: "Manual",
   partial: "Partial",
   flagged: "Flagged",
+};
+
+// ---------------------------------------------------------------------------
+// Icon badge helper — matches dashboard pattern
+// ---------------------------------------------------------------------------
+
+const iconBadgeStyle: React.CSSProperties = {
+  width: "28px",
+  height: "28px",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--p-color-icon-emphasis)",
+};
+
+const statIconBadgeStyle: React.CSSProperties = {
+  width: "32px",
+  height: "32px",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "var(--p-color-icon-emphasis)",
 };
 
 // ---------------------------------------------------------------------------
@@ -287,7 +325,12 @@ export default function Fitment() {
         <InlineGrid columns={{ xs: 2, sm: 3, md: 3, lg: 6 }} gap="400">
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Total Products</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={ProductIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Total Products</Text>
+              </InlineStack>
               <Text as="p" variant="headingLg" fontWeight="bold">
                 {totalProducts.toLocaleString()}
               </Text>
@@ -295,7 +338,12 @@ export default function Fitment() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Total Fitments</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={ConnectIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Total Fitments</Text>
+              </InlineStack>
               <Text as="p" variant="headingLg" fontWeight="bold">
                 {totalFitments.toLocaleString()}
               </Text>
@@ -303,7 +351,12 @@ export default function Fitment() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Auto Mapped</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={WandIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Auto Mapped</Text>
+              </InlineStack>
               <InlineStack gap="200" blockAlign="baseline">
                 <Text as="p" variant="headingLg" fontWeight="bold">
                   {autoMapped.toLocaleString()}
@@ -314,7 +367,12 @@ export default function Fitment() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Manual Mapped</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={TargetIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Manual Mapped</Text>
+              </InlineStack>
               <InlineStack gap="200" blockAlign="baseline">
                 <Text as="p" variant="headingLg" fontWeight="bold">
                   {manualMapped.toLocaleString()}
@@ -325,7 +383,12 @@ export default function Fitment() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Flagged / Partial</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={AlertTriangleIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Flagged / Partial</Text>
+              </InlineStack>
               <Text as="p" variant="headingLg" fontWeight="bold">
                 {(flagged + partial).toLocaleString()}
               </Text>
@@ -333,7 +396,12 @@ export default function Fitment() {
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Unmapped</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={AlertCircleIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Unmapped</Text>
+              </InlineStack>
               <Text as="p" variant="headingLg" fontWeight="bold" tone="critical">
                 {unmapped.toLocaleString()}
               </Text>
@@ -345,7 +413,12 @@ export default function Fitment() {
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between">
-              <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={iconBadgeStyle}>
+                  <Icon source={GaugeIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+              </InlineStack>
               <Text as="p" variant="headingMd" fontWeight="bold">
                 {coveragePercent}%
               </Text>
@@ -363,7 +436,12 @@ export default function Fitment() {
           <Layout.Section variant="oneHalf">
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Auto Extraction</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={iconBadgeStyle}>
+                    <Icon source={WandIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Auto Extraction</Text>
+                </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Automatically extract vehicle fitment data from product titles,
                   descriptions, and tags using pattern matching.
@@ -402,7 +480,12 @@ export default function Fitment() {
           <Layout.Section variant="oneHalf">
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Manual Mapping</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={iconBadgeStyle}>
+                    <Icon source={TargetIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Manual Mapping</Text>
+                </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Manually assign vehicles to products with full control. Search
                   make, model, year, and engine — then link to products one by one.
@@ -419,7 +502,12 @@ export default function Fitment() {
         {topMakes.length > 0 && (
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Top Makes by Fitment Count</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={iconBadgeStyle}>
+                  <Icon source={SearchIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Top Makes by Fitment Count</Text>
+              </InlineStack>
               <DataTable
                 columnContentTypes={["text", "numeric", "numeric"]}
                 headings={["Make", "Fitments", "Models"]}
@@ -437,9 +525,14 @@ export default function Fitment() {
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between">
-              <Text as="h2" variant="headingMd">
-                Recent Fitment Activity
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={iconBadgeStyle}>
+                  <Icon source={ChartVerticalIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">
+                  Recent Fitment Activity
+                </Text>
+              </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
                 {productFitmentGroups.length} recently mapped products
               </Text>
@@ -484,7 +577,7 @@ export default function Fitment() {
                             <InlineStack gap="200" blockAlign="center">
                               <Text as="span" variant="bodyMd" fontWeight="semibold">
                                 {group.product_title.length > 60
-                                  ? group.product_title.slice(0, 60) + "…"
+                                  ? group.product_title.slice(0, 60) + "\u2026"
                                   : group.product_title}
                               </Text>
                               <Badge tone={STATUS_TONE[group.fitment_status] ?? "default"}>

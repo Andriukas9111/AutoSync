@@ -21,7 +21,16 @@ import {
   ProgressBar,
   List,
   Box,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ExportIcon,
+  CollectionIcon,
+  SettingsIcon,
+  PersonIcon,
+  DatabaseIcon,
+  AlertDiamondIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -514,9 +523,20 @@ export default function Settings() {
               {/* Push Settings */}
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Push Settings
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ExportIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Push Settings
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Configure how fitment data is pushed to your Shopify store.
                   </Text>
@@ -547,9 +567,20 @@ export default function Settings() {
               {/* Collection Settings */}
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Collection Settings
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={CollectionIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Collection Settings
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Configure how smart collections are created from vehicle fitment data.
                   </Text>
@@ -574,9 +605,20 @@ export default function Settings() {
               {/* Display Settings */}
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Display Settings
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={SettingsIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Display Settings
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Configure how engine information is displayed across your store widgets and compatibility tables.
                   </Text>
@@ -606,9 +648,20 @@ export default function Settings() {
               {/* Notifications */}
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Notifications
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={PersonIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Notifications
+                    </Text>
+                  </InlineStack>
                   <FormLayout>
                     <TextField
                       label="Notification email"
@@ -636,9 +689,20 @@ export default function Settings() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Data Management
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={DatabaseIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">
+                  Data Management
+                </Text>
+              </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
                 Current data: {counts.products} products, {counts.fitments} fitments,{" "}
                 {counts.collections} collections, {counts.providers} providers.
@@ -738,6 +802,15 @@ export default function Settings() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-fill-critical-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-critical)",
+                }}>
+                  <Icon source={AlertDiamondIcon} />
+                </div>
                 <Text as="h2" variant="headingMd" tone="critical">
                   Danger Zone
                 </Text>

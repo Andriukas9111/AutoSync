@@ -324,38 +324,42 @@ function KpiCard({
 }) {
   return (
     <Card>
-      <BlockStack gap="300">
-        <InlineStack gap="200" blockAlign="center">
-          <div
-            style={{
-              width: "32px",
-              height: "32px",
-              borderRadius: "var(--p-border-radius-200)",
-              background: "var(--p-color-bg-surface-secondary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--p-color-icon-emphasis)",
-            }}
-          >
-            <Icon source={icon} />
-          </div>
-          <Text as="p" variant="bodySm" tone="subdued">
-            {label}
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "140px" }}>
+        <BlockStack gap="300">
+          <InlineStack gap="200" blockAlign="center">
+            <div
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: "var(--p-color-bg-surface-secondary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--p-color-icon-emphasis)",
+              }}
+            >
+              <Icon source={icon} />
+            </div>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {label}
+            </Text>
+          </InlineStack>
+          <Text as="p" variant="heading2xl">
+            {value}
           </Text>
-        </InlineStack>
-        <Text as="p" variant="heading2xl">
-          {value}
-        </Text>
-        {extra}
-        <Button
-          onClick={() => onNavigate(link)}
-          variant="plain"
-          textAlign="start"
-        >
-          {linkLabel}
-        </Button>
-      </BlockStack>
+          {extra}
+        </BlockStack>
+        <div style={{ marginTop: "auto" }}>
+          <Button
+            onClick={() => onNavigate(link)}
+            variant="plain"
+            textAlign="start"
+          >
+            {linkLabel}
+          </Button>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -1044,9 +1048,9 @@ export default function Dashboard() {
 
                     <Divider />
                     <Text as="p" variant="bodySm" tone="subdued">
-                      Vehicle database sourced from auto-data.net (primary) and
-                      NHTSA. Full specs include performance, dimensions, engine
-                      details, and EV data.
+                      Comprehensive global vehicle database with full specs
+                      including performance, dimensions, engine details, and
+                      EV data. Continuously updated.
                     </Text>
                   </BlockStack>
                 </BlockStack>

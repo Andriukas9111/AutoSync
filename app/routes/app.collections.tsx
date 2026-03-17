@@ -18,7 +18,16 @@ import {
   Divider,
   IndexTable,
   EmptyState,
+  Icon,
 } from "@shopify/polaris";
+import {
+  CollectionIcon,
+  ChartVerticalIcon,
+  CollectionFilledIcon,
+  HashtagIcon,
+  LinkIcon,
+  TargetIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -223,9 +232,18 @@ export default function Collections() {
           >
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Collection Strategy
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={CollectionIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Collection Strategy</Text>
+                </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Choose how AutoSync creates smart collections from your vehicle
                   fitment data. Collections group products by vehicle compatibility.
@@ -275,9 +293,18 @@ export default function Collections() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Preview
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={ChartVerticalIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Preview</Text>
+              </InlineStack>
               <Text as="p" variant="bodyMd" tone="subdued">
                 Based on your current fitment data and selected strategy, AutoSync
                 would create the following collections.
@@ -285,25 +312,58 @@ export default function Collections() {
 
               <InlineStack gap="600" wrap>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {uniqueMakes.length}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "22px", height: "22px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={HashtagIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {uniqueMakes.length}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Unique makes in fitments
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {uniqueMakeModelCount}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "22px", height: "22px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={LinkIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {uniqueMakeModelCount}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Unique make + model combos
                   </Text>
                 </BlockStack>
                 <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    ~{previewCount}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "22px", height: "22px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={TargetIcon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      ~{previewCount}
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     Collections to create ({STRATEGY_LABELS[strategy]})
                   </Text>
@@ -355,9 +415,18 @@ export default function Collections() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Existing Collections
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={CollectionFilledIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Existing Collections</Text>
+              </InlineStack>
 
               {collections.length === 0 ? (
                 <EmptyState
