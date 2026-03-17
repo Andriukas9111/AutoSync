@@ -1,0 +1,482 @@
+/* ===== AutoSync Widgets — Shared Styles ===== */
+
+/* --------------- Reset & Base --------------- */
+[class^="autosync-"] {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* --------------- YMME Search --------------- */
+.autosync-ymme-search {
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
+  padding: 1.5rem;
+  border-radius: var(--autosync-border-radius, 8px);
+  border: 1px solid #e3e3e3;
+}
+
+.autosync-ymme__heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.autosync-ymme__fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.autosync-ymme--horizontal .autosync-ymme__fields {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.autosync-ymme--horizontal .autosync-ymme__field {
+  flex: 1;
+  min-width: 150px;
+}
+
+.autosync-ymme__field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: inherit;
+}
+
+.autosync-ymme__field select,
+.autosync-ymme__field input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #c9cccf;
+  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  background: #fff;
+  color: #1a1a1a;
+  appearance: auto;
+}
+
+.autosync-ymme__field select:disabled {
+  background: #f6f6f7;
+  color: #8c9196;
+  cursor: not-allowed;
+}
+
+.autosync-ymme__field select:focus,
+.autosync-ymme__field input:focus {
+  outline: 2px solid var(--autosync-primary, #2c6ecb);
+  outline-offset: 1px;
+  border-color: var(--autosync-primary, #2c6ecb);
+}
+
+.autosync-ymme__field--button button,
+.autosync-plate-lookup__btn,
+.autosync-plate-lookup__find-parts,
+.autosync-wheel-finder__field--button button {
+  width: 100%;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.autosync-ymme__field--button button:hover,
+.autosync-plate-lookup__btn:hover,
+.autosync-plate-lookup__find-parts:hover,
+.autosync-wheel-finder__field--button button:hover {
+  background: #1f5da0;
+}
+
+.autosync-ymme__field--button button:disabled,
+.autosync-plate-lookup__btn:disabled,
+.autosync-wheel-finder__field--button button:disabled {
+  background: #c9cccf;
+  cursor: not-allowed;
+}
+
+/* --------------- Fitment Badge --------------- */
+.autosync-fitment-badge {
+  margin: 0.5rem 0;
+}
+
+.autosync-fitment-badge__content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.autosync-fitment-badge--hidden {
+  display: none !important;
+}
+
+.autosync-fitment-badge__icon--success {
+  color: var(--autosync-badge-success, #1a7f37);
+  font-size: 1.1rem;
+}
+
+.autosync-fitment-badge__icon--warning {
+  color: var(--autosync-badge-warning, #bf5700);
+  font-size: 1.1rem;
+}
+
+[data-autosync-badge-fits] {
+  background: #dafbe1;
+  color: var(--autosync-badge-success, #1a7f37);
+}
+
+[data-autosync-badge-nofit] {
+  background: #fff1e5;
+  color: var(--autosync-badge-warning, #bf5700);
+}
+
+.autosync-fitment-badge__vehicle {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.autosync-fitment-badge__link {
+  color: #2c6ecb;
+  text-decoration: underline;
+  font-size: 0.875rem;
+}
+
+/* --------------- Compatibility Table --------------- */
+.autosync-compat-table {
+  margin: 1rem 0;
+}
+
+.autosync-compat-table__heading {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+
+.autosync-compat-table__wrapper {
+  overflow-x: auto;
+}
+
+.autosync-compat-table__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.autosync-compat-table__table th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  background: #f6f6f7;
+  border-bottom: 2px solid #e3e3e3;
+  font-weight: 600;
+  color: #6d7175;
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.autosync-compat-table__table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #edeeef;
+}
+
+.autosync-compat-table__table tbody tr:hover {
+  background: #f9fafb;
+}
+
+/* --------------- Floating Vehicle Bar --------------- */
+.autosync-vehicle-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: var(--autosync-bar-bg, #1a1a1a);
+  color: var(--autosync-bar-text, #fff);
+  padding: 0.5rem 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: transform 0.3s ease;
+}
+
+.autosync-vehicle-bar--top {
+  top: 0;
+}
+
+.autosync-vehicle-bar--bottom {
+  bottom: 0;
+}
+
+.autosync-vehicle-bar--hidden {
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+.autosync-vehicle-bar--bottom.autosync-vehicle-bar--hidden {
+  transform: translateY(100%);
+}
+
+.autosync-vehicle-bar__inner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.autosync-vehicle-bar__icon {
+  font-size: 1.25rem;
+}
+
+.autosync-vehicle-bar__label {
+  font-size: 0.8125rem;
+  opacity: 0.8;
+}
+
+.autosync-vehicle-bar__vehicle {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.autosync-vehicle-bar__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.autosync-vehicle-bar__btn {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.autosync-vehicle-bar__btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.autosync-vehicle-bar__btn--clear {
+  opacity: 0.7;
+}
+
+/* --------------- Plate Lookup --------------- */
+.autosync-plate-lookup {
+  padding: 1.5rem;
+  border: 1px solid #e3e3e3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.autosync-plate-lookup__heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.autosync-plate-lookup__form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.autosync-plate-lookup__input-group {
+  display: flex;
+  flex: 1;
+  border: 2px solid #f5c518;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f5c518;
+}
+
+.autosync-plate-lookup__flag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  background: #003399;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 2rem;
+}
+
+.autosync-plate-lookup__input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-family: 'UKNumberPlate', 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border: none;
+  background: #f5c518;
+  color: #1a1a1a;
+  outline: none;
+}
+
+.autosync-plate-lookup__input::placeholder {
+  color: #8c7a00;
+  font-weight: 400;
+  font-size: 0.875rem;
+  letter-spacing: normal;
+}
+
+.autosync-plate-lookup--hidden {
+  display: none;
+}
+
+.autosync-plate-lookup__card {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+}
+
+.autosync-plate-lookup__card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.autosync-plate-lookup__details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.autosync-plate-lookup__details dt {
+  font-weight: 500;
+  color: #6d7175;
+}
+
+.autosync-plate-lookup__details dd {
+  margin: 0;
+}
+
+.autosync-plate-lookup__find-parts {
+  margin-top: 0.5rem;
+}
+
+.autosync-plate-lookup__error {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fff4f4;
+  border: 1px solid #e5b8b7;
+  border-radius: 6px;
+  color: #d72c0d;
+  font-size: 0.875rem;
+}
+
+/* --------------- Wheel Finder --------------- */
+.autosync-wheel-finder {
+  padding: 1.5rem;
+  border: 1px solid #e3e3e3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.autosync-wheel-finder__heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.autosync-wheel-finder__fields {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.autosync-wheel-finder__field {
+  flex: 1;
+  min-width: 140px;
+}
+
+.autosync-wheel-finder__field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.autosync-wheel-finder__field select,
+.autosync-wheel-finder__field input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #c9cccf;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.autosync-wheel-finder__field select:focus,
+.autosync-wheel-finder__field input:focus {
+  outline: 2px solid #2c6ecb;
+  outline-offset: 1px;
+}
+
+.autosync-wheel-finder--hidden {
+  display: none;
+}
+
+.autosync-wheel-finder__stub {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f6f6f7;
+  border-radius: 6px;
+  color: #6d7175;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.autosync-wheel-finder__results {
+  margin-top: 1rem;
+}
+
+/* --------------- Responsive --------------- */
+@media (max-width: 768px) {
+  .autosync-ymme--horizontal .autosync-ymme__fields {
+    flex-direction: column;
+  }
+
+  .autosync-ymme--horizontal .autosync-ymme__field {
+    min-width: auto;
+  }
+
+  .autosync-plate-lookup__form {
+    flex-direction: column;
+  }
+
+  .autosync-vehicle-bar__inner {
+    font-size: 0.8125rem;
+  }
+
+  .autosync-vehicle-bar__actions {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .autosync-wheel-finder__fields {
+    flex-direction: column;
+  }
+}
