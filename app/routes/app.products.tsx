@@ -126,6 +126,10 @@ export default function Products() {
 
   const isFetching = fetcher.state !== "idle";
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const fetcherData = fetcher.data as
+    | { success: true; fetched: number; errors: string[] }
+    | { error: string }
+    | undefined;
 
   const updateFilters = useCallback(
     (key: string, value: string) => {
@@ -292,6 +296,20 @@ export default function Products() {
       }}
     >
       <BlockStack gap="400">
+        {/* Fetch result banners */}
+        {fetcherData && "success" in fetcherData && (
+          <Banner
+            tone="success"
+            title={`Successfully fetched ${fetcherData.fetched} products from Shopify`}
+            onDismiss={() => {}}
+          />
+        )}
+        {fetcherData && "error" in fetcherData && (
+          <Banner tone="critical" title="Fetch failed" onDismiss={() => {}}>
+            <p>{fetcherData.error}</p>
+          </Banner>
+        )}
+
         {isFetching && (
           <Banner tone="info">
             <InlineStack gap="200" blockAlign="center">

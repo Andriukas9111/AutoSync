@@ -11,9 +11,16 @@ import db from "../lib/db.server";
 import { getPlanLimits } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 
+// Admin shops get auto-promoted to enterprise plan (app owners)
+const ADMIN_SHOPS = [
+  "autosync-9.myshopify.com",
+  "performancehq-3.myshopify.com",
+];
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
+  const isAdmin = ADMIN_SHOPS.includes(shopId);
 
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db
@@ -23,20 +30,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .single();
 
   if (!tenant) {
-    // First-time install — create tenant record
+    // First-time install — admin shops get enterprise, others get free
     const { error: upsertError } = await db.from("tenants").upsert({
       shop_id: shopId,
       shop_domain: shopId,
-      plan: "free" as PlanTier,
+      plan: (isAdmin ? "enterprise" : "free") as PlanTier,
       plan_status: "active",
       installed_at: new Date().toISOString(),
     });
     if (upsertError) {
       console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
+  } else if (isAdmin && tenant.plan !== "enterprise") {
+    // Auto-promote existing admin shops to enterprise if not already
+    await db
+      .from("tenants")
+      .update({ plan: "enterprise" as PlanTier })
+      .eq("shop_id", shopId);
   }
 
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  // For admin shops, always use enterprise regardless of current DB state
+  const plan = isAdmin
+    ? ("enterprise" as PlanTier)
+    : ((tenant?.plan ?? "free") as PlanTier);
   const limits = getPlanLimits(plan);
 
   return {
@@ -47,11 +63,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productCount: tenant?.product_count ?? 0,
     fitmentCount: tenant?.fitment_count ?? 0,
     isFirstTime: !tenant,
+    isAdmin,
   };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, isAdmin } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
 
@@ -71,6 +88,7 @@ export default function App() {
             <s-link href="/app/settings">Settings</s-link>
             <s-link href="/app/plans">Plans</s-link>
             <s-link href="/app/help">Help</s-link>
+            {isAdmin && <s-link href="/app/admin">Admin</s-link>}
           </s-app-nav>
           {/* Global navigation loading bar */}
           {isNavigating && (

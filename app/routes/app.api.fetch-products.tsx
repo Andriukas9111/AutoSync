@@ -5,7 +5,19 @@ import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  console.log("[fetch-products] Action started");
+
+  let admin, session;
+  try {
+    const auth = await authenticate.admin(request);
+    admin = auth.admin;
+    session = auth.session;
+    console.log("[fetch-products] Authenticated:", session.shop);
+  } catch (authErr: any) {
+    console.error("[fetch-products] Auth failed:", authErr.message);
+    return data({ error: `Authentication failed: ${authErr.message}` }, { status: 401 });
+  }
+
   const shopId = session.shop;
 
   // Create a sync job record
@@ -21,16 +33,21 @@ export async function action({ request }: ActionFunctionArgs) {
     .single();
 
   if (jobError || !job) {
-    return data({ error: "Failed to create sync job" }, { status: 500 });
+    console.error("[fetch-products] Job creation failed:", jobError?.message);
+    return data({ error: `Failed to create sync job: ${jobError?.message ?? "unknown"}` }, { status: 500 });
   }
 
-  // Run the fetch (synchronous for now — will be optimized later)
+  console.log("[fetch-products] Job created:", job.id);
+
+  // Run the fetch
   try {
     const result = await fetchProductsFromShopify({
       admin,
       shopId,
       jobId: job.id,
     });
+
+    console.log("[fetch-products] Complete:", result.fetched, "products fetched");
 
     return data({
       success: true,
@@ -39,6 +56,7 @@ export async function action({ request }: ActionFunctionArgs) {
       jobId: job.id,
     });
   } catch (err: any) {
+    console.error("[fetch-products] Pipeline error:", err.message, err.stack);
     return data({ error: err.message ?? "Fetch failed" }, { status: 500 });
   }
 }
