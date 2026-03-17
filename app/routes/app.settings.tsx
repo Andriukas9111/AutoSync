@@ -87,9 +87,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop_id: shopId,
       tag_prefix: tagPrefix,
       collection_strategy: collectionStrategy,
-      auto_push_tags: autoPushTags,
-      auto_push_metafields: autoPushMetafields,
-      auto_create_collections: autoCreateCollections,
+      push_tags: autoPushTags,
+      push_metafields: autoPushMetafields,
+      push_collections: autoCreateCollections,
       engine_display_format: engineDisplayFormat,
       notification_email: notificationEmail || null,
       updated_at: new Date().toISOString(),
@@ -208,10 +208,10 @@ export default function Settings() {
 
   // Form state — Push Settings
   const [autoPushTags, setAutoPushTags] = useState(
-    appSettings?.auto_push_tags ?? false
+    appSettings?.push_tags ?? false
   );
   const [autoPushMetafields, setAutoPushMetafields] = useState(
-    appSettings?.auto_push_metafields ?? false
+    appSettings?.push_metafields ?? false
   );
   const [tagPrefix, setTagPrefix] = useState(
     appSettings?.tag_prefix ?? "_autosync_"
@@ -222,7 +222,7 @@ export default function Settings() {
     appSettings?.collection_strategy ?? "make"
   );
   const [autoCreateCollections, setAutoCreateCollections] = useState(
-    appSettings?.auto_create_collections ?? false
+    appSettings?.push_collections ?? false
   );
 
   // Form state — Display Settings

@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [tenantResult, recentJobResult, pushCountResult] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).single(),
     db.from("sync_jobs")
-      .select("id, job_type, status, completed_at")
+      .select("id, type, status, completed_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -40,7 +40,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("sync_jobs")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
-      .eq("job_type", "push")
+      .eq("type", "push")
       .eq("status", "completed"),
   ]);
 

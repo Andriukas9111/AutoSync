@@ -303,7 +303,7 @@ export async function pushToShopify(
         .from("sync_jobs")
         .update({
           processed_items: result.processed,
-          failed_items: result.errors,
+          metadata: { failed_items: result.errors },
           progress: Math.round(
             (result.processed / productsWithFitments.length) * 100,
           ),
@@ -319,7 +319,7 @@ export async function pushToShopify(
         progress: 100,
         processed_items: result.processed,
         total_items: productsWithFitments.length,
-        failed_items: result.errors,
+        metadata: { failed_items: result.errors },
         completed_at: new Date().toISOString(),
       })
       .eq("id", jobId);

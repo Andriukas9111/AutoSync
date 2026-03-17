@@ -42,7 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("active", true)
       .order("name", { ascending: true }),
     db.from("tenant_active_makes")
-      .select("make_id")
+      .select("ymme_make_id")
       .eq("shop_id", shopId),
     db.from("vehicle_fitments")
       .select("make")
@@ -63,7 +63,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const allMakes = makesResult.data;
   const activeMakeIds = new Set(
-    (activeResult.data ?? []).map((tam: any) => tam.make_id)
+    (activeResult.data ?? []).map((tam: any) => tam.ymme_make_id)
   );
 
   // Count products per make name
@@ -120,7 +120,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Count current active makes
       const { count: currentActive } = await db
         .from("tenant_active_makes")
-        .select("id", { count: "exact", head: true })
+        .select("*", { count: "exact", head: true })
         .eq("shop_id", shopId);
 
       if ((currentActive ?? 0) >= limits.activeMakes) {
@@ -135,7 +135,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Insert
       const { error } = await db
         .from("tenant_active_makes")
-        .insert({ shop_id: shopId, make_id: makeId });
+        .insert({ shop_id: shopId, ymme_make_id: makeId });
 
       if (error) {
         // Ignore duplicate key errors
@@ -149,7 +149,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .from("tenant_active_makes")
         .delete()
         .eq("shop_id", shopId)
-        .eq("make_id", makeId);
+        .eq("ymme_make_id", makeId);
 
       if (error) {
         return data({ error: "Failed to disable make: " + error.message }, { status: 500 });

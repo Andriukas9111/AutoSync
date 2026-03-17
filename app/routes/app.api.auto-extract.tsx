@@ -22,7 +22,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .from("sync_jobs")
     .select("*")
     .eq("shop_id", shopId)
-    .eq("job_type", "extract")
+    .eq("type", "extract")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -58,7 +58,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .from("sync_jobs")
     .select("id")
     .eq("shop_id", shopId)
-    .eq("job_type", "extract")
+    .eq("type", "extract")
     .eq("status", "running")
     .limit(1)
     .maybeSingle();
@@ -75,10 +75,9 @@ export async function action({ request }: ActionFunctionArgs) {
     .from("sync_jobs")
     .insert({
       shop_id: shopId,
-      job_type: "extract",
+      type: "extract",
       status: "pending",
       processed_items: 0,
-      failed_items: 0,
     })
     .select("id")
     .single();
@@ -108,7 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
       .from("sync_jobs")
       .update({
         status: "failed",
-        error_message: message,
+        error: message,
         completed_at: new Date().toISOString(),
       })
       .eq("id", job.id);
