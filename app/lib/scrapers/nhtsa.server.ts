@@ -92,6 +92,23 @@ function toSlug(name: string): string {
  * Fetch all makes from the NHTSA vPIC API and upsert into ymme_makes.
  * Only adds makes that don't already exist (by name match).
  */
+/**
+ * Well-known automotive makes to prioritise. NHTSA returns ~10,000 makes
+ * including obscure trailers, motorcycles, etc. We only want real car/truck brands.
+ */
+const PRIORITY_MAKES = new Set([
+  "acura", "alfa romeo", "aston martin", "audi", "bentley", "bmw", "bugatti",
+  "buick", "cadillac", "chevrolet", "chrysler", "citroen", "cupra", "dacia",
+  "daewoo", "daihatsu", "dodge", "ds", "ferrari", "fiat", "fisker", "ford",
+  "genesis", "gmc", "honda", "hummer", "hyundai", "infiniti", "isuzu", "jaguar",
+  "jeep", "kia", "lamborghini", "land rover", "lexus", "lincoln", "lotus",
+  "lucid", "maserati", "mazda", "mclaren", "mercedes-benz", "mercury", "mg",
+  "mini", "mitsubishi", "nissan", "oldsmobile", "opel", "pagani", "peugeot",
+  "plymouth", "polestar", "pontiac", "porsche", "ram", "renault", "rivian",
+  "rolls-royce", "saab", "saturn", "scion", "seat", "skoda", "smart",
+  "subaru", "suzuki", "tesla", "toyota", "vauxhall", "volkswagen", "volvo",
+]);
+
 export async function fetchNHTSAMakes(): Promise<{
   makesProcessed: number;
   newMakes: number;
@@ -105,6 +122,12 @@ export async function fetchNHTSAMakes(): Promise<{
   const nhtsMakes = response.Results;
   console.log(`[nhtsa] Received ${nhtsMakes.length} makes from NHTSA`);
 
+  // Filter to well-known automotive brands only
+  const relevantMakes = nhtsMakes.filter((m) =>
+    PRIORITY_MAKES.has(m.Make_Name.toLowerCase().trim()),
+  );
+  console.log(`[nhtsa] Filtered to ${relevantMakes.length} priority automotive makes`);
+
   // Get existing makes from our DB for deduplication
   const { data: existingMakes } = await db
     .from("ymme_makes")
@@ -115,50 +138,53 @@ export async function fetchNHTSAMakes(): Promise<{
     (existingMakes ?? []).map((m: { name: string }) => m.name.toLowerCase()),
   );
 
-  let newMakes = 0;
+  // Batch upsert — build array of new makes, insert in one call
+  const newMakeRows: Array<{
+    name: string;
+    slug: string;
+    country: string;
+    nhtsa_make_id: number;
+    source: string;
+    active: boolean;
+  }> = [];
 
-  for (const make of nhtsMakes) {
+  for (const make of relevantMakes) {
     const name = normaliseName(make.Make_Name);
     if (!name || name.length < 2) continue;
-
-    // Skip if we already have this make (case-insensitive)
     if (existingNameSet.has(name.toLowerCase())) continue;
 
-    const { error } = await db.from("ymme_makes").upsert(
-      {
-        name,
-        slug: toSlug(name),
-        country: "US", // NHTSA is US market data
-        nhtsa_make_id: make.Make_ID,
-        source: "nhtsa",
-        active: true,
-      },
-      { onConflict: "slug" },
-    );
+    newMakeRows.push({
+      name,
+      slug: toSlug(name),
+      country: "US",
+      nhtsa_make_id: make.Make_ID,
+      source: "nhtsa",
+      active: true,
+    });
 
-    if (error) {
-      // Try with name conflict instead
-      await db.from("ymme_makes").upsert(
-        {
-          name,
-          country: "US",
-          nhtsa_make_id: make.Make_ID,
-          source: "nhtsa",
-          active: true,
-        },
-        { onConflict: "name" },
-      );
-    }
-
-    newMakes++;
     existingNameSet.add(name.toLowerCase());
   }
 
+  if (newMakeRows.length > 0) {
+    // Batch upsert in chunks of 50
+    for (let i = 0; i < newMakeRows.length; i += 50) {
+      const chunk = newMakeRows.slice(i, i + 50);
+      const { error } = await db.from("ymme_makes").upsert(chunk, { onConflict: "slug" });
+      if (error) {
+        console.warn(`[nhtsa] Batch upsert error (chunk ${i}):`, error.message);
+        // Fallback: insert one-by-one for this chunk
+        for (const row of chunk) {
+          await db.from("ymme_makes").upsert(row, { onConflict: "slug" });
+        }
+      }
+    }
+  }
+
   console.log(
-    `[nhtsa] Processed ${nhtsMakes.length} makes, ${newMakes} new makes added`,
+    `[nhtsa] Processed ${relevantMakes.length} priority makes, ${newMakeRows.length} new makes added`,
   );
 
-  return { makesProcessed: nhtsMakes.length, newMakes };
+  return { makesProcessed: relevantMakes.length, newMakes: newMakeRows.length };
 }
 
 /**

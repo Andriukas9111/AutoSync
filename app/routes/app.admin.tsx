@@ -1,5 +1,6 @@
+import { useState, useEffect, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -18,6 +19,7 @@ import {
   Select,
   DataTable,
   ProgressBar,
+  Spinner,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -34,7 +36,7 @@ const ADMIN_SHOPS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Plan tier badge tones
+// Plan tier badge tones & display names
 // ---------------------------------------------------------------------------
 const PLAN_BADGE_TONE: Record<
   PlanTier,
@@ -47,6 +49,19 @@ const PLAN_BADGE_TONE: Record<
   business: "warning",
   enterprise: "critical",
 };
+
+const PLAN_DISPLAY_NAME: Record<PlanTier, string> = {
+  free: "Free",
+  starter: "Starter",
+  growth: "Growth",
+  professional: "Professional",
+  business: "Business",
+  enterprise: "Enterprise",
+};
+
+function capitalisePlan(plan: string): string {
+  return PLAN_DISPLAY_NAME[plan as PlanTier] ?? plan.charAt(0).toUpperCase() + plan.slice(1);
+}
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -63,13 +78,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Fetch all data in parallel
-  const [tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes, recentJobsRes, providersRes] = await Promise.all([
+  const [
+    tenantsRes,
+    makesRes,
+    modelsRes,
+    enginesRes,
+    jobsRes,
+    aliasesRes,
+    fitmentCountRes,
+    recentJobsRes,
+    providersRes,
+    productCountRes,
+  ] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
     db.from("ymme_engines").select("*", { count: "exact", head: true }),
     db.from("sync_jobs").select("*", { count: "exact", head: true }),
     db.from("ymme_aliases").select("*", { count: "exact", head: true }),
+    db.from("vehicle_fitments").select("*", { count: "exact", head: true }),
     // Recent sync jobs for usage analytics (last 50)
     db.from("sync_jobs")
       .select("shop_id, type, status, created_at, completed_at")
@@ -78,14 +105,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Provider counts per tenant
     db.from("providers")
       .select("shop_id, name, status, product_count"),
+    // Total products across all tenants
+    db.from("products").select("*", { count: "exact", head: true }),
   ]);
 
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
 
   // Aggregate stats
   const totalTenants = tenantList.length;
-  const totalProducts = tenantList.reduce((s, t) => s + (t.product_count ?? 0), 0);
-  const totalFitments = tenantList.reduce((s, t) => s + (t.fitment_count ?? 0), 0);
+  const totalProducts = productCountRes.count ?? 0;
+  const totalFitments = fitmentCountRes.count ?? 0;
 
   const planBreakdown: Record<string, number> = {};
   for (const t of tenantList) {
@@ -147,9 +176,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isActive: !t.uninstalled_at,
   }));
 
-  // Find the most active tenant (most products)
-  const maxProducts = Math.max(...tenantList.map((t) => t.product_count ?? 0), 1);
-
   return {
     tenants: tenantList,
     totalTenants,
@@ -158,13 +184,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planBreakdown,
     ymmeCounts,
     tenantUsage,
-    maxProducts,
     recentJobs: recentJobs.slice(0, 10),
   };
 };
 
 // ---------------------------------------------------------------------------
-// Action (placeholder)
+// Action
 // ---------------------------------------------------------------------------
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -179,14 +204,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (intent) {
     case "sync-nhtsa": {
       try {
-        const result = await syncNHTSAToYMME({ maxMakes: 200, delayMs: 200 });
+        // Reduced batch: 30 makes with 150ms delay ≈ 30 × (150ms + ~300ms API) ≈ 13.5s
+        // Well within Vercel's 60s timeout
+        const result = await syncNHTSAToYMME({ maxMakes: 30, delayMs: 150 });
         return data({
           ok: true,
-          message: `NHTSA sync complete: ${result.makesProcessed} makes processed (${result.newMakes} new), ${result.modelsProcessed} models processed (${result.newModels} new). ${result.errors.length} errors.`,
+          intent: "sync-nhtsa",
+          message: `NHTSA sync complete: ${result.makesProcessed} makes scanned (${result.newMakes} new), ${result.modelsProcessed} models scanned (${result.newModels} new). ${result.errors.length > 0 ? `${result.errors.length} errors.` : "No errors."}`,
+          details: result,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "NHTSA sync failed";
-        return data({ ok: false, message: msg });
+        return data({ ok: false, intent: "sync-nhtsa", message: msg });
       }
     }
 
@@ -195,14 +224,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const newPlan = formData.get("new_plan") as PlanTier;
 
       if (!shopId || !newPlan) {
-        return data({ ok: false, message: "Missing shop_id or new_plan" });
+        return data({ ok: false, intent: "change-plan", message: "Missing shop_id or new_plan" });
       }
 
       const validPlans: PlanTier[] = [
         "free", "starter", "growth", "professional", "business", "enterprise",
       ];
       if (!validPlans.includes(newPlan)) {
-        return data({ ok: false, message: `Invalid plan: ${newPlan}` });
+        return data({ ok: false, intent: "change-plan", message: `Invalid plan: ${newPlan}` });
       }
 
       const { error } = await db
@@ -211,17 +240,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .eq("shop_id", shopId);
 
       if (error) {
-        return data({ ok: false, message: `Failed to update plan: ${error.message}` });
+        return data({ ok: false, intent: "change-plan", message: `Failed to update plan: ${error.message}` });
       }
 
       return data({
         ok: true,
-        message: `Plan for ${shopId} changed to ${newPlan}.`,
+        intent: "change-plan",
+        message: `Plan for ${shopId} changed to ${capitalisePlan(newPlan)}.`,
       });
     }
 
+    case "refresh-counts": {
+      // No-op action — just triggers loader revalidation
+      return data({ ok: true, intent: "refresh-counts", message: "Counts refreshed." });
+    }
+
     default:
-      return data({ ok: false, message: `Unknown action: ${intent}` });
+      return data({ ok: false, intent, message: `Unknown action: ${intent}` });
   }
 };
 
@@ -237,335 +272,445 @@ export default function AdminPanel() {
     planBreakdown,
     ymmeCounts,
     tenantUsage,
-    maxProducts,
     recentJobs,
   } = useLoaderData<typeof loader>();
 
-  const fetcher = useFetcher<{ ok: boolean; message: string }>();
+  const fetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
+  const revalidator = useRevalidator();
   const isSubmitting = fetcher.state !== "idle";
+  const isRevalidating = revalidator.state === "loading";
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Auto-revalidate 3 seconds after a sync action completes to pick up latest counts
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data?.ok && fetcher.data?.intent === "sync-nhtsa") {
+      const timer = setTimeout(() => {
+        revalidator.revalidate();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  // Reset banner dismiss when new action completes
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      setBannerDismissed(false);
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  const handleRefreshCounts = useCallback(() => {
+    revalidator.revalidate();
+  }, [revalidator]);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "—";
+    return new Date(dateStr).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   return (
-    <Page title="Admin Panel" subtitle="App owner management dashboard">
-      {fetcher.data?.message && (
-        <Box paddingBlockEnd="400">
+    <Page
+      title="Admin Panel"
+      subtitle="App owner management dashboard"
+      secondaryActions={[
+        {
+          content: isRevalidating ? "Refreshing..." : "Refresh Data",
+          onAction: handleRefreshCounts,
+          loading: isRevalidating,
+          disabled: isRevalidating,
+        },
+      ]}
+    >
+      <BlockStack gap="600">
+        {/* Action result banner */}
+        {fetcher.data?.message && !bannerDismissed && (
           <Banner
             title={fetcher.data.message}
             tone={fetcher.data.ok ? "success" : "critical"}
-            onDismiss={() => {}}
+            onDismiss={() => setBannerDismissed(true)}
           />
-        </Box>
-      )}
+        )}
 
-      <Layout>
-        {/* ---- System Stats ---- */}
-        <Layout.Section>
-          <Text as="h2" variant="headingLg">
-            System Overview
-          </Text>
-        </Layout.Section>
-
-        <Layout.Section>
-          <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Total Tenants
-                </Text>
-                <Text as="p" variant="headingXl">
-                  {totalTenants.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Total Products
-                </Text>
-                <Text as="p" variant="headingXl">
-                  {totalProducts.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Total Fitments
-                </Text>
-                <Text as="p" variant="headingXl">
-                  {totalFitments.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Plan Breakdown
-                </Text>
-                <BlockStack gap="100">
-                  {Object.entries(planBreakdown).map(([plan, count]) => (
-                    <InlineStack key={plan} align="space-between">
-                      <Badge tone={PLAN_BADGE_TONE[plan as PlanTier] ?? "default"}>
-                        {plan}
-                      </Badge>
-                      <Text as="span" variant="bodySm">
-                        {count}
-                      </Text>
-                    </InlineStack>
-                  ))}
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </InlineGrid>
-        </Layout.Section>
-
-        {/* ---- YMME Database Stats ---- */}
-        <Layout.Section>
+        {/* ---- System Overview Stats ---- */}
+        <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
           <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                YMME Database
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                Total Tenants
               </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {totalTenants.toLocaleString()}
+              </Text>
+              <InlineStack gap="200" wrap>
+                {Object.entries(planBreakdown).map(([plan, count]) => (
+                  <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier] ?? "default"}>
+                    {capitalisePlan(plan)}: {count}
+                  </Badge>
+                ))}
+              </InlineStack>
+            </BlockStack>
+          </Card>
 
-              <InlineGrid columns={{ xs: 2, sm: 3, md: 5 }} gap="400">
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                Total Products
+              </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {totalProducts.toLocaleString()}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Across all tenants
+              </Text>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                Total Fitments
+              </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {totalFitments.toLocaleString()}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Vehicle-product mappings
+              </Text>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                Sync Jobs
+              </Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {ymmeCounts.totalJobs.toLocaleString()}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Total jobs executed
+              </Text>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
+        {/* ---- YMME Database Section ---- */}
+        <Card>
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingMd">
+                YMME Vehicle Database
+              </Text>
+              <InlineStack gap="200">
+                {isRevalidating && <Spinner size="small" />}
+                <Button onClick={handleRefreshCounts} disabled={isRevalidating} size="slim">
+                  {isRevalidating ? "Refreshing..." : "Refresh Counts"}
+                </Button>
+              </InlineStack>
+            </InlineStack>
+
+            <InlineGrid columns={{ xs: 2, sm: 3, md: 5 }} gap="400">
+              <Card>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
                     Makes
                   </Text>
-                  <Text as="p" variant="headingLg">
+                  <Text as="p" variant="headingLg" fontWeight="bold">
                     {ymmeCounts.makes.toLocaleString()}
                   </Text>
                 </BlockStack>
+              </Card>
 
+              <Card>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
                     Models
                   </Text>
-                  <Text as="p" variant="headingLg">
+                  <Text as="p" variant="headingLg" fontWeight="bold">
                     {ymmeCounts.models.toLocaleString()}
                   </Text>
                 </BlockStack>
+              </Card>
 
+              <Card>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
                     Engines
                   </Text>
-                  <Text as="p" variant="headingLg">
+                  <Text as="p" variant="headingLg" fontWeight="bold">
                     {ymmeCounts.engines.toLocaleString()}
                   </Text>
                 </BlockStack>
+              </Card>
 
+              <Card>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
                     Aliases
                   </Text>
-                  <Text as="p" variant="headingLg">
+                  <Text as="p" variant="headingLg" fontWeight="bold">
                     {ymmeCounts.aliases.toLocaleString()}
                   </Text>
                 </BlockStack>
+              </Card>
 
+              <Card>
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Sync Jobs
+                    Fitments
                   </Text>
-                  <Text as="p" variant="headingLg">
-                    {ymmeCounts.totalJobs.toLocaleString()}
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {totalFitments.toLocaleString()}
                   </Text>
                 </BlockStack>
-              </InlineGrid>
+              </Card>
+            </InlineGrid>
 
-              <Divider />
+            <Divider />
 
-              {/* ---- Actions ---- */}
-              <Text as="h2" variant="headingMd">
-                Actions
-              </Text>
+            {/* ---- YMME Sync Actions ---- */}
+            <Text as="h3" variant="headingSm">
+              Data Sync Actions
+            </Text>
 
-              <InlineStack gap="300">
-                <fetcher.Form method="post">
-                  <input type="hidden" name="intent" value="sync-nhtsa" />
-                  <Button submit loading={isSubmitting} variant="primary">
-                    Sync NHTSA Makes &amp; Models
-                  </Button>
-                </fetcher.Form>
-              </InlineStack>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Syncs up to 50 makes from the NHTSA vPIC database and their models.
-                This is free and requires no API key.
-              </Text>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
+            <Layout>
+              <Layout.Section variant="oneHalf">
+                <Card>
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm">
+                      NHTSA Sync (USA)
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Syncs makes and models from the free NHTSA vPIC database.
+                      Processes 30 makes per run with their models. Run multiple times
+                      to build up the full database. No API key required.
+                    </Text>
+                    <InlineStack gap="200">
+                      <fetcher.Form method="post">
+                        <input type="hidden" name="intent" value="sync-nhtsa" />
+                        <Button submit loading={isSubmitting} variant="primary" size="slim">
+                          {isSubmitting ? "Syncing..." : "Sync NHTSA Data"}
+                        </Button>
+                      </fetcher.Form>
+                    </InlineStack>
+                    {isSubmitting && (
+                      <InlineStack gap="200" blockAlign="center">
+                        <Spinner size="small" />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Syncing makes and models — counts will update automatically when complete...
+                        </Text>
+                      </InlineStack>
+                    )}
+                  </BlockStack>
+                </Card>
+              </Layout.Section>
+
+              <Layout.Section variant="oneHalf">
+                <Card>
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm">
+                      Auto-Data.net Scraper
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Scrapes European and global vehicle data including makes, models,
+                      and engine specs. Covers brands not in NHTSA. Rate-limited and
+                      resumable. Use the Supabase SQL editor for bulk operations.
+                    </Text>
+                    <Badge tone="info">Coming to Admin UI</Badge>
+                  </BlockStack>
+                </Card>
+              </Layout.Section>
+            </Layout>
+          </BlockStack>
+        </Card>
 
         {/* ---- Usage Analytics Per Merchant ---- */}
-        <Layout.Section>
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">
+              Merchant Analytics
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Overview of all installed merchants — products, fitments, providers, and recent activity.
+            </Text>
+
+            <DataTable
+              columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text", "text"]}
+              headings={["Merchant", "Plan", "Products", "Fitments", "Providers", "Job Success", "Last Active"]}
+              rows={tenantUsage.map((t: typeof tenantUsage[number]) => [
+                t.domain.replace(".myshopify.com", ""),
+                capitalisePlan(t.plan),
+                t.products.toLocaleString(),
+                t.fitments.toLocaleString(),
+                String(t.providers),
+                t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "—",
+                t.lastActivity
+                  ? new Date(t.lastActivity).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                    })
+                  : "—",
+              ])}
+            />
+          </BlockStack>
+        </Card>
+
+        {/* ---- Recent Sync Activity ---- */}
+        {recentJobs.length > 0 && (
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingMd">
-                Usage Analytics by Merchant
+                Recent Sync Activity
               </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Product count relative to the most active merchant. Shows recent sync activity and provider usage.
-              </Text>
-
               <DataTable
-                columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text", "text"]}
-                headings={["Merchant", "Plan", "Products", "Fitments", "Providers", "Success Rate", "Last Activity"]}
-                rows={tenantUsage.map((t: typeof tenantUsage[number]) => [
-                  t.domain.replace(".myshopify.com", ""),
-                  t.plan,
-                  t.products.toLocaleString(),
-                  t.fitments.toLocaleString(),
-                  String(t.providers),
-                  t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "—",
-                  t.lastActivity
-                    ? new Date(t.lastActivity).toLocaleDateString("en-GB", {
-                        day: "numeric",
-                        month: "short",
-                      })
-                    : "—",
+                columnContentTypes={["text", "text", "text", "text"]}
+                headings={["Merchant", "Job Type", "Status", "When"]}
+                rows={recentJobs.map((j: typeof recentJobs[number]) => [
+                  j.shop_id.replace(".myshopify.com", ""),
+                  j.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                  j.status.charAt(0).toUpperCase() + j.status.slice(1),
+                  formatDateTime(j.created_at),
                 ])}
               />
             </BlockStack>
           </Card>
-        </Layout.Section>
-
-        {/* ---- Recent Sync Activity ---- */}
-        {recentJobs.length > 0 && (
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Recent Sync Activity (Last 10)
-                </Text>
-                <DataTable
-                  columnContentTypes={["text", "text", "text", "text"]}
-                  headings={["Merchant", "Job Type", "Status", "When"]}
-                  rows={recentJobs.map((j: typeof recentJobs[number]) => [
-                    j.shop_id.replace(".myshopify.com", ""),
-                    j.type.replace(/_/g, " "),
-                    j.status,
-                    new Date(j.created_at).toLocaleDateString("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }),
-                  ])}
-                />
-              </BlockStack>
-            </Card>
-          </Layout.Section>
         )}
 
-        {/* ---- Tenant List ---- */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Installed Merchants ({totalTenants})
-              </Text>
+        {/* ---- Tenant Management ---- */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">
+              Tenant Management ({totalTenants})
+            </Text>
 
-              <IndexTable
-                resourceName={{ singular: "tenant", plural: "tenants" }}
-                itemCount={tenants.length}
-                headings={[
-                  { title: "Shop Domain" },
-                  { title: "Plan" },
-                  { title: "Products" },
-                  { title: "Fitments" },
-                  { title: "Installed" },
-                  { title: "Status" },
-                  { title: "Change Plan" },
-                ]}
-                selectable={false}
-              >
-                {tenants.map((tenant, idx) => {
-                  const isActive = !tenant.uninstalled_at;
-                  return (
-                    <IndexTable.Row
-                      id={tenant.shop_id}
-                      key={tenant.shop_id}
-                      position={idx}
-                    >
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">
-                          {tenant.shop_domain ?? tenant.shop_id}
-                        </Text>
-                      </IndexTable.Cell>
+            <IndexTable
+              resourceName={{ singular: "tenant", plural: "tenants" }}
+              itemCount={tenants.length}
+              headings={[
+                { title: "Shop Domain" },
+                { title: "Plan" },
+                { title: "Products" },
+                { title: "Fitments" },
+                { title: "Installed" },
+                { title: "Status" },
+                { title: "Change Plan" },
+              ]}
+              selectable={false}
+            >
+              {tenants.map((tenant, idx) => {
+                const isActive = !tenant.uninstalled_at;
+                return (
+                  <IndexTable.Row
+                    id={tenant.shop_id}
+                    key={tenant.shop_id}
+                    position={idx}
+                  >
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {(tenant.shop_domain ?? tenant.shop_id).replace(".myshopify.com", "")}
+                      </Text>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <Badge
-                          tone={
-                            PLAN_BADGE_TONE[tenant.plan as PlanTier] ?? "default"
-                          }
-                        >
-                          {tenant.plan}
-                        </Badge>
-                      </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Badge
+                        tone={PLAN_BADGE_TONE[tenant.plan as PlanTier] ?? "default"}
+                      >
+                        {capitalisePlan(tenant.plan)}
+                      </Badge>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {(tenant.product_count ?? 0).toLocaleString()}
-                        </Text>
-                      </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd">
+                        {(tenant.product_count ?? 0).toLocaleString()}
+                      </Text>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {(tenant.fitment_count ?? 0).toLocaleString()}
-                        </Text>
-                      </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodyMd">
+                        {(tenant.fitment_count ?? 0).toLocaleString()}
+                      </Text>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodySm">
-                          {tenant.installed_at
-                            ? new Date(tenant.installed_at).toLocaleDateString()
-                            : "—"}
-                        </Text>
-                      </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm">
+                        {formatDate(tenant.installed_at)}
+                      </Text>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <Badge tone={isActive ? "success" : "critical"}>
-                          {isActive ? "Active" : "Uninstalled"}
-                        </Badge>
-                      </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Badge tone={isActive ? "success" : "critical"}>
+                        {isActive ? "Active" : "Uninstalled"}
+                      </Badge>
+                    </IndexTable.Cell>
 
-                      <IndexTable.Cell>
-                        <fetcher.Form method="post">
-                          <input type="hidden" name="intent" value="change-plan" />
-                          <input type="hidden" name="shop_id" value={tenant.shop_id} />
-                          <InlineStack gap="200" blockAlign="center">
-                            <Select
-                              label=""
-                              labelHidden
-                              options={[
-                                { label: "Free", value: "free" },
-                                { label: "Starter", value: "starter" },
-                                { label: "Growth", value: "growth" },
-                                { label: "Professional", value: "professional" },
-                                { label: "Business", value: "business" },
-                                { label: "Enterprise", value: "enterprise" },
-                              ]}
-                              value={tenant.plan}
-                              name="new_plan"
-                              onChange={() => {}}
-                            />
-                            <Button submit size="slim" loading={isSubmitting}>
-                              Set
-                            </Button>
-                          </InlineStack>
-                        </fetcher.Form>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  );
-                })}
-              </IndexTable>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-      </Layout>
+                    <IndexTable.Cell>
+                      <fetcher.Form method="post">
+                        <input type="hidden" name="intent" value="change-plan" />
+                        <input type="hidden" name="shop_id" value={tenant.shop_id} />
+                        <InlineStack gap="200" blockAlign="center">
+                          <Select
+                            label=""
+                            labelHidden
+                            options={[
+                              { label: "Free", value: "free" },
+                              { label: "Starter", value: "starter" },
+                              { label: "Growth", value: "growth" },
+                              { label: "Professional", value: "professional" },
+                              { label: "Business", value: "business" },
+                              { label: "Enterprise", value: "enterprise" },
+                            ]}
+                            value={tenant.plan}
+                            name="new_plan"
+                            onChange={() => {}}
+                          />
+                          <Button submit size="slim" loading={isSubmitting}>
+                            Set
+                          </Button>
+                        </InlineStack>
+                      </fetcher.Form>
+                    </IndexTable.Cell>
+                  </IndexTable.Row>
+                );
+              })}
+            </IndexTable>
+          </BlockStack>
+        </Card>
+
+        {/* ---- System Info Footer ---- */}
+        <Card>
+          <BlockStack gap="200">
+            <Text as="h2" variant="headingSm">
+              System Information
+            </Text>
+            <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="300">
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Database</Text>
+                <Text as="p" variant="bodySm">Supabase (PostgreSQL)</Text>
+              </BlockStack>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Framework</Text>
+                <Text as="p" variant="bodySm">React Router 7 + Polaris</Text>
+              </BlockStack>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" tone="subdued">Pricing Tiers</Text>
+                <Text as="p" variant="bodySm">6 tiers (Free → Enterprise)</Text>
+              </BlockStack>
+            </InlineGrid>
+          </BlockStack>
+        </Card>
+      </BlockStack>
     </Page>
   );
 }
