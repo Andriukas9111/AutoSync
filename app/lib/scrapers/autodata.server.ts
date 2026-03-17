@@ -744,12 +744,13 @@ export async function fetchBrandList(): Promise<ScrapedBrand[]> {
     const html = await fetchPage("/en/allbrands");
     const brands: ScrapedBrand[] = [];
 
-    // Pattern: <a href="/en/brand-name-brand-123" ...>
-    //   <img src="/img/logos/BrandName.png" ...>
-    //   <strong>BrandName</strong>
+    // Real HTML structure (verified 2026-03):
+    // <a class="marki_blok" href="/en/abarth-brand-200" title="...">
+    //   <img src="/img/logos/Abarth.png" alt="..." />
+    //   <strong>Abarth</strong>
     // </a>
     const brandPattern =
-      /<a\s+href="(\/en\/([a-z0-9._-]+-brand-(\d+)))"[^>]*>[\s\S]*?(?:<img[^>]*src="([^"]*)")?[\s\S]*?(?:<strong>|<span[^>]*>|<b>)([^<]+)/gi;
+      /<a\s+class="marki_blok"\s+href="(\/en\/([a-z0-9._-]+-brand-(\d+)))"[^>]*>(?:<img[^>]*src="([^"]*)"[^>]*\/?>)?\s*<strong>([^<]+)<\/strong>/gi;
 
     let match;
     while ((match = brandPattern.exec(html)) !== null) {
@@ -772,40 +773,16 @@ export async function fetchBrandList(): Promise<ScrapedBrand[]> {
       }
     }
 
-    // Fallback: simpler anchor pattern if the above didn't match
-    if (brands.length === 0) {
-      const simplePattern =
-        /<a\s+href="(\/en\/([a-z0-9._-]+-brand-(\d+)))"[^>]*>[\s\S]*?<[^>]*>([A-Z][A-Za-z0-9\s._-]+?)<\//g;
-      while ((match = simplePattern.exec(html)) !== null) {
-        const pageUrl = match[1];
-        const slug = match[2];
-        const autodataId = parseInt(match[3], 10);
-        const name = match[4].trim();
-
-        if (name && slug && name.length < 50) {
-          brands.push({
-            slug,
-            name,
-            pageUrl,
-            country: null,
-            region: null,
-            logoUrl: resolveLogoUrl(name, null),
-            autodataId: isNaN(autodataId) ? null : autodataId,
-          });
-        }
-      }
-    }
-
-    // Third fallback: any /en/*-brand-* pattern
+    // Fallback: any href with -brand- pattern + <strong>Name</strong>
     if (brands.length === 0) {
       const fallbackPattern =
-        /href="(\/en\/([a-z0-9._-]+-brand-(\d+)))"[^>]*>[^<]*?([A-Z][A-Za-z0-9\s._-]{1,40})/g;
+        /href="(\/en\/([a-z0-9._-]+-brand-(\d+)))"[^>]*>[\s\S]*?<strong>([^<]+)<\/strong>/gi;
       while ((match = fallbackPattern.exec(html)) !== null) {
         const pageUrl = match[1];
         const slug = match[2];
         const autodataId = parseInt(match[3], 10);
         const name = match[4].trim();
-        if (name && slug && !brands.find((b) => b.slug === slug)) {
+        if (name && slug && name.length < 50 && !brands.find((b) => b.slug === slug)) {
           brands.push({
             slug,
             name,
@@ -832,20 +809,26 @@ export async function fetchModelsForBrand(brandPageUrl: string): Promise<Scraped
     const html = await fetchPage(brandPageUrl);
     const models: ScrapedModel[] = [];
 
-    // Model links pattern: /en/brand-model-generation-model-12345
-    // Each model entry typically shows: name, years, body type, power range
+    // Real HTML structure (verified 2026-03):
+    // <a class="modeli" href="/en/bmw-1-series-model-948" ...>
+    //   <img ... />
+    //   <strong>1 Series</strong>
+    //   <div class="redcolor">1967 - 2024</div>
+    // </a>
     const modelPattern =
-      /<a\s+href="(\/en\/[a-z0-9._-]+-model-(\d+))"[^>]*>[\s\S]*?<[^>]*>([^<]+)/gi;
+      /<a\s+class="modeli"\s+href="(\/en\/[a-z0-9._-]+-model-(\d+))"[^>]*>[\s\S]*?<strong>([^<]+)<\/strong>(?:[\s\S]*?<div[^>]*>([^<]*)<\/div>)?/gi;
 
     let match;
     while ((match = modelPattern.exec(html)) !== null) {
       const pageUrl = match[1];
       const rawName = match[3].trim();
+      const yearDiv = match[4]?.trim() || "";
 
       // Extract generation from name, e.g. "3 Series Sedan (G20)"
       const genMatch = rawName.match(/\(([A-Z][A-Z0-9]{1,10}(?:\s*,\s*[A-Z0-9]+)*)\)/);
-      // Extract years, e.g. "(2019 - 2024)" or "(2019 -)"
-      const yearMatch = rawName.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?\)?/i);
+      // Extract years from the red div, e.g. "2019 - 2024" or "2019 -"
+      const yearText = yearDiv || rawName;
+      const yearMatch = yearText.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?\)?/i);
       const yearFrom = yearMatch ? parseInt(yearMatch[1], 10) : 0;
       const yearTo = yearMatch && yearMatch[2] && /\d{4}/.test(yearMatch[2])
         ? parseInt(yearMatch[2], 10)
@@ -910,89 +893,140 @@ export async function fetchModelsForBrand(brandPageUrl: string): Promise<Scraped
 export async function fetchEnginesForModel(modelPageUrl: string): Promise<ScrapedEngine[]> {
   try {
     const html = await fetchPage(modelPageUrl);
-    const engines: ScrapedEngine[] = [];
 
-    // Engine variant links lead to spec pages
-    // Pattern: <a href="/en/brand-model-engine-variant-12345">Engine Name</a>
-    const enginePattern =
-      /<a\s+href="(\/en\/[a-z0-9._-]+-(\d+))"[^>]*>\s*([^<]+)/gi;
+    // auto-data.net has a 5-level hierarchy:
+    //   Brand → Model → Generation → Engine Variant → Specs
+    // Model pages (-model-) show generation links (-generation-)
+    // Generation pages show engine variant links (numeric-only IDs)
+    // We need to detect which level we're on and act accordingly.
 
-    let match;
-    while ((match = enginePattern.exec(html)) !== null) {
-      const specPageUrl = match[1];
-      const name = match[3].trim();
-
-      // Skip navigation links and non-engine entries
-      if (!name || name.length < 5 || name.length > 120) continue;
-      if (specPageUrl.includes("-brand-") || specPageUrl.includes("-model-")) continue;
-
-      // Parse engine details from name
-      const cc = name.match(/(\d{3,5})\s*(?:cc|cm)/i);
-      const hp = name.match(/(\d{2,4})\s*(?:Hp|hp|bhp|PS)/i);
-      const kw = name.match(/(\d{2,4})\s*(?:kW|Kw)/i);
-      const nm = name.match(/(\d{2,4})\s*Nm/i);
-      const code = name.match(/\(([A-Z][A-Z0-9]{2,12})\)/);
-
-      // Detect powertrain type from name
-      let powertrainType: string | null = null;
-      const nameLower = name.toLowerCase();
-      if (nameLower.includes("electric") || nameLower.includes("ev") || nameLower.includes("kwh")) {
-        powertrainType = "BEV";
-      } else if (nameLower.includes("plug-in") || nameLower.includes("phev")) {
-        powertrainType = "PHEV";
-      } else if (nameLower.includes("hybrid") || nameLower.includes("mhev")) {
-        powertrainType = "HEV";
-      } else if (nameLower.includes("mild hybrid")) {
-        powertrainType = "MHEV";
-      } else if (nameLower.includes("fuel cell") || nameLower.includes("fcev")) {
-        powertrainType = "FCEV";
+    // Check if this page has generation links
+    const generationPattern =
+      /href="(\/en\/[a-z0-9._-]+-generation-(\d+))"/gi;
+    const generationUrls: string[] = [];
+    let gMatch;
+    while ((gMatch = generationPattern.exec(html)) !== null) {
+      const url = gMatch[1];
+      if (!generationUrls.includes(url)) {
+        generationUrls.push(url);
       }
-
-      // Detect fuel type
-      let fuelType: string | null = null;
-      if (nameLower.includes("diesel") || nameLower.includes("tdi") || nameLower.includes("cdi") ||
-          nameLower.includes("dci") || nameLower.includes("d4d") || nameLower.includes("hdi")) {
-        fuelType = "Diesel";
-      } else if (powertrainType === "BEV") {
-        fuelType = "Electric";
-      } else if (nameLower.includes("lpg")) {
-        fuelType = "LPG";
-      } else if (nameLower.includes("cng")) {
-        fuelType = "CNG";
-      } else if (nameLower.includes("hydrogen") || powertrainType === "FCEV") {
-        fuelType = "Hydrogen";
-      } else if (cc || hp) {
-        fuelType = "Petrol"; // default for ICE with displacement/power
-      }
-
-      // Extract year range from surrounding HTML
-      const section = html.substring(
-        Math.max(0, html.indexOf(specPageUrl) - 100),
-        html.indexOf(specPageUrl) + 300,
-      );
-      const yr = section.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?/i);
-
-      engines.push({
-        name,
-        code: code ? code[1] : null,
-        displacementCc: cc ? parseInt(cc[1], 10) : null,
-        fuelType,
-        powerHp: hp ? parseInt(hp[1], 10) : null,
-        powerKw: kw ? parseInt(kw[1], 10) : null,
-        torqueNm: nm ? parseInt(nm[1], 10) : null,
-        yearFrom: yr ? parseInt(yr[1], 10) : 0,
-        yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) ? parseInt(yr[2], 10) : null,
-        modification: name,
-        powertrainType,
-        specPageUrl,
-      });
     }
 
-    return engines;
+    if (generationUrls.length > 0) {
+      // This is a model page — follow each generation link to get engines
+      console.log(`[autodata]   Model page has ${generationUrls.length} generations, following...`);
+      const allEngines: ScrapedEngine[] = [];
+      for (const genUrl of generationUrls) {
+        await sleep(DEFAULT_DELAY_MS);
+        const genEngines = await parseEngineVariantsFromPage(genUrl);
+        allEngines.push(...genEngines);
+      }
+      return allEngines;
+    }
+
+    // No generations found — this page has engine variants directly
+    return parseEngineVariantsFromPage(modelPageUrl, html);
   } catch (err) {
     console.error("[autodata] Engines fetch failed:", err);
     return [];
   }
+}
+
+/** Parse engine variant links from a page (generation or direct model page) */
+async function parseEngineVariantsFromPage(
+  pageUrl: string,
+  preloadedHtml?: string,
+): Promise<ScrapedEngine[]> {
+  const html = preloadedHtml || (await fetchPage(pageUrl));
+  const engines: ScrapedEngine[] = [];
+
+  // Real HTML structure (verified 2026-03):
+  // <a href="/en/bmw-3-series-sedan-g20-lci-...-m340i-382hp-...-53477" title="...">
+  //   <strong><span class="tit">M340i (382 Hp) Mild Hybrid Steptronic</span></strong>
+  // </a>
+  //
+  // Engine variant links have numeric-only IDs at the end and do NOT contain
+  // -brand-, -model-, or -generation- in the URL.
+  const enginePattern =
+    /<a\s+href="(\/en\/[a-z0-9._-]+-(\d+))"[^>]*>[\s\S]*?<(?:strong|span)[^>]*>([^<]+)/gi;
+
+  let match;
+  while ((match = enginePattern.exec(html)) !== null) {
+    const specPageUrl = match[1];
+    const name = match[3].trim();
+
+    // Skip navigation links and non-engine entries
+    if (!name || name.length < 5 || name.length > 120) continue;
+    if (specPageUrl.includes("-brand-") || specPageUrl.includes("-model-") ||
+        specPageUrl.includes("-generation-") || specPageUrl.includes("allbrands")) continue;
+    // Skip entries that are just numbers (ads, tracking pixels, etc.)
+    if (/^[\d.]+$/.test(name)) continue;
+    // Engine names must contain at least one letter
+    if (!/[a-zA-Z]/.test(name)) continue;
+
+    // Parse engine details from name
+    const cc = name.match(/(\d{3,5})\s*(?:cc|cm)/i);
+    const hp = name.match(/(\d{2,4})\s*(?:Hp|hp|bhp|PS)/i);
+    const kw = name.match(/(\d{2,4})\s*(?:kW|Kw)/i);
+    const nm = name.match(/(\d{2,4})\s*Nm/i);
+    const code = name.match(/\(([A-Z][A-Z0-9]{2,12})\)/);
+
+    // Detect powertrain type from name
+    let powertrainType: string | null = null;
+    const nameLower = name.toLowerCase();
+    if (nameLower.includes("mild hybrid")) {
+      powertrainType = "MHEV";
+    } else if (nameLower.includes("plug-in") || nameLower.includes("phev")) {
+      powertrainType = "PHEV";
+    } else if (nameLower.includes("electric") || nameLower.includes("ev") || nameLower.includes("kwh")) {
+      powertrainType = "BEV";
+    } else if (nameLower.includes("hybrid") || nameLower.includes("mhev")) {
+      powertrainType = "HEV";
+    } else if (nameLower.includes("fuel cell") || nameLower.includes("fcev")) {
+      powertrainType = "FCEV";
+    }
+
+    // Detect fuel type
+    let fuelType: string | null = null;
+    if (nameLower.includes("diesel") || nameLower.includes("tdi") || nameLower.includes("cdi") ||
+        nameLower.includes("dci") || nameLower.includes("d4d") || nameLower.includes("hdi")) {
+      fuelType = "Diesel";
+    } else if (powertrainType === "BEV") {
+      fuelType = "Electric";
+    } else if (nameLower.includes("lpg")) {
+      fuelType = "LPG";
+    } else if (nameLower.includes("cng")) {
+      fuelType = "CNG";
+    } else if (nameLower.includes("hydrogen") || powertrainType === "FCEV") {
+      fuelType = "Hydrogen";
+    } else if (cc || hp) {
+      fuelType = "Petrol"; // default for ICE with displacement/power
+    }
+
+    // Extract year range from surrounding HTML
+    const section = html.substring(
+      Math.max(0, html.indexOf(specPageUrl) - 100),
+      html.indexOf(specPageUrl) + 300,
+    );
+    const yr = section.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?/i);
+
+    engines.push({
+      name,
+      code: code ? code[1] : null,
+      displacementCc: cc ? parseInt(cc[1], 10) : null,
+      fuelType,
+      powerHp: hp ? parseInt(hp[1], 10) : null,
+      powerKw: kw ? parseInt(kw[1], 10) : null,
+      torqueNm: nm ? parseInt(nm[1], 10) : null,
+      yearFrom: yr ? parseInt(yr[1], 10) : 0,
+      yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) ? parseInt(yr[2], 10) : null,
+      modification: name,
+      powertrainType,
+      specPageUrl,
+    });
+  }
+
+  return engines;
 }
 
 /** Level 4: Parse the full vehicle spec page */
