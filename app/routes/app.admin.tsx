@@ -58,17 +58,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  // Fetch all tenants
-  const { data: tenants, error: tenantError } = await db
-    .from("tenants")
-    .select("*")
-    .order("installed_at", { ascending: false });
+  // Fetch all data in parallel
+  const [tenantsRes, makesRes, modelsRes, enginesRes] = await Promise.all([
+    db.from("tenants").select("*").order("installed_at", { ascending: false }),
+    db.from("ymme_makes").select("*", { count: "exact", head: true }),
+    db.from("ymme_models").select("*", { count: "exact", head: true }),
+    db.from("ymme_engines").select("*", { count: "exact", head: true }),
+  ]);
 
-  if (tenantError) {
-    console.error("Admin: tenants query error", tenantError);
-  }
-
-  const tenantList = (tenants ?? []) as Tenant[];
+  const tenantList = (tenantsRes.data ?? []) as Tenant[];
 
   // Aggregate stats
   const totalTenants = tenantList.length;
@@ -79,13 +77,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   for (const t of tenantList) {
     planBreakdown[t.plan] = (planBreakdown[t.plan] ?? 0) + 1;
   }
-
-  // YMME database counts
-  const [makesRes, modelsRes, enginesRes] = await Promise.all([
-    db.from("ymme_makes").select("*", { count: "exact", head: true }),
-    db.from("ymme_models").select("*", { count: "exact", head: true }),
-    db.from("ymme_engines").select("*", { count: "exact", head: true }),
-  ]);
 
   const ymmeCounts = {
     makes: makesRes.count ?? 0,

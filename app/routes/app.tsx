@@ -94,7 +94,9 @@ export default function App() {
               100% { transform: scaleX(0); transform-origin: right; }
             }
           `}</style>
-          <Outlet />
+          <div style={{ paddingBottom: "40px" }}>
+            <Outlet />
+          </div>
         </Frame>
       </PolarisAppProvider>
     </AppProvider>

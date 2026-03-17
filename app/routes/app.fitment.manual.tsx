@@ -67,50 +67,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const specificProductId = url.searchParams.get("product_id");
 
-  // Count total products
-  const { count: totalProducts } = await db
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-
-  // Count unmapped products
-  const { count: unmappedCount } = await db
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .eq("fitment_status", "unmapped");
-
-  const total = totalProducts ?? 0;
-  const unmapped = unmappedCount ?? 0;
-  const mapped = total - unmapped;
-
-  // Fetch next unmapped product (or specific product if requested)
-  let nextProduct: ProductRecord | null = null;
-
-  if (specificProductId) {
-    const { data } = await db
-      .from("products")
-      .select("*")
+  // Run all queries in parallel
+  const [totalResult, unmappedResult, productResult] = await Promise.all([
+    db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId),
+    db.from("products")
+      .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
-      .eq("id", specificProductId)
-      .single();
-    nextProduct = data as ProductRecord | null;
-  } else {
-    const { data } = await db
-      .from("products")
-      .select("*")
-      .eq("shop_id", shopId)
-      .eq("fitment_status", "unmapped")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    nextProduct = data as ProductRecord | null;
-  }
+      .eq("fitment_status", "unmapped"),
+    specificProductId
+      ? db.from("products")
+          .select("*")
+          .eq("shop_id", shopId)
+          .eq("id", specificProductId)
+          .single()
+      : db.from("products")
+          .select("*")
+          .eq("shop_id", shopId)
+          .eq("fitment_status", "unmapped")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+  ]);
+
+  const total = totalResult.count ?? 0;
+  const unmapped = unmappedResult.count ?? 0;
 
   return {
-    nextProduct,
+    nextProduct: (productResult.data as ProductRecord | null),
     totalProducts: total,
-    mappedCount: mapped,
+    mappedCount: total - unmapped,
     unmappedCount: unmapped,
   };
 };

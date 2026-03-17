@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PlanTier, PlanLimits } from "~/lib/types";
+import type { PlanTier, PlanLimits } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Display-name lookup maps

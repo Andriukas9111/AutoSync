@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -237,6 +237,33 @@ const TIER_ORDER: PlanTier[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Inject responsive CSS via useEffect (safe — no dangerouslySetInnerHTML)
+// ---------------------------------------------------------------------------
+
+const STYLE_ID = "autosync-plans-grid-css";
+
+function useResponsiveGridStyles() {
+  useEffect(() => {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = [
+      ".as-plans-grid { display:grid; gap:16px; grid-template-columns:repeat(3,1fr); }",
+      "@media(max-width:1100px){ .as-plans-grid { grid-template-columns:repeat(2,1fr); } }",
+      "@media(max-width:680px){ .as-plans-grid { grid-template-columns:1fr; } }",
+      ".as-plan-cell { display:flex; flex-direction:column; height:100%; }",
+      ".as-card-outer { flex:1; display:flex; flex-direction:column; border-radius:var(--p-border-radius-300); overflow:hidden; }",
+      ".as-card-body { flex:1; display:flex; flex-direction:column; }",
+      ".as-card-inner { display:flex; flex-direction:column; height:100%; }",
+      ".as-features { flex:1; padding-top:16px; padding-bottom:16px; }",
+      ".as-btn-area { padding-top:16px; margin-top:auto; }",
+    ].join("\n");
+    document.head.appendChild(style);
+    return () => { style.remove(); };
+  }, []);
+}
+
+// ---------------------------------------------------------------------------
 // Loader
 // ---------------------------------------------------------------------------
 
@@ -265,12 +292,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const newPlan = String(formData.get("plan") || "").trim() as PlanTier;
 
-  // Validate the plan tier
   if (!TIER_ORDER.includes(newPlan)) {
     return data({ error: "Invalid plan selected." }, { status: 400 });
   }
 
-  // Update the tenant's plan in the database
   const { error: updateError } = await db
     .from("tenants")
     .update({
@@ -296,13 +321,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export default function Plans() {
+  useResponsiveGridStyles();
+
   const { currentPlan } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
   const [confirmTier, setConfirmTier] = useState<PlanTier | null>(null);
 
-  // Use the updated plan from the fetcher response if available
   const fetcherData = fetcher.data as
     | { success: true; plan: PlanTier; planName: string }
     | { error: string }
@@ -351,252 +377,273 @@ export default function Plans() {
       title="Plans & Pricing"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
-      <BlockStack gap="800">
-        {/* Success/Error banners */}
-        {fetcherData && "success" in fetcherData && (
+        <BlockStack gap="600">
+          {/* Success/Error banners */}
+          {fetcherData && "success" in fetcherData && (
+            <Banner
+              title={`Successfully switched to ${fetcherData.planName} plan`}
+              tone="success"
+              onDismiss={() => {}}
+            >
+              <p>Your plan has been updated. All features for the {fetcherData.planName} plan are now active.</p>
+            </Banner>
+          )}
+          {fetcherData && "error" in fetcherData && (
+            <Banner title="Plan change failed" tone="critical">
+              <p>{fetcherData.error}</p>
+            </Banner>
+          )}
+
+          {/* Current plan banner */}
           <Banner
-            title={`Successfully switched to ${fetcherData.planName} plan`}
-            tone="success"
-            onDismiss={() => {}}
+            title={`You are on the ${PLANS.find((p) => p.tier === activePlan)?.name} plan`}
+            tone="info"
           >
-            <p>Your plan has been updated. All features for the {fetcherData.planName} plan are now active.</p>
+            <p>
+              Select a plan below to change your subscription. In production, plan changes
+              are processed through Shopify&apos;s managed billing system.
+            </p>
           </Banner>
-        )}
-        {fetcherData && "error" in fetcherData && (
-          <Banner title="Plan change failed" tone="critical">
-            <p>{fetcherData.error}</p>
-          </Banner>
-        )}
 
-        {/* Current plan banner */}
-        <Banner
-          title={`You are on the ${PLANS.find((p) => p.tier === activePlan)?.name} plan`}
-          tone="info"
-        >
-          <p>
-            Select a plan below to change your subscription. In production, plan changes
-            are processed through Shopify&apos;s managed billing system.
-          </p>
-        </Banner>
+          {/* ─── Plan cards grid ─── */}
+          <div className="as-plans-grid">
+            {PLANS.map((plan) => {
+              const btnProps = getButtonProps(plan.tier);
+              const isCurrent = plan.tier === activePlan;
+              const isPopular = plan.tier === "growth";
 
-        {/* Plan cards grid — equal height with buttons pinned to bottom */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: "var(--p-space-400)",
-        }}>
-          {PLANS.map((plan) => {
-            const btnProps = getButtonProps(plan.tier);
-            const isCurrent = plan.tier === activePlan;
-            const isPopular = plan.tier === "growth";
-
-            return (
-              <div
-                key={plan.tier}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  borderRadius: "var(--p-border-radius-300)",
-                  overflow: "hidden",
-                  outline: isPopular
-                    ? "2px solid var(--p-color-border-info)"
-                    : isCurrent
-                      ? "2px solid var(--p-color-border-success)"
-                      : undefined,
-                }}
-              >
-                {isPopular && (
-                  <div style={{
-                    background: "var(--p-color-bg-fill-info)",
-                    color: "var(--p-color-text-info-on-bg-fill)",
-                    textAlign: "center",
-                    padding: "6px 0",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    letterSpacing: "0.5px",
-                  }}>
-                    MOST POPULAR
-                  </div>
-                )}
-                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                  <Card>
-                    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
-                      {/* Header + Price */}
-                      <BlockStack gap="400">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h2" variant="headingLg">
-                            {plan.name}
-                          </Text>
-                          {isCurrent && <Badge tone="success">Current</Badge>}
-                        </InlineStack>
-
-                        <BlockStack gap="100">
-                          <InlineStack gap="100" blockAlign="end">
-                            <Text as="span" variant="heading2xl">
-                              {plan.price}
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {plan.priceNote}
-                            </Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {plan.description}
-                          </Text>
-                        </BlockStack>
-
-                        <Divider />
-                      </BlockStack>
-
-                      {/* Features list — flex-grow pushes button to bottom */}
-                      <div style={{ flex: 1, paddingTop: "var(--p-space-400)", paddingBottom: "var(--p-space-400)" }}>
-                        <BlockStack gap="200">
-                          {plan.highlights.map((feature, idx) => (
-                            <InlineStack key={idx} gap="200" blockAlign="center">
-                              <span style={{ color: "var(--p-color-text-success)", fontSize: "14px", flexShrink: 0 }}>
-                                ✓
-                              </span>
-                              <Text as="span" variant="bodySm">
-                                {feature}
-                              </Text>
-                            </InlineStack>
-                          ))}
-                        </BlockStack>
+              return (
+                <div key={plan.tier} className="as-plan-cell">
+                  <div
+                    className="as-card-outer"
+                    style={{
+                      outline: isPopular
+                        ? "2px solid var(--p-color-border-info)"
+                        : isCurrent
+                          ? "2px solid var(--p-color-border-success)"
+                          : "1px solid var(--p-color-border)",
+                    }}
+                  >
+                    {/* Popular banner */}
+                    {isPopular && (
+                      <div
+                        style={{
+                          background: "var(--p-color-bg-fill-info)",
+                          color: "var(--p-color-text-info-on-bg-fill)",
+                          textAlign: "center",
+                          padding: "6px 0",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        MOST POPULAR
                       </div>
+                    )}
 
-                      {/* Action button — always pinned to bottom */}
-                      <div>
-                        <Divider />
-                        <div style={{ paddingTop: "var(--p-space-400)" }}>
-                          <Button
-                            variant={isCurrent ? undefined : "primary"}
-                            tone={btnProps.tone === "critical" ? "critical" : undefined}
-                            disabled={btnProps.disabled || isSubmitting}
-                            loading={isSubmitting}
-                            onClick={() => handlePlanClick(plan.tier)}
-                            fullWidth
-                          >
-                            {btnProps.label}
-                          </Button>
+                    {/* Card body */}
+                    <div className="as-card-body">
+                      <div
+                        style={{
+                          flex: 1,
+                          display: "flex",
+                          flexDirection: "column",
+                          padding: "var(--p-space-400)",
+                          background: "var(--p-color-bg-surface)",
+                        }}
+                      >
+                        <div className="as-card-inner">
+                          {/* Header + Price */}
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <Text as="h2" variant="headingLg">
+                                {plan.name}
+                              </Text>
+                              {isCurrent && <Badge tone="success">Current</Badge>}
+                            </InlineStack>
+
+                            <BlockStack gap="100">
+                              <InlineStack gap="100" blockAlign="end">
+                                <Text as="span" variant="heading2xl">
+                                  {plan.price}
+                                </Text>
+                                <Text as="span" variant="bodySm" tone="subdued">
+                                  {plan.priceNote}
+                                </Text>
+                              </InlineStack>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {plan.description}
+                              </Text>
+                            </BlockStack>
+
+                            <Divider />
+                          </BlockStack>
+
+                          {/* Features list — grows to push button down */}
+                          <div className="as-features">
+                            <BlockStack gap="200">
+                              {plan.highlights.map((feature, idx) => (
+                                <InlineStack key={idx} gap="200" blockAlign="start" wrap={false}>
+                                  <span
+                                    style={{
+                                      color: "var(--p-color-text-success)",
+                                      fontSize: "14px",
+                                      flexShrink: 0,
+                                      lineHeight: 1.4,
+                                    }}
+                                  >
+                                    ✓
+                                  </span>
+                                  <Text as="span" variant="bodySm">
+                                    {feature}
+                                  </Text>
+                                </InlineStack>
+                              ))}
+                            </BlockStack>
+                          </div>
+
+                          {/* Action button — pinned to bottom */}
+                          <div className="as-btn-area">
+                            <Divider />
+                            <div style={{ paddingTop: "16px" }}>
+                              <Button
+                                variant={isCurrent ? undefined : "primary"}
+                                tone={btnProps.tone === "critical" ? "critical" : undefined}
+                                disabled={btnProps.disabled || isSubmitting}
+                                loading={isSubmitting}
+                                onClick={() => handlePlanClick(plan.tier)}
+                                fullWidth
+                              >
+                                {btnProps.label}
+                              </Button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </Card>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Feature comparison table */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-              Feature Comparison
-            </Text>
-            <Divider />
+          {/* ─── Feature comparison table ─── */}
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingLg">
+                Feature Comparison
+              </Text>
+              <Divider />
 
-            <Box overflowX="scroll">
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  minWidth: "800px",
-                }}
-              >
-                <thead>
-                  <tr>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 8px",
-                        borderBottom: "1px solid var(--p-color-border)",
-                        fontWeight: 600,
-                        fontSize: "13px",
-                      }}
-                    >
-                      Feature
-                    </th>
-                    {PLANS.map((plan) => (
+              <Box overflowX="scroll">
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: "800px",
+                  }}
+                >
+                  <thead>
+                    <tr>
                       <th
-                        key={plan.tier}
                         style={{
-                          textAlign: "center",
+                          textAlign: "left",
                           padding: "12px 8px",
                           borderBottom: "1px solid var(--p-color-border)",
                           fontWeight: 600,
                           fontSize: "13px",
-                          backgroundColor:
-                            plan.tier === activePlan
-                              ? "var(--p-color-bg-surface-info)"
-                              : undefined,
                         }}
                       >
-                        {plan.name}
-                        <br />
-                        <span style={{ fontWeight: 400, fontSize: "12px", color: "var(--p-color-text-subdued)" }}>
-                          {plan.price}/{plan.tier === "free" ? "free" : "mo"}
-                        </span>
+                        Feature
                       </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {COMPARISON_ROWS.map((row) => (
-                    <tr key={row.label}>
-                      <td
-                        style={{
-                          padding: "10px 8px",
-                          borderBottom: "1px solid var(--p-color-border)",
-                          fontSize: "13px",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {row.label}
-                      </td>
-                      {TIER_ORDER.map((tier) => (
-                        <td
-                          key={tier}
+                      {PLANS.map((plan) => (
+                        <th
+                          key={plan.tier}
                           style={{
                             textAlign: "center",
+                            padding: "12px 8px",
+                            borderBottom: "1px solid var(--p-color-border)",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            backgroundColor:
+                              plan.tier === activePlan
+                                ? "var(--p-color-bg-surface-info)"
+                                : undefined,
+                          }}
+                        >
+                          {plan.name}
+                          <br />
+                          <span style={{ fontWeight: 400, fontSize: "12px", color: "var(--p-color-text-subdued)" }}>
+                            {plan.price}/{plan.tier === "free" ? "free" : "mo"}
+                          </span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COMPARISON_ROWS.map((row, rowIdx) => (
+                      <tr
+                        key={row.label}
+                        style={{
+                          backgroundColor: rowIdx % 2 === 0
+                            ? undefined
+                            : "var(--p-color-bg-surface-secondary)",
+                        }}
+                      >
+                        <td
+                          style={{
                             padding: "10px 8px",
                             borderBottom: "1px solid var(--p-color-border)",
                             fontSize: "13px",
-                            backgroundColor:
-                              tier === activePlan
-                                ? "var(--p-color-bg-surface-info)"
-                                : undefined,
-                            color:
-                              row.values[tier] === "--"
-                                ? "var(--p-color-text-subdued)"
-                                : "var(--p-color-text)",
+                            fontWeight: 500,
                           }}
                         >
-                          {row.values[tier] === "Yes" ? (
-                            <span style={{ color: "var(--p-color-text-success)" }}>{"\u2713"}</span>
-                          ) : (
-                            row.values[tier]
-                          )}
+                          {row.label}
                         </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Box>
-          </BlockStack>
-        </Card>
+                        {TIER_ORDER.map((tier) => (
+                          <td
+                            key={tier}
+                            style={{
+                              textAlign: "center",
+                              padding: "10px 8px",
+                              borderBottom: "1px solid var(--p-color-border)",
+                              fontSize: "13px",
+                              backgroundColor:
+                                tier === activePlan
+                                  ? "var(--p-color-bg-surface-info)"
+                                  : undefined,
+                              color:
+                                row.values[tier] === "--"
+                                  ? "var(--p-color-text-subdued)"
+                                  : "var(--p-color-text)",
+                            }}
+                          >
+                            {row.values[tier] === "Yes" ? (
+                              <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>✓</span>
+                            ) : (
+                              row.values[tier]
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Box>
+            </BlockStack>
+          </Card>
 
-        {/* Upgrade info banner */}
-        {activePlan !== "enterprise" && (
-          <Banner title="How plans work" tone="info">
-            <p>
-              In production, plan upgrades are processed through Shopify&apos;s managed billing
-              system. Merchants are redirected to confirm the charge in their Shopify admin.
-              Downgrades take effect at the end of the current billing cycle.
-            </p>
-          </Banner>
-        )}
-      </BlockStack>
+          {/* Upgrade info banner */}
+          {activePlan !== "enterprise" && (
+            <Banner title="How plans work" tone="info">
+              <p>
+                In production, plan upgrades are processed through Shopify&apos;s managed billing
+                system. Merchants are redirected to confirm the charge in their Shopify admin.
+                Downgrades take effect at the end of the current billing cycle.
+              </p>
+            </Banner>
+          )}
+        </BlockStack>
 
       {/* Confirmation modal */}
       <Modal

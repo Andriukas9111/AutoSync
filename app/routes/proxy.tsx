@@ -1,6 +1,9 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import crypto from "crypto";
 import db from "../lib/db.server";
+import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
+import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
+import { getTenant } from "../lib/billing.server";
 
 // ---------- CORS helpers ----------
 const corsHeaders = {
@@ -172,12 +175,92 @@ async function handleSearch(params: URLSearchParams) {
   return json({ products: products ?? [], count: products?.length ?? 0 });
 }
 
-async function handlePlateLookup(_params: URLSearchParams, _body: string | null) {
-  // Enterprise-only stub — will integrate DVLA VES + MOT APIs
-  return json({
-    error: "Plate lookup is available on Enterprise plan only",
-    stub: true,
-  }, 403);
+async function handlePlateLookup(params: URLSearchParams, body: string | null) {
+  const shop = params.get("shop");
+
+  // Verify Enterprise plan
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (!tenant || tenant.plan !== "enterprise") {
+      return json(
+        { error: "Plate lookup requires the Enterprise plan" },
+        403,
+      );
+    }
+  }
+
+  // Parse registration from body (POST) or params (GET fallback)
+  let registration = params.get("registration") || params.get("reg") || "";
+
+  if (body) {
+    try {
+      const parsed = JSON.parse(body);
+      registration = parsed.registration || parsed.reg || parsed.registrationNumber || registration;
+    } catch {
+      // body isn't JSON, try as plain text
+      if (!registration && body.trim().length <= 8) {
+        registration = body.trim();
+      }
+    }
+  }
+
+  if (!registration) {
+    return json({ error: "Missing registration number" }, 400);
+  }
+
+  try {
+    // Look up vehicle details from DVLA VES
+    const vehicle = await lookupVehicleByReg(registration);
+
+    // Try to get MOT history (non-fatal if it fails)
+    let motHistory = null;
+    try {
+      motHistory = await getMotHistory(registration);
+    } catch (motErr) {
+      console.warn("[proxy] MOT history lookup failed:", motErr);
+    }
+
+    // Search for compatible products using the identified make/model/year
+    let compatibleProducts: unknown[] = [];
+    try {
+      const { data: fitments } = await db
+        .from("vehicle_fitments")
+        .select("product_id")
+        .ilike("make", vehicle.make)
+        .ilike("model", `%${vehicle.model}%`)
+        .lte("year_from", vehicle.yearOfManufacture)
+        .or(`year_to.gte.${vehicle.yearOfManufacture},year_to.is.null`);
+
+      if (fitments && fitments.length > 0) {
+        const productIds = [...new Set(fitments.map((f) => f.product_id))];
+        const { data: products } = await db
+          .from("products")
+          .select("id, shopify_gid, title, handle, image_url, price")
+          .in("id", productIds.slice(0, 50));
+        compatibleProducts = products ?? [];
+      }
+    } catch (searchErr) {
+      console.warn("[proxy] Product search after plate lookup failed:", searchErr);
+    }
+
+    return json({
+      vehicle,
+      motHistory: motHistory
+        ? {
+            motTests: motHistory.motTests.slice(0, 5),
+            firstUsedDate: motHistory.firstUsedDate,
+          }
+        : null,
+      compatibleProducts,
+      compatibleCount: compatibleProducts.length,
+    });
+  } catch (err) {
+    if (err instanceof VesError) {
+      return json({ error: err.message, code: err.code }, err.status);
+    }
+    const message = err instanceof Error ? err.message : "Plate lookup failed";
+    return json({ error: message }, 500);
+  }
 }
 
 async function handleWheelSearch(params: URLSearchParams) {

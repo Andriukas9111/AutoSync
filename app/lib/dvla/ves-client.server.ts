@@ -1,12 +1,10 @@
 /**
- * DVLA Vehicle Enquiry Service (VES) API Client — Stub
+ * DVLA Vehicle Enquiry Service (VES) API Client
  *
- * Production endpoint: https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles
- * Auth: x-api-key header with DVLA_VES_API_KEY
- *
- * TODO: Implement real DVLA VES API integration
- * - POST with { registrationNumber: "XX00XXX" }
- * - Returns make, model, colour, fuel, year, engine capacity, CO2, tax status, MOT status
+ * Endpoint: POST https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles
+ * Auth: x-api-key header with DVLA_API_KEY env var
+ * Input: { registrationNumber: "AB12CDE" }
+ * Returns: make, model, colour, fuel, year, engine capacity, tax/MOT status
  */
 
 export interface VesVehicleResponse {
@@ -28,46 +26,83 @@ export interface VesVehicleResponse {
   revenueWeight: number | null;
 }
 
+export class VesError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, message: string, code: string) {
+    super(message);
+    this.name = "VesError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+const VES_ENDPOINT =
+  "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles";
+
 /**
  * Look up a vehicle by UK registration number using the DVLA VES API.
- *
- * @param registrationNumber - UK vehicle registration (e.g. "AB12CDE")
- * @returns Vehicle details from DVLA
  */
 export async function lookupVehicleByReg(
   registrationNumber: string,
 ): Promise<VesVehicleResponse> {
-  // TODO: Replace with real DVLA VES API call
-  // const apiKey = process.env.DVLA_VES_API_KEY;
-  // const response = await fetch(
-  //   "https://driver-vehicle-licensing.api.gov.uk/vehicle-enquiry/v1/vehicles",
-  //   {
-  //     method: "POST",
-  //     headers: {
-  //       "Content-Type": "application/json",
-  //       "x-api-key": apiKey,
-  //     },
-  //     body: JSON.stringify({ registrationNumber }),
-  //   }
-  // );
+  const apiKey = process.env.DVLA_API_KEY;
 
-  // Return mock data for development
+  if (!apiKey) {
+    throw new VesError(500, "DVLA_API_KEY is not configured", "MISSING_API_KEY");
+  }
+
+  // Sanitise: uppercase, strip spaces
+  const cleanReg = registrationNumber.toUpperCase().replace(/\s/g, "");
+
+  if (!cleanReg || cleanReg.length < 2 || cleanReg.length > 8) {
+    throw new VesError(400, "Invalid registration number format", "INVALID_REG");
+  }
+
+  const response = await fetch(VES_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify({ registrationNumber: cleanReg }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Unknown error");
+
+    if (response.status === 404) {
+      throw new VesError(404, `Vehicle not found: ${cleanReg}`, "VEHICLE_NOT_FOUND");
+    }
+    if (response.status === 429) {
+      throw new VesError(429, "DVLA rate limit exceeded. Try again later.", "RATE_LIMITED");
+    }
+
+    throw new VesError(
+      response.status,
+      `DVLA API error (${response.status}): ${errorText}`,
+      "API_ERROR",
+    );
+  }
+
+  const d = await response.json();
+
   return {
-    registrationNumber: registrationNumber.toUpperCase().replace(/\s/g, ""),
-    make: "VOLKSWAGEN",
-    model: "GOLF",
-    colour: "BLUE",
-    fuelType: "PETROL",
-    yearOfManufacture: 2019,
-    engineCapacity: 1498,
-    co2Emissions: 128,
-    taxStatus: "Taxed",
-    motStatus: "Valid",
-    taxDueDate: "2026-09-01",
-    motExpiryDate: "2026-11-15",
-    markedForExport: false,
-    typeApproval: "M1",
-    wheelplan: "2 AXLE RIGID BODY",
-    revenueWeight: null,
+    registrationNumber: d.registrationNumber ?? cleanReg,
+    make: d.make ?? "Unknown",
+    model: d.model ?? "Unknown",
+    colour: d.colour ?? "Unknown",
+    fuelType: d.fuelType ?? "Unknown",
+    yearOfManufacture: d.yearOfManufacture ?? 0,
+    engineCapacity: d.engineCapacity ?? 0,
+    co2Emissions: d.co2Emissions ?? null,
+    taxStatus: d.taxStatus ?? "Unknown",
+    motStatus: d.motStatus ?? "Unknown",
+    taxDueDate: d.taxDueDate ?? null,
+    motExpiryDate: d.motExpiryDate ?? null,
+    markedForExport: d.markedForExport ?? false,
+    typeApproval: d.typeApproval ?? null,
+    wheelplan: d.wheelplan ?? null,
+    revenueWeight: d.revenueWeight ?? null,
   };
 }
