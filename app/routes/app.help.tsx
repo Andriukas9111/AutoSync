@@ -359,8 +359,49 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
       ),
     },
     {
+      id: "wheel-finder",
+      title: "8. Wheel Finder",
+      keywords: ["wheel", "pcd", "offset", "bolt", "pattern", "diameter", "bore", "staggered", "alloy"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            The Wheel Finder lets customers search for compatible wheels by PCD (bolt pattern),
+            offset, diameter, and centre bore.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              How it works
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Customers select their vehicle's bolt pattern (e.g., 5x112), wheel diameter (e.g., 18"),
+              and offset range. AutoSync queries your wheel fitment database and returns matching
+              products. The search supports all common PCD patterns from 4x100 to 5x130.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Wheel fitment data
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Wheel specifications (PCD, offset range, centre bore, diameter, width) are stored
+              per product in the wheel_fitments table. You can add this data via CSV import or
+              through your provider feeds.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Plan requirement
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Wheel Finder is available on the Business plan ($179/mo) and above.
+            </Text>
+          </BlockStack>
+        </BlockStack>
+      ),
+    },
+    {
       id: "dvla-mot",
-      title: "8. DVLA/MOT Plate Lookup",
+      title: "9. DVLA/MOT Plate Lookup",
       keywords: ["dvla", "mot", "plate", "registration", "uk", "number", "lookup", "vehicle"],
       content: (
         <BlockStack gap="300">
@@ -375,8 +416,18 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
             <Text as="p" variant="bodySm" tone="subdued">
               When a customer enters a UK registration number, AutoSync queries the DVLA
               Vehicle Enquiry Service (VES) API to retrieve vehicle details including make,
-              model, year, fuel type, and engine size. It can also query the DVSA MOT History
-              API for additional vehicle information.
+              model, year, fuel type, and engine size. It also queries the DVSA MOT History
+              API for additional vehicle history.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Compatible products
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              After identifying the vehicle, AutoSync automatically searches your fitment database
+              for compatible products and returns them alongside the vehicle details. This creates
+              a seamless "enter your reg → see matching parts" experience.
             </Text>
           </BlockStack>
           <BlockStack gap="200">
@@ -384,8 +435,51 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              DVLA/MOT plate lookup is an Enterprise-exclusive feature. It requires valid API
-              credentials to be configured.
+              DVLA/MOT plate lookup is an Enterprise-exclusive feature ($299/mo). It requires
+              valid DVLA VES and MOT History API credentials to be configured.
+            </Text>
+          </BlockStack>
+        </BlockStack>
+      ),
+    },
+    {
+      id: "vin-decode",
+      title: "10. VIN Decode",
+      keywords: ["vin", "decode", "vehicle", "identification", "number", "nhtsa", "17", "chassis"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            VIN Decode translates a 17-character Vehicle Identification Number into full vehicle
+            details — make, model, year, engine, body type, drive type, and more.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              How it works
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              AutoSync uses the NHTSA (National Highway Traffic Safety Administration) vPIC API —
+              a free US Government service — to decode VINs. The VIN is validated (17 characters,
+              no I/O/Q), decoded into 100+ vehicle attributes, and matched against your fitment
+              database to find compatible products.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              What data is returned
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Make, Model, Model Year, Body Class, Drive Type, Engine Cylinders, Engine
+              Displacement, Fuel Type, Transmission Style, Trim, Manufacturer, Plant Country,
+              and compatible products from your store.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Plan requirement
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              VIN Decode is an Enterprise-exclusive feature ($299/mo). No additional API
+              credentials are needed — the NHTSA API is free and public.
             </Text>
           </BlockStack>
         </BlockStack>
@@ -393,7 +487,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
     },
     {
       id: "plan-comparison",
-      title: "9. Plan Comparison",
+      title: "11. Plan Comparison",
       keywords: ["plan", "pricing", "tier", "upgrade", "downgrade", "billing", "subscription"],
       content: (
         <BlockStack gap="300">
@@ -426,7 +520,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
     },
     {
       id: "faq",
-      title: "10. FAQ",
+      title: "12. FAQ",
       keywords: ["faq", "question", "answer", "help", "common", "troubleshoot"],
       content: (
         <BlockStack gap="400">
@@ -501,6 +595,28 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               A: AutoSync maintains its own global vehicle database sourced from auto-data.net,
               NHTSA (free US government data), and other providers. It covers makes and models
               worldwide and is continuously expanding.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: Does VIN Decode work for non-US vehicles?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: The NHTSA database primarily covers vehicles sold in the US market. For UK
+              vehicles, the DVLA plate lookup is more reliable. VINs from other markets may
+              return partial data.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: How do I add wheel fitment data for my products?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: Wheel specifications (PCD, offset, diameter, centre bore, width) can be imported
+              via CSV upload or through provider feeds. Each product can have multiple wheel
+              fitment entries to support different sizes and configurations.
             </Text>
           </BlockStack>
         </BlockStack>
