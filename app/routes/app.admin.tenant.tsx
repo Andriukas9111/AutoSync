@@ -353,6 +353,7 @@ export default function TenantDetail() {
 
   return (
     <Page
+      fullWidth
       title={domain}
       subtitle={`Tenant detail — ${capitalisePlan(tenant.plan)} plan`}
       backAction={{ content: "Admin Panel", onAction: () => navigate("/app/admin") }}

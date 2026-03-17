@@ -3,8 +3,20 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 
+/**
+ * Checks if an engine name is garbage data (numeric scraping artifact).
+ * Garbage names are decimal numbers like "0.00373911..." with no other data.
+ */
+function isGarbageEngineName(name: string | null): boolean {
+  if (!name) return true;
+  // Matches strings that are purely numeric (decimal floats from scraping bugs)
+  return /^\d+\.\d{5,}$/.test(name.trim());
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
-  await authenticate.admin(request);
+  // YMME data is global (shared across all tenants), but require authentication
+  const { session } = await authenticate.admin(request);
+  const _shopId = session.shop;
 
   const url = new URL(request.url);
   const level = url.searchParams.get("level");
@@ -61,23 +73,47 @@ export async function loader({ request }: LoaderFunctionArgs) {
         );
       }
 
+      // Get model's own year range to clamp results
+      const { data: model } = await db
+        .from("ymme_models")
+        .select("year_from, year_to")
+        .eq("id", modelId)
+        .single();
+
+      const modelYearFrom = model?.year_from ?? null;
+      const modelYearTo = model?.year_to ?? new Date().getFullYear();
+
       // Get distinct year ranges from engines for this model
       const { data: engines, error } = await db
         .from("ymme_engines")
         .select("year_from, year_to")
         .eq("model_id", modelId)
-        .eq("active", true);
+        .eq("active", true)
+        .not("year_from", "is", null); // Skip engines with null year_from
 
       if (error) {
         return data({ error: error.message }, { status: 500 });
       }
 
       // Build a sorted set of distinct individual years from engine year ranges
+      const currentYear = new Date().getFullYear();
       const yearSet = new Set<number>();
       for (const engine of engines ?? []) {
         const from = engine.year_from;
-        const to = engine.year_to ?? new Date().getFullYear();
-        for (let y = from; y <= to; y++) {
+        if (typeof from !== "number" || from < 1900) continue; // Skip invalid data
+        const to = engine.year_to ?? currentYear;
+
+        for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
+          // Clamp to model's own year range if available
+          if (modelYearFrom != null && y < modelYearFrom) continue;
+          if (y > modelYearTo) continue;
+          yearSet.add(y);
+        }
+      }
+
+      // If no years from engines, fall back to model's own year range
+      if (yearSet.size === 0 && modelYearFrom != null) {
+        for (let y = modelYearFrom; y <= modelYearTo; y++) {
           yearSet.add(y);
         }
       }
@@ -105,6 +141,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         )
         .eq("model_id", modelId)
         .eq("active", true)
+        .not("year_from", "is", null) // Skip engines with no year data
         .order("name");
 
       // If a year is provided, filter engines whose range includes that year
@@ -121,7 +158,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
         return data({ error: error.message }, { status: 500 });
       }
 
-      return data({ engines });
+      // Filter out engines with garbage/numeric names (scraping artifacts)
+      const cleanEngines = (engines ?? []).filter(
+        (e) => !isGarbageEngineName(e.name),
+      );
+
+      return data({ engines: cleanEngines });
     }
 
     default:

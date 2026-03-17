@@ -25,14 +25,15 @@ export async function action({ request }: ActionFunctionArgs) {
     if (pushMetafields) {
       await assertFeature(shopId, "pushMetafields");
     }
-  } catch (err: any) {
-    if (err.name === "BillingGateError") {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "BillingGateError") {
+      const billingErr = err as Error & { feature?: string; currentPlan?: string; requiredPlan?: string };
       return data(
         {
-          error: err.message,
-          feature: err.feature,
-          currentPlan: err.currentPlan,
-          requiredPlan: err.requiredPlan,
+          error: billingErr.message,
+          feature: billingErr.feature,
+          currentPlan: billingErr.currentPlan,
+          requiredPlan: billingErr.requiredPlan,
         },
         { status: 403 },
       );
@@ -71,8 +72,20 @@ export async function action({ request }: ActionFunctionArgs) {
       metafieldsPushed: result.metafieldsPushed,
       errors: result.errors,
     });
-  } catch (err: any) {
-    return data({ error: err.message ?? "Push failed" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Push failed";
+
+    // Mark job as failed
+    await db
+      .from("sync_jobs")
+      .update({
+        status: "failed",
+        error: message,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
+
+    return data({ error: message }, { status: 500 });
   }
 }
 

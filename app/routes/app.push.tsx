@@ -123,20 +123,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const strategy = (formData.get("strategy") as CollectionStrategy) || "make";
   const seoEnabled = formData.get("seoEnabled") === "true";
 
+  // Save push settings so they persist between visits
+  await db.from("app_settings").upsert(
+    {
+      shop_id: shopId,
+      push_tags: pushTags,
+      push_metafields: pushMetafields,
+      push_collections: createCollections,
+      collection_strategy: strategy,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "shop_id" },
+  );
+
   // Gate features behind billing
   try {
     if (pushTags) await assertFeature(shopId, "pushTags");
     if (pushMetafields) await assertFeature(shopId, "pushMetafields");
     if (createCollections) await assertFeature(shopId, "smartCollections");
     if (seoEnabled) await assertFeature(shopId, "collectionSeoImages");
-  } catch (err: any) {
-    if (err.name === "BillingGateError") {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "BillingGateError") {
+      const billingErr = err as Error & { feature?: string; currentPlan?: string; requiredPlan?: string };
       return data(
         {
-          error: err.message,
-          feature: err.feature,
-          currentPlan: err.currentPlan,
-          requiredPlan: err.requiredPlan,
+          error: billingErr.message,
+          feature: billingErr.feature,
+          currentPlan: billingErr.currentPlan,
+          requiredPlan: billingErr.requiredPlan,
         },
         { status: 403 },
       );
@@ -169,8 +183,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         pushTags,
         pushMetafields,
       });
-    } catch (err: any) {
-      return data({ error: err.message ?? "Push failed" }, { status: 500 });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Push failed";
+      return data({ error: message }, { status: 500 });
     }
   }
 
@@ -204,15 +219,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           completed_at: new Date().toISOString(),
         })
         .eq("id", job.id);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Collections creation failed";
       await db
         .from("sync_jobs")
         .update({
           status: "failed",
+          error: message,
           completed_at: new Date().toISOString(),
         })
         .eq("id", job.id);
-      return data({ error: err.message ?? "Collections creation failed" }, { status: 500 });
+      return data({ error: message }, { status: 500 });
     }
   }
 
@@ -280,12 +297,14 @@ export default function Push() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  // Form state
+  // Form state — initialize ALL settings from saved app_settings
   const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? true);
   const [pushMetafields, setPushMetafields] = useState(appSettings?.push_metafields ?? true);
-  const [createCollectionsChecked, setCreateCollectionsChecked] = useState(false);
+  const [createCollectionsChecked, setCreateCollectionsChecked] = useState(
+    appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false,
+  );
   const [strategy, setStrategy] = useState<string>(appSettings?.collection_strategy ?? "make");
-  const [seoEnabled, setSeoEnabled] = useState(false);
+  const [seoEnabled, setSeoEnabled] = useState(appSettings?.push_collections ?? false);
 
   const nothingSelected = !pushTags && !pushMetafields && !createCollectionsChecked;
   const noProductsReady = productsWithFitments === 0;
@@ -304,7 +323,7 @@ export default function Push() {
   ];
 
   return (
-    <Page title="Push to Shopify">
+    <Page fullWidth title="Push to Shopify">
       <Layout>
         {/* Error banner */}
         {showError && (

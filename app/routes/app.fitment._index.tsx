@@ -268,6 +268,7 @@ export default function Fitment() {
 
   return (
     <Page
+      fullWidth
       title="Fitment Overview"
       subtitle={`${totalFitments.toLocaleString()} fitments across ${totalProducts.toLocaleString()} products`}
       primaryAction={{

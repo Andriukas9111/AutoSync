@@ -194,7 +194,7 @@ export default function Collections() {
         : uniqueMakeModelCount; // make_model_year would be more, but we approximate
 
   return (
-    <Page title="Collections">
+    <Page fullWidth title="Collections">
       <Layout>
         {/* Banners */}
         {showError && (

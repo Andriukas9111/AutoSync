@@ -13,9 +13,10 @@ export async function action({ request }: ActionFunctionArgs) {
     admin = auth.admin;
     session = auth.session;
     console.log("[fetch-products] Authenticated:", session.shop);
-  } catch (authErr: any) {
-    console.error("[fetch-products] Auth failed:", authErr.message);
-    return data({ error: `Authentication failed: ${authErr.message}` }, { status: 401 });
+  } catch (authErr: unknown) {
+    const msg = authErr instanceof Error ? authErr.message : "Unknown auth error";
+    console.error("[fetch-products] Auth failed:", msg);
+    return data({ error: `Authentication failed: ${msg}` }, { status: 401 });
   }
 
   const shopId = session.shop;
@@ -55,8 +56,21 @@ export async function action({ request }: ActionFunctionArgs) {
       errors: result.errors,
       jobId: job.id,
     });
-  } catch (err: any) {
-    console.error("[fetch-products] Pipeline error:", err.message, err.stack);
-    return data({ error: err.message ?? "Fetch failed" }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Fetch failed";
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[fetch-products] Pipeline error:", message, stack);
+
+    // Mark job as failed so dashboard shows accurate status
+    await db
+      .from("sync_jobs")
+      .update({
+        status: "failed",
+        error: message,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
+
+    return data({ error: message }, { status: 500 });
   }
 }

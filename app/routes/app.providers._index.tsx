@@ -102,6 +102,7 @@ export default function Providers() {
   if (providers.length === 0) {
     return (
       <Page
+        fullWidth
         title="Providers"
         primaryAction={{
           content: "Add Provider",
@@ -147,6 +148,7 @@ export default function Providers() {
 
   return (
     <Page
+      fullWidth
       title="Providers"
       primaryAction={{
         content: "Add Provider",

@@ -390,6 +390,7 @@ export default function ProductDetails() {
 
   return (
     <Page
+      fullWidth
       title={product.title}
       backAction={{ onAction: () => navigate("/app/products") }}
       titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}

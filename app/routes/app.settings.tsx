@@ -472,7 +472,7 @@ export default function Settings() {
   const showError = actionData && "error" in actionData;
 
   return (
-    <Page title="Settings">
+    <Page fullWidth title="Settings">
       <Layout>
         {/* Global Banners from save_settings action */}
         {showError && (

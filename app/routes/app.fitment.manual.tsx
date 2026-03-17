@@ -8,17 +8,23 @@ import {
   EmptyState,
   BlockStack,
   InlineStack,
+  InlineGrid,
   Text,
   Badge,
   Button,
   ProgressBar,
-  TextField,
   Banner,
-  Thumbnail,
   Tag,
   Divider,
+  Icon,
   Box,
 } from "@shopify/polaris";
+import {
+  TargetIcon,
+  ProductIcon,
+  ChevronRightIcon,
+  DeleteIcon,
+} from "@shopify/polaris-icons";
 import { data as routerData } from "react-router";
 
 import { authenticate } from "../shopify.server";
@@ -69,20 +75,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Run all queries in parallel
   const [totalResult, unmappedResult, productResult] = await Promise.all([
-    db.from("products")
+    db
+      .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId),
-    db.from("products")
+    db
+      .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
       .eq("fitment_status", "unmapped"),
     specificProductId
-      ? db.from("products")
+      ? db
+          .from("products")
           .select("*")
           .eq("shop_id", shopId)
           .eq("id", specificProductId)
           .single()
-      : db.from("products")
+      : db
+          .from("products")
           .select("*")
           .eq("shop_id", shopId)
           .eq("fitment_status", "unmapped")
@@ -95,7 +105,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const unmapped = unmappedResult.count ?? 0;
 
   return {
-    nextProduct: (productResult.data as ProductRecord | null),
+    nextProduct: productResult.data as ProductRecord | null,
     totalProducts: total,
     mappedCount: total - unmapped,
     unmappedCount: unmapped,
@@ -117,20 +127,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       fitments = JSON.parse(fitmentsJson);
     } catch {
-      return routerData(
-        { error: "Invalid fitment data" },
-        { status: 400 },
-      );
+      return routerData({ error: "Invalid fitment data" }, { status: 400 });
     }
 
     if (fitments.length === 0) {
-      return routerData(
-        { error: "No fitments to save" },
-        { status: 400 },
-      );
+      return routerData({ error: "No fitments to save" }, { status: 400 });
     }
 
-    // Insert all fitments — include ymme_make_id and ymme_model_id for collections
+    // Insert all fitments
     const fitmentRows = fitments.map((f) => ({
       product_id: productId,
       shop_id: shopId,
@@ -186,7 +190,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (actionType === "skip") {
-    // Mark product as flagged so it appears at the end or in a separate queue
     await db
       .from("products")
       .update({ fitment_status: "flagged" })
@@ -216,10 +219,7 @@ export default function FitmentManual() {
   // Local state
   const [currentSelection, setCurrentSelection] =
     useState<VehicleSelection | null>(null);
-  const [yearFrom, setYearFrom] = useState("");
-  const [yearTo, setYearTo] = useState("");
   const [fitmentList, setFitmentList] = useState<FitmentEntry[]>([]);
-  const [showDescription, setShowDescription] = useState(false);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [selectorKey, setSelectorKey] = useState(0);
 
@@ -238,12 +238,8 @@ export default function FitmentManual() {
   // Handle action responses
   useEffect(() => {
     if (fetcher.data?.success) {
-      // Clear fitment list for next product
       setFitmentList([]);
       setCurrentSelection(null);
-      setYearFrom("");
-      setYearTo("");
-      setShowDescription(false);
       setSelectorKey((k) => k + 1);
 
       if (fetcher.data.savedCount) {
@@ -257,7 +253,6 @@ export default function FitmentManual() {
         setLocalUnmapped((u) => Math.max(0, u - 1));
       }
 
-      // Clear banner after 3 seconds
       const timer = setTimeout(() => setSuccessBanner(null), 3000);
       return () => clearTimeout(timer);
     }
@@ -276,8 +271,8 @@ export default function FitmentManual() {
       make: currentSelection.makeName,
       model: currentSelection.modelName,
       variant: null,
-      year_from: yearFrom ? parseInt(yearFrom, 10) : (currentSelection.year ?? null),
-      year_to: yearTo ? parseInt(yearTo, 10) : (currentSelection.year ?? null),
+      year_from: currentSelection.year ?? null,
+      year_to: currentSelection.year ?? null,
       engine: currentSelection.engineName,
       engine_code: null,
       fuel_type: null,
@@ -287,12 +282,9 @@ export default function FitmentManual() {
     };
 
     setFitmentList((prev) => [...prev, entry]);
-    // Reset selector for next entry
     setCurrentSelection(null);
-    setYearFrom("");
-    setYearTo("");
     setSelectorKey((k) => k + 1);
-  }, [currentSelection, yearFrom, yearTo]);
+  }, [currentSelection]);
 
   const handleRemoveFitment = useCallback((index: number) => {
     setFitmentList((prev) => prev.filter((_, i) => i !== index));
@@ -319,51 +311,34 @@ export default function FitmentManual() {
     fetcher.submit(formData, { method: "post" });
   }, [nextProduct, fetcher]);
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────────────
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Enter on year fields = add vehicle
-      if (
-        e.key === "Enter" &&
-        currentSelection &&
-        (document.activeElement?.getAttribute("name") === "year_from" ||
-          document.activeElement?.getAttribute("name") === "year_to")
-      ) {
-        e.preventDefault();
-        handleAddVehicle();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentSelection, handleAddVehicle]);
-
   // ── Computed values ────────────────────────────────────────────────────
 
   const percentage =
     totalProducts > 0 ? Math.round((localMapped / totalProducts) * 100) : 0;
 
   const tags = nextProduct?.tags
-    ? Array.isArray(nextProduct.tags)
-      ? nextProduct.tags.filter(Boolean)
-      : typeof nextProduct.tags === "string"
-        ? nextProduct.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+    ? typeof nextProduct.tags === "string"
+      ? nextProduct.tags
+          .split(",")
+          .map((t: string) => t.trim())
+          .filter(Boolean)
+      : Array.isArray(nextProduct.tags)
+        ? nextProduct.tags.filter(Boolean)
         : []
     : [];
 
-  const descriptionText = nextProduct?.description
-    ? nextProduct.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
-    : "";
-  const truncatedDescription =
-    descriptionText.length > 200
-      ? descriptionText.slice(0, 200) + "..."
-      : descriptionText;
+  // Strip HTML from description for display
+  const descriptionHtml = nextProduct?.description ?? "";
+  const descriptionText = descriptionHtml
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
     <Page
+      fullWidth
       title="Manual Fitment Mapping"
       backAction={{ onAction: () => navigate("/app/fitment") }}
     >
@@ -386,99 +361,47 @@ export default function FitmentManual() {
           </Layout.Section>
         )}
 
-        {/* Progress card */}
+        {/* Progress bar — compact and informative */}
         <Layout.Section>
           <Card>
-            <BlockStack gap="300">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">
-                  Mapping Progress
-                </Text>
-                <Badge tone={percentage === 100 ? "success" : "info"}>
-                  {percentage}% complete
-                </Badge>
+            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <div
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-fill-emphasis)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--p-color-text-inverse)",
+                  }}
+                >
+                  <Icon source={TargetIcon} />
+                </div>
+                <BlockStack gap="100">
+                  <Text as="p" variant="headingSm">
+                    {localMapped} of {totalProducts} mapped
+                  </Text>
+                  <div style={{ width: "200px" }}>
+                    <ProgressBar progress={percentage} size="small" />
+                  </div>
+                </BlockStack>
               </InlineStack>
-              <ProgressBar progress={percentage} size="small" />
-              <Text as="p" variant="bodySm" tone="subdued">
-                {localMapped} of {totalProducts} mapped — {localUnmapped}{" "}
-                remaining
-              </Text>
-            </BlockStack>
+              <InlineStack gap="200" blockAlign="center">
+                <Badge tone={percentage === 100 ? "success" : "info"}>
+                  {percentage}%
+                </Badge>
+                <Badge tone="warning">{localUnmapped} remaining</Badge>
+              </InlineStack>
+            </InlineStack>
           </Card>
         </Layout.Section>
 
-        {/* Product card or empty state */}
-        <Layout.Section>
-          {nextProduct ? (
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Current Product
-                </Text>
-                <InlineStack gap="400" align="start" blockAlign="start" wrap={false}>
-                  {nextProduct.image_url ? (
-                    <Thumbnail
-                      source={nextProduct.image_url}
-                      alt={nextProduct.title}
-                      size="large"
-                    />
-                  ) : (
-                    <Thumbnail
-                      source="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                      alt="No image"
-                      size="large"
-                    />
-                  )}
-                  <BlockStack gap="200">
-                    <Text as="h3" variant="headingLg" fontWeight="bold">
-                      {nextProduct.title}
-                    </Text>
-                    {nextProduct.vendor && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Vendor: {nextProduct.vendor}
-                      </Text>
-                    )}
-                    {nextProduct.product_type && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Type: {nextProduct.product_type}
-                      </Text>
-                    )}
-                    {nextProduct.price && (
-                      <Text as="p" variant="bodyMd" fontWeight="semibold">
-                        {nextProduct.price}
-                      </Text>
-                    )}
-                  </BlockStack>
-                </InlineStack>
-
-                {/* Tags */}
-                {tags.length > 0 && (
-                  <InlineStack gap="100" wrap>
-                    {tags.map((tag: string, i: number) => (
-                      <Tag key={i}>{tag}</Tag>
-                    ))}
-                  </InlineStack>
-                )}
-
-                {/* Description */}
-                {descriptionText && (
-                  <BlockStack gap="100">
-                    <Text as="p" variant="bodySm">
-                      {showDescription ? descriptionText : truncatedDescription}
-                    </Text>
-                    {descriptionText.length > 200 && (
-                      <Button
-                        variant="plain"
-                        onClick={() => setShowDescription(!showDescription)}
-                      >
-                        {showDescription ? "Show less" : "Show more"}
-                      </Button>
-                    )}
-                  </BlockStack>
-                )}
-              </BlockStack>
-            </Card>
-          ) : (
+        {/* Main content: empty state or product + mapping */}
+        {!nextProduct ? (
+          <Layout.Section>
             <Card>
               <EmptyState
                 heading="All products have been mapped!"
@@ -490,135 +413,365 @@ export default function FitmentManual() {
                 </p>
               </EmptyState>
             </Card>
-          )}
-        </Layout.Section>
+          </Layout.Section>
+        ) : (
+          <>
+            {/* Two-column layout: Product info (left) + Mapping (right) */}
+            <Layout.Section>
+              <InlineGrid columns={{ xs: 1, lg: "2fr 1fr" }} gap="400">
+                {/* ─── LEFT: Product Details ─── */}
+                <Card>
+                  <BlockStack gap="400">
+                    {/* Product header */}
+                    <InlineStack gap="200" blockAlign="center">
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--p-color-icon-emphasis)",
+                        }}
+                      >
+                        <Icon source={ProductIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Product Details
+                      </Text>
+                      <Badge tone="warning">Unmapped</Badge>
+                    </InlineStack>
 
-        {/* Fitment assignment card (only if there is a product to map) */}
-        {nextProduct && (
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Assign Vehicle Fitments
-                </Text>
+                    <Divider />
 
-                {/* Vehicle selector */}
-                <VehicleSelector
-                  key={selectorKey}
-                  onChange={handleSelectionChange}
-                />
+                    {/* Product image — large and prominent */}
+                    {nextProduct.image_url ? (
+                      <div
+                        style={{
+                          width: "100%",
+                          maxHeight: "360px",
+                          overflow: "hidden",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <img
+                          src={nextProduct.image_url}
+                          alt={nextProduct.title}
+                          style={{
+                            maxWidth: "100%",
+                            maxHeight: "360px",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "200px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text as="p" variant="bodyMd" tone="subdued">
+                          No image available
+                        </Text>
+                      </div>
+                    )}
 
-                {/* Year range overrides */}
-                <InlineStack gap="300" wrap>
-                  <Box minWidth="120px">
-                    <TextField
-                      label="Year from"
-                      type="number"
-                      value={yearFrom}
-                      onChange={setYearFrom}
-                      autoComplete="off"
-                      name="year_from"
-                      placeholder="e.g. 2015"
-                    />
-                  </Box>
-                  <Box minWidth="120px">
-                    <TextField
-                      label="Year to"
-                      type="number"
-                      value={yearTo}
-                      onChange={setYearTo}
-                      autoComplete="off"
-                      name="year_to"
-                      placeholder="e.g. 2023"
-                    />
-                  </Box>
-                  <Box minWidth="120px">
-                    <div style={{ marginTop: "24px" }}>
+                    {/* Product title + details */}
+                    <BlockStack gap="200">
+                      <Text as="h3" variant="headingLg" fontWeight="bold">
+                        {nextProduct.title}
+                      </Text>
+
+                      <InlineStack gap="300" wrap>
+                        {nextProduct.vendor && (
+                          <Badge>
+                            {nextProduct.vendor}
+                          </Badge>
+                        )}
+                        {nextProduct.product_type && (
+                          <Badge tone="info">
+                            {nextProduct.product_type}
+                          </Badge>
+                        )}
+                        {nextProduct.price && (
+                          <Text
+                            as="span"
+                            variant="headingSm"
+                            fontWeight="bold"
+                          >
+                            {nextProduct.price.startsWith("$") || nextProduct.price.startsWith("\u00A3")
+                              ? nextProduct.price
+                              : `$${nextProduct.price}`}
+                          </Text>
+                        )}
+                      </InlineStack>
+                    </BlockStack>
+
+                    {/* Description — full display */}
+                    {descriptionText && (
+                      <>
+                        <Divider />
+                        <BlockStack gap="200">
+                          <Text as="h4" variant="headingSm">
+                            Description
+                          </Text>
+                          <Text as="p" variant="bodyMd">
+                            {descriptionText}
+                          </Text>
+                        </BlockStack>
+                      </>
+                    )}
+
+                    {/* Tags */}
+                    {tags.length > 0 && (
+                      <>
+                        <Divider />
+                        <BlockStack gap="200">
+                          <Text as="h4" variant="headingSm">
+                            Tags
+                          </Text>
+                          <InlineStack gap="100" wrap>
+                            {tags.map((tag: string, i: number) => (
+                              <Tag key={i}>{tag}</Tag>
+                            ))}
+                          </InlineStack>
+                        </BlockStack>
+                      </>
+                    )}
+
+                    {/* Product meta info */}
+                    {nextProduct.handle && (
+                      <>
+                        <Divider />
+                        <InlineStack gap="400" wrap>
+                          <BlockStack gap="050">
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              Handle
+                            </Text>
+                            <Text as="span" variant="bodySm">
+                              {nextProduct.handle}
+                            </Text>
+                          </BlockStack>
+                          {nextProduct.shopify_product_id && (
+                            <BlockStack gap="050">
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                Shopify ID
+                              </Text>
+                              <Text as="span" variant="bodySm">
+                                {nextProduct.shopify_product_id}
+                              </Text>
+                            </BlockStack>
+                          )}
+                        </InlineStack>
+                      </>
+                    )}
+                  </BlockStack>
+                </Card>
+
+                {/* ─── RIGHT: Mapping Tools ─── */}
+                <BlockStack gap="400">
+                  {/* Vehicle Selector */}
+                  <Card>
+                    <BlockStack gap="400">
+                      <InlineStack gap="200" blockAlign="center">
+                        <div
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-surface-secondary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--p-color-icon-emphasis)",
+                          }}
+                        >
+                          <Icon source={TargetIcon} />
+                        </div>
+                        <Text as="h2" variant="headingMd">
+                          Add Vehicle
+                        </Text>
+                      </InlineStack>
+
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Select Make, Model, Year, and Engine then click Add.
+                      </Text>
+
+                      <VehicleSelector
+                        key={selectorKey}
+                        onChange={handleSelectionChange}
+                      />
+
                       <Button
                         onClick={handleAddVehicle}
                         disabled={!currentSelection}
+                        fullWidth
+                        variant="primary"
                       >
                         Add Vehicle
                       </Button>
-                    </div>
-                  </Box>
-                </InlineStack>
-
-                <Divider />
-
-                {/* List of added fitments */}
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingSm">
-                    Vehicles to save ({fitmentList.length})
-                  </Text>
-
-                  {fitmentList.length === 0 ? (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      No vehicles added yet. Use the selector above to add
-                      fitments.
-                    </Text>
-                  ) : (
-                    <BlockStack gap="200">
-                      {fitmentList.map((entry, index) => (
-                        <InlineStack
-                          key={index}
-                          align="space-between"
-                          blockAlign="center"
-                        >
-                          <InlineStack gap="200" blockAlign="center">
-                            <Badge>{entry.make}</Badge>
-                            <Text as="span" variant="bodyMd">
-                              {entry.model}
-                            </Text>
-                            {entry.engine && (
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {entry.engine}
-                              </Text>
-                            )}
-                            {entry.year_from && (
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {entry.year_from}
-                                {entry.year_to && entry.year_to !== entry.year_from
-                                  ? `–${entry.year_to}`
-                                  : ""}
-                              </Text>
-                            )}
-                          </InlineStack>
-                          <Button
-                            variant="plain"
-                            tone="critical"
-                            onClick={() => handleRemoveFitment(index)}
-                          >
-                            Remove
-                          </Button>
-                        </InlineStack>
-                      ))}
                     </BlockStack>
-                  )}
+                  </Card>
+
+                  {/* Fitment list */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <Text as="h2" variant="headingMd">
+                          Vehicles ({fitmentList.length})
+                        </Text>
+                        {fitmentList.length > 0 && (
+                          <Badge tone="success">
+                            {fitmentList.length} added
+                          </Badge>
+                        )}
+                      </InlineStack>
+
+                      <Divider />
+
+                      {fitmentList.length === 0 ? (
+                        <Box
+                          padding="400"
+                          borderRadius="200"
+                          background="bg-surface-secondary"
+                        >
+                          <BlockStack gap="200" inlineAlign="center">
+                            <Text
+                              as="p"
+                              variant="bodySm"
+                              tone="subdued"
+                              alignment="center"
+                            >
+                              No vehicles added yet.
+                            </Text>
+                            <Text
+                              as="p"
+                              variant="bodySm"
+                              tone="subdued"
+                              alignment="center"
+                            >
+                              Use the selector above to pick a vehicle.
+                            </Text>
+                          </BlockStack>
+                        </Box>
+                      ) : (
+                        <BlockStack gap="200">
+                          {fitmentList.map((entry, index) => (
+                            <div
+                              key={index}
+                              style={{
+                                padding: "var(--p-space-200) var(--p-space-300)",
+                                borderRadius: "var(--p-border-radius-200)",
+                                background: "var(--p-color-bg-surface-secondary)",
+                                border: "1px solid var(--p-color-border)",
+                              }}
+                            >
+                              <InlineStack
+                                align="space-between"
+                                blockAlign="center"
+                                wrap={false}
+                              >
+                                <BlockStack gap="050">
+                                  <InlineStack gap="100" blockAlign="center">
+                                    <Text
+                                      as="span"
+                                      variant="bodyMd"
+                                      fontWeight="semibold"
+                                    >
+                                      {entry.make}
+                                    </Text>
+                                    <Icon source={ChevronRightIcon} />
+                                    <Text as="span" variant="bodyMd">
+                                      {entry.model}
+                                    </Text>
+                                  </InlineStack>
+                                  <InlineStack gap="100">
+                                    {entry.year_from && (
+                                      <Text
+                                        as="span"
+                                        variant="bodySm"
+                                        tone="subdued"
+                                      >
+                                        {entry.year_from}
+                                        {entry.year_to &&
+                                        entry.year_to !== entry.year_from
+                                          ? `\u2013${entry.year_to}`
+                                          : ""}
+                                      </Text>
+                                    )}
+                                    {entry.engine && (
+                                      <Text
+                                        as="span"
+                                        variant="bodySm"
+                                        tone="subdued"
+                                      >
+                                        \u00B7 {entry.engine}
+                                      </Text>
+                                    )}
+                                  </InlineStack>
+                                </BlockStack>
+                                <Button
+                                  icon={DeleteIcon}
+                                  variant="plain"
+                                  tone="critical"
+                                  onClick={() => handleRemoveFitment(index)}
+                                  accessibilityLabel="Remove fitment"
+                                />
+                              </InlineStack>
+                            </div>
+                          ))}
+                        </BlockStack>
+                      )}
+                    </BlockStack>
+                  </Card>
+
+                  {/* Action buttons — prominent, swipe-like */}
+                  <Card>
+                    <InlineStack gap="300" align="center" blockAlign="center">
+                      <div style={{ flex: 1 }}>
+                        <Button
+                          onClick={handleSkip}
+                          disabled={isSubmitting}
+                          fullWidth
+                          size="large"
+                          tone="critical"
+                        >
+                          Skip
+                        </Button>
+                      </div>
+                      <div style={{ flex: 2 }}>
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveAndNext}
+                          disabled={fitmentList.length === 0 || isSubmitting}
+                          loading={isSubmitting}
+                          fullWidth
+                          size="large"
+                        >
+                          Save & Next ({fitmentList.length})
+                        </Button>
+                      </div>
+                    </InlineStack>
+                  </Card>
                 </BlockStack>
-
-                <Divider />
-
-                {/* Action buttons */}
-                <InlineStack align="end" gap="300">
-                  <Button
-                    onClick={handleSkip}
-                    disabled={isSubmitting}
-                  >
-                    Skip
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveAndNext}
-                    disabled={fitmentList.length === 0 || isSubmitting}
-                    loading={isSubmitting}
-                  >
-                    Save & Next
-                  </Button>
-                </InlineStack>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+              </InlineGrid>
+            </Layout.Section>
+          </>
         )}
       </Layout>
     </Page>

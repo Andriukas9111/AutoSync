@@ -173,7 +173,7 @@ export default function ProvidersNew() {
   ];
 
   return (
-    <Page title="Add Provider" backAction={{ onAction: () => navigate("/app/providers") }}>
+    <Page title="Add Provider" fullWidth backAction={{ onAction: () => navigate("/app/providers") }}>
       <Layout>
         {atLimit && (
           <Layout.Section>

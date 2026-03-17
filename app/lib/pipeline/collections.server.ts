@@ -48,6 +48,21 @@ const COLLECTION_UPDATE_MUTATION = `
   }
 `;
 
+const COLLECTION_SET_IMAGE_MUTATION = `
+  mutation collectionUpdate($input: CollectionInput!) {
+    collectionUpdate(input: $input) {
+      collection {
+        id
+        image { url }
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 const COLLECTION_BY_HANDLE_QUERY = `
   query collectionByHandle($handle: String!) {
     collectionByHandle(handle: $handle) {
@@ -350,13 +365,10 @@ async function processCollectionTarget(
 ): Promise<void> {
   const title = buildCollectionTitle(target);
   const handle = slugify(title);
-  const description = buildCollectionDescription(target);
+  const descriptionHtml = buildCollectionDescriptionHtml(target);
 
   // Check if collection already exists on Shopify by handle
   const existingId = await findExistingCollection(admin, handle);
-
-  // Check if we already have a mapping in our DB (by handle for reliability)
-  const _existingMapping = null; // Lookup by Shopify handle instead
 
   // Build smart collection rules
   const rules = buildSmartRules(target);
@@ -364,19 +376,22 @@ async function processCollectionTarget(
   // Build collection input
   const input: Record<string, any> = {
     title,
-    descriptionHtml: `<p>${description}</p>`,
+    descriptionHtml,
     ruleSet: {
       appliedDisjunctively: false,
       rules,
     },
   };
 
-  // Add SEO if enabled
-  if (options?.seoEnabled) {
-    input.seo = {
-      title: `${title} | Performance Parts`,
-      description: `Shop ${target.make}${target.model ? ` ${target.model}` : ""} performance parts, accessories and upgrades. Quality fitment-verified products for your ${target.make}${target.model ? ` ${target.model}` : ""} vehicle.`,
-    };
+  // Always add SEO — proper SEO is critical for discoverability
+  input.seo = buildCollectionSeo(target);
+
+  // Add brand logo as collection image if available (make-level only)
+  let logoUrl: string | null = null;
+  if (!target.model && target.ymme_make_id) {
+    logoUrl = await getMakeLogoUrl(target.ymme_make_id);
+  } else if (!target.model && target.make) {
+    logoUrl = await getMakeLogoUrlByName(target.make);
   }
 
   if (existingId) {
@@ -396,11 +411,19 @@ async function processCollectionTarget(
 
     const collection = data?.collectionUpdate?.collection;
     if (collection) {
+      // Set image separately (Shopify requires image.src on update)
+      if (logoUrl) {
+        await setCollectionImage(admin, collection.id, logoUrl);
+      }
       await upsertCollectionMapping(shopId, collection, target, strategy);
       result.updated++;
     }
   } else {
-    // Create new collection
+    // Create new collection — include image if available
+    if (logoUrl) {
+      input.image = { src: logoUrl, altText: `${target.make} logo` };
+    }
+
     const response = await admin.graphql(COLLECTION_CREATE_MUTATION, {
       variables: { input },
     });
@@ -439,51 +462,6 @@ async function findExistingCollection(
 }
 
 // ── DB Helpers ──────────────────────────────────────────────
-
-async function resolveMakeNames(
-  makeIds: (string | number)[],
-): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  if (makeIds.length === 0) return map;
-
-  const { data } = await db
-    .from("ymme_makes")
-    .select("id, name")
-    .in("id", makeIds);
-
-  if (data) {
-    for (const row of data) {
-      map.set(String(row.id), row.name);
-    }
-  }
-
-  return map;
-}
-
-async function resolveModelNames(
-  modelIds: (string | number)[],
-): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  if (modelIds.length === 0) return map;
-
-  // Supabase .in() has a limit; batch if needed
-  const batchSize = 500;
-  for (let i = 0; i < modelIds.length; i += batchSize) {
-    const batch = modelIds.slice(i, i + batchSize);
-    const { data } = await db
-      .from("ymme_models")
-      .select("id, name")
-      .in("id", batch);
-
-    if (data) {
-      for (const row of data) {
-        map.set(String(row.id), row.name);
-      }
-    }
-  }
-
-  return map;
-}
 
 async function upsertCollectionMapping(
   shopId: string,
@@ -543,14 +521,180 @@ function buildCollectionTitle(target: CollectionTarget): string {
   return `${target.make} Parts`;
 }
 
-function buildCollectionDescription(target: CollectionTarget): string {
-  if (target.yearRange && target.model) {
-    return `Browse our selection of parts and accessories for ${target.make} ${target.model} ${target.yearRange} vehicles.`;
+/**
+ * Build a rich HTML description for the collection page.
+ * This is shown on the storefront collection page body — it should be
+ * keyword-rich, informative, and help with on-page SEO.
+ */
+function buildCollectionDescriptionHtml(target: CollectionTarget): string {
+  const make = target.make;
+  const model = target.model;
+  const yearRange = target.yearRange;
+
+  if (yearRange && model) {
+    return [
+      `<h2>${make} ${model} ${yearRange} Performance Parts & Accessories</h2>`,
+      `<p>Discover our curated collection of high-quality performance parts, upgrades, and accessories specifically designed for the <strong>${make} ${model} (${yearRange})</strong>. Every product in this collection has been verified for fitment compatibility with your vehicle.</p>`,
+      `<p>From exhaust systems and intake upgrades to suspension components and styling accessories, find everything you need to enhance your ${make} ${model}. All parts are sourced from trusted manufacturers and backed by fitment guarantee.</p>`,
+      `<h3>Why Choose Fitment-Verified ${make} Parts?</h3>`,
+      `<ul>`,
+      `<li><strong>Guaranteed Fit</strong> — Every part verified for ${make} ${model} ${yearRange} compatibility</li>`,
+      `<li><strong>Quality Brands</strong> — Sourced from leading automotive parts manufacturers</li>`,
+      `<li><strong>Expert Support</strong> — Specialist knowledge for ${make} vehicle modifications</li>`,
+      `</ul>`,
+    ].join("\n");
   }
-  if (target.model) {
-    return `Browse our selection of parts and accessories for ${target.make} ${target.model} vehicles.`;
+
+  if (model) {
+    return [
+      `<h2>${make} ${model} Performance Parts & Accessories</h2>`,
+      `<p>Browse our complete range of performance parts, upgrades, and accessories for the <strong>${make} ${model}</strong>. Each product has been checked for fitment compatibility, so you can shop with confidence knowing every part is designed to fit your vehicle.</p>`,
+      `<p>Whether you're looking for power upgrades, handling improvements, or cosmetic enhancements, our ${make} ${model} collection has you covered. We stock parts from all major aftermarket brands with guaranteed vehicle compatibility.</p>`,
+      `<h3>Popular ${make} ${model} Upgrades</h3>`,
+      `<ul>`,
+      `<li>Performance exhaust systems and downpipes</li>`,
+      `<li>Cold air intakes and induction kits</li>`,
+      `<li>Suspension springs, coilovers, and anti-roll bars</li>`,
+      `<li>Brake upgrades, pads, and discs</li>`,
+      `<li>Styling accessories and body parts</li>`,
+      `</ul>`,
+    ].join("\n");
   }
-  return `Browse our selection of parts and accessories for ${target.make} vehicles.`;
+
+  // Make-level collection (e.g. "BMW Parts")
+  return [
+    `<h2>${make} Performance Parts & Accessories</h2>`,
+    `<p>Explore our extensive range of aftermarket performance parts, upgrades, and accessories for <strong>${make}</strong> vehicles. Every product is fitment-verified to ensure perfect compatibility with your specific ${make} model and year.</p>`,
+    `<p>Our ${make} parts collection covers all popular models and includes everything from engine performance upgrades to suspension, brakes, exhaust systems, and styling accessories. All parts are sourced from trusted aftermarket brands and OEM suppliers.</p>`,
+    `<h3>Shop by ${make} Model</h3>`,
+    `<p>Use our vehicle selector to narrow down parts for your exact ${make} model, year, and engine specification. Our advanced fitment system ensures you only see parts that are compatible with your vehicle.</p>`,
+    `<h3>Why Shop ${make} Parts With Us?</h3>`,
+    `<ul>`,
+    `<li><strong>Fitment Guaranteed</strong> — Advanced vehicle compatibility verification on every product</li>`,
+    `<li><strong>All Models Covered</strong> — Parts for every ${make} model in our database</li>`,
+    `<li><strong>Trusted Brands</strong> — We stock parts from leading aftermarket manufacturers</li>`,
+    `<li><strong>Expert Knowledge</strong> — Specialist ${make} modification experience and support</li>`,
+    `</ul>`,
+  ].join("\n");
+}
+
+/**
+ * Build SEO metadata for the collection.
+ * Follows SEO best practices:
+ * - Title: 50-60 characters, primary keyword first, brand last
+ * - Description: 150-160 characters, includes call-to-action, mentions USP
+ */
+function buildCollectionSeo(target: CollectionTarget): {
+  title: string;
+  description: string;
+} {
+  const make = target.make;
+  const model = target.model;
+  const yearRange = target.yearRange;
+  const currentYear = new Date().getFullYear();
+
+  if (yearRange && model) {
+    return {
+      title: truncateSeoTitle(
+        `${make} ${model} ${yearRange} Parts & Accessories | Shop Now`,
+      ),
+      description: truncateSeoDescription(
+        `Shop fitment-verified ${make} ${model} ${yearRange} performance parts & accessories. Guaranteed compatibility. Free returns. Browse exhaust, intake, suspension & more for your ${make} ${model}.`,
+      ),
+    };
+  }
+
+  if (model) {
+    return {
+      title: truncateSeoTitle(
+        `${make} ${model} Parts & Accessories ${currentYear} | Performance Upgrades`,
+      ),
+      description: truncateSeoDescription(
+        `Browse ${make} ${model} performance parts, upgrades & accessories. Every part is fitment-verified for guaranteed compatibility. Shop exhaust systems, intakes, suspension, brakes & more.`,
+      ),
+    };
+  }
+
+  // Make-level
+  return {
+    title: truncateSeoTitle(
+      `${make} Parts & Accessories ${currentYear} | Performance & Aftermarket`,
+    ),
+    description: truncateSeoDescription(
+      `Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension, brakes & styling upgrades. Guaranteed compatibility.`,
+    ),
+  };
+}
+
+/** Truncate SEO title to 60 characters (Google's display limit) */
+function truncateSeoTitle(title: string): string {
+  if (title.length <= 60) return title;
+  return title.slice(0, 57) + "...";
+}
+
+/** Truncate SEO description to 160 characters (Google's display limit) */
+function truncateSeoDescription(desc: string): string {
+  if (desc.length <= 160) return desc;
+  // Cut at last space before 157 chars, add ellipsis
+  const cut = desc.lastIndexOf(" ", 157);
+  return desc.slice(0, cut > 120 ? cut : 157) + "...";
+}
+
+// ── Brand Logo Helpers ──────────────────────────────────────
+
+/** Get logo URL for a make by YMME make ID */
+async function getMakeLogoUrl(
+  makeId: string | number,
+): Promise<string | null> {
+  try {
+    const { data } = await db
+      .from("ymme_makes")
+      .select("logo_url")
+      .eq("id", makeId)
+      .maybeSingle();
+    return data?.logo_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Get logo URL for a make by name (fallback when no YMME ID) */
+async function getMakeLogoUrlByName(makeName: string): Promise<string | null> {
+  try {
+    const { data } = await db
+      .from("ymme_makes")
+      .select("logo_url")
+      .ilike("name", makeName)
+      .maybeSingle();
+    return data?.logo_url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Set collection image via separate update (needed for existing collections) */
+async function setCollectionImage(
+  admin: any,
+  collectionGid: string,
+  imageUrl: string,
+): Promise<void> {
+  try {
+    const response = await admin.graphql(COLLECTION_SET_IMAGE_MUTATION, {
+      variables: {
+        input: {
+          id: collectionGid,
+          image: { src: imageUrl, altText: "Brand logo" },
+        },
+      },
+    });
+    const json = await response.json();
+    const userErrors = json?.data?.collectionUpdate?.userErrors;
+    if (userErrors?.length > 0) {
+      console.warn(`[collections] Failed to set image for ${collectionGid}: ${userErrors[0].message}`);
+    }
+  } catch (err) {
+    console.warn(`[collections] Image set failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function buildSmartRules(

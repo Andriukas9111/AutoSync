@@ -723,6 +723,7 @@ export default function Help() {
 
   return (
     <Page
+      fullWidth
       title="Help & Documentation"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >

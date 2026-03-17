@@ -374,6 +374,7 @@ export default function Plans() {
 
   return (
     <Page
+      fullWidth
       title="Plans & Pricing"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >

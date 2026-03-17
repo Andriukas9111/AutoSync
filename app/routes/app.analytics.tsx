@@ -365,7 +365,7 @@ export default function AnalyticsPage() {
   // ── Plan gate ──────────────────────────────────────────────
   if (analyticsLevel === "none") {
     return (
-      <Page title="Analytics">
+      <Page title="Analytics" fullWidth>
         <Banner title="Analytics requires the Starter plan or higher" tone="warning">
           <p>
             Upgrade your plan to access fitment coverage reports, popular vehicle
@@ -421,6 +421,7 @@ export default function AnalyticsPage() {
 
   return (
     <Page
+      fullWidth
       title="Analytics"
       subtitle="Fitment coverage, popular vehicles, and supplier performance"
       primaryAction={

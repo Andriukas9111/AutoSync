@@ -162,11 +162,14 @@ async function handleSearch(params: URLSearchParams) {
     return json({ error: "Missing make and/or model parameter" }, 400);
   }
 
-  // Find matching vehicle fitments
+  // Find matching vehicle fitments (scoped to requesting shop)
   let fitmentQuery = db
     .from("vehicle_fitments")
     .select("product_id, make, model, generation, year_from, year_to, engine_code");
 
+  if (shop) {
+    fitmentQuery = fitmentQuery.eq("shop_id", shop);
+  }
   fitmentQuery = fitmentQuery.ilike("make", make);
   fitmentQuery = fitmentQuery.ilike("model", model);
 
@@ -189,12 +192,18 @@ async function handleSearch(params: URLSearchParams) {
   // Get unique product IDs
   const productIds = [...new Set(fitments.map((f) => f.product_id))];
 
-  // Fetch products
-  const { data: products, error: prodError } = await db
+  // Fetch products (scoped to requesting shop)
+  let prodQuery = db
     .from("products")
     .select("id, shopify_gid, title, handle, image_url, price, status")
     .in("id", productIds)
     .eq("status", "approved");
+
+  if (shop) {
+    prodQuery = prodQuery.eq("shop_id", shop);
+  }
+
+  const { data: products, error: prodError } = await prodQuery;
 
   if (prodError) return json({ error: prodError.message }, 500);
 
@@ -576,7 +585,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleVinDecode(params, null);
     default:
       return json(
-        { error: `Unknown path: '${path}'. Available: makes, models, years, engines, search, plate-lookup, wheel-search, vin-decode` },
+        { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search. POST: plate-lookup, vin-decode` },
         400,
       );
   }

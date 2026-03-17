@@ -15,8 +15,24 @@ import {
   Banner,
   Divider,
   Box,
-  IndexTable,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ProductIcon,
+  ConnectIcon,
+  GaugeIcon,
+  CollectionIcon,
+  PackageIcon,
+  StarFilledIcon,
+  ImportIcon,
+  WandIcon,
+  TargetIcon,
+  ExportIcon,
+  ChartVerticalIcon,
+  DatabaseIcon,
+  SettingsIcon,
+  SearchIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -158,7 +174,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "\u2014";
   const d = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
@@ -190,6 +206,159 @@ const JOB_STATUS_TONE: Record<string, "success" | "info" | "warning" | "critical
   pending: undefined,
   failed: "critical",
 };
+
+const JOB_STATUS_ICON: Record<string, string> = {
+  completed: "\u2713",
+  running: "\u25CF",
+  pending: "\u25CB",
+  failed: "\u2717",
+};
+
+// ---------------------------------------------------------------------------
+// Quick Action Card sub-component
+// ---------------------------------------------------------------------------
+
+function QuickActionCard({
+  icon,
+  label,
+  description,
+  onClick,
+  primary = false,
+  badge,
+}: {
+  icon: any;
+  label: string;
+  description: string;
+  onClick: () => void;
+  primary?: boolean;
+  badge?: { content: string; tone: "success" | "warning" | "critical" | "info" };
+}) {
+  return (
+    <div
+      onClick={onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      role="button"
+      tabIndex={0}
+      style={{
+        cursor: "pointer",
+        borderRadius: "var(--p-border-radius-300)",
+        border: primary
+          ? "2px solid var(--p-color-border-emphasis)"
+          : "1px solid var(--p-color-border)",
+        padding: "var(--p-space-400)",
+        background: primary
+          ? "var(--p-color-bg-surface-secondary)"
+          : "var(--p-color-bg-surface)",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow =
+          "var(--p-shadow-300)";
+        (e.currentTarget as HTMLElement).style.borderColor =
+          "var(--p-color-border-emphasis)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.borderColor = primary
+          ? "var(--p-color-border-emphasis)"
+          : "var(--p-color-border)";
+      }}
+    >
+      <BlockStack gap="200">
+        <InlineStack gap="200" blockAlign="center" align="space-between">
+          <InlineStack gap="200" blockAlign="center">
+            <div
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: primary
+                  ? "var(--p-color-bg-fill-emphasis)"
+                  : "var(--p-color-bg-surface-secondary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: primary
+                  ? "var(--p-color-text-inverse)"
+                  : "var(--p-color-icon-emphasis)",
+              }}
+            >
+              <Icon source={icon} />
+            </div>
+            <Text as="span" variant="headingSm">
+              {label}
+            </Text>
+          </InlineStack>
+          {badge && (
+            <Badge tone={badge.tone}>{badge.content}</Badge>
+          )}
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {description}
+        </Text>
+      </BlockStack>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// KPI Card sub-component
+// ---------------------------------------------------------------------------
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  link,
+  linkLabel,
+  onNavigate,
+  extra,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  link: string;
+  linkLabel: string;
+  onNavigate: (path: string) => void;
+  extra?: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack gap="200" blockAlign="center">
+          <div
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "var(--p-border-radius-200)",
+              background: "var(--p-color-bg-surface-secondary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "var(--p-color-icon-emphasis)",
+            }}
+          >
+            <Icon source={icon} />
+          </div>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {label}
+          </Text>
+        </InlineStack>
+        <Text as="p" variant="heading2xl">
+          {value}
+        </Text>
+        {extra}
+        <Button
+          onClick={() => onNavigate(link)}
+          variant="plain"
+          textAlign="start"
+        >
+          {linkLabel}
+        </Button>
+      </BlockStack>
+    </Card>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -232,462 +401,838 @@ export default function Dashboard() {
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
 
   return (
-    <Page title="Dashboard">
+    <Page title="Dashboard" fullWidth>
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
-        {/* Welcome banner */}
-        {isFirstTime && showWelcome && (
-          <Banner
-            title="Welcome to AutoSync!"
-            tone="info"
-            onDismiss={() => setShowWelcome(false)}
-          >
-            <p>
-              Get started by fetching your products from Shopify, mapping
-              fitment data, and pushing it back to your store.
-            </p>
-          </Banner>
-        )}
+            {/* Welcome banner */}
+            {isFirstTime && showWelcome && (
+              <Banner
+                title="Welcome to AutoSync!"
+                tone="info"
+                onDismiss={() => setShowWelcome(false)}
+              >
+                <p>
+                  Get started by fetching your products from Shopify, mapping
+                  fitment data, and pushing it back to your store.
+                </p>
+              </Banner>
+            )}
 
-        {/* ─── Row 1: Key Metrics ─── */}
-        <InlineGrid columns={{ xs: 2, sm: 2, md: 4, lg: 6 }} gap="400">
-          <Card>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Products</Text>
-              <Text as="p" variant="heading2xl">{totalProducts.toLocaleString()}</Text>
-              <Button onClick={() => navigate("/app/products")} variant="plain" textAlign="start">
-                View all →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Fitments</Text>
-              <Text as="p" variant="heading2xl">{fitmentCount.toLocaleString()}</Text>
-              <Button onClick={() => navigate("/app/fitment")} variant="plain" textAlign="start">
-                View fitments →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Coverage</Text>
-              <InlineStack gap="200" blockAlign="center">
-                <Text as="p" variant="heading2xl">{coverage}%</Text>
-                <Badge tone={coverage >= 80 ? "success" : coverage >= 50 ? "warning" : "critical"}>
-                  {coverage >= 80 ? "Good" : coverage >= 50 ? "Fair" : "Low"}
-                </Badge>
-              </InlineStack>
-              <ProgressBar progress={coverage} size="small" tone={coverage >= 80 ? "success" : "primary"} />
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Collections</Text>
-              <Text as="p" variant="heading2xl">{collectionCount.toLocaleString()}</Text>
-              <Button onClick={() => navigate("/app/collections")} variant="plain" textAlign="start">
-                Manage →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
-              <Text as="p" variant="heading2xl">{providerCount}</Text>
-              <Button onClick={() => navigate("/app/providers")} variant="plain" textAlign="start">
-                Manage →
-              </Button>
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <Text as="p" variant="bodySm" tone="subdued">Plan</Text>
-                <Badge tone={plan === "free" ? "warning" : plan === "enterprise" ? "info" : "success"}>
-                  {planLabel}
-                </Badge>
-              </InlineStack>
-              <Text as="p" variant="heading2xl">
-                {plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299"}
-              </Text>
-              <Button onClick={() => navigate("/app/plans")} variant="plain" textAlign="start">
-                {plan === "enterprise" ? "View plan →" : "Upgrade →"}
-              </Button>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
-
-        {/* Onboarding checklist */}
-        {showOnboarding && (
-          <OnboardingChecklist
-            productCount={totalProducts}
-            fitmentCount={fitmentCount}
-            hasPushed={hasPushed}
-          />
-        )}
-
-        {/* ─── Row 2: Product Status + Recent Activity ─── */}
-        <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-          {/* Product Status Breakdown */}
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Product Status</Text>
-                <Button onClick={() => navigate("/app/products")} variant="plain">
-                  View all
-                </Button>
-              </InlineStack>
-              <Divider />
-
-              {totalProducts === 0 ? (
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  No products yet. Fetch products from Shopify to get started.
-                </Text>
-              ) : (
-                <BlockStack gap="300">
-                  {/* Unmapped */}
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box width="12px" minHeight="12px" borderRadius="100" background="bg-fill-caution" />
-                      <Text as="span" variant="bodyMd">Unmapped</Text>
-                    </InlineStack>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{unmapped}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {totalProducts > 0 ? `${Math.round((unmapped / totalProducts) * 100)}%` : "0%"}
-                      </Text>
-                    </InlineStack>
-                  </InlineStack>
-
-                  {/* Auto Mapped */}
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box width="12px" minHeight="12px" borderRadius="100" background="bg-fill-success" />
-                      <Text as="span" variant="bodyMd">Auto Mapped</Text>
-                    </InlineStack>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{autoMapped}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {totalProducts > 0 ? `${Math.round((autoMapped / totalProducts) * 100)}%` : "0%"}
-                      </Text>
-                    </InlineStack>
-                  </InlineStack>
-
-                  {/* Manual Mapped */}
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box width="12px" minHeight="12px" borderRadius="100" background="bg-fill-info" />
-                      <Text as="span" variant="bodyMd">Manual Mapped</Text>
-                    </InlineStack>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{manualMapped}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {totalProducts > 0 ? `${Math.round((manualMapped / totalProducts) * 100)}%` : "0%"}
-                      </Text>
-                    </InlineStack>
-                  </InlineStack>
-
-                  {/* Flagged */}
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Box width="12px" minHeight="12px" borderRadius="100" background="bg-fill-warning" />
-                      <Text as="span" variant="bodyMd">Flagged for Review</Text>
-                    </InlineStack>
-                    <InlineStack gap="200" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{flagged}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {totalProducts > 0 ? `${Math.round((flagged / totalProducts) * 100)}%` : "0%"}
-                      </Text>
-                    </InlineStack>
-                  </InlineStack>
-
-                  <Divider />
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                      Total Mapped
-                    </Text>
-                    <Badge tone={coverage >= 80 ? "success" : "info"}>
-                      {mapped} / {totalProducts} ({coverage}%)
-                    </Badge>
-                  </InlineStack>
-
+            {/* ─── Quick Actions (TOP — most important) ─── */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="h2" variant="headingMd">
+                    Quick Actions
+                  </Text>
                   {unmapped > 0 && (
-                    <InlineStack gap="200">
-                      <Button onClick={() => navigate("/app/fitment")} size="slim">
-                        Auto Extract
-                      </Button>
-                      <Button onClick={() => navigate("/app/fitment/manual")} size="slim" variant="plain">
-                        Manual Map
-                      </Button>
-                    </InlineStack>
+                    <Badge tone="warning">
+                      {unmapped} unmapped
+                    </Badge>
                   )}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Recent Activity</Text>
-              <Divider />
-
-              {recentJobs.length === 0 ? (
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  No activity yet. Run your first pipeline to see results here.
-                </Text>
-              ) : (
-                <BlockStack gap="300">
-                  {recentJobs.map((job: any) => (
-                    <InlineStack key={job.id} align="space-between" blockAlign="center" wrap={false}>
-                      <BlockStack gap="100">
-                        <Text as="span" variant="bodyMd" fontWeight="medium">
-                          {formatJobType(job.type)}
-                        </Text>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {formatDate(job.completed_at ?? job.created_at)}
-                          {job.total_items ? ` · ${job.processed_items ?? 0}/${job.total_items} items` : ""}
-                        </Text>
-                      </BlockStack>
-                      <Badge tone={JOB_STATUS_TONE[job.status]}>
-                        {job.status === "completed" ? "Done" : job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                      </Badge>
-                    </InlineStack>
-                  ))}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
-        </InlineGrid>
-
-        {/* ─── Row 3: Top Makes + YMME Database + Providers ─── */}
-        <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
-          {/* Top Makes */}
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Top Makes</Text>
-                <Button onClick={() => navigate("/app/vehicles")} variant="plain">
-                  Browse all
-                </Button>
-              </InlineStack>
-              <Divider />
-
-              {topMakes.length === 0 ? (
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  No fitment data yet. Extract fitments to see make distribution.
-                </Text>
-              ) : (
-                <BlockStack gap="200">
-                  {topMakes.map((make) => (
-                    <InlineStack key={make.name} align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd">{make.name}</Text>
-                      <Badge tone="info">{make.count.toLocaleString()}</Badge>
-                    </InlineStack>
-                  ))}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
-
-          {/* YMME Database */}
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">YMME Database</Text>
-                <Button onClick={() => navigate("/app/vehicles")} variant="plain">
-                  Browse
-                </Button>
-              </InlineStack>
-              <Divider />
-
-              <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd">Makes</Text>
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    {ymmeMakes.toLocaleString()}
-                  </Text>
-                </InlineStack>
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd">Models</Text>
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    {ymmeModels.toLocaleString()}
-                  </Text>
-                </InlineStack>
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd">Engines</Text>
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    {ymmeEngines.toLocaleString()}
-                  </Text>
-                </InlineStack>
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" variant="bodyMd">Vehicle Specs</Text>
-                  <Text as="span" variant="bodyMd" fontWeight="semibold">
-                    {ymmeSpecs.toLocaleString()}
-                  </Text>
                 </InlineStack>
 
-                <Divider />
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Vehicle database sourced from auto-data.net (primary) and NHTSA.
-                  Full specs include performance, dimensions, engine details, and EV data.
-                </Text>
-              </BlockStack>
-            </BlockStack>
-          </Card>
-
-          {/* Providers */}
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Providers</Text>
-                <Button onClick={() => navigate("/app/providers")} variant="plain">
-                  Manage
-                </Button>
-              </InlineStack>
-              <Divider />
-
-              {providers.length === 0 ? (
-                <BlockStack gap="300">
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    No providers configured. Add a CSV, API, or FTP provider to
-                    import product data from suppliers.
-                  </Text>
-                  <Button onClick={() => navigate("/app/providers/new")} size="slim">
-                    Add Provider
-                  </Button>
-                </BlockStack>
-              ) : (
-                <BlockStack gap="200">
-                  {providers.map((p: any) => (
-                    <InlineStack key={p.id} align="space-between" blockAlign="center">
-                      <BlockStack gap="050">
-                        <Text as="span" variant="bodyMd" fontWeight="medium">{p.name}</Text>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {p.type.toUpperCase()} · {p.product_count ?? 0} products
-                        </Text>
-                      </BlockStack>
-                      <Badge tone={p.status === "active" ? "success" : undefined}>
-                        {p.status ?? "pending"}
-                      </Badge>
-                    </InlineStack>
-                  ))}
-                </BlockStack>
-              )}
-            </BlockStack>
-          </Card>
-        </InlineGrid>
-
-        {/* ─── Row 4: Quick Actions ─── */}
-        <Card>
-          <BlockStack gap="400">
-            <Text as="h2" variant="headingMd">Quick Actions</Text>
-            <Divider />
-            <InlineStack gap="300" wrap>
-              <Button onClick={() => navigate("/app/products")}>
-                Fetch Products
-              </Button>
-              <Button onClick={() => navigate("/app/fitment")}>
-                Auto Extract Fitments
-              </Button>
-              <Button onClick={() => navigate("/app/fitment/manual")}>
-                Manual Mapping
-              </Button>
-              <Button onClick={() => navigate("/app/push")} variant="primary">
-                Push to Shopify
-              </Button>
-              <Button onClick={() => navigate("/app/collections")}>
-                Collections
-              </Button>
-              <Button onClick={() => navigate("/app/analytics")}>
-                Analytics
-              </Button>
-              <Button onClick={() => navigate("/app/vehicles")}>
-                YMME Browser
-              </Button>
-              <Button onClick={() => navigate("/app/settings")}>
-                Settings
-              </Button>
-            </InlineStack>
-          </BlockStack>
-        </Card>
-
-        {/* ─── Row 5: Plan Usage ─── */}
-        <Card>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">Plan Usage</Text>
-              <Badge tone={plan === "free" ? "warning" : "success"}>
-                {planLabel}
-              </Badge>
-            </InlineStack>
-            <Divider />
-
-            <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-              {/* Product usage */}
-              <BlockStack gap="200">
-                <InlineStack align="space-between">
-                  <Text as="span" variant="bodyMd">Products</Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    {totalProducts.toLocaleString()} /{" "}
-                    {limits.products === Infinity ? "∞" : limits.products.toLocaleString()}
-                  </Text>
-                </InlineStack>
-                {limits.products !== Infinity && (
-                  <ProgressBar
-                    progress={productUsagePercent}
-                    size="small"
-                    tone={productUsagePercent >= 90 ? "critical" : "primary"}
+                <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+                  <QuickActionCard
+                    icon={ImportIcon}
+                    label="Fetch Products"
+                    description="Import products from your Shopify store"
+                    onClick={() => navigate("/app/products")}
                   />
-                )}
-              </BlockStack>
-
-              {/* Fitment usage */}
-              <BlockStack gap="200">
-                <InlineStack align="space-between">
-                  <Text as="span" variant="bodyMd">Fitments</Text>
-                  <Text as="span" variant="bodyMd" tone="subdued">
-                    {fitmentCount.toLocaleString()} /{" "}
-                    {limits.fitments === Infinity ? "∞" : limits.fitments.toLocaleString()}
-                  </Text>
-                </InlineStack>
-                {limits.fitments !== Infinity && (
-                  <ProgressBar
-                    progress={fitmentUsagePercent}
-                    size="small"
-                    tone={fitmentUsagePercent >= 90 ? "critical" : "primary"}
+                  <QuickActionCard
+                    icon={WandIcon}
+                    label="Auto Extract"
+                    description="Automatically detect vehicle fitments"
+                    onClick={() => navigate("/app/fitment")}
+                    badge={unmapped > 0 ? { content: `${unmapped} pending`, tone: "warning" } : undefined}
                   />
-                )}
+                  <QuickActionCard
+                    icon={TargetIcon}
+                    label="Manual Map"
+                    description="Map products to vehicles by hand"
+                    onClick={() => navigate("/app/fitment/manual")}
+                  />
+                  <QuickActionCard
+                    icon={ExportIcon}
+                    label="Push to Shopify"
+                    description="Push tags & metafields to your store"
+                    onClick={() => navigate("/app/push")}
+                    primary
+                  />
+                </InlineGrid>
+
+                <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+                  <QuickActionCard
+                    icon={CollectionIcon}
+                    label="Collections"
+                    description="Auto-create smart collections"
+                    onClick={() => navigate("/app/collections")}
+                    badge={collectionCount > 0 ? { content: `${collectionCount}`, tone: "info" } : undefined}
+                  />
+                  <QuickActionCard
+                    icon={ChartVerticalIcon}
+                    label="Analytics"
+                    description="Fitment coverage and performance"
+                    onClick={() => navigate("/app/analytics")}
+                  />
+                  <QuickActionCard
+                    icon={SearchIcon}
+                    label="YMME Browser"
+                    description="Browse the vehicle database"
+                    onClick={() => navigate("/app/vehicles")}
+                  />
+                  <QuickActionCard
+                    icon={SettingsIcon}
+                    label="Settings"
+                    description="Configure your app preferences"
+                    onClick={() => navigate("/app/settings")}
+                  />
+                </InlineGrid>
               </BlockStack>
+            </Card>
+
+            {/* Onboarding checklist */}
+            {showOnboarding && (
+              <OnboardingChecklist
+                productCount={totalProducts}
+                fitmentCount={fitmentCount}
+                hasPushed={hasPushed}
+              />
+            )}
+
+            {/* ─── KPI Metrics Row ─── */}
+            <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="400">
+              <KpiCard
+                icon={ProductIcon}
+                label="Products"
+                value={totalProducts.toLocaleString()}
+                link="/app/products"
+                linkLabel="View all"
+                onNavigate={navigate}
+              />
+              <KpiCard
+                icon={ConnectIcon}
+                label="Fitments"
+                value={fitmentCount.toLocaleString()}
+                link="/app/fitment"
+                linkLabel="View fitments"
+                onNavigate={navigate}
+              />
+              <KpiCard
+                icon={GaugeIcon}
+                label="Coverage"
+                value={`${coverage}%`}
+                link="/app/products"
+                linkLabel="View products"
+                onNavigate={navigate}
+                extra={
+                  <BlockStack gap="100">
+                    <ProgressBar
+                      progress={coverage}
+                      size="small"
+                      tone={coverage >= 80 ? "success" : "primary"}
+                    />
+                    <Badge
+                      tone={
+                        coverage >= 80
+                          ? "success"
+                          : coverage >= 50
+                            ? "warning"
+                            : "critical"
+                      }
+                    >
+                      {coverage >= 80 ? "Good" : coverage >= 50 ? "Fair" : "Low"}
+                    </Badge>
+                  </BlockStack>
+                }
+              />
+              <KpiCard
+                icon={CollectionIcon}
+                label="Collections"
+                value={collectionCount.toLocaleString()}
+                link="/app/collections"
+                linkLabel="Manage"
+                onNavigate={navigate}
+              />
+              <KpiCard
+                icon={PackageIcon}
+                label="Providers"
+                value={String(providerCount)}
+                link="/app/providers"
+                linkLabel="Manage"
+                onNavigate={navigate}
+              />
+              <KpiCard
+                icon={StarFilledIcon}
+                label="Plan"
+                value={plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299"}
+                link="/app/plans"
+                linkLabel={plan === "enterprise" ? "View plan" : "Upgrade"}
+                onNavigate={navigate}
+                extra={
+                  <Badge
+                    tone={
+                      plan === "free"
+                        ? "warning"
+                        : plan === "enterprise"
+                          ? "info"
+                          : "success"
+                    }
+                  >
+                    {planLabel}
+                  </Badge>
+                }
+              />
             </InlineGrid>
 
-            {plan === "free" && (
-              <>
+            {/* ─── Product Status + Recent Activity ─── */}
+            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+              {/* Product Status Breakdown */}
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--p-color-icon-emphasis)",
+                        }}
+                      >
+                        <Icon source={ProductIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Product Status
+                      </Text>
+                    </InlineStack>
+                    <Button
+                      onClick={() => navigate("/app/products")}
+                      variant="plain"
+                    >
+                      View all
+                    </Button>
+                  </InlineStack>
+                  <Divider />
+
+                  {totalProducts === 0 ? (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      No products yet. Fetch products from Shopify to get
+                      started.
+                    </Text>
+                  ) : (
+                    <BlockStack gap="300">
+                      {/* Unmapped */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <InlineStack gap="200" blockAlign="center">
+                          <Box
+                            width="12px"
+                            minHeight="12px"
+                            borderRadius="100"
+                            background="bg-fill-caution"
+                          />
+                          <Text as="span" variant="bodyMd">
+                            Unmapped
+                          </Text>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text
+                            as="span"
+                            variant="bodyMd"
+                            fontWeight="semibold"
+                          >
+                            {unmapped}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {totalProducts > 0
+                              ? `${Math.round((unmapped / totalProducts) * 100)}%`
+                              : "0%"}
+                          </Text>
+                        </InlineStack>
+                      </InlineStack>
+
+                      {/* Auto Mapped */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <InlineStack gap="200" blockAlign="center">
+                          <Box
+                            width="12px"
+                            minHeight="12px"
+                            borderRadius="100"
+                            background="bg-fill-success"
+                          />
+                          <Text as="span" variant="bodyMd">
+                            Auto Mapped
+                          </Text>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text
+                            as="span"
+                            variant="bodyMd"
+                            fontWeight="semibold"
+                          >
+                            {autoMapped}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {totalProducts > 0
+                              ? `${Math.round((autoMapped / totalProducts) * 100)}%`
+                              : "0%"}
+                          </Text>
+                        </InlineStack>
+                      </InlineStack>
+
+                      {/* Manual Mapped */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <InlineStack gap="200" blockAlign="center">
+                          <Box
+                            width="12px"
+                            minHeight="12px"
+                            borderRadius="100"
+                            background="bg-fill-info"
+                          />
+                          <Text as="span" variant="bodyMd">
+                            Manual Mapped
+                          </Text>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text
+                            as="span"
+                            variant="bodyMd"
+                            fontWeight="semibold"
+                          >
+                            {manualMapped}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {totalProducts > 0
+                              ? `${Math.round((manualMapped / totalProducts) * 100)}%`
+                              : "0%"}
+                          </Text>
+                        </InlineStack>
+                      </InlineStack>
+
+                      {/* Flagged */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <InlineStack gap="200" blockAlign="center">
+                          <Box
+                            width="12px"
+                            minHeight="12px"
+                            borderRadius="100"
+                            background="bg-fill-warning"
+                          />
+                          <Text as="span" variant="bodyMd">
+                            Flagged for Review
+                          </Text>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text
+                            as="span"
+                            variant="bodyMd"
+                            fontWeight="semibold"
+                          >
+                            {flagged}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {totalProducts > 0
+                              ? `${Math.round((flagged / totalProducts) * 100)}%`
+                              : "0%"}
+                          </Text>
+                        </InlineStack>
+                      </InlineStack>
+
+                      <Divider />
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <Text
+                          as="span"
+                          variant="bodyMd"
+                          fontWeight="semibold"
+                        >
+                          Total Mapped
+                        </Text>
+                        <Badge tone={coverage >= 80 ? "success" : "info"}>
+                          {mapped} / {totalProducts} ({coverage}%)
+                        </Badge>
+                      </InlineStack>
+
+                      {unmapped > 0 && (
+                        <InlineStack gap="200">
+                          <Button
+                            onClick={() => navigate("/app/fitment")}
+                            size="slim"
+                          >
+                            Auto Extract
+                          </Button>
+                          <Button
+                            onClick={() => navigate("/app/fitment/manual")}
+                            size="slim"
+                            variant="plain"
+                          >
+                            Manual Map
+                          </Button>
+                        </InlineStack>
+                      )}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* Recent Activity */}
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}
+                    >
+                      <Icon source={ChartVerticalIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Recent Activity
+                    </Text>
+                  </InlineStack>
+                  <Divider />
+
+                  {recentJobs.length === 0 ? (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      No activity yet. Run your first pipeline to see results
+                      here.
+                    </Text>
+                  ) : (
+                    <BlockStack gap="300">
+                      {recentJobs.map((job: any) => (
+                        <InlineStack
+                          key={job.id}
+                          align="space-between"
+                          blockAlign="center"
+                          wrap={false}
+                        >
+                          <InlineStack gap="300" blockAlign="center" wrap={false}>
+                            <div
+                              style={{
+                                width: "24px",
+                                height: "24px",
+                                borderRadius: "50%",
+                                background:
+                                  job.status === "completed"
+                                    ? "var(--p-color-bg-fill-success)"
+                                    : job.status === "failed"
+                                      ? "var(--p-color-bg-fill-critical)"
+                                      : job.status === "running"
+                                        ? "var(--p-color-bg-fill-info)"
+                                        : "var(--p-color-bg-fill-secondary)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                color: "var(--p-color-text-inverse)",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {JOB_STATUS_ICON[job.status] ?? "\u25CB"}
+                            </div>
+                            <BlockStack gap="100">
+                              <Text
+                                as="span"
+                                variant="bodyMd"
+                                fontWeight="medium"
+                              >
+                                {formatJobType(job.type)}
+                              </Text>
+                              <Text
+                                as="span"
+                                variant="bodySm"
+                                tone="subdued"
+                              >
+                                {formatDate(job.completed_at ?? job.created_at)}
+                                {job.total_items
+                                  ? ` \u00B7 ${job.processed_items ?? 0}/${job.total_items} items`
+                                  : ""}
+                              </Text>
+                            </BlockStack>
+                          </InlineStack>
+                          <Badge tone={JOB_STATUS_TONE[job.status]}>
+                            {job.status === "completed"
+                              ? "Done"
+                              : job.status.charAt(0).toUpperCase() +
+                                job.status.slice(1)}
+                          </Badge>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </InlineGrid>
+
+            {/* ─── Top Makes + YMME Database + Providers ─── */}
+            <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+              {/* Top Makes */}
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--p-color-icon-emphasis)",
+                        }}
+                      >
+                        <Icon source={TargetIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Top Makes
+                      </Text>
+                    </InlineStack>
+                    <Button
+                      onClick={() => navigate("/app/vehicles")}
+                      variant="plain"
+                    >
+                      Browse all
+                    </Button>
+                  </InlineStack>
+                  <Divider />
+
+                  {topMakes.length === 0 ? (
+                    <Text as="p" variant="bodyMd" tone="subdued">
+                      No fitment data yet. Extract fitments to see make
+                      distribution.
+                    </Text>
+                  ) : (
+                    <BlockStack gap="200">
+                      {topMakes.map((make, index) => (
+                        <InlineStack
+                          key={make.name}
+                          align="space-between"
+                          blockAlign="center"
+                        >
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text
+                              as="span"
+                              variant="bodySm"
+                              tone="subdued"
+                            >
+                              {index + 1}.
+                            </Text>
+                            <Text as="span" variant="bodyMd">
+                              {make.name}
+                            </Text>
+                          </InlineStack>
+                          <Badge tone="info">
+                            {make.count.toLocaleString()}
+                          </Badge>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+
+              {/* YMME Database */}
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--p-color-icon-emphasis)",
+                        }}
+                      >
+                        <Icon source={DatabaseIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        YMME Database
+                      </Text>
+                    </InlineStack>
+                    <Button
+                      onClick={() => navigate("/app/vehicles")}
+                      variant="plain"
+                    >
+                      Browse
+                    </Button>
+                  </InlineStack>
+                  <Divider />
+
+                  <BlockStack gap="300">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="span" variant="bodyMd">
+                        Makes
+                      </Text>
+                      <Text
+                        as="span"
+                        variant="bodyMd"
+                        fontWeight="semibold"
+                      >
+                        {ymmeMakes.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="span" variant="bodyMd">
+                        Models
+                      </Text>
+                      <Text
+                        as="span"
+                        variant="bodyMd"
+                        fontWeight="semibold"
+                      >
+                        {ymmeModels.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="span" variant="bodyMd">
+                        Engines
+                      </Text>
+                      <Text
+                        as="span"
+                        variant="bodyMd"
+                        fontWeight="semibold"
+                      >
+                        {ymmeEngines.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="span" variant="bodyMd">
+                        Vehicle Specs
+                      </Text>
+                      <Text
+                        as="span"
+                        variant="bodyMd"
+                        fontWeight="semibold"
+                      >
+                        {ymmeSpecs.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+
+                    <Divider />
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Vehicle database sourced from auto-data.net (primary) and
+                      NHTSA. Full specs include performance, dimensions, engine
+                      details, and EV data.
+                    </Text>
+                  </BlockStack>
+                </BlockStack>
+              </Card>
+
+              {/* Providers */}
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--p-color-icon-emphasis)",
+                        }}
+                      >
+                        <Icon source={PackageIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Providers
+                      </Text>
+                    </InlineStack>
+                    <Button
+                      onClick={() => navigate("/app/providers")}
+                      variant="plain"
+                    >
+                      Manage
+                    </Button>
+                  </InlineStack>
+                  <Divider />
+
+                  {providers.length === 0 ? (
+                    <BlockStack gap="300">
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        No providers configured. Add a CSV, API, or FTP
+                        provider to import product data from suppliers.
+                      </Text>
+                      <Button
+                        onClick={() => navigate("/app/providers/new")}
+                        size="slim"
+                      >
+                        Add Provider
+                      </Button>
+                    </BlockStack>
+                  ) : (
+                    <BlockStack gap="200">
+                      {providers.map((p: any) => (
+                        <InlineStack
+                          key={p.id}
+                          align="space-between"
+                          blockAlign="center"
+                        >
+                          <BlockStack gap="050">
+                            <Text
+                              as="span"
+                              variant="bodyMd"
+                              fontWeight="medium"
+                            >
+                              {p.name}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {p.type.toUpperCase()} \u00B7{" "}
+                              {p.product_count ?? 0} products
+                            </Text>
+                          </BlockStack>
+                          <Badge
+                            tone={
+                              p.status === "active" ? "success" : undefined
+                            }
+                          >
+                            {p.status ?? "pending"}
+                          </Badge>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </InlineGrid>
+
+            {/* ─── Plan Usage ─── */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}
+                    >
+                      <Icon source={StarFilledIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Plan Usage
+                    </Text>
+                  </InlineStack>
+                  <Badge tone={plan === "free" ? "warning" : "success"}>
+                    {planLabel}
+                  </Badge>
+                </InlineStack>
                 <Divider />
-                <Banner
-                  title="Upgrade your plan"
-                  tone="warning"
-                  action={{
-                    content: "View Plans",
-                    onAction: () => navigate("/app/plans"),
-                  }}
-                >
-                  <p>
-                    You are on the Free plan with limited product and fitment
-                    capacity. Upgrade to unlock auto-extraction, collections,
-                    API providers, and more.
-                  </p>
-                </Banner>
-              </>
-            )}
-          </BlockStack>
-        </Card>
+
+                <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
+                  {/* Product usage */}
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">
+                        Products
+                      </Text>
+                      <Text as="span" variant="bodyMd" tone="subdued">
+                        {totalProducts.toLocaleString()} /{" "}
+                        {limits.products === Infinity
+                          ? "\u221E"
+                          : limits.products.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                    {limits.products !== Infinity && (
+                      <ProgressBar
+                        progress={productUsagePercent}
+                        size="small"
+                        tone={
+                          productUsagePercent >= 90 ? "critical" : "primary"
+                        }
+                      />
+                    )}
+                  </BlockStack>
+
+                  {/* Fitment usage */}
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">
+                        Fitments
+                      </Text>
+                      <Text as="span" variant="bodyMd" tone="subdued">
+                        {fitmentCount.toLocaleString()} /{" "}
+                        {limits.fitments === Infinity
+                          ? "\u221E"
+                          : limits.fitments.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                    {limits.fitments !== Infinity && (
+                      <ProgressBar
+                        progress={fitmentUsagePercent}
+                        size="small"
+                        tone={
+                          fitmentUsagePercent >= 90 ? "critical" : "primary"
+                        }
+                      />
+                    )}
+                  </BlockStack>
+                </InlineGrid>
+
+                {plan === "free" && (
+                  <>
+                    <Divider />
+                    <Banner
+                      title="Upgrade your plan"
+                      tone="warning"
+                      action={{
+                        content: "View Plans",
+                        onAction: () => navigate("/app/plans"),
+                      }}
+                    >
+                      <p>
+                        You are on the Free plan with limited product and
+                        fitment capacity. Upgrade to unlock auto-extraction,
+                        collections, API providers, and more.
+                      </p>
+                    </Banner>
+                  </>
+                )}
+              </BlockStack>
+            </Card>
           </BlockStack>
         </Layout.Section>
       </Layout>

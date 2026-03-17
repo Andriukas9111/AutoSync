@@ -58,6 +58,16 @@ const COLLECTIONS_QUERY = `
   }
 `;
 
+const COLLECTION_BY_ID_QUERY = `
+  query collectionById($id: ID!) {
+    collection(id: $id) {
+      id
+      title
+      handle
+    }
+  }
+`;
+
 const COLLECTION_DELETE_MUTATION = `
   mutation collectionDelete($input: CollectionDeleteInput!) {
     collectionDelete(input: $input) {
@@ -225,32 +235,21 @@ export async function removeAllCollections(
   let deleted = 0;
 
   try {
-    // Strategy 1: Find collections by our handle prefix (autosync-)
-    const response = await admin.graphql(COLLECTIONS_QUERY, {
-      variables: { query: "title:_autosync_*", first: 250 },
-    });
-    const json = await response.json();
-    await handleRateLimit(json);
-
-    const collections = json?.data?.collections?.edges ?? [];
-
-    // Strategy 2: Also check our collection_mappings table for Shopify IDs
-    const { data: mappings } = await db
-      .from("collection_mappings")
-      .select("shopify_collection_id, make, model")
-      .eq("shop_id", shopId);
-
-    // Combine: mapped collection IDs + any found by title search
+    // Collect all collection GIDs to delete
     const collectionIdsToDelete = new Set<string>();
 
-    for (const edge of collections) {
-      collectionIdsToDelete.add(edge.node.id);
-    }
+    // ── Strategy 1 (Primary): Use our collection_mappings table ──
+    // This is the most reliable source — we store the Shopify collection ID
+    // when we create each collection.
+    const { data: mappings } = await db
+      .from("collection_mappings")
+      .select("shopify_collection_id, make, model, title")
+      .eq("shop_id", shopId);
 
     if (mappings) {
       for (const m of mappings) {
         if (m.shopify_collection_id) {
-          const gid = m.shopify_collection_id.startsWith("gid://")
+          const gid = String(m.shopify_collection_id).startsWith("gid://")
             ? m.shopify_collection_id
             : `gid://shopify/Collection/${m.shopify_collection_id}`;
           collectionIdsToDelete.add(gid);
@@ -258,9 +257,72 @@ export async function removeAllCollections(
       }
     }
 
-    // Delete each collection from Shopify
+    // ── Strategy 2 (Fallback): Search Shopify by "Parts" title suffix ──
+    // AutoSync collections are titled "BMW Parts", "Audi A4 Parts", etc.
+    // This catches any collections not tracked in collection_mappings.
+    try {
+      const response = await admin.graphql(COLLECTIONS_QUERY, {
+        variables: { query: "title:*Parts", first: 250 },
+      });
+      const json = await response.json();
+      await handleRateLimit(json);
+
+      const collections = json?.data?.collections?.edges ?? [];
+      for (const edge of collections) {
+        const title: string = edge.node.title ?? "";
+        // Only delete collections that match our naming pattern: "X Parts" or "X Y Parts"
+        // and contain a tag rule with _autosync_ prefix
+        if (title.endsWith(" Parts") && !collectionIdsToDelete.has(edge.node.id)) {
+          collectionIdsToDelete.add(edge.node.id);
+        }
+      }
+    } catch {
+      // Fallback search failed — still proceed with Strategy 1 results
+    }
+
+    // ── Strategy 3: Search by _autosync_ tag rule (belt-and-suspenders) ──
+    // Some collections may have been created with the tag prefix in the title
+    try {
+      const response = await admin.graphql(COLLECTIONS_QUERY, {
+        variables: { query: "title:_autosync_", first: 250 },
+      });
+      const json = await response.json();
+      await handleRateLimit(json);
+
+      const collections = json?.data?.collections?.edges ?? [];
+      for (const edge of collections) {
+        collectionIdsToDelete.add(edge.node.id);
+      }
+    } catch {
+      // This strategy is optional — continue regardless
+    }
+
+    if (collectionIdsToDelete.size === 0) {
+      console.log("[cleanup] No AutoSync collections found to delete");
+      // Still clean up stale mappings
+      if (mappings && mappings.length > 0) {
+        await db.from("collection_mappings").delete().eq("shop_id", shopId);
+      }
+      return { deleted: 0, errors };
+    }
+
+    console.log(`[cleanup] Found ${collectionIdsToDelete.size} collections to delete`);
+
+    // ── Delete each collection from Shopify ──
     for (const collectionId of collectionIdsToDelete) {
       try {
+        // Verify collection exists before attempting delete
+        const checkResponse = await admin.graphql(COLLECTION_BY_ID_QUERY, {
+          variables: { id: collectionId },
+        });
+        const checkJson = await checkResponse.json();
+        await handleRateLimit(checkJson);
+
+        if (!checkJson?.data?.collection) {
+          // Collection already deleted or doesn't exist — skip silently
+          continue;
+        }
+
         const delResponse = await admin.graphql(COLLECTION_DELETE_MUTATION, {
           variables: { input: { id: collectionId } },
         });
@@ -269,7 +331,6 @@ export async function removeAllCollections(
 
         const userErrors = delJson?.data?.collectionDelete?.userErrors;
         if (userErrors?.length > 0) {
-          // "Collection not found" is ok — already deleted
           if (!userErrors[0].message.includes("not found")) {
             errors.push(`Collection ${collectionId}: ${userErrors[0].message}`);
           }
@@ -284,12 +345,7 @@ export async function removeAllCollections(
     }
 
     // Clean up collection_mappings from our DB
-    if (deleted > 0 || (mappings && mappings.length > 0)) {
-      await db
-        .from("collection_mappings")
-        .delete()
-        .eq("shop_id", shopId);
-    }
+    await db.from("collection_mappings").delete().eq("shop_id", shopId);
   } catch (err) {
     errors.push(
       `Collection query failed: ${err instanceof Error ? err.message : String(err)}`,

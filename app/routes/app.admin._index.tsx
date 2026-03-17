@@ -34,6 +34,12 @@ import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
 import { syncNHTSAToYMME } from "../lib/scrapers/nhtsa.server";
 import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
+import {
+  removeAllTags,
+  removeAllMetafields,
+  removeAllCollections,
+} from "../lib/pipeline/cleanup.server";
+import { createSmartCollections } from "../lib/pipeline/collections.server";
 
 // ---------------------------------------------------------------------------
 // Admin access control
@@ -172,7 +178,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // Action
 // ---------------------------------------------------------------------------
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   if (!ADMIN_SHOPS.includes(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
@@ -238,6 +244,78 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.from("collection_mappings").delete().eq("shop_id", targetShop);
       return data({ ok: true, intent: "admin-purge-collections", message: `All collection mappings purged for ${targetShop}.` });
     }
+    case "admin-shopify-cleanup": {
+      // Remove AutoSync data from a tenant's Shopify store (tags, metafields, collections)
+      const targetShop = formData.get("shop_id") as string;
+      const cleanupType = formData.get("cleanup_type") as string || "all";
+      if (!targetShop) return data({ ok: false, intent: "admin-shopify-cleanup", message: "No shop specified" });
+      try {
+        const results: string[] = [];
+        if (cleanupType === "all" || cleanupType === "tags") {
+          const tagResult = await removeAllTags(targetShop, admin);
+          results.push(`${tagResult.removed} tags removed from ${tagResult.processed} products`);
+        }
+        if (cleanupType === "all" || cleanupType === "metafields") {
+          const mfResult = await removeAllMetafields(targetShop, admin);
+          results.push(`${mfResult.removed} metafields removed from ${mfResult.processed} products`);
+        }
+        if (cleanupType === "all" || cleanupType === "collections") {
+          const colResult = await removeAllCollections(targetShop, admin);
+          results.push(`${colResult.deleted} collections deleted`);
+        }
+        return data({ ok: true, intent: "admin-shopify-cleanup", message: `Shopify cleanup for ${targetShop}: ${results.join(", ")}` });
+      } catch (err) {
+        return data({ ok: false, intent: "admin-shopify-cleanup", message: err instanceof Error ? err.message : "Cleanup failed" });
+      }
+    }
+    case "admin-rebuild-collections": {
+      // Rebuild all collections for a tenant with fresh SEO and logos
+      const targetShop = formData.get("shop_id") as string;
+      const strategy = (formData.get("strategy") as "make" | "make_model" | "make_model_year") || "make";
+      if (!targetShop) return data({ ok: false, intent: "admin-rebuild-collections", message: "No shop specified" });
+      try {
+        // First remove existing collections
+        const removeResult = await removeAllCollections(targetShop, admin);
+        // Then recreate with SEO and images
+        const createResult = await createSmartCollections(targetShop, admin, strategy, {
+          seoEnabled: true,
+          imagesEnabled: true,
+        });
+        return data({
+          ok: true, intent: "admin-rebuild-collections",
+          message: `Collections rebuilt for ${targetShop}: ${removeResult.deleted} removed, ${createResult.created} created, ${createResult.updated} updated.`,
+        });
+      } catch (err) {
+        return data({ ok: false, intent: "admin-rebuild-collections", message: err instanceof Error ? err.message : "Rebuild failed" });
+      }
+    }
+    case "admin-reset-fitment-status": {
+      // Reset all product fitment statuses for a tenant (useful for re-extraction)
+      const targetShop = formData.get("shop_id") as string;
+      if (!targetShop) return data({ ok: false, intent: "admin-reset-fitment-status", message: "No shop specified" });
+      const { count, error } = await db
+        .from("products")
+        .update({ fitment_status: "pending" })
+        .eq("shop_id", targetShop)
+        .select("id", { count: "exact", head: true });
+      if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
+      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count ?? 0} products reset to pending for re-extraction.` });
+    }
+    case "admin-update-tenant-counts": {
+      // Recalculate product & fitment counts for a tenant
+      const targetShop = formData.get("shop_id") as string;
+      if (!targetShop) return data({ ok: false, intent: "admin-update-tenant-counts", message: "No shop specified" });
+      const [productCount, fitmentCount] = await Promise.all([
+        db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", targetShop),
+        db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", targetShop),
+      ]);
+      const { error } = await db.from("tenants").update({
+        product_count: productCount.count ?? 0,
+        fitment_count: fitmentCount.count ?? 0,
+      }).eq("shop_id", targetShop);
+      if (error) return data({ ok: false, intent: "admin-update-tenant-counts", message: error.message });
+      return data({ ok: true, intent: "admin-update-tenant-counts", message: `Counts updated: ${productCount.count ?? 0} products, ${fitmentCount.count ?? 0} fitments.` });
+    }
     default:
       return data({ ok: false, intent, message: `Unknown action: ${intent}` });
   }
@@ -253,10 +331,58 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
     intent: string;
     title: string;
     message: string;
+    extraFields?: Record<string, string>;
   } | null>(null);
   const isLoading = fetcher.state !== "idle";
 
   const actions = [
+    // ── Management Tools ──
+    {
+      content: "Rebuild Collections (SEO + Logos)",
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-rebuild-collections",
+          title: `Rebuild collections for ${shopName}?`,
+          message: "This will remove all existing AutoSync collections from Shopify and recreate them with optimized SEO titles, descriptions, and brand logos.",
+          extraFields: { strategy: "make" },
+        });
+      },
+    },
+    {
+      content: "Shopify Cleanup (Tags + Meta + Collections)",
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-shopify-cleanup",
+          title: `Shopify cleanup for ${shopName}?`,
+          message: "This will remove ALL AutoSync tags, metafields, and collections from this tenant's Shopify store. Their database records remain intact.",
+          extraFields: { cleanup_type: "all" },
+        });
+      },
+    },
+    {
+      content: "Reset Products to Pending (Re-extract)",
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-reset-fitment-status",
+          title: `Reset fitment status for ${shopName}?`,
+          message: "This will reset all product fitment statuses to 'pending', so they can be re-processed by the extraction engine on the next run.",
+        });
+      },
+    },
+    {
+      content: "Recalculate Tenant Counts",
+      onAction: () => {
+        setPopoverActive(false);
+        fetcher.submit(
+          { intent: "admin-update-tenant-counts", shop_id: shopId },
+          { method: "post" },
+        );
+      },
+    },
+    // ── Destructive Actions ──
     {
       content: "Purge Fitments",
       destructive: true,
@@ -270,14 +396,14 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
       },
     },
     {
-      content: "Purge Collections",
+      content: "Purge Collections (DB only)",
       destructive: true,
       onAction: () => {
         setPopoverActive(false);
         setConfirmAction({
           intent: "admin-purge-collections",
           title: `Purge collections for ${shopName}?`,
-          message: "This will delete ALL collection mappings in the database for this tenant. Note: Shopify collections themselves will remain — use the tenant's Settings page to remove those.",
+          message: "This will delete ALL collection mappings in the database for this tenant. Shopify collections themselves will remain — use Shopify Cleanup to remove those too.",
         });
       },
     },
@@ -302,13 +428,12 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
         activator={
           <Button
             size="slim"
-            tone="critical"
             variant="plain"
             onClick={() => setPopoverActive((v) => !v)}
             loading={isLoading}
             disabled={isLoading}
           >
-            {isLoading ? "Purging..." : "Purge ▾"}
+            {isLoading ? "Working..." : "Actions ▾"}
           </Button>
         }
         onClose={() => setPopoverActive(false)}
@@ -322,12 +447,12 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
           onClose={() => setConfirmAction(null)}
           title={confirmAction.title}
           primaryAction={{
-            content: "Yes, purge permanently",
-            destructive: true,
+            content: "Yes, proceed",
+            destructive: confirmAction.intent.includes("purge"),
             loading: isLoading,
             onAction: () => {
               fetcher.submit(
-                { intent: confirmAction.intent, shop_id: shopId },
+                { intent: confirmAction.intent, shop_id: shopId, ...(confirmAction.extraFields ?? {}) },
                 { method: "post" },
               );
               setConfirmAction(null);
@@ -496,6 +621,7 @@ export default function AdminPanel() {
 
   return (
     <Page
+      fullWidth
       title="Admin Panel"
       subtitle="Operations center — manage tenants, data, and system health"
       primaryAction={{
@@ -652,6 +778,18 @@ export default function AdminPanel() {
                             </Text>
                             <Button fullWidth onClick={() => setSelectedTab(2)}>
                               View YMME Data
+                            </Button>
+                          </BlockStack>
+                        </Box>
+
+                        <Box background="bg-surface-secondary" padding="400" borderRadius="200">
+                          <BlockStack gap="200">
+                            <Text as="p" variant="headingSm">Rebuild All Collections</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              Regenerate with SEO + brand logos
+                            </Text>
+                            <Button fullWidth onClick={() => setSelectedTab(1)} variant="secondary">
+                              Go to Tenants → Actions
                             </Button>
                           </BlockStack>
                         </Box>

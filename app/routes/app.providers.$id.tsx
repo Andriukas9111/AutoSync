@@ -5,7 +5,7 @@
  * Actions: update, delete, trigger fetch.
  */
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data, redirect } from "react-router";
@@ -228,6 +228,7 @@ export default function ProviderDetail() {
   // File upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [uploadResult, setUploadResult] = useState<{
     success?: boolean;
     imported?: number;
@@ -236,13 +237,59 @@ export default function ProviderDetail() {
     errors?: string[];
   } | null>(null);
 
+  // Preview state
+  const [previewData, setPreviewData] = useState<{
+    fileName: string;
+    fileSize: string;
+    totalRows: number;
+    headers: string[];
+    columnMapping: Record<string, string | null>;
+    sampleRows: Record<string, string>[];
+    warnings: string[];
+  } | null>(null);
+
   const handleDrop = useCallback((_dropFiles: File[], acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
       setUploadFile(acceptedFiles[0]);
       setUploadResult(null);
+      setPreviewData(null);
     }
   }, []);
 
+  // Preview file before importing
+  const handlePreview = useCallback(async () => {
+    if (!uploadFile) return;
+    setPreviewing(true);
+    setPreviewData(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("provider_id", provider.id);
+      fd.append("file_type", provider.type === "xml" ? "xml" : "csv");
+      fd.append("delimiter", delimiter);
+
+      const response = await fetch("/app/api/upload-preview", {
+        method: "POST",
+        body: fd,
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        setUploadResult({ error: result.error });
+      } else if (result.preview) {
+        setPreviewData(result.preview);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Preview failed";
+      setUploadResult({ error: message });
+    } finally {
+      setPreviewing(false);
+    }
+  }, [uploadFile, provider.id, provider.type, delimiter]);
+
+  // Import after preview confirmation
   const handleUpload = useCallback(async () => {
     if (!uploadFile) return;
     setUploading(true);
@@ -265,6 +312,7 @@ export default function ProviderDetail() {
 
       if (result.success) {
         setUploadFile(null);
+        setPreviewData(null);
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Upload failed";
@@ -298,6 +346,7 @@ export default function ProviderDetail() {
 
   return (
     <Page
+      fullWidth
       title={provider.name}
       backAction={{ content: "Providers", onAction: () => navigate("/app/providers") }}
       titleMetadata={
@@ -571,34 +620,121 @@ export default function ProviderDetail() {
                     )}
                   </DropZone>
 
-                  {uploading && (
+                  {(uploading || previewing) && (
                     <InlineStack gap="200" blockAlign="center">
                       <Spinner size="small" />
                       <Text as="span" variant="bodySm" tone="subdued">
-                        Uploading and parsing file...
+                        {previewing ? "Analysing file..." : "Importing products..."}
                       </Text>
                     </InlineStack>
                   )}
 
+                  {/* Preview Results */}
+                  {previewData && (
+                    <BlockStack gap="300">
+                      <Banner tone="info" title="File Preview">
+                        <p>
+                          <strong>{previewData.fileName}</strong> — {previewData.fileSize},{" "}
+                          {previewData.totalRows.toLocaleString()} rows detected,{" "}
+                          {previewData.headers.length} columns
+                        </p>
+                      </Banner>
+
+                      {previewData.warnings.length > 0 && (
+                        <Banner tone="warning" title="Warnings">
+                          {previewData.warnings.map((w, i) => (
+                            <p key={i}>{w}</p>
+                          ))}
+                        </Banner>
+                      )}
+
+                      {/* Column mapping */}
+                      <Text as="h3" variant="headingSm">
+                        Column Mapping
+                      </Text>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+                        <Text as="span" variant="bodySm" fontWeight="semibold">CSV Column</Text>
+                        <Text as="span" variant="bodySm" fontWeight="semibold">Maps To</Text>
+                        {previewData.headers.map((h) => (
+                          <React.Fragment key={h}>
+                            <Text as="span" variant="bodySm">{h}</Text>
+                            <Text as="span" variant="bodySm" tone={previewData.columnMapping[h] ? "success" : "subdued"}>
+                              {previewData.columnMapping[h] ?? "— unmapped (stored in raw_data)"}
+                            </Text>
+                          </React.Fragment>
+                        ))}
+                      </div>
+
+                      {/* Sample rows */}
+                      <Text as="h3" variant="headingSm">
+                        Sample Data ({Math.min(previewData.sampleRows.length, 5)} of {previewData.totalRows.toLocaleString()} rows)
+                      </Text>
+                      <div style={{ overflowX: "auto", maxHeight: "300px" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                          <thead>
+                            <tr>
+                              {previewData.headers.slice(0, 6).map((h) => (
+                                <th key={h} style={{ textAlign: "left", padding: "4px 8px", borderBottom: "1px solid var(--p-color-border)", whiteSpace: "nowrap" }}>
+                                  {h}
+                                </th>
+                              ))}
+                              {previewData.headers.length > 6 && (
+                                <th style={{ padding: "4px 8px", borderBottom: "1px solid var(--p-color-border)" }}>
+                                  +{previewData.headers.length - 6} more
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {previewData.sampleRows.slice(0, 5).map((row, i) => (
+                              <tr key={i}>
+                                {previewData.headers.slice(0, 6).map((h) => (
+                                  <td key={h} style={{ padding: "4px 8px", borderBottom: "1px solid var(--p-color-border-subdued)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {row[h] || "—"}
+                                  </td>
+                                ))}
+                                {previewData.headers.length > 6 && <td style={{ padding: "4px 8px" }}>…</td>}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </BlockStack>
+                  )}
+
                   <InlineStack align="end" gap="200">
-                    {uploadFile && !uploading && (
+                    {uploadFile && !uploading && !previewing && (
                       <Button
                         onClick={() => {
                           setUploadFile(null);
                           setUploadResult(null);
+                          setPreviewData(null);
                         }}
                       >
                         Clear
                       </Button>
                     )}
-                    <Button
-                      variant="primary"
-                      onClick={handleUpload}
-                      disabled={!uploadFile || uploading}
-                      loading={uploading}
-                    >
-                      Import Products
-                    </Button>
+                    {/* Step 1: Preview */}
+                    {uploadFile && !previewData && !uploading && (
+                      <Button
+                        onClick={handlePreview}
+                        loading={previewing}
+                        disabled={previewing}
+                      >
+                        Preview File
+                      </Button>
+                    )}
+                    {/* Step 2: Confirm Import (only after preview) */}
+                    {previewData && (
+                      <Button
+                        variant="primary"
+                        onClick={handleUpload}
+                        disabled={uploading}
+                        loading={uploading}
+                      >
+                        Import {previewData.totalRows.toLocaleString()} Products
+                      </Button>
+                    )}
                   </InlineStack>
                 </BlockStack>
               </Card>

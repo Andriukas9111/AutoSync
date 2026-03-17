@@ -333,6 +333,7 @@ export default function Vehicles() {
 
   return (
     <Page
+      fullWidth
       title="Vehicle Database"
       subtitle="Browse and manage your YMME vehicle database"
     >

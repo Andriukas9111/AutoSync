@@ -393,6 +393,7 @@ export default function Products() {
   if (products.length === 0 && !hasActiveFilters) {
     return (
       <Page
+        fullWidth
         title="Products"
         primaryAction={{
           content: isFetching ? "Fetching..." : "Fetch Products",
@@ -444,6 +445,7 @@ export default function Products() {
 
   return (
     <Page
+      fullWidth
       title="Products"
       subtitle={`${totalCount.toLocaleString()} products across all sources`}
       primaryAction={{

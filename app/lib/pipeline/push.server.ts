@@ -293,10 +293,10 @@ export async function pushToShopify(
           }
 
           result.processed++;
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(
             `Push failed for product ${product.shopify_product_id}:`,
-            err.message,
+            err instanceof Error ? err.message : err,
           );
           result.errors++;
         }
@@ -329,13 +329,13 @@ export async function pushToShopify(
       .eq("id", jobId);
 
     return result;
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Mark job as failed
     await db
       .from("sync_jobs")
       .update({
         status: "failed",
-        error: err.message ?? "Unknown push error",
+        error: err instanceof Error ? err.message : "Unknown push error",
         completed_at: new Date().toISOString(),
       })
       .eq("id", jobId);

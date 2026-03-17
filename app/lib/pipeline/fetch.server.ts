@@ -174,13 +174,13 @@ export async function fetchProductsFromShopify({
       .eq("id", jobId);
 
     return { fetched, errors };
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Mark job as failed
     await db
       .from("sync_jobs")
       .update({
         status: "failed",
-        error: err.message ?? "Unknown error",
+        error: err instanceof Error ? err.message : "Unknown error",
         completed_at: new Date().toISOString(),
       })
       .eq("id", jobId);
