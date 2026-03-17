@@ -1,0 +1,344 @@
+/**
+ * Cleanup Pipeline — Remove AutoSync data from Shopify
+ *
+ * Removes tags, metafields, and collections that AutoSync pushed.
+ * This does NOT delete data from our Supabase database — only from Shopify.
+ *
+ * For database cleanup, see the settings page actions.
+ */
+
+import db from "../db.server";
+
+// ── GraphQL Mutations ────────────────────────────────────────────────────────
+
+const TAGS_REMOVE_MUTATION = `
+  mutation tagsRemove($id: ID!, $tags: [String!]!) {
+    tagsRemove(id: $id, tags: $tags) {
+      userErrors { field message }
+    }
+  }
+`;
+
+const PRODUCT_TAGS_QUERY = `
+  query productTags($id: ID!) {
+    product(id: $id) {
+      tags
+    }
+  }
+`;
+
+const METAFIELDS_DELETE_MUTATION = `
+  mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) {
+    metafieldsDelete(metafields: $metafields) {
+      deletedMetafields { ownerId namespace key }
+      userErrors { field message }
+    }
+  }
+`;
+
+const PRODUCT_METAFIELDS_QUERY = `
+  query productMetafields($id: ID!, $namespace: String!) {
+    product(id: $id) {
+      metafields(namespace: $namespace, first: 20) {
+        edges {
+          node { id namespace key }
+        }
+      }
+    }
+  }
+`;
+
+const COLLECTIONS_QUERY = `
+  query collections($query: String!, $first: Int!) {
+    collections(first: $first, query: $query) {
+      edges {
+        node { id title handle }
+      }
+    }
+  }
+`;
+
+const COLLECTION_DELETE_MUTATION = `
+  mutation collectionDelete($input: CollectionDeleteInput!) {
+    collectionDelete(input: $input) {
+      deletedCollectionId
+      userErrors { field message }
+    }
+  }
+`;
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+export interface CleanupResult {
+  tagsRemoved: number;
+  metafieldsRemoved: number;
+  collectionsDeleted: number;
+  productsProcessed: number;
+  errors: string[];
+}
+
+// ── Rate Limit Helper ────────────────────────────────────────────────────────
+
+async function handleRateLimit(responseJson: any): Promise<void> {
+  const available =
+    responseJson?.extensions?.cost?.throttleStatus?.currentlyAvailable;
+  if (typeof available === "number" && available < 100) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+
+// ── Remove AutoSync Tags from All Products ───────────────────────────────────
+
+export async function removeAllTags(
+  shopId: string,
+  admin: any,
+  tagPrefix = "_autosync_",
+): Promise<{ removed: number; processed: number; errors: string[] }> {
+  const errors: string[] = [];
+  let removed = 0;
+  let processed = 0;
+
+  // Get all products that might have our tags
+  const { data: products, error } = await db
+    .from("products")
+    .select("shopify_product_id")
+    .eq("shop_id", shopId);
+
+  if (error || !products) {
+    return { removed: 0, processed: 0, errors: [error?.message ?? "No products found"] };
+  }
+
+  for (const product of products) {
+    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+
+    try {
+      // Fetch current tags for this product
+      const tagsResponse = await admin.graphql(PRODUCT_TAGS_QUERY, {
+        variables: { id: gid },
+      });
+      const tagsJson = await tagsResponse.json();
+      await handleRateLimit(tagsJson);
+
+      const currentTags: string[] = tagsJson?.data?.product?.tags ?? [];
+      const autoSyncTags = currentTags.filter((t: string) =>
+        t.startsWith(tagPrefix),
+      );
+
+      if (autoSyncTags.length > 0) {
+        const removeResponse = await admin.graphql(TAGS_REMOVE_MUTATION, {
+          variables: { id: gid, tags: autoSyncTags },
+        });
+        const removeJson = await removeResponse.json();
+        await handleRateLimit(removeJson);
+
+        const userErrors = removeJson?.data?.tagsRemove?.userErrors;
+        if (userErrors?.length > 0) {
+          errors.push(
+            `Tags for ${product.shopify_product_id}: ${userErrors[0].message}`,
+          );
+        } else {
+          removed += autoSyncTags.length;
+        }
+      }
+      processed++;
+    } catch (err) {
+      errors.push(
+        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return { removed, processed, errors };
+}
+
+// ── Remove AutoSync Metafields from All Products ─────────────────────────────
+
+export async function removeAllMetafields(
+  shopId: string,
+  admin: any,
+): Promise<{ removed: number; processed: number; errors: string[] }> {
+  const errors: string[] = [];
+  let removed = 0;
+  let processed = 0;
+
+  const { data: products, error } = await db
+    .from("products")
+    .select("shopify_product_id")
+    .eq("shop_id", shopId);
+
+  if (error || !products) {
+    return { removed: 0, processed: 0, errors: [error?.message ?? "No products found"] };
+  }
+
+  for (const product of products) {
+    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+
+    try {
+      // Query metafields in the autosync_fitment namespace
+      const mfResponse = await admin.graphql(PRODUCT_METAFIELDS_QUERY, {
+        variables: { id: gid, namespace: "autosync_fitment" },
+      });
+      const mfJson = await mfResponse.json();
+      await handleRateLimit(mfJson);
+
+      const edges = mfJson?.data?.product?.metafields?.edges ?? [];
+      if (edges.length > 0) {
+        const metafields = edges.map((e: any) => ({
+          ownerId: gid,
+          namespace: e.node.namespace,
+          key: e.node.key,
+        }));
+
+        const delResponse = await admin.graphql(METAFIELDS_DELETE_MUTATION, {
+          variables: { metafields },
+        });
+        const delJson = await delResponse.json();
+        await handleRateLimit(delJson);
+
+        const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
+        if (userErrors?.length > 0) {
+          errors.push(
+            `Metafields for ${product.shopify_product_id}: ${userErrors[0].message}`,
+          );
+        } else {
+          removed += edges.length;
+        }
+      }
+      processed++;
+    } catch (err) {
+      errors.push(
+        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return { removed, processed, errors };
+}
+
+// ── Delete All AutoSync Smart Collections ────────────────────────────────────
+
+export async function removeAllCollections(
+  shopId: string,
+  admin: any,
+): Promise<{ deleted: number; errors: string[] }> {
+  const errors: string[] = [];
+  let deleted = 0;
+
+  try {
+    // Strategy 1: Find collections by our handle prefix (autosync-)
+    const response = await admin.graphql(COLLECTIONS_QUERY, {
+      variables: { query: "title:_autosync_*", first: 250 },
+    });
+    const json = await response.json();
+    await handleRateLimit(json);
+
+    const collections = json?.data?.collections?.edges ?? [];
+
+    // Strategy 2: Also check our collection_mappings table for Shopify IDs
+    const { data: mappings } = await db
+      .from("collection_mappings")
+      .select("shopify_collection_id, make, model")
+      .eq("shop_id", shopId);
+
+    // Combine: mapped collection IDs + any found by title search
+    const collectionIdsToDelete = new Set<string>();
+
+    for (const edge of collections) {
+      collectionIdsToDelete.add(edge.node.id);
+    }
+
+    if (mappings) {
+      for (const m of mappings) {
+        if (m.shopify_collection_id) {
+          const gid = m.shopify_collection_id.startsWith("gid://")
+            ? m.shopify_collection_id
+            : `gid://shopify/Collection/${m.shopify_collection_id}`;
+          collectionIdsToDelete.add(gid);
+        }
+      }
+    }
+
+    // Delete each collection from Shopify
+    for (const collectionId of collectionIdsToDelete) {
+      try {
+        const delResponse = await admin.graphql(COLLECTION_DELETE_MUTATION, {
+          variables: { input: { id: collectionId } },
+        });
+        const delJson = await delResponse.json();
+        await handleRateLimit(delJson);
+
+        const userErrors = delJson?.data?.collectionDelete?.userErrors;
+        if (userErrors?.length > 0) {
+          // "Collection not found" is ok — already deleted
+          if (!userErrors[0].message.includes("not found")) {
+            errors.push(`Collection ${collectionId}: ${userErrors[0].message}`);
+          }
+        } else {
+          deleted++;
+        }
+      } catch (err) {
+        errors.push(
+          `Collection ${collectionId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Clean up collection_mappings from our DB
+    if (deleted > 0 || (mappings && mappings.length > 0)) {
+      await db
+        .from("collection_mappings")
+        .delete()
+        .eq("shop_id", shopId);
+    }
+  } catch (err) {
+    errors.push(
+      `Collection query failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  return { deleted, errors };
+}
+
+// ── Full Cleanup — Remove Everything from Shopify ────────────────────────────
+
+export async function fullShopifyCleanup(
+  shopId: string,
+  admin: any,
+  options: {
+    removeTags?: boolean;
+    removeMetafields?: boolean;
+    removeCollections?: boolean;
+  } = { removeTags: true, removeMetafields: true, removeCollections: true },
+): Promise<CleanupResult> {
+  const result: CleanupResult = {
+    tagsRemoved: 0,
+    metafieldsRemoved: 0,
+    collectionsDeleted: 0,
+    productsProcessed: 0,
+    errors: [],
+  };
+
+  if (options.removeTags) {
+    const tagResult = await removeAllTags(shopId, admin);
+    result.tagsRemoved = tagResult.removed;
+    result.productsProcessed = tagResult.processed;
+    result.errors.push(...tagResult.errors);
+  }
+
+  if (options.removeMetafields) {
+    const mfResult = await removeAllMetafields(shopId, admin);
+    result.metafieldsRemoved = mfResult.removed;
+    if (mfResult.processed > result.productsProcessed) {
+      result.productsProcessed = mfResult.processed;
+    }
+    result.errors.push(...mfResult.errors);
+  }
+
+  if (options.removeCollections) {
+    const colResult = await removeAllCollections(shopId, admin);
+    result.collectionsDeleted = colResult.deleted;
+    result.errors.push(...colResult.errors);
+  }
+
+  return result;
+}

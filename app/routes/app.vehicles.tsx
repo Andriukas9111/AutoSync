@@ -9,6 +9,7 @@ import {
   Text,
   BlockStack,
   InlineStack,
+  InlineGrid,
   Badge,
   Button,
   Banner,
@@ -334,9 +335,10 @@ export default function Vehicles() {
     <Page
       title="Vehicle Database"
       subtitle="Browse and manage your YMME vehicle database"
-      fullWidth
     >
-      <BlockStack gap="400">
+      <Layout>
+        <Layout.Section>
+          <BlockStack gap="400">
         {/* Error banners */}
         {showError && (
           <Banner tone="critical">
@@ -350,56 +352,48 @@ export default function Vehicles() {
         )}
 
         {/* Stats Cards */}
-        <InlineStack gap="400" wrap>
-          <div style={{ flex: "1 1 220px" }}>
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {makes.length}
+        <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {makes.length}
+              </Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {totalModels.toLocaleString()}
+              </Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {totalEngines.toLocaleString()}
+              </Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between">
+                <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {activeMakeCount} / {limits.activeMakes === 999_999 ? "∞" : limits.activeMakes}
                 </Text>
-              </BlockStack>
-            </Card>
-          </div>
-          <div style={{ flex: "1 1 220px" }}>
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {totalModels.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-          </div>
-          <div style={{ flex: "1 1 220px" }}>
-            <Card>
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {totalEngines.toLocaleString()}
-                </Text>
-              </BlockStack>
-            </Card>
-          </div>
-          <div style={{ flex: "1 1 220px" }}>
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack align="space-between">
-                  <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {activeMakeCount} / {limits.activeMakes === 999_999 ? "∞" : limits.activeMakes}
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {activeMakeCount}
-                </Text>
-                {limits.activeMakes !== 999_999 && (
-                  <ProgressBar progress={activePct} size="small" tone="primary" />
-                )}
-              </BlockStack>
-            </Card>
-          </div>
-        </InlineStack>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {activeMakeCount}
+              </Text>
+              {limits.activeMakes !== 999_999 && (
+                <ProgressBar progress={activePct} size="small" tone="primary" />
+              )}
+            </BlockStack>
+          </Card>
+        </InlineGrid>
 
         {/* Search */}
         <Card>
@@ -740,7 +734,9 @@ export default function Vehicles() {
             {searchValue ? " (filtered)" : ""}
           </Text>
         </Box>
-      </BlockStack>
+          </BlockStack>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }

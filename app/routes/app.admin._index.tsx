@@ -24,6 +24,9 @@ import {
   Link,
   Tabs,
   Icon,
+  Popover,
+  ActionList,
+  Modal,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -209,10 +212,147 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (error) return data({ ok: false, intent: "change-plan", message: error.message });
       return data({ ok: true, intent: "change-plan", message: `Plan changed to ${cap(newPlan)}.` });
     }
+    case "admin-purge-tenant": {
+      const targetShop = formData.get("shop_id") as string;
+      if (!targetShop) return data({ ok: false, intent: "admin-purge-tenant", message: "No shop specified" });
+      // Delete in FK-safe order
+      await db.from("vehicle_fitments").delete().eq("shop_id", targetShop);
+      await db.from("tenant_active_makes").delete().eq("shop_id", targetShop);
+      await db.from("collection_mappings").delete().eq("shop_id", targetShop);
+      await db.from("app_settings").delete().eq("shop_id", targetShop);
+      await db.from("products").delete().eq("shop_id", targetShop);
+      await db.from("providers").delete().eq("shop_id", targetShop);
+      await db.from("sync_jobs").delete().eq("shop_id", targetShop);
+      return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.` });
+    }
+    case "admin-purge-fitments": {
+      const targetShop = formData.get("shop_id") as string;
+      if (!targetShop) return data({ ok: false, intent: "admin-purge-fitments", message: "No shop specified" });
+      await db.from("vehicle_fitments").delete().eq("shop_id", targetShop);
+      await db.from("products").update({ fitment_status: "unmapped" }).eq("shop_id", targetShop);
+      return data({ ok: true, intent: "admin-purge-fitments", message: `All fitments purged for ${targetShop}.` });
+    }
+    case "admin-purge-collections": {
+      const targetShop = formData.get("shop_id") as string;
+      if (!targetShop) return data({ ok: false, intent: "admin-purge-collections", message: "No shop specified" });
+      await db.from("collection_mappings").delete().eq("shop_id", targetShop);
+      return data({ ok: true, intent: "admin-purge-collections", message: `All collection mappings purged for ${targetShop}.` });
+    }
     default:
       return data({ ok: false, intent, message: `Unknown action: ${intent}` });
   }
 };
+
+// ---------------------------------------------------------------------------
+// TenantPurgeActions — per-tenant dropdown with purge options
+// ---------------------------------------------------------------------------
+function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: string }) {
+  const fetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
+  const [popoverActive, setPopoverActive] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    intent: string;
+    title: string;
+    message: string;
+  } | null>(null);
+  const isLoading = fetcher.state !== "idle";
+
+  const actions = [
+    {
+      content: "Purge Fitments",
+      destructive: true,
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-purge-fitments",
+          title: `Purge fitments for ${shopName}?`,
+          message: "This will delete ALL vehicle fitments for this tenant and reset all product statuses to unmapped. This cannot be undone.",
+        });
+      },
+    },
+    {
+      content: "Purge Collections",
+      destructive: true,
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-purge-collections",
+          title: `Purge collections for ${shopName}?`,
+          message: "This will delete ALL collection mappings in the database for this tenant. Note: Shopify collections themselves will remain — use the tenant's Settings page to remove those.",
+        });
+      },
+    },
+    {
+      content: "Purge ALL Data",
+      destructive: true,
+      onAction: () => {
+        setPopoverActive(false);
+        setConfirmAction({
+          intent: "admin-purge-tenant",
+          title: `Purge ALL data for ${shopName}?`,
+          message: "This will permanently delete ALL data for this tenant: fitments, products, providers, collections, settings, sync jobs. The tenant record itself will remain. This CANNOT be undone.",
+        });
+      },
+    },
+  ];
+
+  return (
+    <>
+      <Popover
+        active={popoverActive}
+        activator={
+          <Button
+            size="slim"
+            tone="critical"
+            variant="plain"
+            onClick={() => setPopoverActive((v) => !v)}
+            loading={isLoading}
+            disabled={isLoading}
+          >
+            {isLoading ? "Purging..." : "Purge ▾"}
+          </Button>
+        }
+        onClose={() => setPopoverActive(false)}
+      >
+        <ActionList items={actions} />
+      </Popover>
+
+      {confirmAction && (
+        <Modal
+          open
+          onClose={() => setConfirmAction(null)}
+          title={confirmAction.title}
+          primaryAction={{
+            content: "Yes, purge permanently",
+            destructive: true,
+            loading: isLoading,
+            onAction: () => {
+              fetcher.submit(
+                { intent: confirmAction.intent, shop_id: shopId },
+                { method: "post" },
+              );
+              setConfirmAction(null);
+            },
+          }}
+          secondaryActions={[{ content: "Cancel", onAction: () => setConfirmAction(null) }]}
+        >
+          <Modal.Section>
+            <Text as="p" variant="bodyMd">{confirmAction.message}</Text>
+          </Modal.Section>
+        </Modal>
+      )}
+
+      {fetcher.data?.message && (
+        <div style={{ position: "fixed", bottom: "16px", right: "16px", zIndex: 999 }}>
+          <Banner
+            title={fetcher.data.message}
+            tone={fetcher.data.ok ? "success" : "critical"}
+            onDismiss={() => {}}
+          />
+        </div>
+      )}
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -635,7 +775,7 @@ export default function AdminPanel() {
                               </Badge>
                             </IndexTable.Cell>
                             <IndexTable.Cell>
-                              <InlineStack gap="200">
+                              <InlineStack gap="200" blockAlign="center">
                                 <Button size="slim" variant="primary" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
                                   Details
                                 </Button>
@@ -658,6 +798,10 @@ export default function AdminPanel() {
                                     <Button submit size="slim" loading={isSyncing}>Set</Button>
                                   </InlineStack>
                                 </fetcher.Form>
+                                <TenantPurgeActions
+                                  shopId={t.shop_id}
+                                  shopName={(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
+                                />
                               </InlineStack>
                             </IndexTable.Cell>
                           </IndexTable.Row>

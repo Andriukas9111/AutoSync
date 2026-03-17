@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Form, useFetcher } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -13,16 +13,24 @@ import {
   Select,
   Button,
   Banner,
-  Box,
   Divider,
   TextField,
   FormLayout,
   Modal,
+  Badge,
+  ProgressBar,
+  List,
+  Box,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant } from "../lib/billing.server";
+import {
+  removeAllTags,
+  removeAllMetafields,
+  removeAllCollections,
+} from "../lib/pipeline/cleanup.server";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -34,13 +42,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run queries in parallel
-  const [tenant, appSettingsResult] = await Promise.all([
-    getTenant(shopId),
-    db.from("app_settings")
-      .select("*")
-      .eq("shop_id", shopId)
-      .maybeSingle(),
-  ]);
+  const [tenant, appSettingsResult, fitmentCount, productCount, collectionCount, providerCount] =
+    await Promise.all([
+      getTenant(shopId),
+      db
+        .from("app_settings")
+        .select("*")
+        .eq("shop_id", shopId)
+        .maybeSingle(),
+      db
+        .from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+      db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+      db
+        .from("collection_mappings")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+      db
+        .from("providers")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+    ]);
 
   const plan: PlanTier = tenant?.plan ?? "free";
 
@@ -48,6 +74,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     plan,
     shopId,
     appSettings: appSettingsResult.data,
+    counts: {
+      fitments: fitmentCount.count ?? 0,
+      products: productCount.count ?? 0,
+      collections: collectionCount.count ?? 0,
+      providers: providerCount.count ?? 0,
+    },
   };
 };
 
@@ -56,7 +88,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
 
   const formData = await request.formData();
@@ -76,7 +108,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const notificationEmail =
       (formData.get("notification_email") as string) || "";
 
-    // Upsert app_settings
     const { data: existing } = await db
       .from("app_settings")
       .select("id")
@@ -100,32 +131,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .from("app_settings")
         .update(settingsPayload)
         .eq("shop_id", shopId);
-
-      if (error) {
-        return data(
-          { error: "Failed to save settings: " + error.message },
-          { status: 500 }
-        );
-      }
+      if (error)
+        return data({ error: "Failed to save settings: " + error.message }, { status: 500 });
     } else {
-      const { error } = await db
-        .from("app_settings")
-        .insert(settingsPayload);
-
-      if (error) {
-        return data(
-          { error: "Failed to save settings: " + error.message },
-          { status: 500 }
-        );
-      }
+      const { error } = await db.from("app_settings").insert(settingsPayload);
+      if (error)
+        return data({ error: "Failed to save settings: " + error.message }, { status: 500 });
     }
 
     return data({ success: true, message: "Settings saved successfully" });
   }
 
-  // ---- Delete All Fitment Data ----
-  if (_action === "delete_data") {
-    // Delete all vehicle_fitments for this shop
+  // ---- Delete All Fitment Data (DB only) ----
+  if (_action === "delete_fitments") {
     const { error: fitmentError } = await db
       .from("vehicle_fitments")
       .delete()
@@ -134,49 +152,163 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (fitmentError) {
       return data(
         { error: "Failed to delete fitment data: " + fitmentError.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    // Reset product fitment_status to "unmapped" for this shop
-    const { error: productError } = await db
+    await db
       .from("products")
       .update({ fitment_status: "unmapped" })
       .eq("shop_id", shopId);
 
-    if (productError) {
-      return data(
-        { error: "Failed to reset product statuses: " + productError.message },
-        { status: 500 }
-      );
-    }
-
     return data({
       success: true,
-      message:
-        "All fitment data deleted and product statuses reset to unmapped.",
+      message: "All fitment data deleted and product statuses reset to unmapped.",
     });
   }
 
-  // ---- Disconnect Store ----
+  // ---- Delete All Products from DB ----
+  if (_action === "delete_products") {
+    // Delete fitments first (FK dependency)
+    await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+    const { error } = await db.from("products").delete().eq("shop_id", shopId);
+    if (error)
+      return data({ error: "Failed to delete products: " + error.message }, { status: 500 });
+
+    return data({
+      success: true,
+      message: "All products and fitments deleted from AutoSync database.",
+    });
+  }
+
+  // ---- Delete All Providers ----
+  if (_action === "delete_providers") {
+    const { error } = await db.from("providers").delete().eq("shop_id", shopId);
+    if (error)
+      return data({ error: "Failed to delete providers: " + error.message }, { status: 500 });
+
+    return data({ success: true, message: "All providers deleted." });
+  }
+
+  // ---- Remove Tags from Shopify ----
+  if (_action === "remove_shopify_tags") {
+    try {
+      const result = await removeAllTags(shopId, admin);
+      return data({
+        success: true,
+        message: `Removed ${result.removed} AutoSync tags from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
+      });
+    } catch (err) {
+      return data(
+        { error: "Failed to remove tags: " + (err instanceof Error ? err.message : String(err)) },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ---- Remove Metafields from Shopify ----
+  if (_action === "remove_shopify_metafields") {
+    try {
+      const result = await removeAllMetafields(shopId, admin);
+      return data({
+        success: true,
+        message: `Removed ${result.removed} AutoSync metafields from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
+      });
+    } catch (err) {
+      return data(
+        { error: "Failed to remove metafields: " + (err instanceof Error ? err.message : String(err)) },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ---- Remove Collections from Shopify ----
+  if (_action === "remove_shopify_collections") {
+    try {
+      const result = await removeAllCollections(shopId, admin);
+      return data({
+        success: true,
+        message: `Deleted ${result.deleted} AutoSync collections from Shopify.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
+      });
+    } catch (err) {
+      return data(
+        { error: "Failed to remove collections: " + (err instanceof Error ? err.message : String(err)) },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ---- Full Cleanup — Shopify + DB ----
+  if (_action === "full_cleanup") {
+    try {
+      // 1. Remove from Shopify first
+      const [tagResult, mfResult, colResult] = await Promise.all([
+        removeAllTags(shopId, admin),
+        removeAllMetafields(shopId, admin),
+        removeAllCollections(shopId, admin),
+      ]);
+
+      // 2. Delete from DB
+      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+      await db.from("collection_mappings").delete().eq("shop_id", shopId);
+      await db
+        .from("products")
+        .update({ fitment_status: "unmapped" })
+        .eq("shop_id", shopId);
+
+      const totalErrors =
+        tagResult.errors.length + mfResult.errors.length + colResult.errors.length;
+
+      return data({
+        success: true,
+        message:
+          `Full cleanup complete: ${tagResult.removed} tags, ${mfResult.removed} metafields, ` +
+          `${colResult.deleted} collections removed from Shopify. ` +
+          `All fitments cleared from database.` +
+          (totalErrors > 0 ? ` (${totalErrors} errors)` : ""),
+      });
+    } catch (err) {
+      return data(
+        { error: "Full cleanup failed: " + (err instanceof Error ? err.message : String(err)) },
+        { status: 500 },
+      );
+    }
+  }
+
+  // ---- Disconnect Store (Nuclear) ----
   if (_action === "disconnect_store") {
+    // Remove from Shopify first (best effort)
+    try {
+      await Promise.all([
+        removeAllTags(shopId, admin),
+        removeAllMetafields(shopId, admin),
+        removeAllCollections(shopId, admin),
+      ]);
+    } catch {
+      // Continue even if Shopify cleanup fails
+    }
+
     // Delete all data for this shop
     await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
     await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
     await db.from("collection_mappings").delete().eq("shop_id", shopId);
     await db.from("app_settings").delete().eq("shop_id", shopId);
     await db.from("products").delete().eq("shop_id", shopId);
+    await db.from("providers").delete().eq("shop_id", shopId);
     await db.from("sync_jobs").delete().eq("shop_id", shopId);
 
     // Mark tenant as uninstalled
     await db
       .from("tenants")
-      .update({ uninstalled_at: new Date().toISOString() })
+      .update({
+        uninstalled_at: new Date().toISOString(),
+        plan_status: "cancelled",
+      })
       .eq("shop_id", shopId);
 
     return data({
       success: true,
-      message: "Store disconnected. All data has been removed.",
+      message: "Store disconnected. All AutoSync data removed from Shopify and our database.",
     });
   }
 
@@ -194,58 +326,155 @@ const STRATEGY_OPTIONS = [
 ];
 
 const ENGINE_FORMAT_OPTIONS = [
-  { label: "Engine Code (e.g. N54B30)", value: "code" },
-  { label: "Full Name (e.g. 3.0L Twin-Turbo I6)", value: "full_name" },
-  { label: "Displacement (e.g. 3.0L)", value: "displacement" },
+  { label: "Full — 2.0L I4 Turbo Diesel (B47D20A) 190hp", value: "full" },
+  { label: "Full + Context — ...190hp, Diesel (G20, 2022+)", value: "full_with_context" },
+  { label: "Compact — 2.0L Turbo Diesel 190hp", value: "compact" },
+  { label: "Code First — B47D20A — 2.0L 190hp", value: "code_first" },
+  { label: "Traditional — 2.0 B47D20A 190hp (G20)", value: "traditional" },
+  { label: "Power First — 190hp 2.0L I4 Turbo", value: "power_first" },
+  { label: "Modification — M340i (B48A20E) 382hp AWD", value: "modification" },
+  { label: "Raw — Original database name", value: "raw" },
 ];
 
+// Sample engine data for format preview
+const SAMPLE_ENGINE_PREVIEWS: Record<string, string> = {
+  full: "2.0L I4 Turbo Diesel (B47D20A) 190hp",
+  full_with_context: "2.0L I4 Turbo Diesel (B47D20A) 190hp, Diesel (G20, 2022+)",
+  compact: "2.0L Turbo Diesel 190hp",
+  code_first: "B47D20A — 2.0L 190hp",
+  traditional: "2.0 B47D20A 190hp (G20)",
+  power_first: "190hp 2.0L I4 Turbo",
+  modification: "320d (B47D20A) 190hp RWD",
+  raw: "320d (190 Hp) Steptronic",
+};
+
+function getEngineFormatPreview(format: string): string {
+  return SAMPLE_ENGINE_PREVIEWS[format] || SAMPLE_ENGINE_PREVIEWS.full;
+}
+
+/** A single danger zone row with a useFetcher submit */
+function DangerAction({
+  title,
+  description,
+  buttonLabel,
+  actionName,
+  modalTitle,
+  modalBody,
+}: {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  actionName: string;
+  modalTitle: string;
+  modalBody: string;
+}) {
+  const fetcher = useFetcher();
+  const [open, setOpen] = useState(false);
+  const isLoading = fetcher.state !== "idle";
+
+  // Show result banner from this specific fetcher
+  const result = fetcher.data as { success?: boolean; message?: string; error?: string } | undefined;
+
+  return (
+    <>
+      {result?.success && (
+        <Banner tone="success" onDismiss={() => {}}>
+          <p>{result.message}</p>
+        </Banner>
+      )}
+      {result?.error && (
+        <Banner tone="critical" onDismiss={() => {}}>
+          <p>{result.error}</p>
+        </Banner>
+      )}
+      <InlineStack align="space-between" blockAlign="center" wrap={false}>
+        <BlockStack gap="100">
+          <Text as="p" variant="bodyMd" fontWeight="semibold">
+            {title}
+          </Text>
+          <Text as="p" variant="bodySm" tone="subdued">
+            {description}
+          </Text>
+        </BlockStack>
+        <div style={{ flexShrink: 0 }}>
+          <Button tone="critical" onClick={() => setOpen(true)} loading={isLoading}>
+            {buttonLabel}
+          </Button>
+        </div>
+      </InlineStack>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={modalTitle}
+        primaryAction={{
+          content: buttonLabel,
+          destructive: true,
+          loading: isLoading,
+          onAction: () => {
+            setOpen(false);
+            fetcher.submit({ _action: actionName }, { method: "post" });
+          },
+        }}
+        secondaryActions={[
+          { content: "Cancel", onAction: () => setOpen(false) },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Banner tone="critical">
+              <p>This action cannot be undone.</p>
+            </Banner>
+            <Text as="p" variant="bodyMd">
+              {modalBody}
+            </Text>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+    </>
+  );
+}
+
 export default function Settings() {
-  const { plan, shopId, appSettings } = useLoaderData<typeof loader>();
+  const { plan, shopId, appSettings, counts } = useLoaderData<typeof loader>();
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
   // Form state — Push Settings
-  const [autoPushTags, setAutoPushTags] = useState(
-    appSettings?.push_tags ?? false
-  );
+  const [autoPushTags, setAutoPushTags] = useState(appSettings?.push_tags ?? false);
   const [autoPushMetafields, setAutoPushMetafields] = useState(
-    appSettings?.push_metafields ?? false
+    appSettings?.push_metafields ?? false,
   );
-  const [tagPrefix, setTagPrefix] = useState(
-    appSettings?.tag_prefix ?? "_autosync_"
-  );
+  const [tagPrefix, setTagPrefix] = useState(appSettings?.tag_prefix ?? "_autosync_");
 
   // Form state — Collection Settings
   const [collectionStrategy, setCollectionStrategy] = useState(
-    appSettings?.collection_strategy ?? "make"
+    appSettings?.collection_strategy ?? "make",
   );
   const [autoCreateCollections, setAutoCreateCollections] = useState(
-    appSettings?.push_collections ?? false
+    appSettings?.push_collections ?? false,
   );
 
   // Form state — Display Settings
   const [engineDisplayFormat, setEngineDisplayFormat] = useState(
-    appSettings?.engine_display_format ?? "code"
+    appSettings?.engine_display_format ?? "code",
   );
 
   // Form state — Notifications
   const [notificationEmail, setNotificationEmail] = useState(
-    appSettings?.notification_email ?? ""
+    appSettings?.notification_email ?? "",
   );
 
-  // Danger Zone modals
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
-
-  const showSuccess = actionData && "success" in actionData && actionData.success;
+  const showSuccess =
+    actionData && "success" in actionData && actionData.success;
   const showError = actionData && "error" in actionData;
 
   return (
     <Page title="Settings">
       <Layout>
-        {/* Banners */}
+        {/* Global Banners from save_settings action */}
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
@@ -253,7 +482,6 @@ export default function Settings() {
             </Banner>
           </Layout.Section>
         )}
-
         {showSuccess && (
           <Layout.Section>
             <Banner tone="success">
@@ -266,37 +494,21 @@ export default function Settings() {
         <Layout.Section>
           <Form method="post">
             <input type="hidden" name="_action" value="save_settings" />
-            <input
-              type="hidden"
-              name="auto_push_tags"
-              value={String(autoPushTags)}
-            />
+            <input type="hidden" name="auto_push_tags" value={String(autoPushTags)} />
             <input
               type="hidden"
               name="auto_push_metafields"
               value={String(autoPushMetafields)}
             />
             <input type="hidden" name="tag_prefix" value={tagPrefix} />
-            <input
-              type="hidden"
-              name="collection_strategy"
-              value={collectionStrategy}
-            />
+            <input type="hidden" name="collection_strategy" value={collectionStrategy} />
             <input
               type="hidden"
               name="auto_create_collections"
               value={String(autoCreateCollections)}
             />
-            <input
-              type="hidden"
-              name="engine_display_format"
-              value={engineDisplayFormat}
-            />
-            <input
-              type="hidden"
-              name="notification_email"
-              value={notificationEmail}
-            />
+            <input type="hidden" name="engine_display_format" value={engineDisplayFormat} />
+            <input type="hidden" name="notification_email" value={notificationEmail} />
 
             <BlockStack gap="500">
               {/* Push Settings */}
@@ -308,27 +520,24 @@ export default function Settings() {
                   <Text as="p" variant="bodyMd" tone="subdued">
                     Configure how fitment data is pushed to your Shopify store.
                   </Text>
-
                   <FormLayout>
                     <Checkbox
                       label="Auto-push tags on fitment mapping"
-                      helpText="Automatically push _autosync_ tags to Shopify whenever a product is mapped to a vehicle"
+                      helpText="Automatically push _autosync_ tags to Shopify when a product is mapped"
                       checked={autoPushTags}
                       onChange={setAutoPushTags}
                     />
-
                     <Checkbox
                       label="Auto-push metafields on fitment mapping"
-                      helpText="Automatically set app-owned vehicle metafields on products when fitments are mapped"
+                      helpText="Automatically set app-owned vehicle metafields on products"
                       checked={autoPushMetafields}
                       onChange={setAutoPushMetafields}
                     />
-
                     <TextField
                       label="Tag prefix"
                       value={tagPrefix}
                       onChange={setTagPrefix}
-                      helpText="Prefix added to all vehicle tags pushed to Shopify (e.g. _autosync_BMW)"
+                      helpText="Prefix for all vehicle tags (e.g. _autosync_BMW)"
                       autoComplete="off"
                     />
                   </FormLayout>
@@ -342,22 +551,19 @@ export default function Settings() {
                     Collection Settings
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Configure how smart collections are created from vehicle
-                    fitment data.
+                    Configure how smart collections are created from vehicle fitment data.
                   </Text>
-
                   <FormLayout>
                     <Select
                       label="Collection strategy"
                       options={STRATEGY_OPTIONS}
                       value={collectionStrategy}
                       onChange={setCollectionStrategy}
-                      helpText="Determines how collections are organized: by make only, make and model, or make, model and year"
+                      helpText="How collections are organized: by make, make + model, or full YMME"
                     />
-
                     <Checkbox
                       label="Auto-create collections on push"
-                      helpText="Automatically create or update smart collections when pushing fitment data to Shopify"
+                      helpText="Create or update smart collections when pushing fitment data"
                       checked={autoCreateCollections}
                       onChange={setAutoCreateCollections}
                     />
@@ -372,17 +578,27 @@ export default function Settings() {
                     Display Settings
                   </Text>
                   <Text as="p" variant="bodyMd" tone="subdued">
-                    Configure how vehicle data is displayed on your storefront.
+                    Configure how engine information is displayed across your store widgets and compatibility tables.
                   </Text>
-
                   <FormLayout>
                     <Select
                       label="Engine display format"
                       options={ENGINE_FORMAT_OPTIONS}
                       value={engineDisplayFormat}
                       onChange={setEngineDisplayFormat}
-                      helpText="How engine information is displayed in the compatibility table and vehicle widgets"
+                      helpText="Uses a token system: {displacement} {config} {aspiration} {fuel} ({code}) {power}"
                     />
+                    <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                      <BlockStack gap="200">
+                        <Text as="p" variant="bodySm" fontWeight="semibold">Preview</Text>
+                        <Text as="p" variant="bodyMd" fontWeight="bold">
+                          {getEngineFormatPreview(engineDisplayFormat)}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Sample: BMW 3 Series (G20) — 2.0L I4 Turbo Diesel, B47D20A, 190hp
+                        </Text>
+                      </BlockStack>
+                    </Box>
                   </FormLayout>
                 </BlockStack>
               </Card>
@@ -393,14 +609,13 @@ export default function Settings() {
                   <Text as="h2" variant="headingMd">
                     Notifications
                   </Text>
-
                   <FormLayout>
                     <TextField
                       label="Notification email"
                       type="email"
                       value={notificationEmail}
                       onChange={setNotificationEmail}
-                      helpText="Receive email notifications for sync completions, errors, and billing events"
+                      helpText="Receive notifications for sync completions and errors"
                       autoComplete="email"
                       placeholder="you@example.com"
                     />
@@ -408,7 +623,6 @@ export default function Settings() {
                 </BlockStack>
               </Card>
 
-              {/* Save button */}
               <InlineStack align="start">
                 <Button variant="primary" submit loading={isSubmitting}>
                   Save Settings
@@ -418,150 +632,142 @@ export default function Settings() {
           </Form>
         </Layout.Section>
 
-        {/* Danger Zone */}
+        {/* ─── Data Management ─────────────────────────────────────── */}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd" tone="critical">
-                Danger Zone
+              <Text as="h2" variant="headingMd">
+                Data Management
               </Text>
               <Text as="p" variant="bodyMd" tone="subdued">
-                These actions are destructive and cannot be undone. Please
-                proceed with caution.
+                Current data: {counts.products} products, {counts.fitments} fitments,{" "}
+                {counts.collections} collections, {counts.providers} providers.
               </Text>
 
               <Divider />
 
-              {/* Delete All Fitment Data */}
-              <InlineStack align="space-between" blockAlign="center">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Delete All Fitment Data
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Remove all vehicle fitment mappings and reset all product
-                    statuses to unmapped.
-                  </Text>
-                </BlockStack>
-                <Button
-                  tone="critical"
-                  onClick={() => setDeleteModalOpen(true)}
-                >
-                  Delete All Fitment Data
-                </Button>
-              </InlineStack>
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  Shopify Store Cleanup
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Remove data that AutoSync pushed to your Shopify store. This does not
+                  delete data from AutoSync&apos;s database.
+                </Text>
+              </BlockStack>
+
+              <DangerAction
+                title="Remove All AutoSync Tags"
+                description="Remove all _autosync_ prefixed tags from your Shopify products."
+                buttonLabel="Remove Tags"
+                actionName="remove_shopify_tags"
+                modalTitle="Remove All AutoSync Tags?"
+                modalBody="This will scan all your products and remove every tag starting with _autosync_. Your products will no longer be grouped by smart collections based on these tags."
+              />
 
               <Divider />
 
-              {/* Disconnect Store */}
-              <InlineStack align="space-between" blockAlign="center">
-                <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    Disconnect Store
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Remove all AutoSync data from this store including products,
-                    fitments, collections, and settings.
-                  </Text>
-                </BlockStack>
-                <Button
-                  tone="critical"
-                  onClick={() => setDisconnectModalOpen(true)}
-                >
-                  Disconnect Store
-                </Button>
-              </InlineStack>
+              <DangerAction
+                title="Remove All AutoSync Metafields"
+                description="Remove all autosync_fitment.* metafields from your Shopify products."
+                buttonLabel="Remove Metafields"
+                actionName="remove_shopify_metafields"
+                modalTitle="Remove All AutoSync Metafields?"
+                modalBody="This will delete all vehicle fitment metafields (autosync_fitment.*) from your Shopify products. Storefront widgets will stop showing vehicle data until you re-push."
+              />
+
+              <Divider />
+
+              <DangerAction
+                title="Remove All AutoSync Collections"
+                description="Delete all smart collections created by AutoSync from your Shopify store."
+                buttonLabel="Remove Collections"
+                actionName="remove_shopify_collections"
+                modalTitle="Remove All AutoSync Collections?"
+                modalBody="This will delete all smart collections that AutoSync created from your Shopify store. Your collection mappings in AutoSync will also be cleared."
+              />
+
+              <Divider />
+
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  Database Cleanup
+                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Remove data from AutoSync&apos;s database. This does not affect your
+                  Shopify store directly.
+                </Text>
+              </BlockStack>
+
+              <DangerAction
+                title="Delete All Fitment Data"
+                description={`Remove all ${counts.fitments} vehicle fitment mappings and reset products to unmapped.`}
+                buttonLabel="Delete Fitments"
+                actionName="delete_fitments"
+                modalTitle="Delete All Fitment Data?"
+                modalBody="This will permanently delete all vehicle fitment mappings and reset all product statuses to unmapped. Products, providers, and settings remain intact."
+              />
+
+              <Divider />
+
+              <DangerAction
+                title="Delete All Products"
+                description={`Remove all ${counts.products} products and their fitments from AutoSync's database.`}
+                buttonLabel="Delete Products"
+                actionName="delete_products"
+                modalTitle="Delete All Products?"
+                modalBody="This will permanently delete all products and their fitment mappings from AutoSync's database. Your Shopify products are NOT affected — only our internal records. You can re-sync products from Shopify at any time."
+              />
+
+              <Divider />
+
+              <DangerAction
+                title="Delete All Providers"
+                description={`Remove all ${counts.providers} data providers.`}
+                buttonLabel="Delete Providers"
+                actionName="delete_providers"
+                modalTitle="Delete All Providers?"
+                modalBody="This will permanently delete all provider configurations. You will need to re-create them to import fitment data."
+              />
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* Delete Confirmation Modal */}
-        <Modal
-          open={deleteModalOpen}
-          onClose={() => setDeleteModalOpen(false)}
-          title="Delete All Fitment Data?"
-          primaryAction={{
-            content: "Delete All Data",
-            destructive: true,
-            onAction: () => {
-              setDeleteModalOpen(false);
-              // Submit the form via hidden form
-              const form = document.getElementById(
-                "delete-data-form"
-              ) as HTMLFormElement;
-              if (form) form.submit();
-            },
-          }}
-          secondaryActions={[
-            {
-              content: "Cancel",
-              onAction: () => setDeleteModalOpen(false),
-            },
-          ]}
-        >
-          <Modal.Section>
-            <BlockStack gap="300">
-              <Banner tone="critical">
-                <p>This action cannot be undone.</p>
-              </Banner>
-              <Text as="p" variant="bodyMd">
-                This will permanently delete all vehicle fitment mappings for
-                your store and reset all product fitment statuses to
-                &quot;unmapped&quot;. Your products, providers, and settings will
-                remain intact.
-              </Text>
-            </BlockStack>
-          </Modal.Section>
-        </Modal>
+        {/* ─── Danger Zone ─────────────────────────────────────────── */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h2" variant="headingMd" tone="critical">
+                  Danger Zone
+                </Text>
+                <Badge tone="critical">Destructive</Badge>
+              </InlineStack>
 
-        {/* Disconnect Confirmation Modal */}
-        <Modal
-          open={disconnectModalOpen}
-          onClose={() => setDisconnectModalOpen(false)}
-          title="Disconnect Store?"
-          primaryAction={{
-            content: "Disconnect Store",
-            destructive: true,
-            onAction: () => {
-              setDisconnectModalOpen(false);
-              const form = document.getElementById(
-                "disconnect-store-form"
-              ) as HTMLFormElement;
-              if (form) form.submit();
-            },
-          }}
-          secondaryActions={[
-            {
-              content: "Cancel",
-              onAction: () => setDisconnectModalOpen(false),
-            },
-          ]}
-        >
-          <Modal.Section>
-            <BlockStack gap="300">
-              <Banner tone="critical">
-                <p>This action cannot be undone.</p>
-              </Banner>
-              <Text as="p" variant="bodyMd">
-                This will permanently remove ALL AutoSync data from your store
-                including products, fitments, collections, active makes, sync
-                jobs, and settings. Your store will be marked as uninstalled.
-              </Text>
-            </BlockStack>
-          </Modal.Section>
-        </Modal>
+              <Divider />
 
-        {/* Hidden forms for destructive actions */}
-        <form id="delete-data-form" method="post" style={{ display: "none" }}>
-          <input type="hidden" name="_action" value="delete_data" />
-        </form>
-        <form
-          id="disconnect-store-form"
-          method="post"
-          style={{ display: "none" }}
-        >
-          <input type="hidden" name="_action" value="disconnect_store" />
-        </form>
+              <DangerAction
+                title="Full Cleanup — Shopify + Database"
+                description="Remove all AutoSync tags, metafields, and collections from Shopify AND clear all fitment data from our database."
+                buttonLabel="Full Cleanup"
+                actionName="full_cleanup"
+                modalTitle="Full Cleanup — Shopify + Database?"
+                modalBody="This will: (1) Remove all _autosync_ tags from Shopify products, (2) Delete all autosync_fitment metafields, (3) Delete all AutoSync smart collections, (4) Clear all fitment mappings from our database. Products and providers remain intact."
+              />
+
+              <Divider />
+
+              <DangerAction
+                title="Disconnect Store"
+                description="Remove ALL AutoSync data — from Shopify AND our database. Deletes products, fitments, providers, collections, settings — everything."
+                buttonLabel="Disconnect Store"
+                actionName="disconnect_store"
+                modalTitle="Disconnect Store — Remove Everything?"
+                modalBody="This is the nuclear option. It will remove ALL AutoSync data from your Shopify store (tags, metafields, collections) AND delete ALL data from our database (products, fitments, providers, settings, sync history). Your tenant will be marked as uninstalled."
+              />
+            </BlockStack>
+          </Card>
+        </Layout.Section>
       </Layout>
     </Page>
   );

@@ -457,7 +457,6 @@ export default function Products() {
           onAction: () => navigate("/app/providers/new"),
         },
       ]}
-      fullWidth
     >
       <BlockStack gap="400">
         {/* ── Banners ── */}

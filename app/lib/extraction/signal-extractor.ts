@@ -11,10 +11,12 @@
 import type { YmmeIndex } from "./ymme-index"
 import type { YmmeIndexMake, YmmeIndexModel, YmmeIndexEngine } from "./ymme-index"
 import { scanTextForVehicles, type VehicleMention } from "./ymme-scanner"
+import { extractEngineHints, ENGINE_CODE_PATTERNS } from "../engine-format"
 
 // ── Types ────────────────────────────────────────────────────
 
 export type SignalSource =
+  | "engine_code_direct"
   | "description_structured"
   | "description_natural"
   | "title"
@@ -95,6 +97,31 @@ export function extractAllSignals(
 ): MultiSignalResult {
   const signals: ExtractionSignal[] = []
   const diagnostics: string[] = []
+
+  // ── Signal 0: Engine Code Direct Matching (Priority 0 — Highest) ──
+  // When product text contains known engine codes (B47D20A, EA888, 2JZ-GTE),
+  // directly match to YMME engines and infer make/model from them.
+  // This is the strongest signal — an exact engine code virtually guarantees a match.
+  {
+    const allText = [
+      product.title,
+      product.description || "",
+      product.sku || "",
+    ].join(" ");
+
+    const engineCodeMentions = extractEngineCodeMentions(allText, index);
+    if (engineCodeMentions.length > 0) {
+      signals.push({
+        source: "engine_code_direct",
+        priority: 0,
+        mentions: engineCodeMentions,
+        diagnostics: [`${engineCodeMentions.length} engines matched via direct engine code lookup`],
+      });
+      diagnostics.push(
+        `[engine-code] Direct match: ${engineCodeMentions.map((m) => m.engine?.code).join(", ")}`
+      );
+    }
+  }
 
   // ── Signal 1: Description Structured Sections (Priority 1) ──
   const desc = product.description || ""
@@ -474,4 +501,103 @@ function extractFromSku(
   }
 
   return mentions
+}
+
+// ── Engine Code Direct Matching ─────────────────────────────
+//
+// Scans text for known engine codes using the patterns from engine-format.ts,
+// then looks them up in the YMME index's global enginesByCode map.
+// For each hit, we resolve the parent model and make to create full mentions.
+//
+// This is the MOST POWERFUL signal source because engine codes are unambiguous.
+// "B47D20A" immediately tells us: BMW, 2.0 diesel, specific models.
+
+function extractEngineCodeMentions(
+  text: string,
+  index: YmmeIndex,
+): VehicleMention[] {
+  const mentions: VehicleMention[] = [];
+  const seenKeys = new Set<string>();
+
+  // Step 1: Find engine codes in text using the comprehensive regex patterns
+  for (const pattern of ENGINE_CODE_PATTERNS) {
+    if (pattern.name === "Generic") continue; // Skip generic displacement patterns
+    pattern.regex.lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.regex.exec(text)) !== null) {
+      const rawCode = match[0].replace(/\s+/g, "").toUpperCase();
+      const codeLower = rawCode.toLowerCase();
+
+      // Step 2: Look up in YMME index (global code -> engines map)
+      const matchedEngines = index.enginesByCode.get(codeLower);
+      if (!matchedEngines || matchedEngines.length === 0) continue;
+
+      // Step 3: For each matching engine, resolve model and make
+      for (const engine of matchedEngines) {
+        const model = index.modelById.get(engine.modelId);
+        if (!model) continue;
+
+        const make = index.makeById.get(model.makeId);
+        if (!make) continue;
+
+        // Deduplicate by make+model+engine
+        const key = `${make.id}|${model.id}|${engine.id}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+
+        mentions.push({
+          make,
+          model,
+          engine,
+          generation: model.generation,
+          yearFrom: engine.yearFrom ?? model.yearFrom,
+          yearTo: engine.yearTo ?? model.yearTo,
+          confidence: 0.95, // Engine code is near-certainty
+          matchedText: `[engine-code] ${rawCode} -> ${make.name} ${model.name}`,
+        });
+      }
+    }
+  }
+
+  // Step 4: Also try direct lookup in engineCodeSet for codes not in our pattern list
+  // This catches engine codes that are in the DB but don't match any specific pattern family
+  const wordBoundaryRegex = /\b([A-Z][A-Z0-9]{2,12})\b/gi;
+  wordBoundaryRegex.lastIndex = 0;
+  let directMatch: RegExpExecArray | null;
+
+  while ((directMatch = wordBoundaryRegex.exec(text)) !== null) {
+    const candidate = directMatch[1].toLowerCase();
+    if (candidate.length < 3 || candidate.length > 12) continue;
+    if (["the", "and", "for", "with", "new", "set", "kit", "oem", "fit", "car", "suv"].includes(candidate)) continue;
+
+    if (index.engineCodeSet.has(candidate)) {
+      const engines = index.enginesByCode.get(candidate);
+      if (!engines) continue;
+
+      for (const engine of engines) {
+        const model = index.modelById.get(engine.modelId);
+        if (!model) continue;
+        const make = index.makeById.get(model.makeId);
+        if (!make) continue;
+
+        const key = `${make.id}|${model.id}|${engine.id}`;
+        if (seenKeys.has(key)) continue;
+        seenKeys.add(key);
+
+        mentions.push({
+          make,
+          model,
+          engine,
+          generation: model.generation,
+          yearFrom: engine.yearFrom ?? model.yearFrom,
+          yearTo: engine.yearTo ?? model.yearTo,
+          confidence: 0.85,
+          matchedText: `[engine-code-db] ${directMatch[1]} -> ${make.name} ${model.name}`,
+        });
+      }
+    }
+  }
+
+  return mentions;
 }

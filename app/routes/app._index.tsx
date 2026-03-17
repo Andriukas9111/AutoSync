@@ -232,8 +232,10 @@ export default function Dashboard() {
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
 
   return (
-    <Page title="Dashboard" fullWidth>
-      <BlockStack gap="500">
+    <Page title="Dashboard">
+      <Layout>
+        <Layout.Section>
+          <BlockStack gap="500">
         {/* Welcome banner */}
         {isFirstTime && showWelcome && (
           <Banner
@@ -686,7 +688,9 @@ export default function Dashboard() {
             )}
           </BlockStack>
         </Card>
-      </BlockStack>
+          </BlockStack>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }

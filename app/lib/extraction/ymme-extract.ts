@@ -175,12 +175,14 @@ function convertToFitmentFields(
   }
 
   // Case 1: Engine already matched -> single row
+  // Use the display name if available, otherwise fall back to raw name
   if (f.engine) {
     return [{
       ...base,
-      engine: f.engine.name || null,
+      engine: f.engine.displayName || f.engine.name || null,
       engine_code: f.engine.code || null,
       ymme_engine_id: f.engine.id,
+      fuel_type: f.engine.fuelType || null,
     }]
   }
 
@@ -196,9 +198,10 @@ function convertToFitmentFields(
     if (matching.length > 0) {
       return matching.map((engine) => ({
         ...base,
-        engine: engine.name || null,
+        engine: engine.displayName || engine.name || null,
         engine_code: engine.code || null,
         ymme_engine_id: engine.id,
+        fuel_type: engine.fuelType || null,
         confidence_score: Math.max(0.3, f.confidence - 0.1),
       }))
     }

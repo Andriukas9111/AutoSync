@@ -959,10 +959,11 @@ async function parseEngineVariantsFromPage(
     if (!name || name.length < 5 || name.length > 120) continue;
     if (specPageUrl.includes("-brand-") || specPageUrl.includes("-model-") ||
         specPageUrl.includes("-generation-") || specPageUrl.includes("allbrands")) continue;
-    // Skip entries that are just numbers (ads, tracking pixels, etc.)
-    if (/^[\d.]+$/.test(name)) continue;
-    // Engine names must contain at least one letter
-    if (!/[a-zA-Z]/.test(name)) continue;
+    // Skip entries that are just numbers/dots/whitespace (ads, tracking, timing data)
+    const cleanedName = name.replace(/[\s\u200b\u00a0]/g, ""); // remove whitespace + zero-width
+    if (/^[\d.,]+$/.test(cleanedName)) continue;
+    // Engine names must contain at least 2 alphabetic characters
+    if ((cleanedName.match(/[a-zA-Z]/g) || []).length < 2) continue;
 
     // Parse engine details from name
     const cc = name.match(/(\d{3,5})\s*(?:cc|cm)/i);
@@ -1373,6 +1374,21 @@ export async function upsertVehicleSpecs(
 
   if (error) {
     console.error("[autodata] Upsert specs for engine " + engineId + ":", error.message);
+    return;
+  }
+
+  // Backfill denormalized display fields onto ymme_engines (migration 014)
+  // These fields enable rich engine display names without JOINs
+  const displayUpdate: Record<string, unknown> = {};
+  if (specs.cylinders) displayUpdate.cylinders = specs.cylinders;
+  if (specs.cylinderConfig) displayUpdate.cylinder_config = specs.cylinderConfig;
+  if (specs.aspiration) displayUpdate.aspiration = specs.aspiration;
+  if (specs.driveType) displayUpdate.drive_type = specs.driveType;
+  if (specs.transmissionType) displayUpdate.transmission_type = specs.transmissionType;
+  if (specs.bodyType) displayUpdate.body_type = specs.bodyType;
+
+  if (Object.keys(displayUpdate).length > 0) {
+    await db.from("ymme_engines").update(displayUpdate).eq("id", engineId);
   }
 }
 

@@ -280,7 +280,6 @@ export default function Fitment() {
           onAction: () => navigate("/app/push"),
         },
       ]}
-      fullWidth
     >
       <BlockStack gap="600">
         {/* Stats Cards */}

@@ -142,18 +142,28 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return data({ error: "Provider name is required." }, { status: 400 });
     }
 
-    const config: Record<string, unknown> = {};
+    // Merge with existing config to avoid losing fields not shown in UI
+    const existingConfig = (
+      await db.from("providers").select("config").eq("id", providerId).eq("shop_id", shopId).single()
+    ).data?.config as Record<string, unknown> || {};
 
-    // Type-specific config
+    const config: Record<string, unknown> = { ...existingConfig };
+
+    // Type-specific config (keys match app.providers.new.tsx)
     if (type === "csv") {
       config.delimiter = formData.get("delimiter") || ",";
     } else if (type === "api") {
-      config.apiUrl = formData.get("apiUrl") || "";
-      config.apiKey = formData.get("apiKey") || "";
+      config.endpoint = String(formData.get("api_endpoint") || "").trim();
+      config.authType = String(formData.get("api_auth_type") || "none");
+      config.authValue = String(formData.get("api_auth_value") || "").trim();
+      config.itemsPath = String(formData.get("api_items_path") || "").trim();
     } else if (type === "ftp") {
-      config.ftpHost = formData.get("ftpHost") || "";
-      config.ftpUser = formData.get("ftpUser") || "";
-      config.ftpPath = formData.get("ftpPath") || "/";
+      config.host = String(formData.get("ftp_host") || "").trim();
+      config.port = parseInt(String(formData.get("ftp_port") || "21"), 10);
+      config.username = String(formData.get("ftp_username") || "").trim();
+      config.password = String(formData.get("ftp_password") || "").trim();
+      config.remotePath = String(formData.get("ftp_path") || "").trim();
+      config.protocol = String(formData.get("ftp_protocol") || "ftp");
     }
 
     if (description) {
@@ -199,14 +209,21 @@ export default function ProviderDetail() {
   );
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Type-specific config state
+  // Type-specific config state (keys match app.providers.new.tsx)
   const config = (provider.config || {}) as Record<string, unknown>;
   const [delimiter, setDelimiter] = useState(String(config.delimiter || ","));
-  const [apiUrl, setApiUrl] = useState(String(config.apiUrl || ""));
-  const [apiKey, setApiKey] = useState(String(config.apiKey || ""));
-  const [ftpHost, setFtpHost] = useState(String(config.ftpHost || ""));
-  const [ftpUser, setFtpUser] = useState(String(config.ftpUser || ""));
-  const [ftpPath, setFtpPath] = useState(String(config.ftpPath || "/"));
+  // API fields
+  const [apiEndpoint, setApiEndpoint] = useState(String(config.endpoint || ""));
+  const [apiAuthType, setApiAuthType] = useState(String(config.authType || "none"));
+  const [apiAuthValue, setApiAuthValue] = useState(String(config.authValue || ""));
+  const [apiItemsPath, setApiItemsPath] = useState(String(config.itemsPath || ""));
+  // FTP fields
+  const [ftpHost, setFtpHost] = useState(String(config.host || ""));
+  const [ftpPort, setFtpPort] = useState(String(config.port || "21"));
+  const [ftpUsername, setFtpUsername] = useState(String(config.username || ""));
+  const [ftpPassword, setFtpPassword] = useState(String(config.password || ""));
+  const [ftpPath, setFtpPath] = useState(String(config.remotePath || "/"));
+  const [ftpProtocol, setFtpProtocol] = useState(String(config.protocol || "ftp"));
 
   // File upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -365,19 +382,45 @@ export default function ProviderDetail() {
                           </Banner>
                         )}
                         <TextField
-                          label="API URL"
-                          name="apiUrl"
-                          value={apiUrl}
-                          onChange={setApiUrl}
+                          label="API Endpoint URL"
+                          name="api_endpoint"
+                          value={apiEndpoint}
+                          onChange={setApiEndpoint}
+                          placeholder="https://api.example.com/products"
                           autoComplete="off"
                           disabled={!canUseApi}
                         />
+                        <Select
+                          label="Authentication Type"
+                          name="api_auth_type"
+                          options={[
+                            { label: "None", value: "none" },
+                            { label: "API Key (Header)", value: "api_key" },
+                            { label: "Bearer Token", value: "bearer" },
+                            { label: "Basic Auth", value: "basic" },
+                          ]}
+                          value={apiAuthType}
+                          onChange={setApiAuthType}
+                          disabled={!canUseApi}
+                        />
+                        {apiAuthType !== "none" && (
+                          <TextField
+                            label={apiAuthType === "basic" ? "Credentials (user:pass)" : apiAuthType === "bearer" ? "Bearer Token" : "API Key"}
+                            name="api_auth_value"
+                            value={apiAuthValue}
+                            onChange={setApiAuthValue}
+                            type="password"
+                            autoComplete="off"
+                            disabled={!canUseApi}
+                          />
+                        )}
                         <TextField
-                          label="API Key"
-                          name="apiKey"
-                          value={apiKey}
-                          onChange={setApiKey}
-                          type="password"
+                          label="Items JSON Path"
+                          name="api_items_path"
+                          value={apiItemsPath}
+                          onChange={setApiItemsPath}
+                          placeholder="data.products"
+                          helpText="Dot-path to the products array in the JSON response"
                           autoComplete="off"
                           disabled={!canUseApi}
                         />
@@ -391,27 +434,64 @@ export default function ProviderDetail() {
                             <p>FTP import requires the Business plan or higher.</p>
                           </Banner>
                         )}
-                        <TextField
-                          label="FTP Host"
-                          name="ftpHost"
-                          value={ftpHost}
-                          onChange={setFtpHost}
-                          autoComplete="off"
+                        <Select
+                          label="Protocol"
+                          name="ftp_protocol"
+                          options={[
+                            { label: "FTP", value: "ftp" },
+                            { label: "SFTP", value: "sftp" },
+                            { label: "FTPS", value: "ftps" },
+                          ]}
+                          value={ftpProtocol}
+                          onChange={setFtpProtocol}
                           disabled={!canUseFtp}
                         />
+                        <FormLayout.Group>
+                          <TextField
+                            label="Host"
+                            name="ftp_host"
+                            value={ftpHost}
+                            onChange={setFtpHost}
+                            placeholder="ftp.example.com"
+                            autoComplete="off"
+                            disabled={!canUseFtp}
+                          />
+                          <TextField
+                            label="Port"
+                            name="ftp_port"
+                            value={ftpPort}
+                            onChange={setFtpPort}
+                            type="number"
+                            autoComplete="off"
+                            disabled={!canUseFtp}
+                          />
+                        </FormLayout.Group>
+                        <FormLayout.Group>
+                          <TextField
+                            label="Username"
+                            name="ftp_username"
+                            value={ftpUsername}
+                            onChange={setFtpUsername}
+                            autoComplete="off"
+                            disabled={!canUseFtp}
+                          />
+                          <TextField
+                            label="Password"
+                            name="ftp_password"
+                            value={ftpPassword}
+                            onChange={setFtpPassword}
+                            type="password"
+                            autoComplete="off"
+                            disabled={!canUseFtp}
+                          />
+                        </FormLayout.Group>
                         <TextField
-                          label="FTP Username"
-                          name="ftpUser"
-                          value={ftpUser}
-                          onChange={setFtpUser}
-                          autoComplete="off"
-                          disabled={!canUseFtp}
-                        />
-                        <TextField
-                          label="FTP Path"
-                          name="ftpPath"
+                          label="Remote Path"
+                          name="ftp_path"
                           value={ftpPath}
                           onChange={setFtpPath}
+                          placeholder="/data/products/"
+                          helpText="Path to the file or directory on the remote server"
                           autoComplete="off"
                           disabled={!canUseFtp}
                         />

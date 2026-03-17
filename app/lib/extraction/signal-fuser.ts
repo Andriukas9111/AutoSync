@@ -37,6 +37,7 @@ export interface FusionResult {
 // Updated for V3 signal numbering (no forge_tags)
 
 const SOURCE_WEIGHT: Record<SignalSource, number> = {
+  engine_code_direct: 0.95,    // Engine code match is the strongest signal
   description_structured: 0.90,
   description_natural: 0.80,
   title: 0.75,

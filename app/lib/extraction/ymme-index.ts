@@ -42,6 +42,20 @@ export interface YmmeIndexEngine {
   name: string | null // "2.0 TFSI 300hp"
   yearFrom: number | null
   yearTo: number | null
+
+  // Display fields (denormalized from ymme_vehicle_specs via migration 014)
+  displacementCc: number | null
+  fuelType: string | null
+  powerHp: number | null
+  powerKw: number | null
+  torqueNm: number | null
+  cylinders: number | null
+  cylinderConfig: string | null  // "Inline", "V", "Flat/Boxer"
+  aspiration: string | null      // "Turbo", "Twin-turbo", "Supercharged"
+  driveType: string | null       // "FWD", "RWD", "AWD"
+  transmissionType: string | null
+  modification: string | null
+  displayName: string | null     // Cached formatted display name
 }
 
 export interface YmmeIndex {
@@ -57,6 +71,7 @@ export interface YmmeIndex {
   genToModels: Map<string, YmmeIndexModel[]>      // lowercased gen -> models
   enginesByModelId: Map<string, YmmeIndexEngine[]> // modelId -> engines
   engineCodeSet: Set<string>                       // All known engine codes (lowercased)
+  enginesByCode: Map<string, YmmeIndexEngine[]>    // lowercased code -> engines (cross-model)
 
   // Model->Make reverse lookup (for inferring make from model name)
   modelNameToMakes: Map<string, YmmeIndexMake[]>  // lowercased model name -> makes (unique models only)
@@ -278,14 +293,24 @@ async function buildYmmeIndex(
   })
 
   // Paginate engines (43,665+): fetch in chunks of 1000
+  // Include denormalized display fields (migration 014) for rich engine formatting
   const dbEngines = await fetchAllPaginated<{
     id: string; model_id: string; code: string | null; name: string | null
     year_from: number | null; year_to: number | null
-  }>(supabase, "ymme_engines", "id, model_id, code, name, year_from, year_to", {
-    eq: { active: true },
-    notNull: "code",
-    order: "code",
-  })
+    displacement_cc: number | null; fuel_type: string | null
+    power_hp: number | null; power_kw: number | null; torque_nm: number | null
+    cylinders: number | null; cylinder_config: string | null
+    aspiration: string | null; drive_type: string | null
+    transmission_type: string | null; modification: string | null
+    display_name: string | null
+  }>(supabase, "ymme_engines",
+    "id, model_id, code, name, year_from, year_to, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, cylinders, cylinder_config, aspiration, drive_type, transmission_type, modification, display_name",
+    {
+      eq: { active: true },
+      notNull: "code",
+      order: "code",
+    }
+  )
 
   const dbMakes = (makesRes.data || []) as Array<{ id: string; name: string; country: string | null }>
   const dbAliases = (aliasesRes.data || []) as Array<{ alias: string; entity_type: string; entity_id: string }>
@@ -375,16 +400,37 @@ async function buildYmmeIndex(
       name: e.name,
       yearFrom: e.year_from,
       yearTo: e.year_to,
+      // Display fields (from denormalized columns on ymme_engines)
+      displacementCc: e.displacement_cc,
+      fuelType: e.fuel_type,
+      powerHp: e.power_hp,
+      powerKw: e.power_kw,
+      torqueNm: e.torque_nm,
+      cylinders: e.cylinders,
+      cylinderConfig: e.cylinder_config,
+      aspiration: e.aspiration,
+      driveType: e.drive_type,
+      transmissionType: e.transmission_type,
+      modification: e.modification,
+      displayName: e.display_name,
     }))
 
   const enginesByModelId = new Map<string, YmmeIndexEngine[]>()
   const engineCodeSet = new Set<string>()
+  const enginesByCode = new Map<string, YmmeIndexEngine[]>()  // Global code -> engines lookup
 
   for (const e of engines) {
     let arr = enginesByModelId.get(e.modelId)
     if (!arr) { arr = []; enginesByModelId.set(e.modelId, arr) }
     arr.push(e)
-    engineCodeSet.add(e.code.toLowerCase())
+
+    const codeLower = e.code.toLowerCase()
+    engineCodeSet.add(codeLower)
+
+    // Build global code -> engines map (same code can appear in multiple models)
+    let codeArr = enginesByCode.get(codeLower)
+    if (!codeArr) { codeArr = []; enginesByCode.set(codeLower, codeArr) }
+    codeArr.push(e)
   }
 
   // ── Build compound makes scan regex ──
@@ -478,6 +524,7 @@ async function buildYmmeIndex(
     genToModels,
     enginesByModelId,
     engineCodeSet,
+    enginesByCode,
     modelNameToMakes,
     modelScanRegex,
     platformToMakes,

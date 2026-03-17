@@ -61,3 +61,18 @@ export type {
   ExtractionResultV2,
   FitmentRowFields,
 } from "./ymme-extract"
+
+// ── Engine Display Format System ────────────────────────────
+export {
+  formatEngineDisplay,
+  formatEngineDisplayBatch,
+  extractEngineHints,
+  scoreEngineMatch,
+  ENGINE_FORMAT_PRESETS,
+  DEFAULT_ENGINE_FORMAT,
+} from "../engine-format"
+export type {
+  EngineDisplayData,
+  EngineFormatPreset,
+  EngineHint,
+} from "../engine-format"
