@@ -24,7 +24,13 @@ import {
   ProductIcon,
   ChevronRightIcon,
   DeleteIcon,
+  AutomationIcon,
+  CheckCircleIcon,
+  SearchIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from "@shopify/polaris-icons";
+import { Spinner, Thumbnail } from "@shopify/polaris";
 import { data as routerData } from "react-router";
 
 import { authenticate } from "../shopify.server";
@@ -216,6 +222,11 @@ export default function FitmentManual() {
     skipped?: boolean;
   }>();
 
+  // Suggestion system
+  const suggestionFetcher = useFetcher();
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false);
+
   // Local state
   const [currentSelection, setCurrentSelection] =
     useState<VehicleSelection | null>(null);
@@ -232,6 +243,32 @@ export default function FitmentManual() {
     setLocalMapped(mappedCount);
     setLocalUnmapped(unmappedCount);
   }, [mappedCount, unmappedCount]);
+
+  // Auto-fetch suggestions when a product loads
+  useEffect(() => {
+    if (nextProduct?.title && !suggestionsLoaded) {
+      const cleanDesc = (nextProduct.description || "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      suggestionFetcher.submit(
+        JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: "" }),
+        { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
+      );
+      setSuggestionsLoaded(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextProduct?.id]);
+
+  // Reset suggestions when product changes
+  useEffect(() => {
+    setSuggestionsLoaded(false);
+    setShowAllSuggestions(false);
+  }, [nextProduct?.id]);
+
+  const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
+  const hints = (suggestionFetcher.data as any)?.hints ?? [];
+  const suggestionsLoading = suggestionFetcher.state === "submitting" || suggestionFetcher.state === "loading";
 
   const isSubmitting = fetcher.state !== "idle";
 
@@ -288,6 +325,23 @@ export default function FitmentManual() {
 
   const handleRemoveFitment = useCallback((index: number) => {
     setFitmentList((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const handleAcceptSuggestion = useCallback((suggestion: any) => {
+    const entry: FitmentEntry = {
+      make: suggestion.make.name,
+      model: suggestion.model?.name || "",
+      variant: suggestion.model?.generation || null,
+      year_from: suggestion.yearFrom || null,
+      year_to: suggestion.yearTo || null,
+      engine: suggestion.engine?.displayName || suggestion.engine?.name || null,
+      engine_code: suggestion.engine?.code || null,
+      fuel_type: suggestion.engine?.fuelType || null,
+      makeId: suggestion.make.id,
+      modelId: suggestion.model?.id || "",
+      engineId: suggestion.engine?.id || null,
+    };
+    setFitmentList((prev) => [...prev, entry]);
   }, []);
 
   const handleSaveAndNext = useCallback(() => {
@@ -582,6 +636,156 @@ export default function FitmentManual() {
 
                 {/* ─── RIGHT: Mapping Tools ─── */}
                 <BlockStack gap="400">
+                  {/* Smart Suggestions */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack gap="200" blockAlign="center">
+                          <div style={{
+                            width: "28px", height: "28px", borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-fill-magic-secondary)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "var(--p-color-icon-magic)",
+                          }}>
+                            <Icon source={AutomationIcon} />
+                          </div>
+                          <Text as="h2" variant="headingMd">Smart Suggestions</Text>
+                          {suggestionsLoading && <Spinner size="small" />}
+                          {!suggestionsLoading && suggestions.length > 0 && (
+                            <Badge tone="success">{suggestions.length}</Badge>
+                          )}
+                        </InlineStack>
+                        <Button
+                          size="slim"
+                          icon={SearchIcon}
+                          onClick={() => {
+                            if (!nextProduct) return;
+                            const cleanDesc = (nextProduct.description || "")
+                              .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                            suggestionFetcher.submit(
+                              JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: "" }),
+                              { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
+                            );
+                          }}
+                        >
+                          Re-scan
+                        </Button>
+                      </InlineStack>
+
+                      {/* Detected hints */}
+                      {hints.length > 0 && (
+                        <InlineStack gap="100" wrap>
+                          {hints.map((hint: any, i: number) => (
+                            <Badge key={i} tone={
+                              hint.type === "engine_code" ? "info" :
+                              hint.type === "displacement" ? "warning" :
+                              hint.type === "power" ? "success" : "info"
+                            }>
+                              {hint.type.replace(/_/g, " ")}: {hint.value}
+                            </Badge>
+                          ))}
+                        </InlineStack>
+                      )}
+
+                      <Divider />
+
+                      {suggestionsLoading ? (
+                        <Box padding="300">
+                          <BlockStack gap="200" inlineAlign="center">
+                            <Spinner size="small" />
+                            <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                              Scanning for vehicle matches...
+                            </Text>
+                          </BlockStack>
+                        </Box>
+                      ) : suggestions.length === 0 ? (
+                        <Box padding="300">
+                          <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                            No matches found. Use manual selection below.
+                          </Text>
+                        </Box>
+                      ) : (
+                        <BlockStack gap="200">
+                          {(showAllSuggestions ? suggestions : suggestions.slice(0, 4)).map((s: any, i: number) => {
+                            const yearRange = s.yearFrom && s.yearTo
+                              ? `${s.yearFrom}–${s.yearTo}`
+                              : s.yearFrom ? `${s.yearFrom}+` : "";
+                            // Check if already in fitment list
+                            const alreadyAdded = fitmentList.some(
+                              (f) => f.makeId === s.make.id && f.modelId === (s.model?.id || "") && f.engineId === (s.engine?.id || null)
+                            );
+
+                            return (
+                              <div
+                                key={`${s.make.id}-${s.model?.id || ""}-${s.engine?.id || ""}-${i}`}
+                                style={{
+                                  padding: "8px 12px",
+                                  borderRadius: "var(--p-border-radius-200)",
+                                  border: "1px solid var(--p-color-border-secondary)",
+                                  background: alreadyAdded
+                                    ? "var(--p-color-bg-fill-success-secondary)"
+                                    : s.confidence >= 0.8
+                                      ? "var(--p-color-bg-surface-secondary)"
+                                      : "var(--p-color-bg-surface)",
+                                  opacity: alreadyAdded ? 0.6 : 1,
+                                }}
+                              >
+                                <InlineStack align="space-between" blockAlign="center" wrap>
+                                  <BlockStack gap="050">
+                                    <InlineStack gap="100" blockAlign="center" wrap>
+                                      <Text as="span" variant="bodySm" fontWeight="semibold">
+                                        {s.make.name} {s.model?.name || ""}
+                                      </Text>
+                                      {s.model?.generation && <Badge>{s.model.generation}</Badge>}
+                                      {yearRange && <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>}
+                                    </InlineStack>
+                                    {s.engine && (
+                                      <InlineStack gap="100" wrap>
+                                        <Text as="span" variant="bodySm" tone="subdued">
+                                          {s.engine.displayName || s.engine.name || s.engine.code}
+                                        </Text>
+                                        {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
+                                      </InlineStack>
+                                    )}
+                                  </BlockStack>
+                                  <InlineStack gap="100" blockAlign="center">
+                                    <Badge tone={s.confidence >= 0.8 ? "success" : s.confidence >= 0.5 ? "info" : "warning"}>
+                                      {Math.round(s.confidence * 100)}%
+                                    </Badge>
+                                    {alreadyAdded ? (
+                                      <Badge tone="success">Added</Badge>
+                                    ) : (
+                                      <Button
+                                        size="slim"
+                                        variant="primary"
+                                        icon={CheckCircleIcon}
+                                        onClick={() => handleAcceptSuggestion(s)}
+                                      >
+                                        Add
+                                      </Button>
+                                    )}
+                                  </InlineStack>
+                                </InlineStack>
+                              </div>
+                            );
+                          })}
+                          {suggestions.length > 4 && (
+                            <InlineStack align="center">
+                              <Button
+                                variant="plain"
+                                size="slim"
+                                onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+                                icon={showAllSuggestions ? ChevronUpIcon : ChevronDownIcon}
+                              >
+                                {showAllSuggestions ? "Show less" : `Show all ${suggestions.length}`}
+                              </Button>
+                            </InlineStack>
+                          )}
+                        </BlockStack>
+                      )}
+                    </BlockStack>
+                  </Card>
+
                   {/* Vehicle Selector */}
                   <Card>
                     <BlockStack gap="400">
