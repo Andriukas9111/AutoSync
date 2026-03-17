@@ -34,7 +34,14 @@ import {
   useIndexResourceState,
   type IndexFiltersProps,
 } from "@shopify/polaris";
-import { SearchIcon } from "@shopify/polaris-icons";
+import {
+  SearchIcon,
+  ProductIcon,
+  FilterIcon,
+  ListBulletedIcon,
+  ChartVerticalFilledIcon,
+  ImportIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -416,6 +423,20 @@ export default function Products() {
           )}
           <Layout.Section>
             <Card>
+              <Box paddingBlockEnd="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={ImportIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Get Started</Text>
+                </InlineStack>
+              </Box>
               <EmptyState
                 heading="No products yet"
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
@@ -492,6 +513,19 @@ export default function Products() {
 
         {/* ── Status Summary ── */}
         <Card>
+          <BlockStack gap="400">
+          <InlineStack gap="200" blockAlign="center">
+            <div style={{
+              width: "28px", height: "28px",
+              borderRadius: "var(--p-border-radius-200)",
+              background: "var(--p-color-bg-surface-secondary)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--p-color-icon-emphasis)",
+            }}>
+              <Icon source={ChartVerticalFilledIcon} />
+            </div>
+            <Text as="h2" variant="headingMd">Status Overview</Text>
+          </InlineStack>
           <InlineStack gap="400" align="start" wrap>
             {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
               const count = statusBreakdown[key] ?? 0;
@@ -528,10 +562,24 @@ export default function Products() {
               </BlockStack>
             </div>
           </InlineStack>
+          </BlockStack>
         </Card>
 
         {/* ── Filters Row ── */}
         <Card padding="400">
+          <BlockStack gap="400">
+          <InlineStack gap="200" blockAlign="center">
+            <div style={{
+              width: "28px", height: "28px",
+              borderRadius: "var(--p-border-radius-200)",
+              background: "var(--p-color-bg-surface-secondary)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "var(--p-color-icon-emphasis)",
+            }}>
+              <Icon source={FilterIcon} />
+            </div>
+            <Text as="h2" variant="headingMd">Filters</Text>
+          </InlineStack>
           <InlineStack gap="300" align="start" blockAlign="end" wrap>
             <div style={{ flexGrow: 1, maxWidth: "400px" }}>
               <TextField
@@ -580,11 +628,26 @@ export default function Products() {
               </Button>
             )}
           </InlineStack>
+          </BlockStack>
         </Card>
 
         {/* ── Products Table ── */}
         {products.length === 0 && hasActiveFilters ? (
           <Card>
+            <Box paddingBlockEnd="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={ListBulletedIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Product Catalog</Text>
+              </InlineStack>
+            </Box>
             <EmptyState
               heading="No products match your filters"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
@@ -594,6 +657,20 @@ export default function Products() {
           </Card>
         ) : (
           <Card padding="0">
+            <Box padding="400" paddingBlockEnd="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={ListBulletedIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">Product Catalog</Text>
+              </InlineStack>
+            </Box>
             <IndexTable
               resourceName={resourceName}
               itemCount={products.length}

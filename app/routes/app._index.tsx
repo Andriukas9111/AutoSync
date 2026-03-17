@@ -14,7 +14,6 @@ import {
   ProgressBar,
   Banner,
   Divider,
-  Box,
   Icon,
 } from "@shopify/polaris";
 import {
@@ -32,6 +31,9 @@ import {
   DatabaseIcon,
   SettingsIcon,
   SearchIcon,
+  AlertCircleIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -637,12 +639,21 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <Box
-                            width="12px"
-                            minHeight="12px"
-                            borderRadius="100"
-                            background="bg-fill-caution"
-                          />
+                          <div
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-fill-caution-secondary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--p-color-icon-caution)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon source={AlertCircleIcon} />
+                          </div>
                           <Text as="span" variant="bodyMd">
                             Unmapped
                           </Text>
@@ -669,12 +680,21 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <Box
-                            width="12px"
-                            minHeight="12px"
-                            borderRadius="100"
-                            background="bg-fill-success"
-                          />
+                          <div
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-fill-success-secondary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--p-color-icon-success)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon source={CheckCircleIcon} />
+                          </div>
                           <Text as="span" variant="bodyMd">
                             Auto Mapped
                           </Text>
@@ -701,12 +721,21 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <Box
-                            width="12px"
-                            minHeight="12px"
-                            borderRadius="100"
-                            background="bg-fill-info"
-                          />
+                          <div
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-fill-info-secondary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--p-color-icon-info)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon source={TargetIcon} />
+                          </div>
                           <Text as="span" variant="bodyMd">
                             Manual Mapped
                           </Text>
@@ -733,12 +762,21 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <Box
-                            width="12px"
-                            minHeight="12px"
-                            borderRadius="100"
-                            background="bg-fill-warning"
-                          />
+                          <div
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-fill-warning-secondary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--p-color-icon-warning)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon source={AlertTriangleIcon} />
+                          </div>
                           <Text as="span" variant="bodyMd">
                             Flagged for Review
                           </Text>

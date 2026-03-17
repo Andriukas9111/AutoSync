@@ -21,7 +21,16 @@ import {
   Divider,
   Select,
   InlineGrid,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ProductIcon,
+  ConnectIcon,
+  PlusCircleIcon,
+  StatusIcon,
+  InfoIcon,
+  ExternalIcon,
+} from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
@@ -414,7 +423,18 @@ export default function ProductDetails() {
                     />
                   </div>
                   <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">{product.title}</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={ProductIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">{product.title}</Text>
+                    </InlineStack>
                     {product.description && (
                       <Text as="p" variant="bodySm" tone="subdued">
                         {product.description
@@ -486,9 +506,20 @@ export default function ProductDetails() {
             <Card>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
-                  <Text as="h2" variant="headingMd">
-                    Vehicle Fitments ({fitments.length})
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ConnectIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Vehicle Fitments ({fitments.length})
+                    </Text>
+                  </InlineStack>
                   <Badge tone={fitments.length > 0 ? "success" : "warning"}>
                     {fitments.length > 0 ? `${fitments.length} mapped` : "No fitments"}
                   </Badge>
@@ -571,7 +602,18 @@ export default function ProductDetails() {
             {/* Add Fitment Card */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Add Vehicle Fitment</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={PlusCircleIcon} />
+                  </div>
+                  <Text as="h2" variant="headingMd">Add Vehicle Fitment</Text>
+                </InlineStack>
 
                 <VehicleSelector onChange={handleVehicleChange} />
 
@@ -630,7 +672,18 @@ export default function ProductDetails() {
             {/* Status Card */}
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingSm">Fitment Status</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={StatusIcon} />
+                  </div>
+                  <Text as="h2" variant="headingSm">Fitment Status</Text>
+                </InlineStack>
                 <Select
                   label="Status"
                   labelHidden
@@ -650,7 +703,18 @@ export default function ProductDetails() {
             {/* Product Details Card */}
             <Card>
               <BlockStack gap="300">
-                <Text as="h2" variant="headingSm">Details</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                  }}>
+                    <Icon source={InfoIcon} />
+                  </div>
+                  <Text as="h2" variant="headingSm">Details</Text>
+                </InlineStack>
                 <BlockStack gap="200">
                   <InlineStack align="space-between">
                     <Text as="span" variant="bodySm" tone="subdued">Handle</Text>
@@ -697,7 +761,18 @@ export default function ProductDetails() {
             {product.shopify_product_id && (
               <Card>
                 <BlockStack gap="200">
-                  <Text as="h2" variant="headingSm">Shopify</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={ExternalIcon} />
+                    </div>
+                    <Text as="h2" variant="headingSm">Shopify</Text>
+                  </InlineStack>
                   <Button
                     fullWidth
                     onClick={() => {
