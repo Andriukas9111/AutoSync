@@ -179,7 +179,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (intent) {
     case "sync-nhtsa": {
       try {
-        const result = await syncNHTSAToYMME({ maxMakes: 50, delayMs: 300 });
+        const result = await syncNHTSAToYMME({ maxMakes: 200, delayMs: 200 });
         return data({
           ok: true,
           message: `NHTSA sync complete: ${result.makesProcessed} makes processed (${result.newMakes} new), ${result.modelsProcessed} models processed (${result.newModels} new). ${result.errors.length} errors.`,
