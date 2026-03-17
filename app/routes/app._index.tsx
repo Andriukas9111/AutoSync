@@ -28,35 +28,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Get tenant data
-  const { data: tenant } = await db
-    .from("tenants")
-    .select("*")
-    .eq("shop_id", shopId)
-    .single();
+  // Run all queries in parallel for fast loading
+  const [tenantResult, recentJobResult, pushCountResult] = await Promise.all([
+    db.from("tenants").select("*").eq("shop_id", shopId).single(),
+    db.from("sync_jobs")
+      .select("id, job_type, status, completed_at")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from("sync_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .eq("job_type", "push")
+      .eq("status", "completed"),
+  ]);
 
+  const tenant = tenantResult.data;
   const plan = (tenant?.plan ?? "free") as PlanTier;
   const limits = getPlanLimits(plan);
   const productCount: number = tenant?.product_count ?? 0;
   const fitmentCount: number = tenant?.fitment_count ?? 0;
   const isFirstTime = !tenant;
-
-  // Get latest sync job status
-  const { data: recentJob } = await db
-    .from("sync_jobs")
-    .select("id, job_type, status, completed_at")
-    .eq("shop_id", shopId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Check if push has ever been done
-  const { count: pushCount } = await db
-    .from("sync_jobs")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .eq("job_type", "push")
-    .eq("status", "completed");
 
   return {
     shopId,
@@ -65,8 +58,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productCount,
     fitmentCount,
     isFirstTime,
-    recentJob,
-    hasPushed: (pushCount ?? 0) > 0,
+    recentJob: recentJobResult.data,
+    hasPushed: (pushCountResult.count ?? 0) > 0,
   };
 };
 
@@ -119,7 +112,7 @@ export default function Dashboard() {
           </Banner>
         )}
 
-        {/* 2. Stats overview cards */}
+        {/* 2. Stats overview cards — equal height */}
         <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
           <Card>
             <BlockStack gap="200">
@@ -133,7 +126,7 @@ export default function Dashboard() {
                 onClick={() => navigate("/app/products")}
                 variant="plain"
               >
-                Fetch Products
+                View Products →
               </Button>
             </BlockStack>
           </Card>
@@ -150,7 +143,7 @@ export default function Dashboard() {
                 onClick={() => navigate("/app/fitment")}
                 variant="plain"
               >
-                Map Fitment
+                Map Fitment →
               </Button>
             </BlockStack>
           </Card>
@@ -163,20 +156,20 @@ export default function Dashboard() {
               <Text as="p" variant="headingXl">
                 {coverage}%
               </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Products with fitment data
-              </Text>
+              <Button
+                onClick={() => navigate("/app/fitment")}
+                variant="plain"
+              >
+                View Details →
+              </Button>
             </BlockStack>
           </Card>
 
           <Card>
             <BlockStack gap="200">
-              <Text as="h3" variant="headingSm" tone="subdued">
-                Current Plan
-              </Text>
               <InlineStack gap="200" align="start" blockAlign="center">
-                <Text as="p" variant="headingXl">
-                  {planLabel}
+                <Text as="h3" variant="headingSm" tone="subdued">
+                  Current Plan
                 </Text>
                 {plan === "free" && <Badge tone="warning">Free</Badge>}
                 {plan !== "free" && plan !== "enterprise" && (
@@ -186,14 +179,15 @@ export default function Dashboard() {
                   <Badge tone="info">Enterprise</Badge>
                 )}
               </InlineStack>
-              {plan !== "enterprise" && (
-                <Button
-                  onClick={() => navigate("/app/plans")}
-                  variant="plain"
-                >
-                  Upgrade
-                </Button>
-              )}
+              <Text as="p" variant="headingXl">
+                {planLabel}
+              </Text>
+              <Button
+                onClick={() => navigate("/app/plans")}
+                variant="plain"
+              >
+                {plan === "enterprise" ? "View Plan →" : "Upgrade →"}
+              </Button>
             </BlockStack>
           </Card>
         </InlineGrid>

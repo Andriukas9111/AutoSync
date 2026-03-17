@@ -34,46 +34,42 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Get tenant & plan
-  const tenant = await getTenant(shopId);
+  // Run all queries in parallel
+  const [tenantResult, makesResult, activeResult, fitmentResult] = await Promise.all([
+    getTenant(shopId),
+    db.from("ymme_makes")
+      .select("id, name, country, logo_url")
+      .eq("active", true)
+      .order("name", { ascending: true }),
+    db.from("tenant_active_makes")
+      .select("make_id")
+      .eq("shop_id", shopId),
+    db.from("vehicle_fitments")
+      .select("make")
+      .eq("shop_id", shopId)
+      .not("make", "is", null),
+  ]);
+
+  const tenant = tenantResult;
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
-  // Fetch all active makes
-  const { data: allMakes, error: makesError } = await db
-    .from("ymme_makes")
-    .select("id, name, country, logo_url")
-    .eq("active", true)
-    .order("name", { ascending: true });
-
-  if (makesError) {
-    console.error("Makes query error:", makesError);
+  if (makesResult.error) {
+    console.error("Makes query error:", makesResult.error);
+  }
+  if (activeResult.error) {
+    console.error("Tenant active makes query error:", activeResult.error);
   }
 
-  // Fetch tenant's active makes
-  const { data: tenantActiveMakes, error: activeError } = await db
-    .from("tenant_active_makes")
-    .select("make_id")
-    .eq("shop_id", shopId);
-
-  if (activeError) {
-    console.error("Tenant active makes query error:", activeError);
-  }
-
+  const allMakes = makesResult.data;
   const activeMakeIds = new Set(
-    (tenantActiveMakes ?? []).map((tam: any) => tam.make_id)
+    (activeResult.data ?? []).map((tam: any) => tam.make_id)
   );
-
-  // Count products mapped per make (from vehicle_fitments)
-  const { data: fitmentCounts } = await db
-    .from("vehicle_fitments")
-    .select("make")
-    .eq("shop_id", shopId);
 
   // Count products per make name
   const productCountByMake: Record<string, number> = {};
-  if (fitmentCounts) {
-    for (const row of fitmentCounts) {
+  if (fitmentResult.data) {
+    for (const row of fitmentResult.data) {
       if (row.make) {
         productCountByMake[row.make] = (productCountByMake[row.make] || 0) + 1;
       }

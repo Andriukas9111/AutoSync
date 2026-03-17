@@ -50,48 +50,46 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // 1. Get status counts
-  const { data: statusRows, error: statusErr } = await db
-    .from("products")
-    .select("fitment_status")
-    .eq("shop_id", shopId);
+  // Run status counts, recent fitments, and tenant lookup in parallel
+  // Use individual count queries per status instead of fetching ALL products
+  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "manual_mapped", "partial", "flagged"];
 
-  // Aggregate counts in JS since Supabase JS client doesn't support GROUP BY with count easily
-  const countMap: Record<string, number> = {};
-  if (statusRows) {
-    for (const row of statusRows) {
-      const s = row.fitment_status || "unmapped";
-      countMap[s] = (countMap[s] || 0) + 1;
-    }
-  }
+  const [
+    totalCountResult,
+    recentRowsResult,
+    tenantResult,
+    ...statusCountResults
+  ] = await Promise.all([
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("vehicle_fitments")
+      .select("id, make, model, year_start, year_end, created_at, product_id")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    getTenant(shopId),
+    ...statuses.map((s) =>
+      db.from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("fitment_status", s)
+    ),
+  ]);
 
-  const statusCounts: StatusCount[] = Object.entries(countMap).map(
-    ([fitment_status, count]) => ({
-      fitment_status: fitment_status as FitmentStatus,
-      count,
-    }),
-  );
+  const totalProducts = totalCountResult.count ?? 0;
 
-  const totalProducts = statusRows?.length ?? 0;
+  const statusCounts: StatusCount[] = statuses.map((s, i) => ({
+    fitment_status: s,
+    count: statusCountResults[i].count ?? 0,
+  }));
 
-  // 2. Get recent fitments with product title
-  const { data: recentRows } = await db
-    .from("vehicle_fitments")
-    .select("id, make, model, year_start, year_end, created_at, product_id")
-    .eq("shop_id", shopId)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  // Fetch product titles for the fitments
+  // Fetch product titles for recent fitments (second pass — depends on first result)
+  const recentRows = recentRowsResult.data;
   let recentFitments: RecentFitment[] = [];
   if (recentRows && recentRows.length > 0) {
     const productIds = [...new Set(recentRows.map((r: any) => r.product_id).filter(Boolean))];
     const { data: products } = productIds.length > 0
-      ? await db
-          .from("products")
-          .select("id, title")
-          .in("id", productIds)
-      : { data: [] };
+      ? await db.from("products").select("id, title").in("id", productIds)
+      : { data: [] as any[] };
 
     const titleMap: Record<string, string> = {};
     if (products) {
@@ -111,8 +109,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }));
   }
 
-  // 3. Get tenant plan
-  const tenant = await getTenant(shopId);
+  const tenant = tenantResult;
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
   const autoExtractionAllowed = !!limits.features.autoExtraction;

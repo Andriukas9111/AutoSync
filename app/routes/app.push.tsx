@@ -37,85 +37,68 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Get tenant & plan
-  const tenant = await getTenant(shopId);
+  // Run ALL queries in parallel — including tenant lookup
+  const [
+    tenant,
+    fitmentCountResult,
+    pushedCountResult,
+    latestPushJobResult,
+    latestCollectionJobResult,
+    collectionCountResult,
+    appSettingsResult,
+    pushHistoryResult,
+  ] = await Promise.all([
+    getTenant(shopId),
+    db.from("vehicle_fitments")
+      .select("product_id", { count: "exact", head: true })
+      .eq("shop_id", shopId),
+    db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .like("tags::text", "%_autosync_%"),
+    db.from("sync_jobs")
+      .select("*")
+      .eq("shop_id", shopId)
+      .eq("type", "push")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from("sync_jobs")
+      .select("*")
+      .eq("shop_id", shopId)
+      .eq("type", "collections")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    db.from("collection_mappings")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId),
+    db.from("app_settings")
+      .select("*")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
+    db.from("sync_jobs")
+      .select("*")
+      .eq("shop_id", shopId)
+      .in("type", ["push", "collections"])
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
+
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
-
-  // Count products with fitments (distinct product_id in vehicle_fitments)
-  const { count: productsWithFitments } = await db
-    .from("vehicle_fitments")
-    .select("product_id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-
-  // Count products already pushed (have _autosync_ tags)
-  const { data: pushedProducts } = await db
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .filter("tags", "cs", "{_autosync_}");
-
-  // Alternative: count products where any tag starts with _autosync_
-  // Using a raw count since Supabase array contains is tricky
-  const { count: pushedCount } = await db
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .like("tags::text", "%_autosync_%");
-
-  // Get latest push job
-  const { data: latestPushJob } = await db
-    .from("sync_jobs")
-    .select("*")
-    .eq("shop_id", shopId)
-    .eq("type", "push")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Get latest collections job
-  const { data: latestCollectionJob } = await db
-    .from("sync_jobs")
-    .select("*")
-    .eq("shop_id", shopId)
-    .eq("type", "collections")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  // Get collection count
-  const { count: collectionCount } = await db
-    .from("collection_mappings")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-
-  // Get app settings
-  const { data: appSettings } = await db
-    .from("app_settings")
-    .select("*")
-    .eq("shop_id", shopId)
-    .maybeSingle();
-
-  // Get push history (last 10)
-  const { data: pushHistory } = await db
-    .from("sync_jobs")
-    .select("*")
-    .eq("shop_id", shopId)
-    .in("type", ["push", "collections"])
-    .order("created_at", { ascending: false })
-    .limit(10);
 
   return {
     plan,
     limits,
     allLimits: PLAN_LIMITS,
-    productsWithFitments: productsWithFitments ?? 0,
-    pushedCount: pushedCount ?? 0,
-    collectionCount: collectionCount ?? 0,
-    latestPushJob,
-    latestCollectionJob,
-    appSettings,
-    pushHistory: pushHistory ?? [],
+    productsWithFitments: fitmentCountResult.count ?? 0,
+    pushedCount: pushedCountResult.count ?? 0,
+    collectionCount: collectionCountResult.count ?? 0,
+    latestPushJob: latestPushJobResult.data,
+    latestCollectionJob: latestCollectionJobResult.data,
+    appSettings: appSettingsResult.data,
+    pushHistory: pushHistoryResult.data ?? [],
   };
 };
 

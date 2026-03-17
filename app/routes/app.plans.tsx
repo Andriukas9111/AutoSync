@@ -431,77 +431,116 @@ export default function Plans() {
           </p>
         </Banner>
 
-        {/* Plan cards grid */}
-        <InlineGrid columns={{ xs: 1, sm: 2, lg: 3 }} gap="400">
+        {/* Plan cards grid — equal height with buttons pinned to bottom */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "var(--p-space-400)",
+        }}>
           {PLANS.map((plan) => {
             const btnProps = getButtonProps(plan.tier);
             const isCurrent = plan.tier === currentPlan;
+            const isPopular = plan.tier === "growth";
 
             return (
-              <Card key={plan.tier}>
-                <BlockStack gap="400">
-                  {/* Header */}
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingLg">
-                      {plan.name}
-                    </Text>
-                    {isCurrent && <Badge tone="success">Current</Badge>}
-                  </InlineStack>
+              <div
+                key={plan.tier}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  borderRadius: "var(--p-border-radius-300)",
+                  overflow: "hidden",
+                  outline: isPopular
+                    ? "2px solid var(--p-color-border-info)"
+                    : isCurrent
+                      ? "2px solid var(--p-color-border-success)"
+                      : undefined,
+                }}
+              >
+                {isPopular && (
+                  <div style={{
+                    background: "var(--p-color-bg-fill-info)",
+                    color: "var(--p-color-text-info-on-bg-fill)",
+                    textAlign: "center",
+                    padding: "6px 0",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    letterSpacing: "0.5px",
+                  }}>
+                    MOST POPULAR
+                  </div>
+                )}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                  <Card>
+                    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
+                      {/* Header + Price */}
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="h2" variant="headingLg">
+                            {plan.name}
+                          </Text>
+                          {isCurrent && <Badge tone="success">Current</Badge>}
+                        </InlineStack>
 
-                  {/* Price */}
-                  <BlockStack gap="100">
-                    <InlineStack gap="100" blockAlign="end">
-                      <Text as="span" variant="heading2xl">
-                        {plan.price}
-                      </Text>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {plan.priceNote}
-                      </Text>
-                    </InlineStack>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {plan.description}
-                    </Text>
-                  </BlockStack>
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="end">
+                            <Text as="span" variant="heading2xl">
+                              {plan.price}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {plan.priceNote}
+                            </Text>
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {plan.description}
+                          </Text>
+                        </BlockStack>
 
-                  <Divider />
+                        <Divider />
+                      </BlockStack>
 
-                  {/* Features list */}
-                  <BlockStack gap="200">
-                    {plan.highlights.map((feature, idx) => (
-                      <InlineStack key={idx} gap="200" blockAlign="center">
-                        <Text as="span" variant="bodySm" tone="success">
-                          {"\u2713"}
-                        </Text>
-                        <Text as="span" variant="bodySm">
-                          {feature}
-                        </Text>
-                      </InlineStack>
-                    ))}
-                  </BlockStack>
+                      {/* Features list — flex-grow pushes button to bottom */}
+                      <div style={{ flex: 1, paddingTop: "var(--p-space-400)", paddingBottom: "var(--p-space-400)" }}>
+                        <BlockStack gap="200">
+                          {plan.highlights.map((feature, idx) => (
+                            <InlineStack key={idx} gap="200" blockAlign="center">
+                              <span style={{ color: "var(--p-color-text-success)", fontSize: "14px", flexShrink: 0 }}>
+                                ✓
+                              </span>
+                              <Text as="span" variant="bodySm">
+                                {feature}
+                              </Text>
+                            </InlineStack>
+                          ))}
+                        </BlockStack>
+                      </div>
 
-                  <Divider />
-
-                  {/* Action button */}
-                  <Button
-                    variant={isCurrent ? undefined : "primary"}
-                    tone={btnProps.tone === "critical" ? "critical" : undefined}
-                    disabled={btnProps.disabled}
-                    onClick={() => {
-                      if (!isCurrent) {
-                        // In production, this would redirect to Shopify managed pricing.
-                        // For now, show the plans page with info.
-                        navigate("/app/plans");
-                      }
-                    }}
-                    fullWidth
-                  >
-                    {btnProps.label}
-                  </Button>
-                </BlockStack>
-              </Card>
+                      {/* Action button — always pinned to bottom */}
+                      <div>
+                        <Divider />
+                        <div style={{ paddingTop: "var(--p-space-400)" }}>
+                          <Button
+                            variant={isCurrent ? undefined : "primary"}
+                            tone={btnProps.tone === "critical" ? "critical" : undefined}
+                            disabled={btnProps.disabled}
+                            onClick={() => {
+                              if (!isCurrent) {
+                                navigate("/app/plans");
+                              }
+                            }}
+                            fullWidth
+                          >
+                            {btnProps.label}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </div>
             );
           })}
-        </InlineGrid>
+        </div>
 
         {/* Feature comparison table */}
         <Card>

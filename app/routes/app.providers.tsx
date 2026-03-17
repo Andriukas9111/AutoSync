@@ -58,25 +58,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Fetch providers
-  const { data: providers, error } = await db
-    .from("providers")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("created_at", { ascending: false });
+  // Run queries in parallel
+  const [providersResult, tenant] = await Promise.all([
+    db.from("providers")
+      .select("*")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false }),
+    getTenant(shopId),
+  ]);
 
-  if (error) {
-    console.error("Failed to fetch providers:", error.message);
+  if (providersResult.error) {
+    console.error("Failed to fetch providers:", providersResult.error.message);
   }
 
-  // Fetch plan limits for gate display
-  const tenant = await getTenant(shopId);
   const plan = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
+  const providers = (providersResult.data ?? []) as Provider[];
 
   return {
-    providers: (providers ?? []) as Provider[],
-    providerCount: (providers ?? []).length,
+    providers,
+    providerCount: providers.length,
     providerLimit: limits.providers,
     plan,
   };

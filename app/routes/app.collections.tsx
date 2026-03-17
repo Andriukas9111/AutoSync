@@ -34,62 +34,52 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Get tenant & plan
-  const tenant = await getTenant(shopId);
+  // Run ALL queries in parallel — including tenant lookup
+  const [tenant, collectionsResult, appSettingsResult, fitmentMakesResult, fitmentMakeModelsResult] = await Promise.all([
+    getTenant(shopId),
+    db.from("collection_mappings")
+      .select("*")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false }),
+    db.from("app_settings")
+      .select("*")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
+    db.from("vehicle_fitments")
+      .select("make")
+      .eq("shop_id", shopId)
+      .not("make", "is", null),
+    db.from("vehicle_fitments")
+      .select("make, model")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .not("model", "is", null),
+  ]);
+
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
-  // Fetch existing collection mappings
-  const { data: collections, error: collectionsError } = await db
-    .from("collection_mappings")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("created_at", { ascending: false });
-
-  if (collectionsError) {
-    console.error("Collection mappings query error:", collectionsError);
+  if (collectionsResult.error) {
+    console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Get app settings
-  const { data: appSettings } = await db
-    .from("app_settings")
-    .select("*")
-    .eq("shop_id", shopId)
-    .maybeSingle();
-
-  // Count distinct makes from fitments for preview
-  const { data: fitmentMakes } = await db
-    .from("vehicle_fitments")
-    .select("make")
-    .eq("shop_id", shopId);
-
-  // Deduplicate makes
-  const uniqueMakes = fitmentMakes
-    ? [...new Set(fitmentMakes.map((f: any) => f.make).filter(Boolean))]
+  // Deduplicate makes and make+model combos in JS
+  const uniqueMakes = fitmentMakesResult.data
+    ? [...new Set(fitmentMakesResult.data.map((f: any) => f.make).filter(Boolean))]
     : [];
 
-  // Count distinct make+model combos for preview
-  const { data: fitmentMakeModels } = await db
-    .from("vehicle_fitments")
-    .select("make, model")
-    .eq("shop_id", shopId);
-
-  const uniqueMakeModels = fitmentMakeModels
-    ? [
-        ...new Set(
-          fitmentMakeModels
-            .filter((f: any) => f.make && f.model)
-            .map((f: any) => `${f.make}|${f.model}`)
-        ),
-      ]
+  const uniqueMakeModels = fitmentMakeModelsResult.data
+    ? [...new Set(
+        fitmentMakeModelsResult.data.map((f: any) => `${f.make}|${f.model}`)
+      )]
     : [];
 
   return {
     plan,
     limits,
     allLimits: PLAN_LIMITS,
-    collections: collections ?? [],
-    appSettings,
+    collections: collectionsResult.data ?? [],
+    appSettings: appSettingsResult.data,
     uniqueMakes,
     uniqueMakeModelCount: uniqueMakeModels.length,
   };

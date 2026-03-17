@@ -1,8 +1,8 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
+import { AppProvider as PolarisAppProvider, Frame } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
@@ -12,76 +12,90 @@ import { getPlanLimits } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  try {
-    const { session } = await authenticate.admin(request);
-    const shopId = session.shop;
-    console.log("[app.tsx] Authenticated shop:", shopId);
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
 
-    // Ensure tenant record exists (upsert on every load)
-    const { data: tenant, error: tenantError } = await db
-      .from("tenants")
-      .select("*")
-      .eq("shop_id", shopId)
-      .single();
+  // Ensure tenant record exists (upsert on every load)
+  const { data: tenant, error: tenantError } = await db
+    .from("tenants")
+    .select("*")
+    .eq("shop_id", shopId)
+    .single();
 
-    if (tenantError) {
-      console.log("[app.tsx] Tenant query error (expected for first install):", tenantError.message);
+  if (!tenant) {
+    // First-time install — create tenant record
+    const { error: upsertError } = await db.from("tenants").upsert({
+      shop_id: shopId,
+      shop_domain: shopId,
+      plan: "free" as PlanTier,
+      plan_status: "active",
+      installed_at: new Date().toISOString(),
+    });
+    if (upsertError) {
+      console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
-
-    if (!tenant) {
-      // First-time install — create tenant record
-      console.log("[app.tsx] Creating new tenant for:", shopId);
-      const { error: upsertError } = await db.from("tenants").upsert({
-        shop_id: shopId,
-        shop_domain: shopId,
-        plan: "free" as PlanTier,
-        plan_status: "active",
-        installed_at: new Date().toISOString(),
-      });
-      if (upsertError) {
-        console.error("[app.tsx] Tenant upsert error:", upsertError.message);
-      }
-    }
-
-    const plan = (tenant?.plan ?? "free") as PlanTier;
-    const limits = getPlanLimits(plan);
-
-    console.log("[app.tsx] Loader success — plan:", plan);
-    return {
-      apiKey: process.env.SHOPIFY_API_KEY || "",
-      shopId,
-      plan,
-      limits,
-      productCount: tenant?.product_count ?? 0,
-      fitmentCount: tenant?.fitment_count ?? 0,
-      isFirstTime: !tenant,
-    };
-  } catch (err: unknown) {
-    console.error("[app.tsx] LOADER CRASH:", err instanceof Error ? err.message : String(err));
-    console.error("[app.tsx] Stack:", err instanceof Error ? err.stack : "no stack");
-    throw err;
   }
+
+  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const limits = getPlanLimits(plan);
+
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    shopId,
+    plan,
+    limits,
+    productCount: tenant?.product_count ?? 0,
+    fitmentCount: tenant?.fitment_count ?? 0,
+    isFirstTime: !tenant,
+  };
 };
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <PolarisAppProvider i18n={enTranslations}>
-        <s-app-nav>
-          <s-link href="/app">Dashboard</s-link>
-          <s-link href="/app/products">Products</s-link>
-          <s-link href="/app/fitment">Fitment</s-link>
-          <s-link href="/app/push">Push to Shopify</s-link>
-          <s-link href="/app/providers">Providers</s-link>
-          <s-link href="/app/collections">Collections</s-link>
-          <s-link href="/app/vehicles">Vehicles</s-link>
-          <s-link href="/app/settings">Settings</s-link>
-          <s-link href="/app/plans">Plans</s-link>
-          <s-link href="/app/help">Help</s-link>
-        </s-app-nav>
-        <Outlet />
+        <Frame>
+          <s-app-nav>
+            <s-link href="/app">Dashboard</s-link>
+            <s-link href="/app/products">Products</s-link>
+            <s-link href="/app/fitment">Fitment</s-link>
+            <s-link href="/app/push">Push to Shopify</s-link>
+            <s-link href="/app/providers">Providers</s-link>
+            <s-link href="/app/collections">Collections</s-link>
+            <s-link href="/app/vehicles">Vehicles</s-link>
+            <s-link href="/app/settings">Settings</s-link>
+            <s-link href="/app/plans">Plans</s-link>
+            <s-link href="/app/help">Help</s-link>
+          </s-app-nav>
+          {/* Global navigation loading bar */}
+          {isNavigating && (
+            <div
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: "3px",
+                zIndex: 100,
+                background: "var(--p-color-bg-fill-info)",
+                animation: "loadingBar 1.5s ease-in-out infinite",
+              }}
+            />
+          )}
+          <style>{`
+            @keyframes loadingBar {
+              0% { transform: scaleX(0); transform-origin: left; }
+              50% { transform: scaleX(1); transform-origin: left; }
+              50.1% { transform: scaleX(1); transform-origin: right; }
+              100% { transform: scaleX(0); transform-origin: right; }
+            }
+          `}</style>
+          <Outlet />
+        </Frame>
       </PolarisAppProvider>
     </AppProvider>
   );

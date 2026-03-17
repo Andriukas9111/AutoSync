@@ -29,17 +29,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  const tenant = await getTenant(shopId);
+  // Run queries in parallel
+  const [tenant, providerCountResult] = await Promise.all([
+    getTenant(shopId),
+    db.from("providers")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId),
+  ]);
+
   const plan = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
-
-  // Count existing providers
-  const { count } = await db
-    .from("providers")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-
-  const providerCount = count ?? 0;
+  const providerCount = providerCountResult.count ?? 0;
   const atLimit =
     limits.providers !== Infinity && providerCount >= limits.providers;
 

@@ -33,21 +33,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Get tenant
-  const tenant = await getTenant(shopId);
-  const plan: PlanTier = tenant?.plan ?? "free";
+  // Run queries in parallel
+  const [tenant, appSettingsResult] = await Promise.all([
+    getTenant(shopId),
+    db.from("app_settings")
+      .select("*")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
+  ]);
 
-  // Fetch app_settings
-  const { data: appSettings } = await db
-    .from("app_settings")
-    .select("*")
-    .eq("shop_id", shopId)
-    .maybeSingle();
+  const plan: PlanTier = tenant?.plan ?? "free";
 
   return {
     plan,
     shopId,
-    appSettings,
+    appSettings: appSettingsResult.data,
   };
 };
 
