@@ -16,6 +16,8 @@ import {
   Divider,
   Box,
   Select,
+  DataTable,
+  ProgressBar,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -61,13 +63,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Fetch all data in parallel
-  const [tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes] = await Promise.all([
+  const [tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes, recentJobsRes, providersRes] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
     db.from("ymme_engines").select("*", { count: "exact", head: true }),
     db.from("sync_jobs").select("*", { count: "exact", head: true }),
     db.from("ymme_aliases").select("*", { count: "exact", head: true }),
+    // Recent sync jobs for usage analytics (last 50)
+    db.from("sync_jobs")
+      .select("shop_id, type, status, created_at, completed_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
+    // Provider counts per tenant
+    db.from("providers")
+      .select("shop_id, name, status, product_count"),
   ]);
 
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
@@ -90,6 +100,56 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalJobs: jobsRes.count ?? 0,
   };
 
+  // ── Usage analytics per merchant ─────────────────────────
+  const recentJobs = (recentJobsRes.data ?? []) as Array<{
+    shop_id: string;
+    type: string;
+    status: string;
+    created_at: string;
+    completed_at: string | null;
+  }>;
+
+  // Sync job counts per tenant
+  const jobsByTenant: Record<string, { total: number; completed: number; failed: number; lastJob: string | null }> = {};
+  for (const job of recentJobs) {
+    if (!jobsByTenant[job.shop_id]) {
+      jobsByTenant[job.shop_id] = { total: 0, completed: 0, failed: 0, lastJob: null };
+    }
+    jobsByTenant[job.shop_id].total++;
+    if (job.status === "completed") jobsByTenant[job.shop_id].completed++;
+    if (job.status === "failed") jobsByTenant[job.shop_id].failed++;
+    if (!jobsByTenant[job.shop_id].lastJob) {
+      jobsByTenant[job.shop_id].lastJob = job.created_at;
+    }
+  }
+
+  // Provider counts per tenant
+  const providersByTenant: Record<string, number> = {};
+  for (const p of (providersRes.data ?? []) as Array<{ shop_id: string }>) {
+    providersByTenant[p.shop_id] = (providersByTenant[p.shop_id] ?? 0) + 1;
+  }
+
+  // Build tenant usage data
+  const tenantUsage = tenantList.map((t) => ({
+    shopId: t.shop_id,
+    domain: t.shop_domain ?? t.shop_id,
+    plan: t.plan,
+    products: t.product_count ?? 0,
+    fitments: t.fitment_count ?? 0,
+    providers: providersByTenant[t.shop_id] ?? 0,
+    recentJobs: jobsByTenant[t.shop_id]?.total ?? 0,
+    jobSuccessRate: jobsByTenant[t.shop_id]
+      ? jobsByTenant[t.shop_id].total > 0
+        ? Math.round((jobsByTenant[t.shop_id].completed / jobsByTenant[t.shop_id].total) * 100)
+        : 0
+      : 0,
+    lastActivity: jobsByTenant[t.shop_id]?.lastJob ?? t.installed_at,
+    isActive: !t.uninstalled_at,
+  }));
+
+  // Find the most active tenant (most products)
+  const maxProducts = Math.max(...tenantList.map((t) => t.product_count ?? 0), 1);
+
   return {
     tenants: tenantList,
     totalTenants,
@@ -97,6 +157,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalFitments,
     planBreakdown,
     ymmeCounts,
+    tenantUsage,
+    maxProducts,
+    recentJobs: recentJobs.slice(0, 10),
   };
 };
 
@@ -173,6 +236,9 @@ export default function AdminPanel() {
     totalFitments,
     planBreakdown,
     ymmeCounts,
+    tenantUsage,
+    maxProducts,
+    recentJobs,
   } = useLoaderData<typeof loader>();
 
   const fetcher = useFetcher<{ ok: boolean; message: string }>();
@@ -332,6 +398,67 @@ export default function AdminPanel() {
             </BlockStack>
           </Card>
         </Layout.Section>
+
+        {/* ---- Usage Analytics Per Merchant ---- */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Usage Analytics by Merchant
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Product count relative to the most active merchant. Shows recent sync activity and provider usage.
+              </Text>
+
+              <DataTable
+                columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text", "text"]}
+                headings={["Merchant", "Plan", "Products", "Fitments", "Providers", "Success Rate", "Last Activity"]}
+                rows={tenantUsage.map((t: typeof tenantUsage[number]) => [
+                  t.domain.replace(".myshopify.com", ""),
+                  t.plan,
+                  t.products.toLocaleString(),
+                  t.fitments.toLocaleString(),
+                  String(t.providers),
+                  t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "—",
+                  t.lastActivity
+                    ? new Date(t.lastActivity).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                      })
+                    : "—",
+                ])}
+              />
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* ---- Recent Sync Activity ---- */}
+        {recentJobs.length > 0 && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  Recent Sync Activity (Last 10)
+                </Text>
+                <DataTable
+                  columnContentTypes={["text", "text", "text", "text"]}
+                  headings={["Merchant", "Job Type", "Status", "When"]}
+                  rows={recentJobs.map((j: typeof recentJobs[number]) => [
+                    j.shop_id.replace(".myshopify.com", ""),
+                    j.type.replace(/_/g, " "),
+                    j.status,
+                    new Date(j.created_at).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                  ])}
+                />
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        )}
 
         {/* ---- Tenant List ---- */}
         <Layout.Section>

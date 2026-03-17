@@ -55,10 +55,11 @@ app/
     app.vehicles.tsx    # YMME browser
     app.providers.tsx   # Provider list
     app.providers.new.tsx # New provider form
+    app.analytics.tsx   # Analytics dashboard (plan-gated: none/basic/full/full_export)
     app.plans.tsx       # Plan comparison (6 tiers)
-    app.help.tsx        # Help documentation (10 sections)
+    app.help.tsx        # Help documentation (12 sections)
     app.settings.tsx    # App settings
-    app.admin.tsx       # Admin panel (owner-only)
+    app.admin.tsx       # Admin panel (owner-only, usage analytics per merchant)
     app.api.*.tsx       # API routes (fetch-products, auto-extract, push, upload, ymme)
     proxy.tsx           # App Proxy for storefront widgets
     webhooks.*.tsx      # Webhook handlers
