@@ -152,212 +152,186 @@ async function buildCollectionTargets(
 ): Promise<CollectionTarget[]> {
   const targets: CollectionTarget[] = [];
 
+  // Query ALL fitments (both with and without YMME IDs)
+  // This ensures collections work whether fitments came from auto-extraction
+  // (no ymme IDs) or manual mapping (with ymme IDs).
+  const { data: fitments, error } = await db
+    .from("vehicle_fitments")
+    .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
+    .eq("shop_id", shopId)
+    .not("make", "is", null);
+
+  if (error || !fitments || fitments.length === 0) return [];
+
+  // Resolve YMME IDs from text names when missing
+  const makeNameToId = new Map<string, string | number>();
+  const modelNameToId = new Map<string, string | number>();
+
+  // Collect all unique makes/models that need ID resolution
+  const makesNeedingId = new Set<string>();
+  const modelsNeedingId = new Set<string>();
+  for (const f of fitments) {
+    if (!f.ymme_make_id && f.make) makesNeedingId.add(f.make);
+    if (!f.ymme_model_id && f.model) modelsNeedingId.add(f.model);
+  }
+
+  // Resolve make IDs from names
+  if (makesNeedingId.size > 0) {
+    const { data: makeRows } = await db
+      .from("ymme_makes")
+      .select("id, name")
+      .in("name", [...makesNeedingId]);
+    if (makeRows) {
+      for (const row of makeRows) {
+        makeNameToId.set(row.name, row.id);
+      }
+    }
+  }
+
+  // Resolve model IDs from names
+  if (modelsNeedingId.size > 0) {
+    const namesBatch = [...modelsNeedingId];
+    for (let i = 0; i < namesBatch.length; i += 500) {
+      const batch = namesBatch.slice(i, i + 500);
+      const { data: modelRows } = await db
+        .from("ymme_models")
+        .select("id, name")
+        .in("name", batch);
+      if (modelRows) {
+        for (const row of modelRows) {
+          modelNameToId.set(row.name, row.id);
+        }
+      }
+    }
+  }
+
+  // Normalise fitments: ensure every entry has a makeId and makeName
+  interface NormalisedFitment {
+    make: string;
+    model: string | null;
+    makeId: string | number | null;
+    modelId: string | number | null;
+    yearFrom: number | null;
+    yearTo: number | null;
+  }
+
+  const normalised: NormalisedFitment[] = fitments.map((f: any) => ({
+    make: f.make,
+    model: f.model || null,
+    makeId: f.ymme_make_id || makeNameToId.get(f.make) || null,
+    modelId: f.ymme_model_id || (f.model ? modelNameToId.get(f.model) : null) || null,
+    yearFrom: f.year_from,
+    yearTo: f.year_to,
+  }));
+
+  // Deduplicate targets based on strategy
   if (strategy === "make") {
-    // Distinct makes only
-    const { data: makes, error } = await db
-      .from("vehicle_fitments")
-      .select("ymme_make_id")
-      .eq("shop_id", shopId)
-      .not("ymme_make_id", "is", null);
-
-    if (error || !makes) return [];
-
-    // Deduplicate make IDs
-    const uniqueMakeIds = [
-      ...new Set(makes.map((m: any) => m.ymme_make_id)),
-    ];
-
-    // Resolve make names from ymme_makes table
-    const makeNames = await resolveMakeNames(uniqueMakeIds);
-
-    for (const makeId of uniqueMakeIds) {
-      const makeName = makeNames.get(String(makeId));
-      if (!makeName) continue;
-
+    const seenMakes = new Set<string>();
+    for (const f of normalised) {
+      const key = f.make.toLowerCase();
+      if (seenMakes.has(key)) continue;
+      seenMakes.add(key);
       targets.push({
-        make: makeName,
+        make: f.make,
         model: null,
         yearRange: null,
         yearFrom: null,
         yearTo: null,
-        ymme_make_id: makeId,
+        ymme_make_id: f.makeId,
         ymme_model_id: null,
       });
     }
   } else if (strategy === "make_model") {
-    // Distinct make + model pairs
-    const { data: fitments, error } = await db
-      .from("vehicle_fitments")
-      .select("ymme_make_id, ymme_model_id")
-      .eq("shop_id", shopId)
-      .not("ymme_make_id", "is", null);
-
-    if (error || !fitments) return [];
-
-    // Collect unique make IDs and make+model pairs
-    const uniqueMakeIds = new Set<string | number>();
-    const uniquePairs = new Map<string, { makeId: any; modelId: any }>();
-
-    for (const f of fitments) {
-      uniqueMakeIds.add(f.ymme_make_id);
-      if (f.ymme_model_id) {
-        const key = `${f.ymme_make_id}:${f.ymme_model_id}`;
-        if (!uniquePairs.has(key)) {
-          uniquePairs.set(key, {
-            makeId: f.ymme_make_id,
-            modelId: f.ymme_model_id,
-          });
-        }
-      }
-    }
-
-    const makeNames = await resolveMakeNames([...uniqueMakeIds]);
-    const modelNames = await resolveModelNames(
-      [...uniquePairs.values()].map((p) => p.modelId),
-    );
-
-    // Add make-level collections first
-    for (const makeId of uniqueMakeIds) {
-      const makeName = makeNames.get(String(makeId));
-      if (!makeName) continue;
-
+    // Make-level collections
+    const seenMakes = new Set<string>();
+    for (const f of normalised) {
+      const key = f.make.toLowerCase();
+      if (seenMakes.has(key)) continue;
+      seenMakes.add(key);
       targets.push({
-        make: makeName,
+        make: f.make,
         model: null,
         yearRange: null,
         yearFrom: null,
         yearTo: null,
-        ymme_make_id: makeId,
+        ymme_make_id: f.makeId,
         ymme_model_id: null,
       });
     }
 
-    // Then add make+model collections
-    for (const [, pair] of uniquePairs) {
-      const makeName = makeNames.get(String(pair.makeId));
-      const modelName = modelNames.get(String(pair.modelId));
-      if (!makeName || !modelName) continue;
-
+    // Make+Model collections
+    const seenPairs = new Set<string>();
+    for (const f of normalised) {
+      if (!f.model) continue;
+      const key = `${f.make.toLowerCase()}|${f.model.toLowerCase()}`;
+      if (seenPairs.has(key)) continue;
+      seenPairs.add(key);
       targets.push({
-        make: makeName,
-        model: modelName,
+        make: f.make,
+        model: f.model,
         yearRange: null,
         yearFrom: null,
         yearTo: null,
-        ymme_make_id: pair.makeId,
-        ymme_model_id: pair.modelId,
+        ymme_make_id: f.makeId,
+        ymme_model_id: f.modelId,
       });
     }
   } else {
     // make_model_year — full YMME with year ranges
-    const { data: fitments, error } = await db
-      .from("vehicle_fitments")
-      .select("ymme_make_id, ymme_model_id, year_from, year_to")
-      .eq("shop_id", shopId)
-      .not("ymme_make_id", "is", null);
+    const seenMakes = new Set<string>();
+    const seenPairs = new Set<string>();
+    const seenFull = new Set<string>();
 
-    if (error || !fitments) return [];
-
-    // Collect unique make IDs
-    const uniqueMakeIds = new Set<string | number>();
-    // make+model pairs (without year)
-    const uniqueModelPairs = new Map<
-      string,
-      { makeId: any; modelId: any }
-    >();
-    // make+model+year combos
-    const uniqueFullTargets = new Map<
-      string,
-      {
-        makeId: any;
-        modelId: any;
-        yearFrom: number | null;
-        yearTo: number | null;
+    for (const f of normalised) {
+      // Make-level
+      const makeKey = f.make.toLowerCase();
+      if (!seenMakes.has(makeKey)) {
+        seenMakes.add(makeKey);
+        targets.push({
+          make: f.make,
+          model: null,
+          yearRange: null,
+          yearFrom: null,
+          yearTo: null,
+          ymme_make_id: f.makeId,
+          ymme_model_id: null,
+        });
       }
-    >();
 
-    for (const f of fitments) {
-      uniqueMakeIds.add(f.ymme_make_id);
+      if (!f.model) continue;
 
-      if (f.ymme_model_id) {
-        const modelKey = `${f.ymme_make_id}:${f.ymme_model_id}`;
-        if (!uniqueModelPairs.has(modelKey)) {
-          uniqueModelPairs.set(modelKey, {
-            makeId: f.ymme_make_id,
-            modelId: f.ymme_model_id,
+      // Make+Model level
+      const pairKey = `${makeKey}|${f.model.toLowerCase()}`;
+      if (!seenPairs.has(pairKey)) {
+        seenPairs.add(pairKey);
+        targets.push({
+          make: f.make,
+          model: f.model,
+          yearRange: null,
+          yearFrom: null,
+          yearTo: null,
+          ymme_make_id: f.makeId,
+          ymme_model_id: f.modelId,
+        });
+      }
+
+      // Make+Model+Year level
+      if (f.yearFrom || f.yearTo) {
+        const yearRange = formatYearRange(f.yearFrom, f.yearTo);
+        const fullKey = `${pairKey}|${f.yearFrom ?? "any"}-${f.yearTo ?? "any"}`;
+        if (!seenFull.has(fullKey)) {
+          seenFull.add(fullKey);
+          targets.push({
+            make: f.make,
+            model: f.model,
+            yearRange,
+            yearFrom: f.yearFrom,
+            yearTo: f.yearTo,
+            ymme_make_id: f.makeId,
+            ymme_model_id: f.modelId,
           });
         }
-
-        if (f.year_from || f.year_to) {
-          const yearKey = `${f.ymme_make_id}:${f.ymme_model_id}:${f.year_from ?? "any"}-${f.year_to ?? "any"}`;
-          if (!uniqueFullTargets.has(yearKey)) {
-            uniqueFullTargets.set(yearKey, {
-              makeId: f.ymme_make_id,
-              modelId: f.ymme_model_id,
-              yearFrom: f.year_from,
-              yearTo: f.year_to,
-            });
-          }
-        }
       }
-    }
-
-    const makeNames = await resolveMakeNames([...uniqueMakeIds]);
-    const allModelIds = [
-      ...new Set([
-        ...[...uniqueModelPairs.values()].map((p) => p.modelId),
-        ...[...uniqueFullTargets.values()].map((t) => t.modelId),
-      ]),
-    ];
-    const modelNames = await resolveModelNames(allModelIds);
-
-    // Make-level collections
-    for (const makeId of uniqueMakeIds) {
-      const makeName = makeNames.get(String(makeId));
-      if (!makeName) continue;
-      targets.push({
-        make: makeName,
-        model: null,
-        yearRange: null,
-        yearFrom: null,
-        yearTo: null,
-        ymme_make_id: makeId,
-        ymme_model_id: null,
-      });
-    }
-
-    // Make+model collections
-    for (const [, pair] of uniqueModelPairs) {
-      const makeName = makeNames.get(String(pair.makeId));
-      const modelName = modelNames.get(String(pair.modelId));
-      if (!makeName || !modelName) continue;
-      targets.push({
-        make: makeName,
-        model: modelName,
-        yearRange: null,
-        yearFrom: null,
-        yearTo: null,
-        ymme_make_id: pair.makeId,
-        ymme_model_id: pair.modelId,
-      });
-    }
-
-    // Make+model+year collections
-    for (const [, t] of uniqueFullTargets) {
-      const makeName = makeNames.get(String(t.makeId));
-      const modelName = modelNames.get(String(t.modelId));
-      if (!makeName || !modelName) continue;
-
-      const yearRange = formatYearRange(t.yearFrom, t.yearTo);
-      targets.push({
-        make: makeName,
-        model: modelName,
-        yearRange,
-        yearFrom: t.yearFrom,
-        yearTo: t.yearTo,
-        ymme_make_id: t.makeId,
-        ymme_model_id: t.modelId,
-      });
     }
   }
 
@@ -381,15 +355,8 @@ async function processCollectionTarget(
   // Check if collection already exists on Shopify by handle
   const existingId = await findExistingCollection(admin, handle);
 
-  // Check if we already have a mapping in our DB
-  const { data: existingMapping } = await db
-    .from("collection_mappings")
-    .select("id, shopify_collection_id")
-    .eq("shop_id", shopId)
-    .eq("ymme_make_id", target.ymme_make_id)
-    .is("ymme_model_id", target.ymme_model_id ?? null)
-    .eq("type", target.model ? (target.yearRange ? "make_model_year" : "make_model") : "make")
-    .maybeSingle();
+  // Check if we already have a mapping in our DB (by handle for reliability)
+  const _existingMapping = null; // Lookup by Shopify handle instead
 
   // Build smart collection rules
   const rules = buildSmartRules(target);
@@ -533,20 +500,29 @@ async function upsertCollectionMapping(
       : "make_model"
     : "make";
 
-  const mapping = {
+  const mapping: Record<string, any> = {
     shop_id: shopId,
     shopify_collection_id: shopifyCollectionId,
-    ymme_make_id: target.ymme_make_id,
-    ymme_model_id: target.ymme_model_id ?? null,
     type,
-    seo_title: collection.title,
-    seo_description: null as string | null,
+    title: collection.title,
+    handle: collection.handle,
+    make: target.make,
+    model: target.model ?? null,
     synced_at: new Date().toISOString(),
   };
 
-  const { error } = await db.from("collection_mappings").upsert(mapping, {
-    onConflict: "shop_id,ymme_make_id,ymme_model_id,type",
-  });
+  // Only set YMME IDs if they're available
+  if (target.ymme_make_id) mapping.ymme_make_id = target.ymme_make_id;
+  if (target.ymme_model_id) mapping.ymme_model_id = target.ymme_model_id;
+
+  // Delete any existing mapping for this handle, then insert fresh
+  await db
+    .from("collection_mappings")
+    .delete()
+    .eq("shop_id", shopId)
+    .eq("handle", collection.handle);
+
+  const { error } = await db.from("collection_mappings").insert(mapping);
 
   if (error) {
     console.error(

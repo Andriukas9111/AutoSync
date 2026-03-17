@@ -38,6 +38,8 @@ interface VehicleFitment {
   year_from: number | null;
   year_to: number | null;
   engine: string | null;
+  engine_code: string | null;
+  fuel_type: string | null;
 }
 
 interface ProductWithFitments {
@@ -88,6 +90,8 @@ function buildMetafieldInputs(
     year_start: f.year_from,
     year_end: f.year_to,
     engine: f.engine,
+    engine_code: f.engine_code,
+    fuel_type: f.fuel_type,
   }));
 
   const makeNames = [...new Set(fitments.map((f) => f.make).filter(Boolean))];
@@ -192,7 +196,7 @@ export async function pushToShopify(
     const productIds = products.map((p: any) => p.id);
     const { data: allFitments, error: fitmentsError } = await db
       .from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
       .eq("shop_id", shopId)
       .in("product_id", productIds);
 

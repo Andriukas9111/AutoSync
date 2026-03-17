@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useNavigate, Form } from "react-router";
 import { redirect, data } from "react-router";
 import {
   Page,
@@ -157,6 +157,7 @@ export default function ProvidersNew() {
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isSubmitting = navigation.state === "submitting";
 
   const [providerType, setProviderType] = useState<ProviderType>("csv");
@@ -172,7 +173,7 @@ export default function ProvidersNew() {
   ];
 
   return (
-    <Page title="Add Provider" backAction={{ url: "/app/providers" }}>
+    <Page title="Add Provider" backAction={{ onAction: () => navigate("/app/providers") }}>
       <Layout>
         {atLimit && (
           <Layout.Section>

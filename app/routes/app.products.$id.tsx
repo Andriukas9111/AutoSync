@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import { useLoaderData, useSubmit, useNavigation, useNavigate } from "react-router";
 import {
   Page,
   Layout,
@@ -17,7 +17,10 @@ import {
   ResourceItem,
   TextField,
   Banner,
-  Link,
+  Box,
+  Divider,
+  Select,
+  InlineGrid,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -61,9 +64,41 @@ interface Fitment {
   confidence_score: number | null;
   source_text: string | null;
   created_at: string;
+  // Enriched engine data from ymme_engines (if ymme_engine_id is set)
+  displacement_cc?: number | null;
+  power_hp?: number | null;
+  power_kw?: number | null;
+  torque_nm?: number | null;
 }
 
-// ── Status badge config ───────────────────────────────────────────────────────
+type EngineDisplayFormat = "code" | "full_name" | "displacement";
+
+/** Format engine text based on user's display preference */
+function formatEngine(fitment: Fitment, format: EngineDisplayFormat): string | null {
+  switch (format) {
+    case "code":
+      return fitment.engine_code || fitment.engine || null;
+    case "full_name": {
+      const parts: string[] = [];
+      if (fitment.engine) parts.push(fitment.engine);
+      if (fitment.displacement_cc) {
+        parts.push(`${(fitment.displacement_cc / 1000).toFixed(1)}L`);
+      }
+      if (fitment.power_hp) parts.push(`${fitment.power_hp}hp`);
+      return parts.length > 0 ? parts.join(" · ") : fitment.engine_code || null;
+    }
+    case "displacement": {
+      if (fitment.displacement_cc) {
+        return `${(fitment.displacement_cc / 1000).toFixed(1)}L`;
+      }
+      return fitment.engine || fitment.engine_code || null;
+    }
+    default:
+      return fitment.engine || fitment.engine_code || null;
+  }
+}
+
+// ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_BADGES: Record<
   string,
@@ -104,29 +139,66 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product ID is required", { status: 400 });
   }
 
-  // Fetch product and fitments in parallel
-  const [productResult, fitmentsResult] = await Promise.all([
-    db.from("products")
+  const [productResult, fitmentsResult, settingsResult] = await Promise.all([
+    db
+      .from("products")
       .select("*")
       .eq("id", productId)
       .eq("shop_id", shopId)
       .single(),
-    db.from("vehicle_fitments")
-      .select("*")
+    db
+      .from("vehicle_fitments")
+      .select("*, ymme_engine_id")
       .eq("product_id", productId)
       .order("make", { ascending: true })
       .order("model", { ascending: true })
       .order("year_from", { ascending: true }),
+    db
+      .from("app_settings")
+      .select("engine_display_format")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
   ]);
 
   if (productResult.error || !productResult.data) {
     throw new Response("Product not found", { status: 404 });
   }
 
+  const engineDisplayFormat: EngineDisplayFormat =
+    (settingsResult.data?.engine_display_format as EngineDisplayFormat) || "code";
+
+  // Enrich fitments with engine specs from ymme_engines if available
+  let fitments = (fitmentsResult.data ?? []) as Fitment[];
+  const engineIds = fitments
+    .map((f: any) => f.ymme_engine_id)
+    .filter(Boolean);
+
+  if (engineIds.length > 0) {
+    const { data: engines } = await db
+      .from("ymme_engines")
+      .select("id, displacement_cc, power_hp, power_kw, torque_nm")
+      .in("id", engineIds);
+
+    if (engines) {
+      const engineMap = new Map(engines.map((e: any) => [e.id, e]));
+      fitments = fitments.map((f: any) => {
+        const engineData = f.ymme_engine_id ? engineMap.get(f.ymme_engine_id) : null;
+        return {
+          ...f,
+          displacement_cc: engineData?.displacement_cc ?? null,
+          power_hp: engineData?.power_hp ?? null,
+          power_kw: engineData?.power_kw ?? null,
+          torque_nm: engineData?.torque_nm ?? null,
+        };
+      });
+    }
+  }
+
   return {
     product: productResult.data as Product,
-    fitments: (fitmentsResult.data ?? []) as Fitment[],
+    fitments,
     shopDomain: shopId,
+    engineDisplayFormat,
   };
 };
 
@@ -176,7 +248,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return { error: "Failed to add fitment" };
     }
 
-    // Update fitment_status if currently unmapped
+    // Update fitment_status if unmapped
     const { data: currentProduct } = await db
       .from("products")
       .select("fitment_status")
@@ -187,7 +259,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     if (currentProduct?.fitment_status === "unmapped") {
       await db
         .from("products")
-        .update({ fitment_status: "manual_mapped", updated_at: new Date().toISOString() })
+        .update({
+          fitment_status: "manual_mapped",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", productId)
         .eq("shop_id", shopId);
     }
@@ -197,10 +272,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (intent === "delete_fitment") {
     const fitmentId = formData.get("fitment_id") as string;
-
-    if (!fitmentId) {
-      return { error: "Fitment ID is required" };
-    }
+    if (!fitmentId) return { error: "Fitment ID is required" };
 
     const { error: deleteError } = await db
       .from("vehicle_fitments")
@@ -213,7 +285,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return { error: "Failed to delete fitment" };
     }
 
-    // Check if any fitments remain; if not, set status back to unmapped
     const { count } = await db
       .from("vehicle_fitments")
       .select("*", { count: "exact", head: true })
@@ -223,7 +294,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     if (count === 0) {
       await db
         .from("products")
-        .update({ fitment_status: "unmapped", updated_at: new Date().toISOString() })
+        .update({
+          fitment_status: "unmapped",
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", productId)
         .eq("shop_id", shopId);
     }
@@ -236,15 +310,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { error: updateError } = await db
       .from("products")
-      .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
+      .update({
+        fitment_status: newStatus,
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", productId)
       .eq("shop_id", shopId);
 
-    if (updateError) {
-      console.error("Update status error:", updateError);
-      return { error: "Failed to update status" };
-    }
-
+    if (updateError) return { error: "Failed to update status" };
     return { success: true, message: "Status updated" };
   }
 
@@ -254,23 +327,25 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain } = useLoaderData<typeof loader>();
+  const { product, fitments, shopDomain, engineDisplayFormat } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isSubmitting = navigation.state === "submitting";
 
   // Add fitment form state
   const [vehicleSelection, setVehicleSelection] = useState<VehicleSelection | null>(null);
   const [yearFrom, setYearFrom] = useState("");
   const [yearTo, setYearTo] = useState("");
+  const [statusValue, setStatusValue] = useState(product.fitment_status);
 
-  const handleVehicleChange = useCallback((selection: VehicleSelection) => {
-    setVehicleSelection(selection);
-  }, []);
+  const handleVehicleChange = useCallback(
+    (selection: VehicleSelection) => setVehicleSelection(selection),
+    [],
+  );
 
   const handleAddFitment = useCallback(() => {
     if (!vehicleSelection) return;
-
     const formData = new FormData();
     formData.set("_action", "add_fitment");
     formData.set("make", vehicleSelection.makeName);
@@ -278,10 +353,7 @@ export default function ProductDetails() {
     if (yearFrom) formData.set("year_from", yearFrom);
     if (yearTo) formData.set("year_to", yearTo);
     if (vehicleSelection.engineName) formData.set("engine", vehicleSelection.engineName);
-
     submit(formData, { method: "POST" });
-
-    // Reset form
     setVehicleSelection(null);
     setYearFrom("");
     setYearTo("");
@@ -297,105 +369,143 @@ export default function ProductDetails() {
     [submit],
   );
 
-  const formatPrice = (price: string | null) => {
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      setStatusValue(value as FitmentStatus);
+      const formData = new FormData();
+      formData.set("_action", "update_status");
+      formData.set("fitment_status", value);
+      submit(formData, { method: "POST" });
+    },
+    [submit],
+  );
+
+  const fmtPrice = (price: string | null) => {
     if (!price) return null;
     const num = parseFloat(price);
-    if (isNaN(num)) return null;
-    return `£${num.toFixed(2)}`;
+    return isNaN(num) ? null : `£${num.toFixed(2)}`;
   };
 
   const statusBadge = STATUS_BADGES[product.fitment_status] ?? STATUS_BADGES.unmapped;
-  const shopifyAdminUrl = product.shopify_product_id
-    ? `https://${shopDomain}/admin/products/${product.shopify_product_id}`
-    : null;
 
   return (
     <Page
       title={product.title}
-      backAction={{ url: "/app/products" }}
+      backAction={{ onAction: () => navigate("/app/products") }}
       titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      fullWidth
     >
-      <BlockStack gap="400">
-        {/* Product Info Card */}
-        <Layout>
-          <Layout.Section>
+      <Layout>
+        {/* ── Left Column: Product Info + Fitments ── */}
+        <Layout.Section>
+          <BlockStack gap="400">
+            {/* Product Overview Card */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="400" align="start" blockAlign="start">
-                  <Thumbnail
-                    source={
-                      product.image_url ||
-                      "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png"
-                    }
-                    alt={product.title}
-                    size="large"
-                  />
+                <InlineStack gap="400" align="start" blockAlign="start" wrap={false}>
+                  <div style={{ flexShrink: 0 }}>
+                    <Thumbnail
+                      source={
+                        product.image_url ||
+                        "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png"
+                      }
+                      alt={product.title}
+                      size="large"
+                    />
+                  </div>
                   <BlockStack gap="200">
-                    <Text as="h2" variant="headingMd">
-                      {product.title}
-                    </Text>
-                    <InlineStack gap="200" wrap>
+                    <Text as="h2" variant="headingMd">{product.title}</Text>
+                    {product.description && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {product.description
+                          .replace(/<[^>]*>/g, " ")
+                          .replace(/\s+/g, " ")
+                          .trim()
+                          .slice(0, 200)}
+                        {product.description.replace(/<[^>]*>/g, "").length > 200 ? "..." : ""}
+                      </Text>
+                    )}
+                    <Divider />
+                    <InlineGrid columns={{ xs: 2, sm: 4 }} gap="200">
                       {product.vendor && (
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          Vendor: {product.vendor}
-                        </Text>
+                        <BlockStack gap="050">
+                          <Text as="span" variant="bodySm" tone="subdued">Vendor</Text>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {product.vendor}
+                          </Text>
+                        </BlockStack>
                       )}
                       {product.price && (
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          Price: {formatPrice(product.price)}
-                        </Text>
+                        <BlockStack gap="050">
+                          <Text as="span" variant="bodySm" tone="subdued">Price</Text>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {fmtPrice(product.price)}
+                          </Text>
+                        </BlockStack>
                       )}
                       {product.product_type && (
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          Type: {product.product_type}
-                        </Text>
+                        <BlockStack gap="050">
+                          <Text as="span" variant="bodySm" tone="subdued">Type</Text>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {product.product_type}
+                          </Text>
+                        </BlockStack>
                       )}
                       {product.source && (
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          Source: {product.source}
-                        </Text>
+                        <BlockStack gap="050">
+                          <Text as="span" variant="bodySm" tone="subdued">Source</Text>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {product.source}
+                          </Text>
+                        </BlockStack>
                       )}
-                    </InlineStack>
+                    </InlineGrid>
 
                     {/* Tags */}
                     {product.tags && product.tags.length > 0 && (
-                      <InlineStack gap="100" wrap>
-                        {product.tags.map((tag, i) => (
-                          <Tag key={`${tag}-${i}`}>{tag}</Tag>
-                        ))}
-                      </InlineStack>
-                    )}
-
-                    {shopifyAdminUrl && (
-                      <Link url={shopifyAdminUrl} target="_blank">
-                        View on Shopify
-                      </Link>
+                      <>
+                        <Divider />
+                        <InlineStack gap="100" wrap>
+                          {product.tags.slice(0, 20).map((tag, i) => (
+                            <Tag key={`${tag}-${i}`}>{tag}</Tag>
+                          ))}
+                          {product.tags.length > 20 && (
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              +{product.tags.length - 20} more
+                            </Text>
+                          )}
+                        </InlineStack>
+                      </>
                     )}
                   </BlockStack>
                 </InlineStack>
               </BlockStack>
             </Card>
-          </Layout.Section>
-        </Layout>
 
-        {/* Current Fitments Card */}
-        <Layout>
-          <Layout.Section>
+            {/* Current Fitments Card */}
             <Card>
               <BlockStack gap="300">
-                <InlineStack align="space-between">
+                <InlineStack align="space-between" blockAlign="center">
                   <Text as="h2" variant="headingMd">
-                    Current Fitments ({fitments.length})
+                    Vehicle Fitments ({fitments.length})
                   </Text>
+                  <Badge tone={fitments.length > 0 ? "success" : "warning"}>
+                    {fitments.length > 0 ? `${fitments.length} mapped` : "No fitments"}
+                  </Badge>
                 </InlineStack>
 
                 {fitments.length === 0 ? (
-                  <EmptyState
-                    heading="No vehicles mapped to this product"
-                    image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                  >
-                    <p>Use the form below to add vehicle fitment data.</p>
-                  </EmptyState>
+                  <Box padding="600">
+                    <BlockStack gap="200" inlineAlign="center">
+                      <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                        No vehicles mapped to this product yet.
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                        Use the form below to manually add vehicle fitment data,
+                        or run auto-extraction from the Fitment page.
+                      </Text>
+                    </BlockStack>
+                  </Box>
                 ) : (
                   <ResourceList
                     resourceName={{ singular: "fitment", plural: "fitments" }}
@@ -428,24 +538,23 @@ export default function ProductDetails() {
                                 {fitment.make} {fitment.model}
                                 {fitment.variant ? ` (${fitment.variant})` : ""}
                               </Text>
-                              <InlineStack gap="200" wrap>
+                              <InlineStack gap="300" wrap>
                                 <Text as="span" variant="bodySm" tone="subdued">
-                                  Years: {yearRange}
+                                  {yearRange}
                                 </Text>
-                                {fitment.engine && (
-                                  <Text as="span" variant="bodySm" tone="subdued">
-                                    Engine: {fitment.engine}
-                                  </Text>
-                                )}
-                                {fitment.engine_code && (
-                                  <Text as="span" variant="bodySm" tone="subdued">
-                                    Code: {fitment.engine_code}
-                                  </Text>
+                                {(() => {
+                                  const engineText = formatEngine(fitment, engineDisplayFormat);
+                                  return engineText ? (
+                                    <Text as="span" variant="bodySm" tone="subdued">
+                                      {engineText}
+                                    </Text>
+                                  ) : null;
+                                })()}
+                                {fitment.fuel_type && (
+                                  <Badge tone="info">{fitment.fuel_type}</Badge>
                                 )}
                                 {fitment.extraction_method && (
-                                  <Text as="span" variant="bodySm" tone="subdued">
-                                    Method: {fitment.extraction_method}
-                                  </Text>
+                                  <Badge tone="info">{fitment.extraction_method}</Badge>
                                 )}
                               </InlineStack>
                             </BlockStack>
@@ -458,17 +567,11 @@ export default function ProductDetails() {
                 )}
               </BlockStack>
             </Card>
-          </Layout.Section>
-        </Layout>
 
-        {/* Add Fitment Card */}
-        <Layout>
-          <Layout.Section>
+            {/* Add Fitment Card */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Add Vehicle Fitment
-                </Text>
+                <Text as="h2" variant="headingMd">Add Vehicle Fitment</Text>
 
                 <VehicleSelector onChange={handleVehicleChange} />
 
@@ -518,9 +621,101 @@ export default function ProductDetails() {
                 </InlineStack>
               </BlockStack>
             </Card>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
+          </BlockStack>
+        </Layout.Section>
+
+        {/* ── Right Sidebar ── */}
+        <Layout.Section variant="oneThird">
+          <BlockStack gap="400">
+            {/* Status Card */}
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingSm">Fitment Status</Text>
+                <Select
+                  label="Status"
+                  labelHidden
+                  options={[
+                    { label: "Unmapped", value: "unmapped" },
+                    { label: "Auto Mapped", value: "auto_mapped" },
+                    { label: "Manual Mapped", value: "manual_mapped" },
+                    { label: "Partial", value: "partial" },
+                    { label: "Flagged", value: "flagged" },
+                  ]}
+                  value={statusValue}
+                  onChange={handleStatusChange}
+                />
+              </BlockStack>
+            </Card>
+
+            {/* Product Details Card */}
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingSm">Details</Text>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between">
+                    <Text as="span" variant="bodySm" tone="subdued">Handle</Text>
+                    <Text as="span" variant="bodySm">{product.handle || "—"}</Text>
+                  </InlineStack>
+                  <Divider />
+                  <InlineStack align="space-between">
+                    <Text as="span" variant="bodySm" tone="subdued">Shopify ID</Text>
+                    <Text as="span" variant="bodySm">
+                      {product.shopify_product_id || "—"}
+                    </Text>
+                  </InlineStack>
+                  <Divider />
+                  <InlineStack align="space-between">
+                    <Text as="span" variant="bodySm" tone="subdued">Created</Text>
+                    <Text as="span" variant="bodySm">
+                      {new Date(product.created_at).toLocaleDateString("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  </InlineStack>
+                  {product.updated_at && (
+                    <>
+                      <Divider />
+                      <InlineStack align="space-between">
+                        <Text as="span" variant="bodySm" tone="subdued">Updated</Text>
+                        <Text as="span" variant="bodySm">
+                          {new Date(product.updated_at).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </Text>
+                      </InlineStack>
+                    </>
+                  )}
+                </BlockStack>
+              </BlockStack>
+            </Card>
+
+            {/* Shopify Link Card */}
+            {product.shopify_product_id && (
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h2" variant="headingSm">Shopify</Text>
+                  <Button
+                    fullWidth
+                    onClick={() => {
+                      // Open in Shopify admin using App Bridge-compatible navigation
+                      window.open(
+                        `https://${shopDomain}/admin/products/${product.shopify_product_id}`,
+                        "_blank",
+                      );
+                    }}
+                  >
+                    View on Shopify
+                  </Button>
+                </BlockStack>
+              </Card>
+            )}
+          </BlockStack>
+        </Layout.Section>
+      </Layout>
     </Page>
   );
 }

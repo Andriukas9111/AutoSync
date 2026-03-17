@@ -5,7 +5,7 @@
  * Actions: update, delete, trigger fetch.
  */
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data, redirect } from "react-router";
@@ -24,6 +24,9 @@ import {
   Divider,
   Modal,
   FormLayout,
+  DropZone,
+  Spinner,
+  ProgressBar,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -205,6 +208,55 @@ export default function ProviderDetail() {
   const [ftpUser, setFtpUser] = useState(String(config.ftpUser || ""));
   const [ftpPath, setFtpPath] = useState(String(config.ftpPath || "/"));
 
+  // File upload state
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{
+    success?: boolean;
+    imported?: number;
+    total?: number;
+    error?: string;
+    errors?: string[];
+  } | null>(null);
+
+  const handleDrop = useCallback((_dropFiles: File[], acceptedFiles: File[]) => {
+    if (acceptedFiles.length > 0) {
+      setUploadFile(acceptedFiles[0]);
+      setUploadResult(null);
+    }
+  }, []);
+
+  const handleUpload = useCallback(async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    setUploadResult(null);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", uploadFile);
+      fd.append("provider_id", provider.id);
+      fd.append("file_type", provider.type === "xml" ? "xml" : "csv");
+      fd.append("delimiter", delimiter);
+
+      const response = await fetch("/app/api/upload", {
+        method: "POST",
+        body: fd,
+      });
+
+      const result = await response.json();
+      setUploadResult(result);
+
+      if (result.success) {
+        setUploadFile(null);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      setUploadResult({ error: message });
+    } finally {
+      setUploading(false);
+    }
+  }, [uploadFile, provider.id, provider.type, delimiter]);
+
   const isSubmitting = fetcher.state !== "idle";
   const fetcherData = fetcher.data as
     | { success: true; message: string }
@@ -381,6 +433,97 @@ export default function ProviderDetail() {
               </BlockStack>
             </Card>
           </Layout.Section>
+
+          {/* File Upload */}
+          {(provider.type === "csv" || provider.type === "xml") && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">
+                    Upload {provider.type.toUpperCase()} File
+                  </Text>
+                  <Divider />
+
+                  {uploadResult?.success && (
+                    <Banner tone="success" title="Upload successful">
+                      <p>
+                        Imported {uploadResult.imported} of {uploadResult.total} products.
+                      </p>
+                      {uploadResult.errors && uploadResult.errors.length > 0 && (
+                        <p style={{ marginTop: 8 }}>
+                          Warnings: {uploadResult.errors.join("; ")}
+                        </p>
+                      )}
+                    </Banner>
+                  )}
+                  {uploadResult?.error && (
+                    <Banner tone="critical" title="Upload failed">
+                      <p>{uploadResult.error}</p>
+                    </Banner>
+                  )}
+
+                  <DropZone
+                    onDrop={handleDrop}
+                    accept={
+                      provider.type === "xml"
+                        ? ".xml,application/xml,text/xml"
+                        : ".csv,text/csv,application/csv"
+                    }
+                    type="file"
+                    allowMultiple={false}
+                  >
+                    {uploadFile ? (
+                      <div style={{ padding: "16px", textAlign: "center" }}>
+                        <BlockStack gap="200" inlineAlign="center">
+                          <Text as="p" variant="bodyMd" fontWeight="semibold">
+                            {uploadFile.name}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {(uploadFile.size / 1024).toFixed(1)} KB
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    ) : (
+                      <DropZone.FileUpload
+                        actionTitle={`Upload ${provider.type.toUpperCase()}`}
+                        actionHint={`Accepts .${provider.type} files`}
+                      />
+                    )}
+                  </DropZone>
+
+                  {uploading && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Spinner size="small" />
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        Uploading and parsing file...
+                      </Text>
+                    </InlineStack>
+                  )}
+
+                  <InlineStack align="end" gap="200">
+                    {uploadFile && !uploading && (
+                      <Button
+                        onClick={() => {
+                          setUploadFile(null);
+                          setUploadResult(null);
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    )}
+                    <Button
+                      variant="primary"
+                      onClick={handleUpload}
+                      disabled={!uploadFile || uploading}
+                      loading={uploading}
+                    >
+                      Import Products
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
 
           {/* Sidebar — info & danger zone */}
           <Layout.Section variant="oneThird">

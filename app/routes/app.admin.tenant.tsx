@@ -355,7 +355,7 @@ export default function TenantDetail() {
     <Page
       title={domain}
       subtitle={`Tenant detail — ${capitalisePlan(tenant.plan)} plan`}
-      backAction={{ content: "Admin Panel", url: "/app/admin" }}
+      backAction={{ content: "Admin Panel", onAction: () => navigate("/app/admin") }}
       titleMetadata={
         <InlineStack gap="200">
           <Badge tone={PLAN_BADGE_TONE[tenant.plan as PlanTier] ?? "default"}>

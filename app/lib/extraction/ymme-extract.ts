@@ -52,6 +52,9 @@ export interface FitmentRowFields {
   engine: string | null
   engine_code: string | null
   fuel_type: string | null
+  ymme_make_id: string | null
+  ymme_model_id: string | null
+  ymme_engine_id: string | null
   extraction_method: "pattern"
   confidence_score: number
   source_text: string
@@ -161,6 +164,9 @@ function convertToFitmentFields(
     year_from: f.yearFrom,
     year_to: f.yearTo,
     fuel_type: null,
+    ymme_make_id: f.make.id,
+    ymme_model_id: f.model?.id || null,
+    ymme_engine_id: null,
     extraction_method: "pattern" as const,
     confidence_score: f.confidence,
     source_text: f.sourceText,
@@ -174,6 +180,7 @@ function convertToFitmentFields(
       ...base,
       engine: f.engine.name || null,
       engine_code: f.engine.code || null,
+      ymme_engine_id: f.engine.id,
     }]
   }
 
@@ -191,6 +198,7 @@ function convertToFitmentFields(
         ...base,
         engine: engine.name || null,
         engine_code: engine.code || null,
+        ymme_engine_id: engine.id,
         confidence_score: Math.max(0.3, f.confidence - 0.1),
       }))
     }

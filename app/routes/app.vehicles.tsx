@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form, useFetcher } from "react-router";
+import { useLoaderData, useActionData, useFetcher } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -19,7 +19,12 @@ import {
   Spinner,
   Collapsible,
   EmptyState,
+  Icon,
+  Divider,
+  Thumbnail,
+  ProgressBar,
 } from "@shopify/polaris";
+import { SearchIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -35,10 +40,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run all queries in parallel
-  const [tenantResult, makesResult, activeResult, fitmentResult] = await Promise.all([
+  const [tenantResult, makesResult, activeResult, fitmentResult, modelCountResult, engineCountResult] = await Promise.all([
     getTenant(shopId),
     db.from("ymme_makes")
-      .select("id, name, country, logo_url")
+      .select("id, name, slug, country, logo_url, nhtsa_make_id")
       .eq("active", true)
       .order("name", { ascending: true }),
     db.from("tenant_active_makes")
@@ -48,25 +53,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("make")
       .eq("shop_id", shopId)
       .not("make", "is", null),
+    db.from("ymme_models")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
+    db.from("ymme_engines")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
   ]);
 
   const tenant = tenantResult;
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
-  if (makesResult.error) {
-    console.error("Makes query error:", makesResult.error);
-  }
-  if (activeResult.error) {
-    console.error("Tenant active makes query error:", activeResult.error);
-  }
-
-  const allMakes = makesResult.data;
+  const allMakes = makesResult.data ?? [];
   const activeMakeIds = new Set(
     (activeResult.data ?? []).map((tam: any) => tam.ymme_make_id)
   );
 
-  // Count products per make name
+  // Count fitments per make name
   const productCountByMake: Record<string, number> = {};
   if (fitmentResult.data) {
     for (const row of fitmentResult.data) {
@@ -77,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Build makes list with enriched data
-  const makes = (allMakes ?? []).map((make: any) => ({
+  const makes = allMakes.map((make: any) => ({
     ...make,
     isActive: activeMakeIds.has(make.id),
     productCount: productCountByMake[make.name] || 0,
@@ -86,9 +90,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
     makes,
     activeMakeCount: activeMakeIds.size,
+    totalModels: modelCountResult.count ?? 0,
+    totalEngines: engineCountResult.count ?? 0,
   };
 };
 
@@ -111,13 +116,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return data({ error: "Missing make_id" }, { status: 400 });
     }
 
-    // Check plan limits before enabling
     if (enable) {
       const tenant = await getTenant(shopId);
       const plan: PlanTier = tenant?.plan ?? "free";
       const limits = getPlanLimits(plan);
 
-      // Count current active makes
       const { count: currentActive } = await db
         .from("tenant_active_makes")
         .select("*", { count: "exact", head: true })
@@ -132,19 +135,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
 
-      // Insert
       const { error } = await db
         .from("tenant_active_makes")
         .insert({ shop_id: shopId, ymme_make_id: makeId });
 
-      if (error) {
-        // Ignore duplicate key errors
-        if (!error.message.includes("duplicate")) {
-          return data({ error: "Failed to enable make: " + error.message }, { status: 500 });
-        }
+      if (error && !error.message.includes("duplicate")) {
+        return data({ error: "Failed to enable make: " + error.message }, { status: 500 });
       }
     } else {
-      // Delete
       const { error } = await db
         .from("tenant_active_makes")
         .delete()
@@ -163,30 +161,91 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
-// Component
+// Types
 // ---------------------------------------------------------------------------
 
 interface MakeItem {
   id: string;
   name: string;
+  slug: string | null;
   country: string | null;
   logo_url: string | null;
+  nhtsa_make_id: number | null;
   isActive: boolean;
   productCount: number;
 }
 
+interface ModelItem {
+  id: string;
+  name: string;
+  generation: string | null;
+  year_from: number | null;
+  year_to: number | null;
+  body_type: string | null;
+}
+
+interface EngineItem {
+  id: string;
+  code: string | null;
+  name: string | null;
+  displacement_cc: number | null;
+  fuel_type: string | null;
+  power_hp: number | null;
+  power_kw: number | null;
+  torque_nm: number | null;
+  year_from: number | null;
+  year_to: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatYearRange(from: number | null, to: number | null): string {
+  if (!from && !to) return "";
+  if (from && !to) return `${from}–present`;
+  if (!from && to) return `–${to}`;
+  if (from === to) return `${from}`;
+  return `${from}–${to}`;
+}
+
+function formatDisplacement(cc: number | null): string {
+  if (!cc) return "";
+  return `${(cc / 1000).toFixed(1)}L`;
+}
+
+function fuelBadgeTone(fuel: string | null): "default" | "info" | "success" | "warning" | "critical" {
+  if (!fuel) return "default";
+  const f = fuel.toLowerCase();
+  if (f.includes("petrol") || f.includes("gasoline")) return "warning";
+  if (f.includes("diesel")) return "info";
+  if (f.includes("electric")) return "success";
+  if (f.includes("hybrid")) return "success";
+  return "default";
+}
+
+function makeInitials(name: string): string {
+  return name.slice(0, 2).toUpperCase();
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function Vehicles() {
-  const { plan, limits, allLimits, makes, activeMakeCount } =
+  const { plan, limits, makes, activeMakeCount, totalModels, totalEngines } =
     useLoaderData<typeof loader>();
 
   const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
   const fetcher = useFetcher();
 
   const [searchValue, setSearchValue] = useState("");
   const [expandedMake, setExpandedMake] = useState<string | null>(null);
-  const [models, setModels] = useState<any[]>([]);
+  const [models, setModels] = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const [engines, setEngines] = useState<EngineItem[]>([]);
+  const [enginesLoading, setEnginesLoading] = useState(false);
 
   const showError = actionData && "error" in actionData;
 
@@ -200,9 +259,13 @@ export default function Vehicles() {
       if (expandedMake === makeId) {
         setExpandedMake(null);
         setModels([]);
+        setExpandedModel(null);
+        setEngines([]);
         return;
       }
       setExpandedMake(makeId);
+      setExpandedModel(null);
+      setEngines([]);
       setModels([]);
       setModelsLoading(true);
 
@@ -212,7 +275,7 @@ export default function Vehicles() {
         );
         if (response.ok) {
           const result = await response.json();
-          setModels(result.data ?? result ?? []);
+          setModels(result.models ?? result.data ?? []);
         }
       } catch (err) {
         console.error("Failed to fetch models:", err);
@@ -221,6 +284,34 @@ export default function Vehicles() {
       }
     },
     [expandedMake]
+  );
+
+  const handleExpandModel = useCallback(
+    async (modelId: string) => {
+      if (expandedModel === modelId) {
+        setExpandedModel(null);
+        setEngines([]);
+        return;
+      }
+      setExpandedModel(modelId);
+      setEngines([]);
+      setEnginesLoading(true);
+
+      try {
+        const response = await fetch(
+          `/app/api/ymme?level=engines&model_id=${modelId}`
+        );
+        if (response.ok) {
+          const result = await response.json();
+          setEngines(result.engines ?? result.data ?? []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch engines:", err);
+      } finally {
+        setEnginesLoading(false);
+      }
+    },
+    [expandedModel]
   );
 
   const handleToggleMake = useCallback(
@@ -235,141 +326,203 @@ export default function Vehicles() {
   );
 
   const isToggling = fetcher.state !== "idle";
+  const activePct = limits.activeMakes > 0
+    ? Math.min(Math.round((activeMakeCount / limits.activeMakes) * 100), 100)
+    : 0;
 
   return (
-    <Page title="Vehicles">
-      <Layout>
-        {/* Error banner */}
+    <Page
+      title="Vehicle Database"
+      subtitle="Browse and manage your YMME vehicle database"
+      fullWidth
+    >
+      <BlockStack gap="400">
+        {/* Error banners */}
         {showError && (
-          <Layout.Section>
-            <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
-            </Banner>
-          </Layout.Section>
+          <Banner tone="critical">
+            <p>{(actionData as any).error}</p>
+          </Banner>
         )}
-
-        {/* Fetcher error */}
         {fetcher.data && "error" in (fetcher.data as any) && (
-          <Layout.Section>
-            <Banner tone="critical">
-              <p>{(fetcher.data as any).error}</p>
-            </Banner>
-          </Layout.Section>
+          <Banner tone="critical">
+            <p>{(fetcher.data as any).error}</p>
+          </Banner>
         )}
 
-        {/* Summary */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Vehicle Makes
-              </Text>
-              <InlineStack gap="600" wrap>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {makes.length}
-                  </Text>
+        {/* Stats Cards */}
+        <InlineStack gap="400" wrap>
+          <div style={{ flex: "1 1 220px" }}>
+            <Card>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
+                <Text as="p" variant="headingXl" fontWeight="bold">
+                  {makes.length}
+                </Text>
+              </BlockStack>
+            </Card>
+          </div>
+          <div style={{ flex: "1 1 220px" }}>
+            <Card>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
+                <Text as="p" variant="headingXl" fontWeight="bold">
+                  {totalModels.toLocaleString()}
+                </Text>
+              </BlockStack>
+            </Card>
+          </div>
+          <div style={{ flex: "1 1 220px" }}>
+            <Card>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
+                <Text as="p" variant="headingXl" fontWeight="bold">
+                  {totalEngines.toLocaleString()}
+                </Text>
+              </BlockStack>
+            </Card>
+          </div>
+          <div style={{ flex: "1 1 220px" }}>
+            <Card>
+              <BlockStack gap="200">
+                <InlineStack align="space-between">
+                  <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
                   <Text as="p" variant="bodySm" tone="subdued">
-                    Total makes available
+                    {activeMakeCount} / {limits.activeMakes === 999_999 ? "∞" : limits.activeMakes}
                   </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {activeMakeCount}
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Active for your store
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {limits.activeMakes === 999_999
-                      ? "Unlimited"
-                      : limits.activeMakes}
-                  </Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Plan limit
-                  </Text>
-                </BlockStack>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
+                </InlineStack>
+                <Text as="p" variant="headingXl" fontWeight="bold">
+                  {activeMakeCount}
+                </Text>
+                {limits.activeMakes !== 999_999 && (
+                  <ProgressBar progress={activePct} size="small" tone="primary" />
+                )}
+              </BlockStack>
+            </Card>
+          </div>
+        </InlineStack>
 
         {/* Search */}
-        <Layout.Section>
-          <Card>
-            <TextField
-              label="Search makes"
-              labelHidden
-              value={searchValue}
-              onChange={setSearchValue}
-              placeholder="Search by make name..."
-              clearButton
-              onClearButtonClick={() => setSearchValue("")}
-              autoComplete="off"
-            />
-          </Card>
-        </Layout.Section>
+        <Card>
+          <TextField
+            label="Search makes"
+            labelHidden
+            value={searchValue}
+            onChange={setSearchValue}
+            placeholder="Search by make name..."
+            clearButton
+            onClearButtonClick={() => setSearchValue("")}
+            autoComplete="off"
+            prefix={<Icon source={SearchIcon} />}
+          />
+        </Card>
 
         {/* Makes list */}
-        <Layout.Section>
-          <Card padding="0">
-            {filteredMakes.length === 0 ? (
-              <Box padding="400">
-                <EmptyState
-                  heading={
-                    searchValue
-                      ? "No makes match your search"
-                      : "No vehicle makes available"
-                  }
-                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-                >
-                  <p>
-                    {searchValue
-                      ? "Try a different search term."
-                      : "Vehicle makes will appear here once the YMME database is populated."}
-                  </p>
-                </EmptyState>
-              </Box>
-            ) : (
-              <ResourceList
-                resourceName={{ singular: "make", plural: "makes" }}
-                items={filteredMakes}
-                renderItem={(make: MakeItem) => {
-                  const isExpanded = expandedMake === make.id;
+        <Card padding="0">
+          {filteredMakes.length === 0 ? (
+            <Box padding="400">
+              <EmptyState
+                heading={
+                  searchValue
+                    ? "No makes match your search"
+                    : "No vehicle makes available"
+                }
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              >
+                <p>
+                  {searchValue
+                    ? "Try a different search term."
+                    : "Vehicle makes will appear here once the YMME database is populated."}
+                </p>
+              </EmptyState>
+            </Box>
+          ) : (
+            <ResourceList
+              resourceName={{ singular: "make", plural: "makes" }}
+              items={filteredMakes}
+              renderItem={(make: MakeItem) => {
+                const isExpanded = expandedMake === make.id;
 
-                  return (
-                    <ResourceItem
-                      id={make.id}
-                      onClick={() => handleExpandMake(make.id)}
-                      verticalAlignment="center"
-                    >
-                      <BlockStack gap="300">
-                        <InlineStack
-                          align="space-between"
-                          blockAlign="center"
-                          wrap={false}
-                        >
-                          <InlineStack gap="300" blockAlign="center">
-                            {make.logo_url && (
+                return (
+                  <ResourceItem
+                    id={make.id}
+                    onClick={() => handleExpandMake(make.id)}
+                    verticalAlignment="center"
+                  >
+                    <BlockStack gap="300">
+                      {/* Make Row */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                        wrap={false}
+                      >
+                        <InlineStack gap="300" blockAlign="center">
+                          {/* Logo or initials */}
+                          {make.logo_url ? (
+                            <div
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 8,
+                                overflow: "hidden",
+                                backgroundColor: "var(--p-color-bg-surface-secondary)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
                               <img
                                 src={make.logo_url}
                                 alt={make.name}
+                                loading="lazy"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  target.style.display = "none";
+                                  const fallback = target.nextElementSibling as HTMLElement;
+                                  if (fallback) fallback.style.display = "flex";
+                                }}
                                 style={{
                                   width: 28,
                                   height: 28,
                                   objectFit: "contain",
-                                  borderRadius: 4,
                                 }}
                               />
-                            )}
-                            <BlockStack gap="0">
-                              <Text
-                                as="span"
-                                variant="bodyMd"
-                                fontWeight="semibold"
+                              <span
+                                style={{
+                                  display: "none",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: 28,
+                                  height: 28,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  color: "var(--p-color-text-subdued)",
+                                }}
                               >
+                                {makeInitials(make.name)}
+                              </span>
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: 8,
+                                backgroundColor: "var(--p-color-bg-surface-secondary)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
+                                {makeInitials(make.name)}
+                              </Text>
+                            </div>
+                          )}
+                          <BlockStack gap="0">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">
                                 {make.name}
                               </Text>
                               {make.country && (
@@ -377,103 +530,217 @@ export default function Vehicles() {
                                   {make.country}
                                 </Text>
                               )}
-                            </BlockStack>
-                          </InlineStack>
-
-                          <InlineStack gap="300" blockAlign="center">
-                            {make.productCount > 0 && (
-                              <Badge tone="info">
-                                {make.productCount} fitment
-                                {make.productCount !== 1 ? "s" : ""}
-                              </Badge>
-                            )}
-                            {make.isActive ? (
-                              <Badge tone="success">Active</Badge>
-                            ) : (
-                              <Badge>Inactive</Badge>
-                            )}
-                            <div
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ display: "inline-flex" }}
-                            >
-                              <Button
-                                size="slim"
-                                variant={make.isActive ? "secondary" : "primary"}
-                                onClick={() =>
-                                  handleToggleMake(make.id, make.isActive)
-                                }
-                                loading={isToggling}
-                              >
-                                {make.isActive ? "Disable" : "Enable"}
-                              </Button>
-                            </div>
-                          </InlineStack>
-                        </InlineStack>
-
-                        {/* Expanded models */}
-                        <Collapsible
-                          open={isExpanded}
-                          id={`models-${make.id}`}
-                          transition={{
-                            duration: "200ms",
-                            timingFunction: "ease-in-out",
-                          }}
-                        >
-                          <Box
-                            paddingInlineStart="400"
-                            paddingBlockStart="200"
-                            paddingBlockEnd="200"
-                          >
-                            {modelsLoading ? (
-                              <InlineStack gap="200" blockAlign="center">
-                                <Spinner size="small" />
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  Loading models...
-                                </Text>
-                              </InlineStack>
-                            ) : models.length > 0 ? (
-                              <BlockStack gap="200">
-                                <Text
-                                  as="p"
-                                  variant="bodySm"
-                                  fontWeight="semibold"
-                                >
-                                  Models ({models.length})
-                                </Text>
-                                <InlineStack gap="200" wrap>
-                                  {models.map((model: any) => (
-                                    <Badge key={model.id || model.name}>
-                                      {model.name}
-                                    </Badge>
-                                  ))}
-                                </InlineStack>
-                              </BlockStack>
-                            ) : (
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                No models found for this make.
+                            </InlineStack>
+                            {make.nhtsa_make_id && (
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                NHTSA ID: {make.nhtsa_make_id}
                               </Text>
                             )}
-                          </Box>
-                        </Collapsible>
-                      </BlockStack>
-                    </ResourceItem>
-                  );
-                }}
-              />
-            )}
-          </Card>
-        </Layout.Section>
+                          </BlockStack>
+                        </InlineStack>
+
+                        <InlineStack gap="200" blockAlign="center">
+                          {make.productCount > 0 && (
+                            <Badge tone="info">
+                              {make.productCount} fitment{make.productCount !== 1 ? "s" : ""}
+                            </Badge>
+                          )}
+                          {make.isActive ? (
+                            <Badge tone="success">Active</Badge>
+                          ) : (
+                            <Badge>Inactive</Badge>
+                          )}
+                          <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
+                            <Button
+                              size="slim"
+                              variant={make.isActive ? "secondary" : "primary"}
+                              onClick={() => handleToggleMake(make.id, make.isActive)}
+                              loading={isToggling}
+                            >
+                              {make.isActive ? "Disable" : "Enable"}
+                            </Button>
+                          </div>
+                          <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
+                        </InlineStack>
+                      </InlineStack>
+
+                      {/* Expanded: Models */}
+                      <Collapsible
+                        open={isExpanded}
+                        id={`models-${make.id}`}
+                        transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
+                      >
+                        <Box
+                          paddingInlineStart="600"
+                          paddingBlockStart="200"
+                          paddingBlockEnd="200"
+                        >
+                          {modelsLoading ? (
+                            <InlineStack gap="200" blockAlign="center">
+                              <Spinner size="small" />
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                Loading models...
+                              </Text>
+                            </InlineStack>
+                          ) : models.length > 0 ? (
+                            <BlockStack gap="200">
+                              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                                Models ({models.length})
+                              </Text>
+                              <Divider />
+                              {models.map((model) => {
+                                const isModelExpanded = expandedModel === model.id;
+                                const yearRange = formatYearRange(model.year_from, model.year_to);
+
+                                return (
+                                  <BlockStack gap="100" key={model.id}>
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleExpandModel(model.id);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.stopPropagation();
+                                          handleExpandModel(model.id);
+                                        }
+                                      }}
+                                      style={{
+                                        cursor: "pointer",
+                                        padding: "8px 12px",
+                                        borderRadius: 8,
+                                        backgroundColor: isModelExpanded
+                                          ? "var(--p-color-bg-surface-hover)"
+                                          : "transparent",
+                                        transition: "background-color 0.15s",
+                                      }}
+                                    >
+                                      <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                                        <InlineStack gap="200" blockAlign="center">
+                                          <Text as="span" variant="bodyMd" fontWeight="medium">
+                                            {model.name}
+                                          </Text>
+                                          {model.generation && (
+                                            <Badge tone="info">{model.generation}</Badge>
+                                          )}
+                                          {model.body_type && (
+                                            <Badge>{model.body_type}</Badge>
+                                          )}
+                                        </InlineStack>
+                                        <InlineStack gap="200" blockAlign="center">
+                                          {yearRange && (
+                                            <Text as="span" variant="bodySm" tone="subdued">
+                                              {yearRange}
+                                            </Text>
+                                          )}
+                                          <Icon source={isModelExpanded ? ChevronUpIcon : ChevronDownIcon} />
+                                        </InlineStack>
+                                      </InlineStack>
+                                    </div>
+
+                                    {/* Expanded: Engines */}
+                                    <Collapsible
+                                      open={isModelExpanded}
+                                      id={`engines-${model.id}`}
+                                      transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
+                                    >
+                                      <Box paddingInlineStart="400" paddingBlockStart="100" paddingBlockEnd="200">
+                                        {enginesLoading ? (
+                                          <InlineStack gap="200" blockAlign="center">
+                                            <Spinner size="small" />
+                                            <Text as="span" variant="bodySm" tone="subdued">
+                                              Loading engines...
+                                            </Text>
+                                          </InlineStack>
+                                        ) : engines.length > 0 ? (
+                                          <BlockStack gap="200">
+                                            <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                                              Engines ({engines.length})
+                                            </Text>
+                                            {engines.map((engine) => (
+                                              <Box
+                                                key={engine.id}
+                                                padding="200"
+                                                borderRadius="200"
+                                                background="bg-surface-secondary"
+                                              >
+                                                <InlineStack align="space-between" blockAlign="center" wrap>
+                                                  <InlineStack gap="200" blockAlign="center" wrap>
+                                                    <Text as="span" variant="bodyMd" fontWeight="medium">
+                                                      {engine.name || engine.code || "Unknown"}
+                                                    </Text>
+                                                    {engine.code && engine.name && (
+                                                      <Badge>{engine.code}</Badge>
+                                                    )}
+                                                    {engine.displacement_cc && (
+                                                      <Badge tone="info">
+                                                        {formatDisplacement(engine.displacement_cc)}
+                                                      </Badge>
+                                                    )}
+                                                    {engine.fuel_type && (
+                                                      <Badge tone={fuelBadgeTone(engine.fuel_type)}>
+                                                        {engine.fuel_type}
+                                                      </Badge>
+                                                    )}
+                                                  </InlineStack>
+                                                  <InlineStack gap="300" blockAlign="center" wrap>
+                                                    {engine.power_hp && (
+                                                      <Text as="span" variant="bodySm" tone="subdued">
+                                                        {engine.power_hp} hp
+                                                        {engine.power_kw ? ` (${engine.power_kw} kW)` : ""}
+                                                      </Text>
+                                                    )}
+                                                    {engine.torque_nm && (
+                                                      <Text as="span" variant="bodySm" tone="subdued">
+                                                        {engine.torque_nm} Nm
+                                                      </Text>
+                                                    )}
+                                                    {(engine.year_from || engine.year_to) && (
+                                                      <Text as="span" variant="bodySm" tone="subdued">
+                                                        {formatYearRange(engine.year_from, engine.year_to)}
+                                                      </Text>
+                                                    )}
+                                                  </InlineStack>
+                                                </InlineStack>
+                                              </Box>
+                                            ))}
+                                          </BlockStack>
+                                        ) : (
+                                          <Text as="p" variant="bodySm" tone="subdued">
+                                            No engines found for this model.
+                                          </Text>
+                                        )}
+                                      </Box>
+                                    </Collapsible>
+                                  </BlockStack>
+                                );
+                              })}
+                            </BlockStack>
+                          ) : (
+                            <Text as="p" variant="bodySm" tone="subdued">
+                              No models found for this make.
+                            </Text>
+                          )}
+                        </Box>
+                      </Collapsible>
+                    </BlockStack>
+                  </ResourceItem>
+                );
+              }}
+            />
+          )}
+        </Card>
 
         {/* Results count */}
-        <Layout.Section>
-          <Box paddingInlineStart="100">
-            <Text as="span" variant="bodySm" tone="subdued">
-              Showing {filteredMakes.length} of {makes.length} makes
-              {searchValue ? " (filtered)" : ""}
-            </Text>
-          </Box>
-        </Layout.Section>
-      </Layout>
+        <Box paddingInlineStart="100">
+          <Text as="span" variant="bodySm" tone="subdued">
+            Showing {filteredMakes.length} of {makes.length} makes
+            {searchValue ? " (filtered)" : ""}
+          </Text>
+        </Box>
+      </BlockStack>
     </Page>
   );
 }

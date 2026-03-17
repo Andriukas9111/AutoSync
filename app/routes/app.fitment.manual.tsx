@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import { useLoaderData, useFetcher, useNavigate } from "react-router";
 import {
   Page,
   Layout,
@@ -130,7 +130,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Insert all fitments
+    // Insert all fitments — include ymme_make_id and ymme_model_id for collections
     const fitmentRows = fitments.map((f) => ({
       product_id: productId,
       shop_id: shopId,
@@ -142,6 +142,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       engine: f.engine || null,
       engine_code: f.engine_code || null,
       fuel_type: f.fuel_type || null,
+      ymme_make_id: f.makeId || null,
+      ymme_model_id: f.modelId || null,
+      ymme_engine_id: f.engineId || null,
       extraction_method: "manual",
       confidence_score: 1.0,
       source_text: "Manual fitment mapping",
@@ -201,6 +204,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function FitmentManual() {
   const { nextProduct, totalProducts, mappedCount, unmappedCount } =
     useLoaderData<typeof loader>();
+  const navigate = useNavigate();
 
   const fetcher = useFetcher<{
     success?: boolean;
@@ -341,10 +345,16 @@ export default function FitmentManual() {
     totalProducts > 0 ? Math.round((localMapped / totalProducts) * 100) : 0;
 
   const tags = nextProduct?.tags
-    ? nextProduct.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+    ? Array.isArray(nextProduct.tags)
+      ? nextProduct.tags.filter(Boolean)
+      : typeof nextProduct.tags === "string"
+        ? nextProduct.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+        : []
     : [];
 
-  const descriptionText = nextProduct?.description ?? "";
+  const descriptionText = nextProduct?.description
+    ? nextProduct.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+    : "";
   const truncatedDescription =
     descriptionText.length > 200
       ? descriptionText.slice(0, 200) + "..."
@@ -355,7 +365,7 @@ export default function FitmentManual() {
   return (
     <Page
       title="Manual Fitment Mapping"
-      backAction={{ url: "/app/fitment" }}
+      backAction={{ onAction: () => navigate("/app/fitment") }}
     >
       <Layout>
         {/* Success banner */}
