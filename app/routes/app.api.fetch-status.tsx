@@ -17,7 +17,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       .select("*")
       .eq("id", jobId)
       .eq("shop_id", shopId)
-      .single();
+      .maybeSingle();
 
     return data({ job });
   }
@@ -30,7 +30,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .eq("type", "fetch")
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   return data({ job });
 }

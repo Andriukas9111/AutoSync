@@ -33,6 +33,7 @@ export interface PlanLimits {
     wheelFinder: boolean;
     plateLookup: boolean;
     vinDecode: boolean;
+    pricingEngine: boolean;
     widgetCustomisation: "none" | "basic" | "full" | "full_css";
     dashboardAnalytics: "none" | "basic" | "full" | "full_export";
     prioritySupport: boolean;
