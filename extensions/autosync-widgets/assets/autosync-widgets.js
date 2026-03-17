@@ -407,23 +407,41 @@
             return;
           }
 
-          if (resultDiv) {
+          if (resultDiv && data.vehicle) {
+            var v = data.vehicle;
             var nameEl = resultDiv.querySelector('[data-autosync-plate-vehicle-name]');
-            if (nameEl) nameEl.textContent = escapeText(data.make) + ' ' + escapeText(data.model);
+            if (nameEl) nameEl.textContent = escapeText(v.make) + ' ' + escapeText(v.model);
 
             var fields = {
-              colour: data.colour,
-              fuel: data.fuelType,
-              year: data.yearOfManufacture,
-              engine: data.engineCapacity ? data.engineCapacity + 'cc' : '',
-              mot: data.motExpiryDate || 'N/A',
+              colour: v.colour,
+              fuel: v.fuelType,
+              year: v.yearOfManufacture,
+              engine: v.engineCapacity ? v.engineCapacity + 'cc' : '',
+              mot: v.motExpiryDate || (data.motHistory && data.motHistory.motTests && data.motHistory.motTests[0] ? data.motHistory.motTests[0].expiryDate : 'N/A'),
             };
             Object.keys(fields).forEach(function (key) {
               var el = resultDiv.querySelector('[data-autosync-plate-' + key + ']');
               if (el) el.textContent = escapeText(fields[key]) || '\u2014';
             });
 
+            // Store the identified vehicle for fitment badge cross-referencing
+            storeVehicle({
+              makeName: v.make,
+              modelName: v.model,
+              year: String(v.yearOfManufacture),
+              source: 'plate-lookup',
+            });
+
             resultDiv.classList.remove('autosync-plate-lookup--hidden');
+
+            // Show compatible products count if available
+            var partsBtn = resultDiv.querySelector('[data-autosync-plate-find-parts]');
+            if (partsBtn && data.compatibleCount > 0) {
+              partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
+              partsBtn.onclick = function () {
+                window.location.href = '/search?q=' + encodeURIComponent(v.make + ' ' + v.model) + '&type=product';
+              };
+            }
           }
         })
         .catch(function () {
@@ -468,24 +486,167 @@
 
           if (resultsDiv) {
             clearChildren(resultsDiv);
-            var p = document.createElement('p');
 
-            if (data.stub) {
-              p.className = 'autosync-wheel-finder__stub';
-              p.textContent = 'Wheel search coming soon.';
+            if (data.error) {
+              var errP = document.createElement('p');
+              errP.className = 'autosync-wheel-finder__error';
+              errP.textContent = escapeText(data.error);
+              resultsDiv.appendChild(errP);
             } else if (data.wheels && data.wheels.length > 0) {
-              p.textContent = data.count + ' wheels found';
+              var heading = document.createElement('p');
+              heading.className = 'autosync-wheel-finder__count';
+              heading.textContent = data.count + ' matching wheel' + (data.count !== 1 ? 's' : '') + ' found';
+              resultsDiv.appendChild(heading);
+
+              var grid = document.createElement('div');
+              grid.className = 'autosync-wheel-finder__grid';
+
+              data.wheels.forEach(function (item) {
+                var card = document.createElement('a');
+                card.className = 'autosync-wheel-finder__card';
+                card.href = '/products/' + escapeText(item.product.handle);
+
+                if (item.product.image_url) {
+                  var img = document.createElement('img');
+                  img.src = item.product.image_url;
+                  img.alt = escapeText(item.product.title);
+                  img.loading = 'lazy';
+                  card.appendChild(img);
+                }
+
+                var title = document.createElement('span');
+                title.className = 'autosync-wheel-finder__title';
+                title.textContent = escapeText(item.product.title);
+                card.appendChild(title);
+
+                if (item.product.price) {
+                  var price = document.createElement('span');
+                  price.className = 'autosync-wheel-finder__price';
+                  price.textContent = '\u00A3' + Number(item.product.price).toFixed(2);
+                  card.appendChild(price);
+                }
+
+                grid.appendChild(card);
+              });
+
+              resultsDiv.appendChild(grid);
             } else {
-              p.textContent = 'No wheels found matching your criteria.';
+              var noResults = document.createElement('p');
+              noResults.textContent = 'No wheels found matching your criteria.';
+              resultsDiv.appendChild(noResults);
             }
 
-            resultsDiv.appendChild(p);
             resultsDiv.classList.remove('autosync-wheel-finder--hidden');
           }
         })
         .catch(function () {
           searchBtn.disabled = false;
           searchBtn.textContent = 'Search Wheels';
+        });
+    });
+  }
+
+  // --------------- VIN Decode ---------------
+
+  function initVinDecode(container) {
+    var proxyUrl = container.dataset.proxyUrl;
+    var input = container.querySelector('[data-autosync-vin-input]');
+    var submitBtn = container.querySelector('[data-autosync-vin-submit]');
+    var resultDiv = container.querySelector('[data-autosync-vin-result]');
+    var errorDiv = container.querySelector('[data-autosync-vin-error]');
+
+    if (!submitBtn || !input) return;
+
+    // VIN input formatting — uppercase, alphanumeric only, no I/O/Q
+    input.addEventListener('input', function () {
+      this.value = this.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+    });
+
+    submitBtn.addEventListener('click', function () {
+      var vin = input.value.trim();
+      if (vin.length !== 17) {
+        if (errorDiv) {
+          var msg = errorDiv.querySelector('[data-autosync-vin-error-msg]');
+          if (msg) msg.textContent = 'VIN must be exactly 17 characters.';
+          errorDiv.classList.remove('autosync-vin-decode--hidden');
+        }
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Decoding...';
+
+      if (resultDiv) resultDiv.classList.add('autosync-vin-decode--hidden');
+      if (errorDiv) errorDiv.classList.add('autosync-vin-decode--hidden');
+
+      fetch(proxyUrl + '?path=vin-decode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin: vin }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Decode VIN';
+
+          if (data.error) {
+            if (errorDiv) {
+              var msg = errorDiv.querySelector('[data-autosync-vin-error-msg]');
+              if (msg) msg.textContent = escapeText(data.error);
+              errorDiv.classList.remove('autosync-vin-decode--hidden');
+            }
+            return;
+          }
+
+          if (resultDiv && data.vehicle) {
+            var v = data.vehicle;
+            var nameEl = resultDiv.querySelector('[data-autosync-vin-vehicle-name]');
+            if (nameEl) nameEl.textContent = v.year + ' ' + escapeText(v.make) + ' ' + escapeText(v.model);
+
+            var fields = {
+              body: v.bodyClass,
+              drive: v.driveType,
+              engine: v.engineCylinders ? v.engineCylinders + ' cyl' + (v.engineDisplacement ? ', ' + v.engineDisplacement + 'L' : '') : '',
+              fuel: v.fuelType,
+              transmission: v.transmissionStyle,
+              trim: v.trim,
+              manufacturer: v.manufacturer,
+              country: v.plantCountry,
+            };
+            Object.keys(fields).forEach(function (key) {
+              var el = resultDiv.querySelector('[data-autosync-vin-' + key + ']');
+              if (el) el.textContent = escapeText(fields[key]) || '\u2014';
+            });
+
+            // Store the decoded vehicle
+            storeVehicle({
+              makeName: v.make,
+              modelName: v.model,
+              year: String(v.year),
+              source: 'vin-decode',
+            });
+
+            resultDiv.classList.remove('autosync-vin-decode--hidden');
+
+            // Show compatible products
+            var partsBtn = resultDiv.querySelector('[data-autosync-vin-find-parts]');
+            if (partsBtn && data.compatibleCount > 0) {
+              partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
+              partsBtn.classList.remove('autosync-vin-decode--hidden');
+              partsBtn.onclick = function () {
+                window.location.href = '/search?q=' + encodeURIComponent(v.make + ' ' + v.model) + '&type=product';
+              };
+            }
+          }
+        })
+        .catch(function () {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Decode VIN';
+          if (errorDiv) {
+            var msg = errorDiv.querySelector('[data-autosync-vin-error-msg]');
+            if (msg) msg.textContent = 'Failed to decode VIN. Please try again.';
+            errorDiv.classList.remove('autosync-vin-decode--hidden');
+          }
         });
     });
   }
@@ -499,6 +660,7 @@
     document.querySelectorAll('[data-autosync-vehicle-bar]').forEach(initVehicleBar);
     document.querySelectorAll('[data-autosync-plate-lookup]').forEach(initPlateLookup);
     document.querySelectorAll('[data-autosync-wheel-finder]').forEach(initWheelFinder);
+    document.querySelectorAll('[data-autosync-vin-decode]').forEach(initVinDecode);
   }
 
   if (document.readyState === 'loading') {

@@ -452,6 +452,200 @@
   margin-top: 1rem;
 }
 
+.autosync-wheel-finder__count {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.autosync-wheel-finder__error {
+  color: #d72c0d;
+  font-size: 0.875rem;
+}
+
+.autosync-wheel-finder__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.autosync-wheel-finder__card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e3e3e3;
+  border-radius: 8px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+
+.autosync-wheel-finder__card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #c9cccf;
+}
+
+.autosync-wheel-finder__card img {
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: #f9fafb;
+}
+
+.autosync-wheel-finder__title {
+  padding: 0.5rem 0.75rem 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.autosync-wheel-finder__price {
+  padding: 0.25rem 0.75rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+/* --------------- VIN Decode --------------- */
+.autosync-vin-decode {
+  padding: 1.5rem;
+  border: 1px solid #e3e3e3;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.autosync-vin-decode__heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.autosync-vin-decode__form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.autosync-vin-decode__input-group {
+  flex: 1;
+}
+
+.autosync-vin-decode__input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 2px solid #c9cccf;
+  border-radius: 6px;
+  background: #fff;
+  color: #1a1a1a;
+  transition: border-color 0.15s;
+}
+
+.autosync-vin-decode__input:focus {
+  outline: none;
+  border-color: #2c6ecb;
+  box-shadow: 0 0 0 2px rgba(44, 110, 203, 0.2);
+}
+
+.autosync-vin-decode__input::placeholder {
+  font-weight: 400;
+  font-size: 0.875rem;
+  letter-spacing: normal;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #8c9196;
+}
+
+.autosync-vin-decode__btn {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.autosync-vin-decode__btn:hover {
+  background: #1f5da0;
+}
+
+.autosync-vin-decode__btn:disabled {
+  background: #c9cccf;
+  cursor: not-allowed;
+}
+
+.autosync-vin-decode--hidden {
+  display: none;
+}
+
+.autosync-vin-decode__card {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border: 1px solid #e3e3e3;
+  border-radius: 6px;
+}
+
+.autosync-vin-decode__card h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.autosync-vin-decode__details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
+}
+
+.autosync-vin-decode__details dt {
+  font-weight: 500;
+  color: #6d7175;
+}
+
+.autosync-vin-decode__details dd {
+  margin: 0;
+}
+
+.autosync-vin-decode__find-parts {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.autosync-vin-decode__find-parts:hover {
+  background: #1f5da0;
+}
+
+.autosync-vin-decode__error {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fff4f4;
+  border: 1px solid #e5b8b7;
+  border-radius: 6px;
+  color: #d72c0d;
+  font-size: 0.875rem;
+}
+
 /* --------------- Responsive --------------- */
 @media (max-width: 768px) {
   .autosync-ymme--horizontal .autosync-ymme__fields {
@@ -478,5 +672,13 @@
 
   .autosync-wheel-finder__fields {
     flex-direction: column;
+  }
+
+  .autosync-vin-decode__form {
+    flex-direction: column;
+  }
+
+  .autosync-wheel-finder__grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

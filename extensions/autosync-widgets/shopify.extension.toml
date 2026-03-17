@@ -26,3 +26,7 @@ template = "blocks/plate-lookup.liquid"
 [[blocks]]
 name = "Wheel Finder"
 template = "blocks/wheel-finder.liquid"
+
+[[blocks]]
+name = "VIN Decode"
+template = "blocks/vin-decode.liquid"
