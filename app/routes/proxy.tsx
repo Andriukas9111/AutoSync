@@ -3,6 +3,7 @@ import crypto from "crypto";
 import db from "../lib/db.server";
 import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
+import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
 import { getTenant } from "../lib/billing.server";
 
 // ---------- CORS helpers ----------
@@ -264,15 +265,237 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
 }
 
 async function handleWheelSearch(params: URLSearchParams) {
+  const shop = params.get("shop");
+
+  // Verify Business+ plan
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (!tenant) {
+      return json({ error: "Shop not found" }, 404);
+    }
+    const allowedPlans = ["business", "enterprise"];
+    if (!allowedPlans.includes(tenant.plan)) {
+      return json(
+        { error: "Wheel Finder requires the Business plan or higher" },
+        403,
+      );
+    }
+  }
+
   const pcd = params.get("pcd");
   const offset = params.get("offset");
-  // Stub — will query wheel_fitments table
+  const diameter = params.get("diameter");
+  const centerBore = params.get("center_bore");
+  const width = params.get("width");
+
+  // At least PCD is required for a meaningful search
+  if (!pcd) {
+    return json({ error: "Missing pcd (bolt pattern) parameter" }, 400);
+  }
+
+  // Build query against wheel_fitments table
+  let query = db
+    .from("wheel_fitments")
+    .select("*, products!inner(id, shopify_gid, title, handle, image_url, price, status)")
+    .eq("pcd", pcd);
+
+  if (shop) {
+    query = query.eq("shop_id", shop);
+  }
+
+  // Filter by offset range — if the user's offset falls within the wheel's min/max range
+  if (offset) {
+    const offsetNum = parseInt(offset, 10);
+    if (!isNaN(offsetNum)) {
+      query = query
+        .lte("offset_min", offsetNum)
+        .gte("offset_max", offsetNum);
+    }
+  }
+
+  if (diameter) {
+    const diam = parseInt(diameter, 10);
+    if (!isNaN(diam)) {
+      query = query.eq("diameter", diam);
+    }
+  }
+
+  if (centerBore) {
+    const bore = parseFloat(centerBore);
+    if (!isNaN(bore)) {
+      // Center bore must be >= the vehicle's hub bore
+      query = query.gte("center_bore", bore);
+    }
+  }
+
+  if (width) {
+    const w = parseFloat(width);
+    if (!isNaN(w)) {
+      query = query.eq("width", w);
+    }
+  }
+
+  // Only return approved products
+  query = query.eq("products.status", "approved");
+
+  const { data: wheelFitments, error } = await query.limit(100);
+
+  if (error) {
+    console.error("[proxy] Wheel search error:", error);
+    return json({ error: error.message }, 500);
+  }
+
+  // Deduplicate by product — a product might have multiple wheel fitment entries
+  const productMap = new Map<string, {
+    product: {
+      id: string;
+      shopify_gid: string;
+      title: string;
+      handle: string;
+      image_url: string | null;
+      price: number | null;
+    };
+    specs: {
+      pcd: string | null;
+      offset_min: number | null;
+      offset_max: number | null;
+      center_bore: number | null;
+      diameter: number | null;
+      width: number | null;
+    }[];
+  }>();
+
+  for (const wf of wheelFitments ?? []) {
+    const product = (wf as any).products;
+    if (!product) continue;
+
+    const existing = productMap.get(product.id);
+    const spec = {
+      pcd: wf.pcd,
+      offset_min: wf.offset_min,
+      offset_max: wf.offset_max,
+      center_bore: wf.center_bore,
+      diameter: wf.diameter,
+      width: wf.width,
+    };
+
+    if (existing) {
+      existing.specs.push(spec);
+    } else {
+      productMap.set(product.id, {
+        product: {
+          id: product.id,
+          shopify_gid: product.shopify_gid,
+          title: product.title,
+          handle: product.handle,
+          image_url: product.image_url,
+          price: product.price,
+        },
+        specs: [spec],
+      });
+    }
+  }
+
+  const wheels = Array.from(productMap.values());
+
   return json({
-    wheels: [],
-    count: 0,
-    stub: true,
-    filters: { pcd, offset },
+    wheels,
+    count: wheels.length,
+    filters: { pcd, offset, diameter, center_bore: centerBore, width },
   });
+}
+
+async function handleVinDecode(params: URLSearchParams, body: string | null) {
+  const shop = params.get("shop");
+
+  // Verify Enterprise plan
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (!tenant || tenant.plan !== "enterprise") {
+      return json(
+        { error: "VIN Decode requires the Enterprise plan" },
+        403,
+      );
+    }
+  }
+
+  // Parse VIN from body (POST) or params (GET fallback)
+  let vin = params.get("vin") || "";
+  let modelYear: number | undefined;
+
+  if (body) {
+    try {
+      const parsed = JSON.parse(body);
+      vin = parsed.vin || parsed.VIN || vin;
+      if (parsed.year || parsed.modelYear) {
+        modelYear = parseInt(parsed.year || parsed.modelYear, 10);
+      }
+    } catch {
+      // body isn't JSON — use as plain text VIN
+      if (!vin && body.trim().length === 17) {
+        vin = body.trim();
+      }
+    }
+  }
+
+  if (!vin) {
+    return json({ error: "Missing VIN" }, 400);
+  }
+
+  try {
+    const decoded = await decodeVin(vin, modelYear);
+
+    // Search for compatible products using the decoded vehicle info
+    let compatibleProducts: unknown[] = [];
+    try {
+      const { data: fitments } = await db
+        .from("vehicle_fitments")
+        .select("product_id")
+        .ilike("make", decoded.make)
+        .ilike("model", `%${decoded.model}%`)
+        .lte("year_from", decoded.modelYear)
+        .or(`year_to.gte.${decoded.modelYear},year_to.is.null`);
+
+      if (fitments && fitments.length > 0) {
+        const productIds = [...new Set(fitments.map((f) => f.product_id))];
+        const { data: products } = await db
+          .from("products")
+          .select("id, shopify_gid, title, handle, image_url, price")
+          .in("id", productIds.slice(0, 50))
+          .eq("status", "approved");
+        compatibleProducts = products ?? [];
+      }
+    } catch (searchErr) {
+      console.warn("[proxy] Product search after VIN decode failed:", searchErr);
+    }
+
+    return json({
+      vehicle: {
+        vin: decoded.vin,
+        make: decoded.make,
+        model: decoded.model,
+        year: decoded.modelYear,
+        bodyClass: decoded.bodyClass,
+        driveType: decoded.driveType,
+        engineCylinders: decoded.engineCylinders,
+        engineDisplacement: decoded.engineDisplacement,
+        fuelType: decoded.fuelType,
+        transmissionStyle: decoded.transmissionStyle,
+        trim: decoded.trim,
+        manufacturer: decoded.manufacturer,
+        vehicleType: decoded.vehicleType,
+        plantCountry: decoded.plantCountry,
+      },
+      compatibleProducts,
+      compatibleCount: compatibleProducts.length,
+    });
+  } catch (err) {
+    if (err instanceof VinDecodeError) {
+      return json({ error: err.message, code: err.code }, err.status);
+    }
+    const message = err instanceof Error ? err.message : "VIN decode failed";
+    return json({ error: message }, 500);
+  }
 }
 
 // ---------- Loader (GET requests) ----------
@@ -319,9 +542,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleSearch(params);
     case "wheel-search":
       return handleWheelSearch(params);
+    case "vin-decode":
+      return handleVinDecode(params, null);
     default:
       return json(
-        { error: `Unknown path: '${path}'. Available: makes, models, years, engines, search, plate-lookup, wheel-search` },
+        { error: `Unknown path: '${path}'. Available: makes, models, years, engines, search, plate-lookup, wheel-search, vin-decode` },
         400,
       );
   }
@@ -347,10 +572,15 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const path = params.get("path");
 
+  const body = await request.text();
+
   if (path === "plate-lookup") {
-    const body = await request.text();
     return handlePlateLookup(params, body);
   }
 
-  return json({ error: "POST only supported for plate-lookup" }, 405);
+  if (path === "vin-decode") {
+    return handleVinDecode(params, body);
+  }
+
+  return json({ error: "POST only supported for plate-lookup and vin-decode" }, 405);
 }
