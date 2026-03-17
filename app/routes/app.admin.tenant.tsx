@@ -122,7 +122,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("providers")
       .select("id, name, type, status, product_count, config, created_at")
       .eq("shop_id", shopId),
-    db.from("app_settings").select("*").eq("shop_id", shopId).single(),
+    db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
     // Fitment status breakdown
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),

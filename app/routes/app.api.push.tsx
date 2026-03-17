@@ -103,7 +103,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .eq("type", "push")
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (error || !job) {
     return data({ job: null });

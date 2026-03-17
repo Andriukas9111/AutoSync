@@ -81,7 +81,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .select("id, type")
     .eq("id", providerId)
     .eq("shop_id", shopId)
-    .single();
+    .maybeSingle();
 
   if (providerError || !provider) {
     return data({ error: "Provider not found." }, { status: 404 });

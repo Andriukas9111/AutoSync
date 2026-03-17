@@ -78,7 +78,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         .from("ymme_models")
         .select("year_from, year_to")
         .eq("id", modelId)
-        .single();
+        .maybeSingle();
 
       const modelYearFrom = model?.year_from ?? null;
       const modelYearTo = model?.year_to ?? new Date().getFullYear();

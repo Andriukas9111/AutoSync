@@ -250,7 +250,7 @@ export async function fetchNHTSAModelsForMake(makeId: number): Promise<{
     .from("ymme_makes")
     .select("id")
     .ilike("name", makeName)
-    .single();
+    .maybeSingle();
 
   if (!dbMake) {
     console.warn(`[nhtsa] Make "${makeName}" not found in DB, skipping models`);

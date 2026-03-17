@@ -1453,7 +1453,7 @@ export async function getScrapeJobStatus(jobId: string): Promise<{
     .from("scrape_jobs")
     .select("status, progress, current_item, result, processed_items, total_items, errors")
     .eq("id", jobId)
-    .single();
+    .maybeSingle();
 
   if (!data) return null;
   return {
@@ -1560,7 +1560,7 @@ export async function scrapeAutoData(
         .from("scrape_jobs")
         .select("status")
         .eq("id", jobId)
-        .single();
+        .maybeSingle();
 
       if (jobCheck?.status === "paused") {
         // Save resume point and exit

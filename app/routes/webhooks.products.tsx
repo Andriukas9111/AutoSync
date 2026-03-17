@@ -17,7 +17,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .select("id")
         .eq("shop_id", shop)
         .eq("shopify_product_id", payload.id)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         await db
