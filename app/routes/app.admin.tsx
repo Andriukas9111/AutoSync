@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
-import { json } from "react-router";
+import { data } from "react-router";
 import {
   Page,
   Layout,
@@ -119,14 +119,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (intent) {
     case "trigger-scrape":
       // Placeholder — will call /app/api/admin/scrape in the future
-      return json({ ok: true, message: "YMME scrape triggered (placeholder)." });
+      return data({ ok: true, message: "YMME scrape triggered (placeholder)." });
 
     case "sync-nhtsa":
       // Placeholder — will call NHTSA sync in the future
-      return json({ ok: true, message: "NHTSA sync triggered (placeholder)." });
+      return data({ ok: true, message: "NHTSA sync triggered (placeholder)." });
 
     default:
-      return json({ ok: false, message: `Unknown action: ${intent}` });
+      return data({ ok: false, message: `Unknown action: ${intent}` });
   }
 };
 
