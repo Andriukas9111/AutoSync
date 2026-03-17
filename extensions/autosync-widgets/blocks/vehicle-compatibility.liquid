@@ -28,7 +28,7 @@
       </thead>
       <tbody data-autosync-compat-body>
         <tr>
-          <td colspan="{{ block.settings.show_engine | ternary: 4, 3 }}">
+          <td colspan="{% if block.settings.show_engine %}4{% else %}3{% endif %}">
             Loading compatibility data...
           </td>
         </tr>
@@ -38,11 +38,11 @@
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
-{{ 'autosync-widgets.js' | asset_url | script_tag }}
+<script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
-  "name": "Vehicle Compatibility Table",
+  "name": "Vehicle Compatibility",
   "target": "section",
   "settings": [
     {

@@ -29,7 +29,7 @@
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
-{{ 'autosync-widgets.js' | asset_url | script_tag }}
+<script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
 
 {% schema %}
 {

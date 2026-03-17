@@ -1,4 +1,5 @@
 api_version = "2026-01"
+uid = "dbc464d7-e2bb-019d-9a25-244029d888d02b791e3c"
 type = "theme_app_extension"
 name = "AutoSync Widgets"
 
