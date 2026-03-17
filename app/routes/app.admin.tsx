@@ -15,11 +15,13 @@ import {
   Banner,
   Divider,
   Box,
+  Select,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
+import { syncNHTSAToYMME } from "../lib/scrapers/nhtsa.server";
 
 // ---------------------------------------------------------------------------
 // Admin access control
@@ -59,11 +61,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Fetch all data in parallel
-  const [tenantsRes, makesRes, modelsRes, enginesRes] = await Promise.all([
+  const [tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
     db.from("ymme_engines").select("*", { count: "exact", head: true }),
+    db.from("sync_jobs").select("*", { count: "exact", head: true }),
+    db.from("ymme_aliases").select("*", { count: "exact", head: true }),
   ]);
 
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
@@ -82,6 +86,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     makes: makesRes.count ?? 0,
     models: modelsRes.count ?? 0,
     engines: enginesRes.count ?? 0,
+    aliases: aliasesRes.count ?? 0,
+    totalJobs: jobsRes.count ?? 0,
   };
 
   return {
@@ -108,13 +114,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent") as string;
 
   switch (intent) {
-    case "trigger-scrape":
-      // Placeholder — will call /app/api/admin/scrape in the future
-      return data({ ok: true, message: "YMME scrape triggered (placeholder)." });
+    case "sync-nhtsa": {
+      try {
+        const result = await syncNHTSAToYMME({ maxMakes: 50, delayMs: 300 });
+        return data({
+          ok: true,
+          message: `NHTSA sync complete: ${result.makesProcessed} makes processed (${result.newMakes} new), ${result.modelsProcessed} models processed (${result.newModels} new). ${result.errors.length} errors.`,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "NHTSA sync failed";
+        return data({ ok: false, message: msg });
+      }
+    }
 
-    case "sync-nhtsa":
-      // Placeholder — will call NHTSA sync in the future
-      return data({ ok: true, message: "NHTSA sync triggered (placeholder)." });
+    case "change-plan": {
+      const shopId = formData.get("shop_id") as string;
+      const newPlan = formData.get("new_plan") as PlanTier;
+
+      if (!shopId || !newPlan) {
+        return data({ ok: false, message: "Missing shop_id or new_plan" });
+      }
+
+      const validPlans: PlanTier[] = [
+        "free", "starter", "growth", "professional", "business", "enterprise",
+      ];
+      if (!validPlans.includes(newPlan)) {
+        return data({ ok: false, message: `Invalid plan: ${newPlan}` });
+      }
+
+      const { error } = await db
+        .from("tenants")
+        .update({ plan: newPlan })
+        .eq("shop_id", shopId);
+
+      if (error) {
+        return data({ ok: false, message: `Failed to update plan: ${error.message}` });
+      }
+
+      return data({
+        ok: true,
+        message: `Plan for ${shopId} changed to ${newPlan}.`,
+      });
+    }
 
     default:
       return data({ ok: false, message: `Unknown action: ${intent}` });
@@ -222,7 +263,7 @@ export default function AdminPanel() {
                 YMME Database
               </Text>
 
-              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+              <InlineGrid columns={{ xs: 2, sm: 3, md: 5 }} gap="400">
                 <BlockStack gap="100">
                   <Text as="p" variant="bodySm" tone="subdued">
                     Makes
@@ -249,6 +290,24 @@ export default function AdminPanel() {
                     {ymmeCounts.engines.toLocaleString()}
                   </Text>
                 </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Aliases
+                  </Text>
+                  <Text as="p" variant="headingLg">
+                    {ymmeCounts.aliases.toLocaleString()}
+                  </Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Sync Jobs
+                  </Text>
+                  <Text as="p" variant="headingLg">
+                    {ymmeCounts.totalJobs.toLocaleString()}
+                  </Text>
+                </BlockStack>
               </InlineGrid>
 
               <Divider />
@@ -260,19 +319,16 @@ export default function AdminPanel() {
 
               <InlineStack gap="300">
                 <fetcher.Form method="post">
-                  <input type="hidden" name="intent" value="trigger-scrape" />
-                  <Button submit loading={isSubmitting} variant="primary">
-                    Trigger YMME Scrape
-                  </Button>
-                </fetcher.Form>
-
-                <fetcher.Form method="post">
                   <input type="hidden" name="intent" value="sync-nhtsa" />
-                  <Button submit loading={isSubmitting}>
-                    Sync NHTSA Data
+                  <Button submit loading={isSubmitting} variant="primary">
+                    Sync NHTSA Makes &amp; Models
                   </Button>
                 </fetcher.Form>
               </InlineStack>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Syncs up to 50 makes from the NHTSA vPIC database and their models.
+                This is free and requires no API key.
+              </Text>
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -295,6 +351,7 @@ export default function AdminPanel() {
                   { title: "Fitments" },
                   { title: "Installed" },
                   { title: "Status" },
+                  { title: "Change Plan" },
                 ]}
                 selectable={false}
               >
@@ -346,6 +403,33 @@ export default function AdminPanel() {
                         <Badge tone={isActive ? "success" : "critical"}>
                           {isActive ? "Active" : "Uninstalled"}
                         </Badge>
+                      </IndexTable.Cell>
+
+                      <IndexTable.Cell>
+                        <fetcher.Form method="post">
+                          <input type="hidden" name="intent" value="change-plan" />
+                          <input type="hidden" name="shop_id" value={tenant.shop_id} />
+                          <InlineStack gap="200" blockAlign="center">
+                            <Select
+                              label=""
+                              labelHidden
+                              options={[
+                                { label: "Free", value: "free" },
+                                { label: "Starter", value: "starter" },
+                                { label: "Growth", value: "growth" },
+                                { label: "Professional", value: "professional" },
+                                { label: "Business", value: "business" },
+                                { label: "Enterprise", value: "enterprise" },
+                              ]}
+                              value={tenant.plan}
+                              name="new_plan"
+                              onChange={() => {}}
+                            />
+                            <Button submit size="slim" loading={isSubmitting}>
+                              Set
+                            </Button>
+                          </InlineStack>
+                        </fetcher.Form>
                       </IndexTable.Cell>
                     </IndexTable.Row>
                   );
