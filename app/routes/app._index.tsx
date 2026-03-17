@@ -205,7 +205,7 @@ export default function Dashboard() {
         <Text as="h2" variant="headingMd">
           Quick Actions
         </Text>
-        <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
+        <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
           <Card>
             <BlockStack gap="200">
               <Text as="h3" variant="headingSm">
@@ -246,6 +246,21 @@ export default function Dashboard() {
               </Text>
               <Button onClick={() => navigate("/app/push")}>
                 Go to Push
+              </Button>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingSm">
+                Analytics
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Fitment coverage, popular vehicles, supplier performance, and
+                inventory gaps.
+              </Text>
+              <Button onClick={() => navigate("/app/analytics")}>
+                View Analytics
               </Button>
             </BlockStack>
           </Card>

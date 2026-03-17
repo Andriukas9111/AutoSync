@@ -486,8 +486,67 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
       ),
     },
     {
+      id: "analytics",
+      title: "11. Analytics Dashboard",
+      keywords: ["analytics", "fitment", "coverage", "popular", "makes", "models", "supplier", "performance", "inventory", "gap", "export", "report"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            The Analytics dashboard provides insights into your fitment coverage, popular
+            vehicles, supplier performance, and inventory gaps.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Fitment coverage
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              See what percentage of your products have vehicle fitment data mapped. Track
+              coverage progress over time and identify products that still need mapping.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Popular makes and models
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              View your top 15 makes and models by fitment count. Understand which vehicles
+              have the most product coverage and where you might want to expand.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Supplier performance
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Monitor your providers — see product counts, last fetch dates, and sync job
+              success rates to ensure your data pipeline is healthy.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Inventory gap analysis
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Discover how many vehicle makes in the global database have no products in your
+              store. This highlights opportunities to expand your catalogue.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Plan availability
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Basic analytics (coverage + status) available on Starter. Full analytics (tables,
+              gaps, supplier metrics) on Growth+. Data export (JSON/CSV) on Business+.
+            </Text>
+          </BlockStack>
+          <Button onClick={() => navigate("/app/analytics")}>Go to Analytics</Button>
+        </BlockStack>
+      ),
+    },
+    {
       id: "plan-comparison",
-      title: "11. Plan Comparison",
+      title: "12. Plan Comparison",
       keywords: ["plan", "pricing", "tier", "upgrade", "downgrade", "billing", "subscription"],
       content: (
         <BlockStack gap="300">
@@ -520,7 +579,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
     },
     {
       id: "faq",
-      title: "12. FAQ",
+      title: "13. FAQ",
       keywords: ["faq", "question", "answer", "help", "common", "troubleshoot"],
       content: (
         <BlockStack gap="400">

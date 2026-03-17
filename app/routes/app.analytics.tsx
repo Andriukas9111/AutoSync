@@ -75,6 +75,12 @@ interface SyncJobSummary {
   successRate: number;
 }
 
+interface PopularSearch {
+  make: string;
+  model: string;
+  count: number;
+}
+
 interface AnalyticsData {
   plan: PlanTier;
   analyticsLevel: string;
@@ -87,6 +93,7 @@ interface AnalyticsData {
   inventoryGaps: { makesWithoutProducts: number; productsPerMakeAvg: number };
   totalMakes: number;
   totalModels: number;
+  popularSearches: PopularSearch[];
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +123,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       inventoryGaps: { makesWithoutProducts: 0, productsPerMakeAvg: 0 },
       totalMakes: 0,
       totalModels: 0,
+      popularSearches: [],
     } satisfies AnalyticsData;
   }
 
@@ -130,6 +138,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncJobsRes,
     makesRes,
     modelsRes,
+    searchEventsRes,
   ] = await Promise.all([
     // Total products for this tenant
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
@@ -168,6 +177,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Global YMME counts
     db.from("ymme_makes").select("id, name", { count: "exact" }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
+
+    // Search events (last 30 days — silently returns empty if table doesn't exist)
+    db.from("search_events")
+      .select("search_make, search_model")
+      .eq("shop_id", shopId)
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .not("search_make", "is", null),
   ]);
 
   // ── Compute fitment coverage ───────────────────────────────
@@ -284,6 +300,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         )
       : 0;
 
+  // ── Popular storefront searches (last 30 days) ──────────
+  const searchCounts: Record<string, number> = {};
+  for (const s of (searchEventsRes.data ?? []) as Array<{ search_make: string; search_model: string }>) {
+    const key = `${s.search_make}|||${s.search_model || "(any model)"}`;
+    searchCounts[key] = (searchCounts[key] ?? 0) + 1;
+  }
+  const popularSearches: PopularSearch[] = Object.entries(searchCounts)
+    .map(([key, count]) => {
+      const [make, model] = key.split("|||");
+      return { make, model, count };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 15);
+
   return {
     plan,
     analyticsLevel,
@@ -296,6 +326,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     inventoryGaps: { makesWithoutProducts, productsPerMakeAvg },
     totalMakes,
     totalModels: modelsRes.count ?? 0,
+    popularSearches,
   } satisfies AnalyticsData;
 };
 
@@ -326,6 +357,7 @@ export default function AnalyticsPage() {
     inventoryGaps,
     totalMakes,
     totalModels,
+    popularSearches,
   } = useLoaderData<typeof loader>();
 
   const [showExport, setShowExport] = useState(false);
@@ -628,6 +660,33 @@ export default function AnalyticsPage() {
                       ])}
                     />
                   )}
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
+          {/* ── Popular Storefront Searches ────────────────── */}
+          {!isBasic && popularSearches.length > 0 && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between">
+                    <Text as="h2" variant="headingMd">
+                      Popular Storefront Searches (Last 30 Days)
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      From YMME widget usage
+                    </Text>
+                  </InlineStack>
+                  <DataTable
+                    columnContentTypes={["text", "text", "numeric"]}
+                    headings={["Make", "Model", "Searches"]}
+                    rows={popularSearches.map((s) => [
+                      s.make,
+                      s.model,
+                      s.count.toLocaleString(),
+                    ])}
+                  />
                 </BlockStack>
               </Card>
             </Layout.Section>

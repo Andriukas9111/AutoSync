@@ -46,6 +46,30 @@ function verifyProxySignature(
   );
 }
 
+// ---------- Search event logging (fire-and-forget) ----------
+function logSearchEvent(
+  shop: string,
+  eventType: string,
+  searchParams: Record<string, string | undefined>,
+  resultCount: number,
+) {
+  // Non-blocking insert — don't await, don't fail the request
+  db.from("search_events")
+    .insert({
+      shop_id: shop,
+      event_type: eventType,
+      search_make: searchParams.make ?? null,
+      search_model: searchParams.model ?? null,
+      search_year: searchParams.year ?? null,
+      result_count: resultCount,
+      created_at: new Date().toISOString(),
+    })
+    .then(() => {})
+    .catch(() => {
+      // Silently ignore — table may not exist yet
+    });
+}
+
 // ---------- Sub-route handlers ----------
 
 async function handleMakes(shop: string) {
@@ -132,6 +156,7 @@ async function handleSearch(params: URLSearchParams) {
   const make = params.get("make");
   const model = params.get("model");
   const year = params.get("year");
+  const shop = params.get("shop") ?? "";
 
   if (!make || !model) {
     return json({ error: "Missing make and/or model parameter" }, 400);
@@ -173,7 +198,12 @@ async function handleSearch(params: URLSearchParams) {
 
   if (prodError) return json({ error: prodError.message }, 500);
 
-  return json({ products: products ?? [], count: products?.length ?? 0 });
+  const resultCount = products?.length ?? 0;
+
+  // Fire-and-forget search event logging
+  logSearchEvent(shop, "ymme_search", { make, model, year: year ?? undefined }, resultCount);
+
+  return json({ products: products ?? [], count: resultCount });
 }
 
 async function handlePlateLookup(params: URLSearchParams, body: string | null) {
