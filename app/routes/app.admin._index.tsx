@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, useRevalidator, useNavigate } from "react-router";
 import { data } from "react-router";
@@ -30,7 +30,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
 import { syncNHTSAToYMME } from "../lib/scrapers/nhtsa.server";
-import { startScrapeJob, pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
+import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
 
 // ---------------------------------------------------------------------------
 // Admin access control
@@ -189,35 +189,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return data({ ok: false, intent: "sync-nhtsa", message: err instanceof Error ? err.message : "NHTSA sync failed" });
       }
     }
-    case "start-autodata-sync": {
-      try {
-        const maxBrands = parseInt(formData.get("max_brands") as string || "5", 10);
-        const delayMs = parseInt(formData.get("delay_ms") as string || "1500", 10);
-        const scrapeSpecs = formData.get("scrape_specs") !== "false";
-        const resumeFrom = formData.get("resume_from") as string || undefined;
-
-        const { jobId, result } = await startScrapeJob({
-          type: "autodata_full",
-          maxBrands,
-          delayMs,
-          scrapeSpecs,
-          resumeFrom,
-        });
-
-        return data({
-          ok: true,
-          intent: "start-autodata-sync",
-          message: `Auto-data.net sync complete — ${result.brandsProcessed} brands, ${result.modelsProcessed} models, ${result.enginesProcessed} engines, ${result.specsProcessed} specs scraped. ${result.logosResolved} logos resolved.${result.errors.length > 0 ? ` ${result.errors.length} errors.` : ""}`,
-          jobId,
-        });
-      } catch (err) {
-        return data({
-          ok: false,
-          intent: "start-autodata-sync",
-          message: err instanceof Error ? err.message : "Auto-data sync failed",
-        });
-      }
-    }
     case "pause-autodata-sync": {
       try {
         const jobId = formData.get("job_id") as string;
@@ -261,19 +232,93 @@ export default function AdminPanel() {
   const [selectedTab, setSelectedTab] = useState(0);
   const [search, setSearch] = useState("");
   const [planOverrides, setPlanOverrides] = useState<Record<string, string>>({});
-  const [autodataBatchSize, setAutodataBatchSize] = useState("5");
-  const [autodataDelay, setAutodataDelay] = useState("1500");
+  const [autodataDelay, setAutodataDelay] = useState("500");
   const [autodataScrapeSpecs, setAutodataScrapeSpecs] = useState("true");
-  const autodataFetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
-  const isAutoDataSyncing = autodataFetcher.state !== "idle";
 
-  // Auto-refresh after auto-data sync
-  useEffect(() => {
-    if (autodataFetcher.state === "idle" && autodataFetcher.data?.ok && autodataFetcher.data?.intent === "start-autodata-sync") {
-      const t = setTimeout(() => revalidator.revalidate(), 2000);
-      return () => clearTimeout(t);
+  // Chunked brand-by-brand scrape state
+  const [scrapeState, setScrapeState] = useState<{
+    running: boolean;
+    currentBrand: string;
+    brandIndex: number;
+    totalBrands: number;
+    brandsProcessed: number;
+    modelsProcessed: number;
+    enginesProcessed: number;
+    specsProcessed: number;
+    errors: string[];
+  } | null>(null);
+  const stopRef = useRef(false);
+
+  async function startChunkedScrape() {
+    stopRef.current = false;
+    const scrapeSpecs = autodataScrapeSpecs;
+    let brandIndex = 0;
+    let totalBrands = 0;
+    let totalModels = 0;
+    let totalEngines = 0;
+    let totalSpecs = 0;
+    const allErrors: string[] = [];
+
+    setScrapeState({
+      running: true,
+      currentBrand: "Loading...",
+      brandIndex: 0,
+      totalBrands: 0,
+      brandsProcessed: 0,
+      modelsProcessed: 0,
+      enginesProcessed: 0,
+      specsProcessed: 0,
+      errors: [],
+    });
+
+    while (!stopRef.current) {
+      try {
+        const formData = new FormData();
+        formData.append("brand_index", String(brandIndex));
+        formData.append("scrape_specs", scrapeSpecs);
+        formData.append("delay_ms", autodataDelay);
+
+        const res = await fetch("/app/api/scrape-brand", {
+          method: "POST",
+          body: formData,
+          credentials: "same-origin",
+        });
+        const result = await res.json();
+
+        if (!result.ok || result.done) {
+          if (!result.ok) allErrors.push(result.error || "Unknown error");
+          break;
+        }
+
+        totalBrands = result.total_brands;
+        totalModels += result.models;
+        totalEngines += result.engines;
+        totalSpecs += result.specs;
+        if (result.errors?.length) allErrors.push(...result.errors);
+
+        brandIndex++;
+        setScrapeState({
+          running: true,
+          currentBrand: result.brand_name,
+          brandIndex,
+          totalBrands,
+          brandsProcessed: brandIndex,
+          modelsProcessed: totalModels,
+          enginesProcessed: totalEngines,
+          specsProcessed: totalSpecs,
+          errors: allErrors,
+        });
+
+        if (brandIndex >= totalBrands) break;
+      } catch (err) {
+        allErrors.push(err instanceof Error ? err.message : "Network error");
+        break;
+      }
     }
-  }, [autodataFetcher.state, autodataFetcher.data]);
+
+    setScrapeState((prev) => (prev ? { ...prev, running: false } : null));
+    revalidator.revalidate();
+  }
 
   // Auto-refresh after NHTSA sync
   useEffect(() => {
@@ -625,12 +670,12 @@ export default function AdminPanel() {
                 {/* ──── YMME DATABASE ──── */}
                 {selectedTab === 2 && (
                   <BlockStack gap="600">
-                    {/* Auto-data banner */}
-                    {autodataFetcher.data?.message && (
+                    {/* Chunked scrape banner */}
+                    {scrapeState && !scrapeState.running && (
                       <Banner
-                        title={autodataFetcher.data.message}
-                        tone={autodataFetcher.data.ok ? "success" : "critical"}
-                        onDismiss={() => {}}
+                        title={`Scrape complete — ${scrapeState.brandsProcessed} brands, ${scrapeState.modelsProcessed} models, ${scrapeState.enginesProcessed} engines, ${scrapeState.specsProcessed} specs.${scrapeState.errors.length > 0 ? ` ${scrapeState.errors.length} errors.` : ""}`}
+                        tone={scrapeState.errors.length > 0 ? "warning" : "success"}
+                        onDismiss={() => setScrapeState(null)}
                       />
                     )}
 
@@ -675,7 +720,7 @@ export default function AdminPanel() {
                     <Text as="h2" variant="headingMd">Data Sources</Text>
 
                     <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-                      {/* Auto-data.net — PRIMARY */}
+                      {/* Auto-data.net — PRIMARY (Chunked brand-by-brand) */}
                       <Box background="bg-surface-secondary" padding="400" borderRadius="200" borderWidth="025" borderColor="border">
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
@@ -683,36 +728,23 @@ export default function AdminPanel() {
                             <Badge tone="success">Primary Source</Badge>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            387 global brands with full 4-level deep scraping: brands, models, engines, and 90+ vehicle spec fields. Includes logos, electric/hybrid data, performance specs, dimensions, and more.
+                            387 global brands with full 4-level deep scraping: brands, models, engines, and 90+ vehicle spec fields. Processes one brand at a time to avoid serverless timeouts.
                           </Text>
                           <Divider />
 
-                          {/* Batch size & delay controls */}
-                          <InlineGrid columns={3} gap="200">
+                          {/* Delay & specs controls */}
+                          <InlineGrid columns={2} gap="200">
                             <Select
-                              label="Brands per batch"
+                              label="Delay between requests"
                               options={[
-                                { label: "3 brands", value: "3" },
-                                { label: "5 brands", value: "5" },
-                                { label: "10 brands", value: "10" },
-                                { label: "25 brands", value: "25" },
-                                { label: "50 brands", value: "50" },
-                                { label: "100 brands", value: "100" },
-                                { label: "All (387)", value: "400" },
-                              ]}
-                              value={autodataBatchSize}
-                              onChange={setAutodataBatchSize}
-                            />
-                            <Select
-                              label="Delay (ms)"
-                              options={[
+                                { label: "300ms (fast)", value: "300" },
+                                { label: "500ms (default)", value: "500" },
                                 { label: "1.0s", value: "1000" },
                                 { label: "1.5s", value: "1500" },
-                                { label: "2.0s", value: "2000" },
-                                { label: "3.0s", value: "3000" },
                               ]}
                               value={autodataDelay}
                               onChange={setAutodataDelay}
+                              disabled={scrapeState?.running ?? false}
                             />
                             <Select
                               label="Scrape specs"
@@ -722,32 +754,90 @@ export default function AdminPanel() {
                               ]}
                               value={autodataScrapeSpecs}
                               onChange={setAutodataScrapeSpecs}
+                              disabled={scrapeState?.running ?? false}
                             />
                           </InlineGrid>
 
                           <InlineStack gap="200">
-                            <autodataFetcher.Form method="post">
-                              <input type="hidden" name="intent" value="start-autodata-sync" />
-                              <input type="hidden" name="max_brands" value={autodataBatchSize} />
-                              <input type="hidden" name="delay_ms" value={autodataDelay} />
-                              <input type="hidden" name="scrape_specs" value={autodataScrapeSpecs} />
-                              <Button submit loading={isAutoDataSyncing} variant="primary">
-                                {isAutoDataSyncing ? "Scraping..." : "Start Scrape"}
+                            {!scrapeState?.running ? (
+                              <Button
+                                variant="primary"
+                                onClick={() => startChunkedScrape()}
+                              >
+                                Start Scrape
                               </Button>
-                            </autodataFetcher.Form>
+                            ) : (
+                              <Button
+                                variant="primary"
+                                tone="critical"
+                                onClick={() => { stopRef.current = true; }}
+                              >
+                                Stop Scrape
+                              </Button>
+                            )}
                             <Button onClick={() => revalidator.revalidate()} disabled={isRefreshing}>
                               {isRefreshing ? "Refreshing..." : "Refresh Counts"}
                             </Button>
                           </InlineStack>
 
-                          {isAutoDataSyncing && (
-                            <Box background="bg-surface" padding="300" borderRadius="200">
-                              <InlineStack gap="200" blockAlign="center">
-                                <Spinner size="small" />
-                                <Text as="p" variant="bodySm" tone="subdued">
-                                  Scraping auto-data.net — this may take a while depending on batch size...
-                                </Text>
-                              </InlineStack>
+                          {/* Progress display during scrape */}
+                          {scrapeState?.running && (
+                            <Box background="bg-surface" padding="400" borderRadius="200">
+                              <BlockStack gap="300">
+                                <InlineStack gap="200" blockAlign="center">
+                                  <Spinner size="small" />
+                                  <Text as="p" variant="bodySm" fontWeight="semibold">
+                                    Scraping: {scrapeState.currentBrand}
+                                  </Text>
+                                </InlineStack>
+
+                                {scrapeState.totalBrands > 0 && (
+                                  <>
+                                    <ProgressBar
+                                      progress={Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}
+                                      size="small"
+                                      tone="primary"
+                                    />
+                                    <Text as="p" variant="bodySm" tone="subdued">
+                                      Brand {scrapeState.brandsProcessed} of {scrapeState.totalBrands}
+                                      {" "}({Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}%)
+                                    </Text>
+                                  </>
+                                )}
+
+                                <InlineGrid columns={3} gap="200">
+                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
+                                    <BlockStack gap="100" inlineAlign="center">
+                                      <Text as="p" variant="bodySm" tone="subdued">Models</Text>
+                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
+                                        {scrapeState.modelsProcessed.toLocaleString()}
+                                      </Text>
+                                    </BlockStack>
+                                  </Box>
+                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
+                                    <BlockStack gap="100" inlineAlign="center">
+                                      <Text as="p" variant="bodySm" tone="subdued">Engines</Text>
+                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
+                                        {scrapeState.enginesProcessed.toLocaleString()}
+                                      </Text>
+                                    </BlockStack>
+                                  </Box>
+                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
+                                    <BlockStack gap="100" inlineAlign="center">
+                                      <Text as="p" variant="bodySm" tone="subdued">Specs</Text>
+                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
+                                        {scrapeState.specsProcessed.toLocaleString()}
+                                      </Text>
+                                    </BlockStack>
+                                  </Box>
+                                </InlineGrid>
+
+                                {scrapeState.errors.length > 0 && (
+                                  <Text as="p" variant="bodySm" tone="critical">
+                                    {scrapeState.errors.length} error(s) so far
+                                  </Text>
+                                )}
+                              </BlockStack>
                             </Box>
                           )}
                         </BlockStack>

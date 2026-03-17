@@ -223,7 +223,7 @@ interface ScrapedVehicleSpecs {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BASE_URL = "https://www.auto-data.net";
+export const BASE_URL = "https://www.auto-data.net";
 const DEFAULT_DELAY_MS = 1500;
 const GITHUB_LOGO_BASE =
   "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized";
@@ -691,7 +691,7 @@ function regionFromCountry(country: string | null): string | null {
 
 // ── Logo Resolution ───────────────────────────────────────────────────────────
 
-function resolveLogoUrl(brandName: string, autodataLogoSrc: string | null): string {
+export function resolveLogoUrl(brandName: string, autodataLogoSrc: string | null): string {
   // GitHub CDN slug: lowercase, spaces→hyphens, remove special chars
   const slug = brandName
     .toLowerCase()
@@ -733,13 +733,13 @@ async function fetchPage(path: string): Promise<string> {
   return response.text();
 }
 
-function sleep(ms: number): Promise<void> {
+export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ── Parsers ───────────────────────────────────────────────────────────────────
 
-async function fetchBrandList(): Promise<ScrapedBrand[]> {
+export async function fetchBrandList(): Promise<ScrapedBrand[]> {
   try {
     const html = await fetchPage("/en/allbrands");
     const brands: ScrapedBrand[] = [];
@@ -827,7 +827,7 @@ async function fetchBrandList(): Promise<ScrapedBrand[]> {
   }
 }
 
-async function fetchModelsForBrand(brandPageUrl: string): Promise<ScrapedModel[]> {
+export async function fetchModelsForBrand(brandPageUrl: string): Promise<ScrapedModel[]> {
   try {
     const html = await fetchPage(brandPageUrl);
     const models: ScrapedModel[] = [];
@@ -907,7 +907,7 @@ async function fetchModelsForBrand(brandPageUrl: string): Promise<ScrapedModel[]
   }
 }
 
-async function fetchEnginesForModel(modelPageUrl: string): Promise<ScrapedEngine[]> {
+export async function fetchEnginesForModel(modelPageUrl: string): Promise<ScrapedEngine[]> {
   try {
     const html = await fetchPage(modelPageUrl);
     const engines: ScrapedEngine[] = [];
@@ -996,7 +996,7 @@ async function fetchEnginesForModel(modelPageUrl: string): Promise<ScrapedEngine
 }
 
 /** Level 4: Parse the full vehicle spec page */
-async function fetchSpecsForEngine(specPageUrl: string): Promise<ScrapedVehicleSpecs> {
+export async function fetchSpecsForEngine(specPageUrl: string): Promise<ScrapedVehicleSpecs> {
   const specs = createEmptySpecs();
 
   try {
@@ -1124,7 +1124,7 @@ function createEmptySpecs(): ScrapedVehicleSpecs {
 
 // ── Database Upserts ──────────────────────────────────────────────────────────
 
-async function upsertMake(brand: ScrapedBrand): Promise<string | null> {
+export async function upsertMake(brand: ScrapedBrand): Promise<string | null> {
   const { data, error } = await db
     .from("ymme_makes")
     .upsert(
@@ -1151,7 +1151,7 @@ async function upsertMake(brand: ScrapedBrand): Promise<string | null> {
   return data?.id ?? null;
 }
 
-async function upsertModel(
+export async function upsertModel(
   makeId: string,
   model: ScrapedModel,
 ): Promise<string | null> {
@@ -1184,7 +1184,7 @@ async function upsertModel(
   return data?.id ?? null;
 }
 
-async function upsertEngine(
+export async function upsertEngine(
   modelId: string,
   engine: ScrapedEngine,
 ): Promise<string | null> {
@@ -1219,7 +1219,7 @@ async function upsertEngine(
   return data?.id ?? null;
 }
 
-async function upsertVehicleSpecs(
+export async function upsertVehicleSpecs(
   engineId: string,
   specs: ScrapedVehicleSpecs,
   sourceUrl: string,
