@@ -32,8 +32,8 @@ interface RecentFitment {
   id: string;
   make: string | null;
   model: string | null;
-  year_start: number | null;
-  year_end: number | null;
+  year_from: number | null;
+  year_to: number | null;
   created_at: string;
   product_title: string | null;
 }
@@ -63,7 +63,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ] = await Promise.all([
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("vehicle_fitments")
-      .select("id, make, model, year_start, year_end, created_at, product_id")
+      .select("id, make, model, year_from, year_to, created_at, product_id")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(10),
@@ -103,8 +103,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       id: r.id,
       make: r.make,
       model: r.model,
-      year_start: r.year_start,
-      year_end: r.year_end,
+      year_from: r.year_from,
+      year_to: r.year_to,
       created_at: r.created_at,
       product_title: r.product_id ? titleMap[r.product_id] || "Unknown" : "Unknown",
     }));
@@ -380,12 +380,12 @@ export default function Fitment() {
                   f.product_title || "Unknown",
                   f.make || "-",
                   f.model || "-",
-                  f.year_start && f.year_end
-                    ? f.year_start === f.year_end
-                      ? String(f.year_start)
-                      : `${f.year_start}-${f.year_end}`
-                    : f.year_start
-                      ? String(f.year_start)
+                  f.year_from && f.year_to
+                    ? f.year_from === f.year_to
+                      ? String(f.year_from)
+                      : `${f.year_from}-${f.year_to}`
+                    : f.year_from
+                      ? String(f.year_from)
                       : "-",
                   formatTimeAgo(f.created_at),
                 ])}

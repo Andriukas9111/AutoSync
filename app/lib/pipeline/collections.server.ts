@@ -252,7 +252,7 @@ async function buildCollectionTargets(
     // make_model_year — full YMME with year ranges
     const { data: fitments, error } = await db
       .from("vehicle_fitments")
-      .select("ymme_make_id, ymme_model_id, year_start, year_end")
+      .select("ymme_make_id, ymme_model_id, year_from, year_to")
       .eq("shop_id", shopId)
       .not("ymme_make_id", "is", null);
 
@@ -288,14 +288,14 @@ async function buildCollectionTargets(
           });
         }
 
-        if (f.year_start || f.year_end) {
-          const yearKey = `${f.ymme_make_id}:${f.ymme_model_id}:${f.year_start ?? "any"}-${f.year_end ?? "any"}`;
+        if (f.year_from || f.year_to) {
+          const yearKey = `${f.ymme_make_id}:${f.ymme_model_id}:${f.year_from ?? "any"}-${f.year_to ?? "any"}`;
           if (!uniqueFullTargets.has(yearKey)) {
             uniqueFullTargets.set(yearKey, {
               makeId: f.ymme_make_id,
               modelId: f.ymme_model_id,
-              yearFrom: f.year_start,
-              yearTo: f.year_end,
+              yearFrom: f.year_from,
+              yearTo: f.year_to,
             });
           }
         }
