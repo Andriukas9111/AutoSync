@@ -507,6 +507,7 @@ async function upsertCollectionMapping(
     console.error(
       `[collections] Failed to save mapping for "${collection.title}": ${error.message}`,
     );
+    throw new Error(`Failed to save collection mapping: ${error.message}`);
   }
 }
 
