@@ -1,5 +1,6 @@
+import { useCallback, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -159,6 +160,22 @@ export default function Fitment() {
   } = useLoaderData<LoaderData>();
 
   const navigate = useNavigate();
+  const extractFetcher = useFetcher();
+  const [extractDismissed, setExtractDismissed] = useState(false);
+
+  const isExtracting = extractFetcher.state !== "idle";
+  const extractResult = extractFetcher.data as
+    | { success: true; processed: number; autoMapped: number; flagged: number; unmapped: number }
+    | { error: string; requiredPlan?: string }
+    | undefined;
+
+  const handleRunExtract = useCallback(() => {
+    extractFetcher.submit(
+      {},
+      { method: "POST", action: "/app/api/auto-extract" },
+    );
+    setExtractDismissed(false);
+  }, [extractFetcher]);
 
   const autoMapped = getCount(statusCounts, "auto_mapped");
   const manualMapped = getCount(statusCounts, "manual_mapped");
@@ -269,13 +286,40 @@ export default function Fitment() {
                   descriptions, and tags using pattern matching. Works best with
                   products that contain make, model, or year information in their text.
                 </Text>
+                {/* Extraction result banner */}
+                {extractResult && !extractDismissed && "success" in extractResult && (
+                  <Banner
+                    title="Extraction complete"
+                    tone="success"
+                    onDismiss={() => setExtractDismissed(true)}
+                  >
+                    <p>
+                      Processed {extractResult.processed} products —{" "}
+                      {extractResult.autoMapped} auto-mapped,{" "}
+                      {extractResult.flagged} flagged,{" "}
+                      {extractResult.unmapped} unmapped.
+                    </p>
+                  </Banner>
+                )}
+                {extractResult && !extractDismissed && "error" in extractResult && (
+                  <Banner
+                    title="Extraction failed"
+                    tone="critical"
+                    onDismiss={() => setExtractDismissed(true)}
+                  >
+                    <p>{extractResult.error}</p>
+                  </Banner>
+                )}
+
                 {autoExtractionAllowed ? (
                   <InlineStack align="start">
                     <Button
                       variant="primary"
-                      onClick={() => navigate("/app/fitment/auto")}
+                      onClick={handleRunExtract}
+                      loading={isExtracting}
+                      disabled={isExtracting}
                     >
-                      Run Auto Extract
+                      {isExtracting ? "Extracting..." : "Run Auto Extract"}
                     </Button>
                   </InlineStack>
                 ) : (

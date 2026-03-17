@@ -1,23 +1,25 @@
-import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useState } from "react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { data } from "react-router";
 import {
   Page,
-  Layout,
   Card,
   BlockStack,
   InlineStack,
-  InlineGrid,
   Text,
   Badge,
   Button,
   Divider,
   Banner,
   Box,
+  Modal,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
-import { PLAN_LIMITS, getTenant } from "../lib/billing.server";
-import type { PlanTier, PlanLimits } from "../lib/types";
+import { getTenant } from "../lib/billing.server";
+import db from "../lib/db.server";
+import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Plan display configuration
@@ -145,223 +147,83 @@ interface ComparisonRow {
 const COMPARISON_ROWS: ComparisonRow[] = [
   {
     label: "Products",
-    values: {
-      free: "50",
-      starter: "1,000",
-      growth: "10,000",
-      professional: "50,000",
-      business: "200,000",
-      enterprise: "Unlimited",
-    },
+    values: { free: "50", starter: "1,000", growth: "10,000", professional: "50,000", business: "200,000", enterprise: "Unlimited" },
   },
   {
     label: "Fitments",
-    values: {
-      free: "200",
-      starter: "5,000",
-      growth: "50,000",
-      professional: "250,000",
-      business: "1,000,000",
-      enterprise: "Unlimited",
-    },
+    values: { free: "200", starter: "5,000", growth: "50,000", professional: "250,000", business: "1,000,000", enterprise: "Unlimited" },
   },
   {
     label: "Providers",
-    values: {
-      free: "0",
-      starter: "1",
-      growth: "3",
-      professional: "5",
-      business: "15",
-      enterprise: "Unlimited",
-    },
+    values: { free: "0", starter: "1", growth: "3", professional: "5", business: "15", enterprise: "Unlimited" },
   },
   {
     label: "Active Makes",
-    values: {
-      free: "0",
-      starter: "10",
-      growth: "30",
-      professional: "Unlimited",
-      business: "Unlimited",
-      enterprise: "Unlimited",
-    },
+    values: { free: "0", starter: "10", growth: "30", professional: "Unlimited", business: "Unlimited", enterprise: "Unlimited" },
   },
   {
     label: "Push Tags",
-    values: {
-      free: "--",
-      starter: "Yes",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "Yes", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Push Metafields",
-    values: {
-      free: "--",
-      starter: "Yes",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "Yes", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Auto Extraction",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Bulk Operations",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Smart Collections",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "By Make",
-      professional: "Make + Model",
-      business: "Full",
-      enterprise: "Full",
-    },
+    values: { free: "--", starter: "--", growth: "By Make", professional: "Make + Model", business: "Full", enterprise: "Full" },
   },
   {
     label: "YMME Widget",
-    values: {
-      free: "--",
-      starter: "Yes",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "Yes", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Fitment Badge",
-    values: {
-      free: "--",
-      starter: "Yes",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "Yes", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Compatibility Table",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Floating Vehicle Bar",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "Yes",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "Yes", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "My Garage",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "--",
-      professional: "Yes",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "--", professional: "Yes", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Wheel Finder",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "--",
-      professional: "--",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "--", professional: "--", business: "Yes", enterprise: "Yes" },
   },
   {
     label: "Plate Lookup (DVLA)",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "--",
-      professional: "--",
-      business: "--",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "--", professional: "--", business: "--", enterprise: "Yes" },
   },
   {
     label: "VIN Decode",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "--",
-      professional: "--",
-      business: "--",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "--", professional: "--", business: "--", enterprise: "Yes" },
   },
   {
     label: "Widget Customisation",
-    values: {
-      free: "--",
-      starter: "Basic",
-      growth: "Full",
-      professional: "Full",
-      business: "Full",
-      enterprise: "Full + CSS",
-    },
+    values: { free: "--", starter: "Basic", growth: "Full", professional: "Full", business: "Full", enterprise: "Full + CSS" },
   },
   {
     label: "Analytics",
-    values: {
-      free: "--",
-      starter: "Basic",
-      growth: "Full",
-      professional: "Full",
-      business: "Full + Export",
-      enterprise: "Full + Export",
-    },
+    values: { free: "--", starter: "Basic", growth: "Full", professional: "Full", business: "Full + Export", enterprise: "Full + Export" },
   },
   {
     label: "Priority Support",
-    values: {
-      free: "--",
-      starter: "--",
-      growth: "--",
-      professional: "--",
-      business: "Yes",
-      enterprise: "Yes",
-    },
+    values: { free: "--", starter: "--", growth: "--", professional: "--", business: "Yes", enterprise: "Yes" },
   },
 ];
 
@@ -392,23 +254,69 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
+// Action — change plan (development mode: direct DB update)
+// In production, this would redirect to Shopify billing confirmation
+// ---------------------------------------------------------------------------
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+
+  const formData = await request.formData();
+  const newPlan = String(formData.get("plan") || "").trim() as PlanTier;
+
+  // Validate the plan tier
+  if (!TIER_ORDER.includes(newPlan)) {
+    return data({ error: "Invalid plan selected." }, { status: 400 });
+  }
+
+  // Update the tenant's plan in the database
+  const { error: updateError } = await db
+    .from("tenants")
+    .update({
+      plan: newPlan,
+      plan_status: "active",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId);
+
+  if (updateError) {
+    return data(
+      { error: `Failed to update plan: ${updateError.message}` },
+      { status: 500 },
+    );
+  }
+
+  const planName = PLANS.find((p) => p.tier === newPlan)?.name ?? newPlan;
+  return data({ success: true, plan: newPlan, planName });
+};
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function Plans() {
   const { currentPlan } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const fetcher = useFetcher();
 
-  const currentIndex = TIER_ORDER.indexOf(currentPlan);
+  const [confirmTier, setConfirmTier] = useState<PlanTier | null>(null);
 
-  function getBadgeTone(tier: PlanTier): "info" | "success" | "warning" | "attention" | undefined {
-    if (tier === currentPlan) return "info";
-    return undefined;
-  }
+  // Use the updated plan from the fetcher response if available
+  const fetcherData = fetcher.data as
+    | { success: true; plan: PlanTier; planName: string }
+    | { error: string }
+    | undefined;
+
+  const activePlan: PlanTier =
+    fetcherData && "success" in fetcherData ? fetcherData.plan : currentPlan;
+
+  const currentIndex = TIER_ORDER.indexOf(activePlan);
+  const isSubmitting = fetcher.state !== "idle";
 
   function getButtonProps(tier: PlanTier) {
     const tierIndex = TIER_ORDER.indexOf(tier);
-    if (tier === currentPlan) {
+    if (tier === activePlan) {
       return { label: "Current Plan", disabled: true, tone: "success" as const };
     }
     if (tierIndex > currentIndex) {
@@ -417,17 +325,57 @@ export default function Plans() {
     return { label: "Downgrade", disabled: false, tone: "critical" as const };
   }
 
+  function handlePlanClick(tier: PlanTier) {
+    if (tier === activePlan) return;
+    setConfirmTier(tier);
+  }
+
+  function handleConfirm() {
+    if (!confirmTier) return;
+    fetcher.submit(
+      { plan: confirmTier },
+      { method: "POST" },
+    );
+    setConfirmTier(null);
+  }
+
+  const confirmPlanInfo = confirmTier
+    ? PLANS.find((p) => p.tier === confirmTier)
+    : null;
+  const isUpgrade = confirmTier
+    ? TIER_ORDER.indexOf(confirmTier) > currentIndex
+    : false;
+
   return (
     <Page
       title="Plans & Pricing"
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="800">
+        {/* Success/Error banners */}
+        {fetcherData && "success" in fetcherData && (
+          <Banner
+            title={`Successfully switched to ${fetcherData.planName} plan`}
+            tone="success"
+            onDismiss={() => {}}
+          >
+            <p>Your plan has been updated. All features for the {fetcherData.planName} plan are now active.</p>
+          </Banner>
+        )}
+        {fetcherData && "error" in fetcherData && (
+          <Banner title="Plan change failed" tone="critical">
+            <p>{fetcherData.error}</p>
+          </Banner>
+        )}
+
         {/* Current plan banner */}
-        <Banner title={`You are on the ${PLANS.find((p) => p.tier === currentPlan)?.name} plan`} tone="info">
+        <Banner
+          title={`You are on the ${PLANS.find((p) => p.tier === activePlan)?.name} plan`}
+          tone="info"
+        >
           <p>
-            To change your plan, select an option below. Plan changes are managed through
-            Shopify&apos;s billing system and will be reflected on your next invoice.
+            Select a plan below to change your subscription. In production, plan changes
+            are processed through Shopify&apos;s managed billing system.
           </p>
         </Banner>
 
@@ -439,7 +387,7 @@ export default function Plans() {
         }}>
           {PLANS.map((plan) => {
             const btnProps = getButtonProps(plan.tier);
-            const isCurrent = plan.tier === currentPlan;
+            const isCurrent = plan.tier === activePlan;
             const isPopular = plan.tier === "growth";
 
             return (
@@ -522,12 +470,9 @@ export default function Plans() {
                           <Button
                             variant={isCurrent ? undefined : "primary"}
                             tone={btnProps.tone === "critical" ? "critical" : undefined}
-                            disabled={btnProps.disabled}
-                            onClick={() => {
-                              if (!isCurrent) {
-                                navigate("/app/plans");
-                              }
-                            }}
+                            disabled={btnProps.disabled || isSubmitting}
+                            loading={isSubmitting}
+                            onClick={() => handlePlanClick(plan.tier)}
                             fullWidth
                           >
                             {btnProps.label}
@@ -581,7 +526,7 @@ export default function Plans() {
                           fontWeight: 600,
                           fontSize: "13px",
                           backgroundColor:
-                            plan.tier === currentPlan
+                            plan.tier === activePlan
                               ? "var(--p-color-bg-surface-info)"
                               : undefined,
                         }}
@@ -596,7 +541,7 @@ export default function Plans() {
                   </tr>
                 </thead>
                 <tbody>
-                  {COMPARISON_ROWS.map((row, idx) => (
+                  {COMPARISON_ROWS.map((row) => (
                     <tr key={row.label}>
                       <td
                         style={{
@@ -617,7 +562,7 @@ export default function Plans() {
                             borderBottom: "1px solid var(--p-color-border)",
                             fontSize: "13px",
                             backgroundColor:
-                              tier === currentPlan
+                              tier === activePlan
                                 ? "var(--p-color-bg-surface-info)"
                                 : undefined,
                             color:
@@ -642,17 +587,52 @@ export default function Plans() {
         </Card>
 
         {/* Upgrade info banner */}
-        {currentPlan !== "enterprise" && (
-          <Banner title="How to upgrade" tone="info">
+        {activePlan !== "enterprise" && (
+          <Banner title="How plans work" tone="info">
             <p>
-              Plan upgrades are processed through Shopify&apos;s managed billing system.
-              When you select an upgrade, you will be redirected to confirm the charge
-              in your Shopify admin. Downgrades take effect at the end of your current
-              billing cycle.
+              In production, plan upgrades are processed through Shopify&apos;s managed billing
+              system. Merchants are redirected to confirm the charge in their Shopify admin.
+              Downgrades take effect at the end of the current billing cycle.
             </p>
           </Banner>
         )}
       </BlockStack>
+
+      {/* Confirmation modal */}
+      <Modal
+        open={confirmTier !== null}
+        onClose={() => setConfirmTier(null)}
+        title={isUpgrade ? "Confirm Upgrade" : "Confirm Downgrade"}
+        primaryAction={{
+          content: isUpgrade
+            ? `Upgrade to ${confirmPlanInfo?.name}`
+            : `Downgrade to ${confirmPlanInfo?.name}`,
+          onAction: handleConfirm,
+          loading: isSubmitting,
+          tone: isUpgrade ? undefined : "critical",
+        }}
+        secondaryActions={[
+          { content: "Cancel", onAction: () => setConfirmTier(null) },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            {isUpgrade ? (
+              <Text as="p" variant="bodyMd">
+                You are upgrading from <strong>{PLANS.find((p) => p.tier === activePlan)?.name}</strong> to{" "}
+                <strong>{confirmPlanInfo?.name}</strong> ({confirmPlanInfo?.price}/{confirmPlanInfo?.priceNote}).
+                This will unlock all features included in the {confirmPlanInfo?.name} plan.
+              </Text>
+            ) : (
+              <Text as="p" variant="bodyMd">
+                You are downgrading from <strong>{PLANS.find((p) => p.tier === activePlan)?.name}</strong> to{" "}
+                <strong>{confirmPlanInfo?.name}</strong> ({confirmPlanInfo?.price}/{confirmPlanInfo?.priceNote}).
+                Some features may become unavailable after the downgrade.
+              </Text>
+            )}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
     </Page>
   );
 }

@@ -104,34 +104,28 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product ID is required", { status: 400 });
   }
 
-  // Fetch product
-  const { data: product, error: productError } = await db
-    .from("products")
-    .select("*")
-    .eq("id", productId)
-    .eq("shop_id", shopId)
-    .single();
+  // Fetch product and fitments in parallel
+  const [productResult, fitmentsResult] = await Promise.all([
+    db.from("products")
+      .select("*")
+      .eq("id", productId)
+      .eq("shop_id", shopId)
+      .single(),
+    db.from("vehicle_fitments")
+      .select("*")
+      .eq("product_id", productId)
+      .order("make", { ascending: true })
+      .order("model", { ascending: true })
+      .order("year_from", { ascending: true }),
+  ]);
 
-  if (productError || !product) {
+  if (productResult.error || !productResult.data) {
     throw new Response("Product not found", { status: 404 });
   }
 
-  // Fetch fitments
-  const { data: fitments, error: fitmentsError } = await db
-    .from("vehicle_fitments")
-    .select("*")
-    .eq("product_id", productId)
-    .order("make", { ascending: true })
-    .order("model", { ascending: true })
-    .order("year_from", { ascending: true });
-
-  if (fitmentsError) {
-    console.error("Fitments query error:", fitmentsError);
-  }
-
   return {
-    product: product as Product,
-    fitments: (fitments ?? []) as Fitment[],
+    product: productResult.data as Product,
+    fitments: (fitmentsResult.data ?? []) as Fitment[],
     shopDomain: shopId,
   };
 };

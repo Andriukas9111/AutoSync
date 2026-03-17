@@ -222,7 +222,7 @@ export default function Providers() {
                   <ResourceItem
                     id={provider.id}
                     accessibilityLabel={`View ${provider.name}`}
-                    onClick={() => {}}
+                    onClick={() => navigate(`/app/providers/${provider.id}`)}
                   >
                     <InlineStack align="space-between" blockAlign="center">
                       <BlockStack gap="100">
