@@ -391,7 +391,14 @@ export default function ProductDetails() {
   const suggestionsLoading = suggestionFetcher.state === "submitting" || suggestionFetcher.state === "loading";
 
   const handleVehicleChange = useCallback(
-    (selection: VehicleSelection) => setVehicleSelection(selection),
+    (selection: VehicleSelection) => {
+      setVehicleSelection(selection);
+      // Auto-populate year range from the selected year
+      if (selection.year) {
+        setYearFrom(String(selection.year));
+        setYearTo(String(selection.year));
+      }
+    },
     [],
   );
 
@@ -811,9 +818,6 @@ export default function ProductDetails() {
                           id={fitment.id}
                           onClick={() => {}}
                           accessibilityLabel={`${fitment.make} ${fitment.model}`}
-                          shortcutActions={[
-                            { content: "Delete", onAction: () => handleDeleteFitment(fitment.id) },
-                          ]}
                         >
                           <InlineStack gap="400" align="space-between" blockAlign="center" wrap>
                             <BlockStack gap="100">
@@ -885,28 +889,33 @@ export default function ProductDetails() {
                     <Divider />
                     <VehicleSelector onChange={handleVehicleChange} />
 
-                    <InlineStack gap="300">
-                      <div style={{ maxWidth: "140px" }}>
-                        <TextField
-                          label="Year from"
-                          type="number"
-                          value={yearFrom}
-                          onChange={setYearFrom}
-                          autoComplete="off"
-                          placeholder="e.g. 2010"
-                        />
-                      </div>
-                      <div style={{ maxWidth: "140px" }}>
-                        <TextField
-                          label="Year to"
-                          type="number"
-                          value={yearTo}
-                          onChange={setYearTo}
-                          autoComplete="off"
-                          placeholder="e.g. 2023"
-                        />
-                      </div>
-                    </InlineStack>
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Year range — auto-filled from your selection. Adjust if this part fits multiple years.
+                      </Text>
+                      <InlineStack gap="300">
+                        <div style={{ maxWidth: "140px" }}>
+                          <TextField
+                            label="From"
+                            type="number"
+                            value={yearFrom}
+                            onChange={setYearFrom}
+                            autoComplete="off"
+                            placeholder="e.g. 2010"
+                          />
+                        </div>
+                        <div style={{ maxWidth: "140px" }}>
+                          <TextField
+                            label="To"
+                            type="number"
+                            value={yearTo}
+                            onChange={setYearTo}
+                            autoComplete="off"
+                            placeholder="e.g. 2023"
+                          />
+                        </div>
+                      </InlineStack>
+                    </BlockStack>
 
                     {vehicleSelection && (
                       <Banner tone="info">
