@@ -50,7 +50,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    reactRouter({
+    (reactRouter as Function)({
       presets: [vercelPreset()],
     }),
     tsconfigPaths(),

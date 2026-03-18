@@ -6,5 +6,6 @@ export default {
   future: {
     unstable_optimizeDeps: true,
   },
-  routes: (defineRoutes) => flatRoutes(defineRoutes),
-} satisfies Config;
+  routes: (defineRoutes: Parameters<typeof flatRoutes>[0]) =>
+    flatRoutes(defineRoutes),
+} satisfies Config & { routes?: unknown };
