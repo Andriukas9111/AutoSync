@@ -420,7 +420,7 @@ export function extractVehiclePatterns(
   // Extract year range — check "YYYY+" / "YYYY onwards" first, then ranges, then singles
   let yearFrom: number | null = null
   let yearTo: number | null = null
-  const yearOnwardsMatch = text.match(/\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)\b/i)
+  const yearOnwardsMatch = text.match(/\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)(?:\s|$|,|\.)/i)
   if (yearOnwardsMatch) {
     yearFrom = parseInt(yearOnwardsMatch[1], 10)
     yearTo = null // open-ended

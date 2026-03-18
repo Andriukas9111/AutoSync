@@ -38,7 +38,7 @@ export interface ScanResult {
 
 // ── Year Extraction Helpers ──────────────────────────────────
 
-const YEAR_ONWARDS_REGEX = /\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)\b/i
+const YEAR_ONWARDS_REGEX = /\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)(?:\s|$|,|\.)/i
 
 function extractYearsNearby(text: string): { from: number | null; to: number | null } {
   // Try range first: (2013-2020), 2013-2020, 2013 - 2020

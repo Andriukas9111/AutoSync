@@ -348,7 +348,7 @@ function resolvePatternFitments(
       // Match by: engine code in name, model code in name, power hint, aspiration
       const scoredEngines = matchingEngines
         .map((engine) => {
-          let score = 0.1; // Base score for year-matching engine
+          let score = 0.2; // Base score for year-matching engine (always show year-compatible engines)
           const engName = (engine.name || "").toLowerCase();
 
           // Check if engine name contains the detected model code (e.g., "140i" in "140i (326 Hp)")
@@ -398,7 +398,7 @@ function resolvePatternFitments(
 
           return { engine, score, displayName: formatEngineDisplay(engineData, engineFormatTemplate) };
         })
-        .filter((e) => e.score > 0.15) // Only show engines with meaningful match
+        .filter((e) => e.score > 0.08) // Show engines with any match signal
         .sort((a, b) => b.score - a.score)
         .slice(0, 5);
 
