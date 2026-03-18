@@ -729,50 +729,60 @@ export default function ProductDetails() {
                                 : "var(--p-color-bg-surface)",
                           }}
                         >
-                          <InlineStack align="space-between" blockAlign="center" wrap>
-                            <BlockStack gap="100">
-                              <InlineStack gap="200" blockAlign="center" wrap>
-                                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                  {s.make.name} {s.model?.name || ""}
-                                </Text>
-                                {s.model?.generation && <Badge>{s.model.generation}</Badge>}
-                                {yearRange && (
-                                  <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>
-                                )}
+                          <BlockStack gap="100">
+                            {/* Make + Model + Actions */}
+                            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                              <Text as="span" variant="bodyMd" fontWeight="bold">
+                                {s.make.name} {s.model?.name || ""}
+                              </Text>
+                              <InlineStack gap="100" blockAlign="center">
+                                <Badge tone={confBadge.tone}>{`${Math.round(s.confidence * 100)}%`}</Badge>
+                                <Button variant="primary" size="slim" icon={CheckCircleIcon} onClick={() => handleAcceptSuggestion(s)} loading={isSubmitting}>
+                                  Accept
+                                </Button>
                               </InlineStack>
-                              {s.engine && (
-                                <InlineStack gap="200" wrap>
-                                  <Text as="span" variant="bodySm" tone="subdued">
-                                    {s.engine.displayName || s.engine.name || s.engine.code}
-                                  </Text>
-                                  {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
-                                  {s.engine.powerHp && <Badge>{`${s.engine.powerHp}hp`}</Badge>}
-                                  {s.engine.displacementCc && (
-                                    <Badge>{`${(s.engine.displacementCc / 1000).toFixed(1)}L`}</Badge>
-                                  )}
-                                </InlineStack>
-                              )}
-                              {s.matchedHints?.length > 0 && (
-                                <InlineStack gap="100">
-                                  {s.matchedHints.map((h: string, hi: number) => (
-                                    <Text key={hi} as="span" variant="bodySm" tone="magic">✓ {h}</Text>
-                                  ))}
-                                </InlineStack>
-                              )}
-                            </BlockStack>
-                            <InlineStack gap="200" blockAlign="center">
-                              <Badge tone={confBadge.tone}>{`${Math.round(s.confidence * 100)}%`}</Badge>
-                              <Button
-                                variant="primary"
-                                size="slim"
-                                icon={CheckCircleIcon}
-                                onClick={() => handleAcceptSuggestion(s)}
-                                loading={isSubmitting}
-                              >
-                                Accept
-                              </Button>
                             </InlineStack>
-                          </InlineStack>
+
+                            {/* Year + Generation */}
+                            {(yearRange || s.model?.generation) && (
+                              <InlineStack gap="200" blockAlign="center" wrap>
+                                {yearRange && <Text as="span" variant="bodySm" tone="subdued">{`Years: ${yearRange}`}</Text>}
+                                {s.model?.generation && <Badge>{s.model.generation}</Badge>}
+                              </InlineStack>
+                            )}
+
+                            {/* Engine details */}
+                            {s.engine && (
+                              <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-secondary)" }}>
+                                <InlineStack gap="200" blockAlign="center" wrap>
+                                  <Text as="span" variant="bodySm" fontWeight="medium">
+                                    {s.engine.displayName || s.engine.name || s.engine.code || "Engine"}
+                                  </Text>
+                                  {s.engine.powerHp && <Badge tone="info">{`${s.engine.powerHp}hp`}</Badge>}
+                                  {s.engine.displacementCc && <Badge>{`${(s.engine.displacementCc / 1000).toFixed(1)}L`}</Badge>}
+                                  {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
+                                </InlineStack>
+                              </div>
+                            )}
+
+                            {/* Tags preview */}
+                            <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-info)" }}>
+                              <InlineStack gap="100" blockAlign="center" wrap>
+                                <Text as="span" variant="bodySm" tone="subdued">Tags:</Text>
+                                <Badge size="small">{`_autosync_${s.make.name}`}</Badge>
+                                {s.model?.name && <Badge size="small">{`_autosync_${s.model.name}`}</Badge>}
+                              </InlineStack>
+                            </div>
+
+                            {/* Matched hints */}
+                            {s.matchedHints?.length > 0 && (
+                              <InlineStack gap="100" wrap>
+                                {s.matchedHints.map((h: string, hi: number) => (
+                                  <Badge key={hi} tone="attention">{h}</Badge>
+                                ))}
+                              </InlineStack>
+                            )}
+                          </BlockStack>
                         </div>
                       );
                     })}
