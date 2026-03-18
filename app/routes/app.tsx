@@ -114,7 +114,7 @@ export default function App() {
               100% { transform: scaleX(0); transform-origin: right; }
             }
           `}</style>
-          <div style={{ paddingBottom: "40px" }}>
+          <div style={{ maxWidth: 1700, margin: "0 auto", paddingBottom: "40px" }}>
             <Outlet />
           </div>
         </Frame>
