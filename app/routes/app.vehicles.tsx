@@ -15,20 +15,15 @@ import {
   Banner,
   Box,
   TextField,
-  ResourceList,
-  ResourceItem,
   Spinner,
-  Collapsible,
   EmptyState,
   Icon,
   Divider,
-  Thumbnail,
   ProgressBar,
 } from "@shopify/polaris";
 import {
   SearchIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
+  ChevronLeftIcon,
   DatabaseIcon,
   CategoriesIcon,
   GaugeIcon,
@@ -211,10 +206,10 @@ interface EngineItem {
 
 function formatYearRange(from: number | null, to: number | null): string {
   if (!from && !to) return "";
-  if (from && !to) return `${from}–present`;
-  if (!from && to) return `–${to}`;
+  if (from && !to) return `${from}\u2013present`;
+  if (!from && to) return `\u2013${to}`;
   if (from === to) return `${from}`;
-  return `${from}–${to}`;
+  return `${from}\u2013${to}`;
 }
 
 function formatDisplacement(cc: number | null): string {
@@ -248,10 +243,22 @@ export default function Vehicles() {
   const fetcher = useFetcher();
 
   const [searchValue, setSearchValue] = useState("");
-  const [expandedMake, setExpandedMake] = useState<string | null>(null);
+
+  // Navigation state
+  const [selectedMake, setSelectedMake] = useState<{
+    id: string;
+    name: string;
+    logo_url: string | null;
+  } | null>(null);
+  const [selectedModel, setSelectedModel] = useState<{
+    id: string;
+    name: string;
+    generation: string | null;
+  } | null>(null);
+
+  // Data state
   const [models, setModels] = useState<ModelItem[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
-  const [expandedModel, setExpandedModel] = useState<string | null>(null);
   const [engines, setEngines] = useState<EngineItem[]>([]);
   const [enginesLoading, setEnginesLoading] = useState(false);
 
@@ -262,65 +269,68 @@ export default function Vehicles() {
     make.name.toLowerCase().includes(searchValue.toLowerCase())
   );
 
-  const handleExpandMake = useCallback(
-    async (makeId: string) => {
-      if (expandedMake === makeId) {
-        setExpandedMake(null);
-        setModels([]);
-        setExpandedModel(null);
-        setEngines([]);
-        return;
-      }
-      setExpandedMake(makeId);
-      setExpandedModel(null);
-      setEngines([]);
-      setModels([]);
-      setModelsLoading(true);
+  // Navigate into a make - fetch its models
+  const handleSelectMake = useCallback(async (make: MakeItem) => {
+    setSelectedMake({ id: make.id, name: make.name, logo_url: make.logo_url });
+    setSelectedModel(null);
+    setEngines([]);
+    setModels([]);
+    setModelsLoading(true);
+    setSearchValue("");
 
-      try {
-        const response = await fetch(
-          `/app/api/ymme?level=models&make_id=${makeId}`
-        );
-        if (response.ok) {
-          const result = await response.json();
-          setModels(result.models ?? result.data ?? []);
-        }
-      } catch (err) {
-        console.error("Failed to fetch models:", err);
-      } finally {
-        setModelsLoading(false);
+    try {
+      const response = await fetch(
+        `/app/api/ymme?level=models&make_id=${make.id}`
+      );
+      if (response.ok) {
+        const result = await response.json();
+        setModels(result.models ?? result.data ?? []);
       }
-    },
-    [expandedMake]
-  );
+    } catch (err) {
+      console.error("Failed to fetch models:", err);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
 
-  const handleExpandModel = useCallback(
-    async (modelId: string) => {
-      if (expandedModel === modelId) {
-        setExpandedModel(null);
-        setEngines([]);
-        return;
-      }
-      setExpandedModel(modelId);
-      setEngines([]);
-      setEnginesLoading(true);
+  // Navigate into a model - fetch its engines
+  const handleSelectModel = useCallback(async (model: ModelItem) => {
+    setSelectedModel({
+      id: model.id,
+      name: model.name,
+      generation: model.generation,
+    });
+    setEngines([]);
+    setEnginesLoading(true);
 
-      try {
-        const response = await fetch(
-          `/app/api/ymme?level=engines&model_id=${modelId}`
-        );
-        if (response.ok) {
-          const result = await response.json();
-          setEngines(result.engines ?? result.data ?? []);
-        }
-      } catch (err) {
-        console.error("Failed to fetch engines:", err);
-      } finally {
-        setEnginesLoading(false);
+    try {
+      const response = await fetch(
+        `/app/api/ymme?level=engines&model_id=${model.id}`
+      );
+      if (response.ok) {
+        const result = await response.json();
+        setEngines(result.engines ?? result.data ?? []);
       }
-    },
-    [expandedModel]
-  );
+    } catch (err) {
+      console.error("Failed to fetch engines:", err);
+    } finally {
+      setEnginesLoading(false);
+    }
+  }, []);
+
+  // Navigation helpers
+  const goToMakes = useCallback(() => {
+    setSelectedMake(null);
+    setSelectedModel(null);
+    setModels([]);
+    setEngines([]);
+    setSearchValue("");
+  }, []);
+
+  const goToModels = useCallback(() => {
+    setSelectedModel(null);
+    setEngines([]);
+  }, []);
 
   const handleToggleMake = useCallback(
     (makeId: string, currentlyActive: boolean) => {
@@ -338,6 +348,434 @@ export default function Vehicles() {
     ? Math.min(Math.round((activeMakeCount / limits.activeMakes) * 100), 100)
     : 0;
 
+  // Determine current view
+  const currentView: "makes" | "models" | "engines" =
+    selectedMake && selectedModel
+      ? "engines"
+      : selectedMake
+        ? "models"
+        : "makes";
+
+  // ------- Breadcrumb -------
+  const renderBreadcrumb = () => {
+    if (currentView === "makes") return null;
+
+    return (
+      <Card>
+        <InlineStack gap="100" blockAlign="center" wrap={false}>
+          <Button
+            variant="plain"
+            onClick={goToMakes}
+            icon={ChevronLeftIcon}
+          >
+            All Makes
+          </Button>
+          {selectedMake && (
+            <>
+              <Text as="span" tone="subdued">/</Text>
+              {currentView === "engines" ? (
+                <Button variant="plain" onClick={goToModels}>
+                  {selectedMake.name}
+                </Button>
+              ) : (
+                <Text as="span" variant="bodyMd" fontWeight="semibold">
+                  {selectedMake.name}
+                </Text>
+              )}
+            </>
+          )}
+          {selectedModel && (
+            <>
+              <Text as="span" tone="subdued">/</Text>
+              <Text as="span" variant="bodyMd" fontWeight="semibold">
+                {selectedModel.name}
+                {selectedModel.generation ? ` (${selectedModel.generation})` : ""}
+              </Text>
+            </>
+          )}
+        </InlineStack>
+      </Card>
+    );
+  };
+
+  // ------- Makes Grid -------
+  const renderMakesView = () => (
+    <BlockStack gap="400">
+      {/* Search */}
+      <Card>
+        <TextField
+          label="Search makes"
+          labelHidden
+          value={searchValue}
+          onChange={setSearchValue}
+          placeholder="Search by make name..."
+          clearButton
+          onClearButtonClick={() => setSearchValue("")}
+          autoComplete="off"
+          prefix={<Icon source={SearchIcon} />}
+        />
+      </Card>
+
+      {filteredMakes.length === 0 ? (
+        <Card>
+          <EmptyState
+            heading={
+              searchValue
+                ? "No makes match your search"
+                : "No vehicle makes available"
+            }
+            image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+          >
+            <p>
+              {searchValue
+                ? "Try a different search term."
+                : "Vehicle makes will appear here once the YMME database is populated."}
+            </p>
+          </EmptyState>
+        </Card>
+      ) : (
+        <>
+          <InlineGrid columns={{ xs: 1, sm: 2, md: 3, lg: 4 }} gap="400">
+            {filteredMakes.map((make: MakeItem) => (
+              <Card key={make.id}>
+                <BlockStack gap="300">
+                  {/* Header: logo + name */}
+                  <InlineStack gap="300" blockAlign="center" wrap={false}>
+                    {make.logo_url ? (
+                      <div
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          overflow: "hidden",
+                          backgroundColor: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <img
+                          src={make.logo_url}
+                          alt={make.name}
+                          loading="lazy"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = "flex";
+                          }}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            objectFit: "contain",
+                          }}
+                        />
+                        <span
+                          style={{
+                            display: "none",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            width: 32,
+                            height: 32,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "var(--p-color-text-subdued)",
+                          }}
+                        >
+                          {makeInitials(make.name)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 8,
+                          backgroundColor: "var(--p-color-bg-surface-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
+                          {makeInitials(make.name)}
+                        </Text>
+                      </div>
+                    )}
+                    <BlockStack gap="050">
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {make.name}
+                      </Text>
+                      {make.country && (
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {make.country}
+                        </Text>
+                      )}
+                    </BlockStack>
+                  </InlineStack>
+
+                  {/* Badges */}
+                  <InlineStack gap="200" wrap>
+                    {make.isActive ? (
+                      <Badge tone="success">Active</Badge>
+                    ) : (
+                      <Badge>Inactive</Badge>
+                    )}
+                    {make.productCount > 0 && (
+                      <Badge tone="info">
+                        {make.productCount} fitment{make.productCount !== 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                  </InlineStack>
+
+                  <Divider />
+
+                  {/* Actions */}
+                  <InlineStack gap="200" align="space-between" blockAlign="center">
+                    <Button
+                      size="slim"
+                      onClick={() => handleSelectMake(make)}
+                    >
+                      Browse models
+                    </Button>
+                    <Button
+                      size="slim"
+                      variant={make.isActive ? "secondary" : "primary"}
+                      onClick={() => handleToggleMake(make.id, make.isActive)}
+                      loading={isToggling}
+                    >
+                      {make.isActive ? "Disable" : "Enable"}
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            ))}
+          </InlineGrid>
+
+          {/* Results count */}
+          <Box paddingInlineStart="100">
+            <Text as="span" variant="bodySm" tone="subdued">
+              Showing {filteredMakes.length} of {makes.length} makes
+              {searchValue ? " (filtered)" : ""}
+            </Text>
+          </Box>
+        </>
+      )}
+    </BlockStack>
+  );
+
+  // ------- Models List -------
+  const renderModelsView = () => (
+    <BlockStack gap="400">
+      {modelsLoading ? (
+        <Card>
+          <Box padding="800">
+            <InlineStack align="center" gap="200" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="span" variant="bodySm" tone="subdued">
+                Loading models for {selectedMake?.name}...
+              </Text>
+            </InlineStack>
+          </Box>
+        </Card>
+      ) : models.length === 0 ? (
+        <Card>
+          <EmptyState
+            heading={`No models found for ${selectedMake?.name}`}
+            image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+          >
+            <p>Models will appear here once they are added to the YMME database.</p>
+          </EmptyState>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <BlockStack gap="0">
+              <Box paddingBlockEnd="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={CategoriesIcon} />
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {models.length} model{models.length !== 1 ? "s" : ""} for {selectedMake?.name}
+                  </Text>
+                </InlineStack>
+              </Box>
+              <Divider />
+              {models.map((model, index) => {
+                const yearRange = formatYearRange(model.year_from, model.year_to);
+                return (
+                  <Box key={model.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleSelectModel(model)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSelectModel(model);
+                      }}
+                      style={{
+                        cursor: "pointer",
+                        padding: "12px 0",
+                        transition: "background-color 0.15s",
+                      }}
+                    >
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                        wrap={false}
+                      >
+                        <InlineStack gap="200" blockAlign="center" wrap>
+                          <Text as="span" variant="bodyMd" fontWeight="medium">
+                            {model.name}
+                          </Text>
+                          {model.generation && (
+                            <Badge tone="info">{model.generation}</Badge>
+                          )}
+                          {model.body_type && (
+                            <Badge>{model.body_type}</Badge>
+                          )}
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          {yearRange && (
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {yearRange}
+                            </Text>
+                          )}
+                          <Text as="span" tone="subdued">&rsaquo;</Text>
+                        </InlineStack>
+                      </InlineStack>
+                    </div>
+                    {index < models.length - 1 && <Divider />}
+                  </Box>
+                );
+              })}
+            </BlockStack>
+          </Card>
+        </>
+      )}
+    </BlockStack>
+  );
+
+  // ------- Engines Grid -------
+  const renderEnginesView = () => (
+    <BlockStack gap="400">
+      {enginesLoading ? (
+        <Card>
+          <Box padding="800">
+            <InlineStack align="center" gap="200" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="span" variant="bodySm" tone="subdued">
+                Loading engines for {selectedModel?.name}...
+              </Text>
+            </InlineStack>
+          </Box>
+        </Card>
+      ) : engines.length === 0 ? (
+        <Card>
+          <EmptyState
+            heading={`No engines found for ${selectedModel?.name}`}
+            image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+          >
+            <p>Engines will appear here once they are added to the YMME database.</p>
+          </EmptyState>
+        </Card>
+      ) : (
+        <>
+          <Box paddingInlineStart="100">
+            <InlineStack gap="200" blockAlign="center">
+              <Icon source={GaugeIcon} />
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                {engines.length} engine{engines.length !== 1 ? "s" : ""} for{" "}
+                {selectedMake?.name} {selectedModel?.name}
+                {selectedModel?.generation ? ` (${selectedModel.generation})` : ""}
+              </Text>
+            </InlineStack>
+          </Box>
+
+          <InlineGrid columns={{ xs: 1, sm: 1, md: 2 }} gap="400">
+            {engines.map((engine) => {
+              const yearRange = formatYearRange(engine.year_from, engine.year_to);
+              const engineTitle = engine.name || engine.code || "Unknown Engine";
+
+              return (
+                <Card key={engine.id}>
+                  <BlockStack gap="300">
+                    {/* Engine heading + code badge */}
+                    <InlineStack gap="200" blockAlign="center" wrap>
+                      <Text as="span" variant="headingSm" fontWeight="semibold">
+                        {engineTitle}
+                      </Text>
+                      {engine.code && engine.name && (
+                        <Badge>{engine.code}</Badge>
+                      )}
+                    </InlineStack>
+
+                    <Divider />
+
+                    {/* Structured specs */}
+                    <BlockStack gap="200">
+                      {engine.displacement_cc && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            Displacement
+                          </Text>
+                          <Badge tone="info">
+                            {formatDisplacement(engine.displacement_cc)}
+                          </Badge>
+                        </InlineStack>
+                      )}
+                      {engine.fuel_type && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            Fuel
+                          </Text>
+                          <Badge tone={fuelBadgeTone(engine.fuel_type)}>
+                            {engine.fuel_type}
+                          </Badge>
+                        </InlineStack>
+                      )}
+                      {engine.power_hp && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            Power
+                          </Text>
+                          <Text as="span" variant="bodySm">
+                            {engine.power_hp} hp
+                            {engine.power_kw ? ` (${engine.power_kw} kW)` : ""}
+                          </Text>
+                        </InlineStack>
+                      )}
+                      {engine.torque_nm && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            Torque
+                          </Text>
+                          <Text as="span" variant="bodySm">
+                            {engine.torque_nm} Nm
+                          </Text>
+                        </InlineStack>
+                      )}
+                      {yearRange && (
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            Years
+                          </Text>
+                          <Text as="span" variant="bodySm">
+                            {yearRange}
+                          </Text>
+                        </InlineStack>
+                      )}
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
+              );
+            })}
+          </InlineGrid>
+        </>
+      )}
+    </BlockStack>
+  );
+
   return (
     <Page
       fullWidth
@@ -347,452 +785,102 @@ export default function Vehicles() {
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
-        {/* Error banners */}
-        {showError && (
-          <Banner tone="critical">
-            <p>{(actionData as any).error}</p>
-          </Banner>
-        )}
-        {fetcher.data && "error" in (fetcher.data as any) && (
-          <Banner tone="critical">
-            <p>{(fetcher.data as any).error}</p>
-          </Banner>
-        )}
+            {/* Error banners */}
+            {showError && (
+              <Banner tone="critical">
+                <p>{(actionData as any).error}</p>
+              </Banner>
+            )}
+            {fetcher.data && "error" in (fetcher.data as any) && (
+              <Banner tone="critical">
+                <p>{(fetcher.data as any).error}</p>
+              </Banner>
+            )}
 
-        {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="100" blockAlign="center">
-                <div style={{
-                  width: "20px", height: "20px",
-                  borderRadius: "var(--p-border-radius-100)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={DatabaseIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {makes.length}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="100" blockAlign="center">
-                <div style={{
-                  width: "20px", height: "20px",
-                  borderRadius: "var(--p-border-radius-100)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={CategoriesIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {totalModels.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="100" blockAlign="center">
-                <div style={{
-                  width: "20px", height: "20px",
-                  borderRadius: "var(--p-border-radius-100)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={GaugeIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {totalEngines.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack align="space-between">
-                <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {activeMakeCount} / {limits.activeMakes === 999_999 ? "∞" : limits.activeMakes}
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {activeMakeCount}
-              </Text>
-              {limits.activeMakes !== 999_999 && (
-                <ProgressBar progress={activePct} size="small" tone="primary" />
-              )}
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+            {/* Stats Cards */}
+            <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={DatabaseIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {makes.length}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={CategoriesIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {totalModels.toLocaleString()}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack gap="100" blockAlign="center">
+                    <div style={{
+                      width: "20px", height: "20px",
+                      borderRadius: "var(--p-border-radius-100)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={GaugeIcon} />
+                    </div>
+                    <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {totalEngines.toLocaleString()}
+                  </Text>
+                </BlockStack>
+              </Card>
+              <Card>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between">
+                    <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {activeMakeCount} / {limits.activeMakes === 999_999 ? "\u221E" : limits.activeMakes}
+                    </Text>
+                  </InlineStack>
+                  <Text as="p" variant="headingXl" fontWeight="bold">
+                    {activeMakeCount}
+                  </Text>
+                  {limits.activeMakes !== 999_999 && (
+                    <ProgressBar progress={activePct} size="small" tone="primary" />
+                  )}
+                </BlockStack>
+              </Card>
+            </InlineGrid>
 
-        {/* Search */}
-        <Card>
-          <TextField
-            label="Search makes"
-            labelHidden
-            value={searchValue}
-            onChange={setSearchValue}
-            placeholder="Search by make name..."
-            clearButton
-            onClearButtonClick={() => setSearchValue("")}
-            autoComplete="off"
-            prefix={<Icon source={SearchIcon} />}
-          />
-        </Card>
+            {/* Breadcrumb navigation */}
+            {renderBreadcrumb()}
 
-        {/* Makes list */}
-        <Card padding="0">
-          {filteredMakes.length === 0 ? (
-            <Box padding="400">
-              <EmptyState
-                heading={
-                  searchValue
-                    ? "No makes match your search"
-                    : "No vehicle makes available"
-                }
-                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              >
-                <p>
-                  {searchValue
-                    ? "Try a different search term."
-                    : "Vehicle makes will appear here once the YMME database is populated."}
-                </p>
-              </EmptyState>
-            </Box>
-          ) : (
-            <ResourceList
-              resourceName={{ singular: "make", plural: "makes" }}
-              items={filteredMakes}
-              renderItem={(make: MakeItem) => {
-                const isExpanded = expandedMake === make.id;
-
-                return (
-                  <ResourceItem
-                    id={make.id}
-                    onClick={() => handleExpandMake(make.id)}
-                    verticalAlignment="center"
-                  >
-                    <BlockStack gap="300">
-                      {/* Make Row */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                        wrap={false}
-                      >
-                        <InlineStack gap="300" blockAlign="center">
-                          {/* Logo or initials */}
-                          {make.logo_url ? (
-                            <div
-                              style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 8,
-                                overflow: "hidden",
-                                backgroundColor: "var(--p-color-bg-surface-secondary)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <img
-                                src={make.logo_url}
-                                alt={make.name}
-                                loading="lazy"
-                                onError={(e) => {
-                                  const target = e.currentTarget;
-                                  target.style.display = "none";
-                                  const fallback = target.nextElementSibling as HTMLElement;
-                                  if (fallback) fallback.style.display = "flex";
-                                }}
-                                style={{
-                                  width: 28,
-                                  height: 28,
-                                  objectFit: "contain",
-                                }}
-                              />
-                              <span
-                                style={{
-                                  display: "none",
-                                  alignItems: "center",
-                                  justifyContent: "center",
-                                  width: 28,
-                                  height: 28,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  color: "var(--p-color-text-subdued)",
-                                }}
-                              >
-                                {makeInitials(make.name)}
-                              </span>
-                            </div>
-                          ) : (
-                            <div
-                              style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: 8,
-                                backgroundColor: "var(--p-color-bg-surface-secondary)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">
-                                {makeInitials(make.name)}
-                              </Text>
-                            </div>
-                          )}
-                          <BlockStack gap="0">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {make.name}
-                              </Text>
-                              {make.country && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  {make.country}
-                                </Text>
-                              )}
-                            </InlineStack>
-                            {/* NHTSA ID hidden from merchants - admin only */}
-                          </BlockStack>
-                        </InlineStack>
-
-                        <InlineStack gap="200" blockAlign="center">
-                          {make.productCount > 0 && (
-                            <Badge tone="info">
-                              {`${make.productCount} fitment${make.productCount !== 1 ? "s" : ""}`}
-                            </Badge>
-                          )}
-                          {make.isActive ? (
-                            <Badge tone="success">Active</Badge>
-                          ) : (
-                            <Badge>Inactive</Badge>
-                          )}
-                          <div onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex" }}>
-                            <Button
-                              size="slim"
-                              variant={make.isActive ? "secondary" : "primary"}
-                              onClick={() => handleToggleMake(make.id, make.isActive)}
-                              loading={isToggling}
-                            >
-                              {make.isActive ? "Disable" : "Enable"}
-                            </Button>
-                          </div>
-                          <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
-                        </InlineStack>
-                      </InlineStack>
-
-                      {/* Expanded: Models */}
-                      <Collapsible
-                        open={isExpanded}
-                        id={`models-${make.id}`}
-                        transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
-                      >
-                        <Box
-                          paddingInlineStart="600"
-                          paddingBlockStart="200"
-                          paddingBlockEnd="200"
-                        >
-                          {modelsLoading ? (
-                            <InlineStack gap="200" blockAlign="center">
-                              <Spinner size="small" />
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                Loading models...
-                              </Text>
-                            </InlineStack>
-                          ) : models.length > 0 ? (
-                            <BlockStack gap="200">
-                              <InlineStack gap="200" blockAlign="center">
-                                <div style={{
-                                  width: "22px", height: "22px",
-                                  borderRadius: "var(--p-border-radius-100)",
-                                  background: "var(--p-color-bg-surface-secondary)",
-                                  display: "flex", alignItems: "center", justifyContent: "center",
-                                  color: "var(--p-color-icon-emphasis)",
-                                }}>
-                                  <Icon source={CategoriesIcon} />
-                                </div>
-                                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                                  Models ({models.length})
-                                </Text>
-                              </InlineStack>
-                              <Divider />
-                              {models.map((model) => {
-                                const isModelExpanded = expandedModel === model.id;
-                                const yearRange = formatYearRange(model.year_from, model.year_to);
-
-                                return (
-                                  <BlockStack gap="100" key={model.id}>
-                                    <div
-                                      role="button"
-                                      tabIndex={0}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleExpandModel(model.id);
-                                      }}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          e.stopPropagation();
-                                          handleExpandModel(model.id);
-                                        }
-                                      }}
-                                      style={{
-                                        cursor: "pointer",
-                                        padding: "8px 12px",
-                                        borderRadius: 8,
-                                        backgroundColor: isModelExpanded
-                                          ? "var(--p-color-bg-surface-hover)"
-                                          : "transparent",
-                                        transition: "background-color 0.15s",
-                                      }}
-                                    >
-                                      <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                                        <InlineStack gap="200" blockAlign="center">
-                                          <Text as="span" variant="bodyMd" fontWeight="medium">
-                                            {model.name}
-                                          </Text>
-                                          {model.generation && (
-                                            <Badge tone="info">{model.generation}</Badge>
-                                          )}
-                                          {model.body_type && (
-                                            <Badge>{model.body_type}</Badge>
-                                          )}
-                                        </InlineStack>
-                                        <InlineStack gap="200" blockAlign="center">
-                                          {yearRange && (
-                                            <Text as="span" variant="bodySm" tone="subdued">
-                                              {yearRange}
-                                            </Text>
-                                          )}
-                                          <Icon source={isModelExpanded ? ChevronUpIcon : ChevronDownIcon} />
-                                        </InlineStack>
-                                      </InlineStack>
-                                    </div>
-
-                                    {/* Expanded: Engines */}
-                                    <Collapsible
-                                      open={isModelExpanded}
-                                      id={`engines-${model.id}`}
-                                      transition={{ duration: "200ms", timingFunction: "ease-in-out" }}
-                                    >
-                                      <Box paddingInlineStart="400" paddingBlockStart="100" paddingBlockEnd="200">
-                                        {enginesLoading ? (
-                                          <InlineStack gap="200" blockAlign="center">
-                                            <Spinner size="small" />
-                                            <Text as="span" variant="bodySm" tone="subdued">
-                                              Loading engines...
-                                            </Text>
-                                          </InlineStack>
-                                        ) : engines.length > 0 ? (
-                                          <BlockStack gap="200">
-                                            <InlineStack gap="200" blockAlign="center">
-                                              <div style={{
-                                                width: "20px", height: "20px",
-                                                borderRadius: "var(--p-border-radius-100)",
-                                                background: "var(--p-color-bg-surface-secondary)",
-                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                                color: "var(--p-color-icon-emphasis)",
-                                              }}>
-                                                <Icon source={GaugeIcon} />
-                                              </div>
-                                              <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
-                                                Engines ({engines.length})
-                                              </Text>
-                                            </InlineStack>
-                                            {engines.map((engine) => (
-                                              <Box
-                                                key={engine.id}
-                                                padding="200"
-                                                borderRadius="200"
-                                                background="bg-surface-secondary"
-                                              >
-                                                <InlineStack align="space-between" blockAlign="center" wrap>
-                                                  <InlineStack gap="200" blockAlign="center" wrap>
-                                                    <Text as="span" variant="bodyMd" fontWeight="medium">
-                                                      {engine.name || engine.code || "Unknown"}
-                                                    </Text>
-                                                    {engine.code && engine.name && (
-                                                      <Badge>{engine.code}</Badge>
-                                                    )}
-                                                    {engine.displacement_cc && (
-                                                      <Badge tone="info">
-                                                        {formatDisplacement(engine.displacement_cc)}
-                                                      </Badge>
-                                                    )}
-                                                    {engine.fuel_type && (
-                                                      <Badge tone={fuelBadgeTone(engine.fuel_type)}>
-                                                        {engine.fuel_type}
-                                                      </Badge>
-                                                    )}
-                                                  </InlineStack>
-                                                  <InlineStack gap="300" blockAlign="center" wrap>
-                                                    {engine.power_hp && (
-                                                      <Text as="span" variant="bodySm" tone="subdued">
-                                                        {engine.power_hp} hp
-                                                        {engine.power_kw ? ` (${engine.power_kw} kW)` : ""}
-                                                      </Text>
-                                                    )}
-                                                    {engine.torque_nm && (
-                                                      <Text as="span" variant="bodySm" tone="subdued">
-                                                        {engine.torque_nm} Nm
-                                                      </Text>
-                                                    )}
-                                                    {(engine.year_from || engine.year_to) && (
-                                                      <Text as="span" variant="bodySm" tone="subdued">
-                                                        {formatYearRange(engine.year_from, engine.year_to)}
-                                                      </Text>
-                                                    )}
-                                                  </InlineStack>
-                                                </InlineStack>
-                                              </Box>
-                                            ))}
-                                          </BlockStack>
-                                        ) : (
-                                          <Text as="p" variant="bodySm" tone="subdued">
-                                            No engines found for this model.
-                                          </Text>
-                                        )}
-                                      </Box>
-                                    </Collapsible>
-                                  </BlockStack>
-                                );
-                              })}
-                            </BlockStack>
-                          ) : (
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              No models found for this make.
-                            </Text>
-                          )}
-                        </Box>
-                      </Collapsible>
-                    </BlockStack>
-                  </ResourceItem>
-                );
-              }}
-            />
-          )}
-        </Card>
-
-        {/* Results count */}
-        <Box paddingInlineStart="100">
-          <Text as="span" variant="bodySm" tone="subdued">
-            Showing {filteredMakes.length} of {makes.length} makes
-            {searchValue ? " (filtered)" : ""}
-          </Text>
-        </Box>
+            {/* Content based on current view */}
+            {currentView === "makes" && renderMakesView()}
+            {currentView === "models" && renderModelsView()}
+            {currentView === "engines" && renderEnginesView()}
           </BlockStack>
         </Layout.Section>
       </Layout>
