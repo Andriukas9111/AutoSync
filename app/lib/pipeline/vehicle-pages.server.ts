@@ -1377,27 +1377,15 @@ export async function pushVehiclePages(
                 isPublished: true,
                 metafields: [
                   {
-                    namespace: "autosync",
+                    namespace: "$app:autosync",
                     key: "vehicle_type",
                     value: "vehicle_spec",
                     type: "single_line_text_field",
                   },
                   {
-                    namespace: "autosync",
+                    namespace: "$app:autosync",
                     key: "engine_id",
                     value: vehicle.engineId,
-                    type: "single_line_text_field",
-                  },
-                  {
-                    namespace: "autosync",
-                    key: "make",
-                    value: vehicle.make,
-                    type: "single_line_text_field",
-                  },
-                  {
-                    namespace: "autosync",
-                    key: "model",
-                    value: vehicle.model,
                     type: "single_line_text_field",
                   },
                 ],
@@ -1408,10 +1396,12 @@ export async function pushVehiclePages(
           const pageErrors = createJson?.data?.pageCreate?.userErrors;
           if (pageErrors?.length) {
             console.error(`[vehicle-pages] Page create errors for ${pageHandle}: ${pageErrors.map((e: any) => e.message).join(", ")}`);
-          } else {
-            const createdPage = createJson?.data?.pageCreate?.page;
-            pageGid = createdPage?.id ?? null;
-            finalPageHandle = createdPage?.handle ?? pageHandle;
+          }
+          // Always try to get the page GID — Shopify may create the page even with metafield warnings
+          const createdPage = createJson?.data?.pageCreate?.page;
+          if (createdPage?.id) {
+            pageGid = createdPage.id;
+            finalPageHandle = createdPage.handle ?? pageHandle;
           }
         } catch (err) {
           console.error(`[vehicle-pages] Page create exception for ${pageHandle}:`, err instanceof Error ? err.message : err);
