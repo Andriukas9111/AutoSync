@@ -240,17 +240,21 @@ export default function ProvidersIndex() {
             <EmptyState
               heading="Add your first provider"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              action={{
-                content: "Add Provider",
-                onAction: () => navigate("/app/providers/new"),
-                disabled: atLimit,
-              }}
             >
               <p>
                 Connect a data source to start importing products. AutoSync
                 supports CSV uploads, XML feeds, JSON, API integrations,
                 and FTP imports.
               </p>
+              <InlineStack align="center">
+                <Button
+                  variant="primary"
+                  onClick={() => navigate("/app/providers/new")}
+                  disabled={atLimit}
+                >
+                  Add Provider
+                </Button>
+              </InlineStack>
             </EmptyState>
           </Card>
         </BlockStack>
