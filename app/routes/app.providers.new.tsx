@@ -462,7 +462,7 @@ export default function ProvidersNew() {
                       value={name}
                       onChange={setName}
                       autoComplete="off"
-                      placeholder="e.g. Scorpion Exhausts"
+                      placeholder="e.g. Parts Unlimited"
                       helpText="A friendly name to identify this data source."
                       requiredIndicator
                     />
@@ -472,7 +472,7 @@ export default function ProvidersNew() {
                       value={description}
                       onChange={setDescription}
                       autoComplete="off"
-                      placeholder="Performance exhaust systems supplier — FTP stock feed updated daily"
+                      placeholder="Automotive parts supplier — stock feed updated daily"
                       multiline={3}
                     />
                   </BlockStack>
@@ -525,7 +525,7 @@ export default function ProvidersNew() {
                       value={websiteUrl}
                       onChange={setWebsiteUrl}
                       autoComplete="off"
-                      placeholder="https://www.scorpion-exhausts.com"
+                      placeholder="https://www.supplier.com"
                     />
                     <TextField
                       label="Contact email"
@@ -708,7 +708,7 @@ export default function ProvidersNew() {
                             value={ftpHost}
                             onChange={setFtpHost}
                             autoComplete="off"
-                            placeholder="scorpionexhausts.iweb-storage.com"
+                            placeholder="ftp.supplier.com"
                                 />
                           <TextField
                             label="Port"
@@ -728,7 +728,7 @@ export default function ProvidersNew() {
                             value={ftpUsername}
                             onChange={setFtpUsername}
                             autoComplete="off"
-                            placeholder="scorpionexhausts-car"
+                            placeholder="your-username"
                           />
                           <TextField
                             label="Password"
