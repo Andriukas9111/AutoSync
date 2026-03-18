@@ -371,10 +371,12 @@ export default function FitmentManual() {
     totalProducts > 0 ? Math.round((localMapped / totalProducts) * 100) : 0;
 
   const tags: string[] = nextProduct?.tags
-    ? nextProduct.tags
-        .split(",")
-        .map((t: string) => t.trim())
-        .filter(Boolean)
+    ? Array.isArray(nextProduct.tags)
+      ? nextProduct.tags
+      : String(nextProduct.tags)
+          .split(",")
+          .map((t: string) => t.trim())
+          .filter(Boolean)
     : [];
 
   // Strip HTML from description for display

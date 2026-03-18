@@ -161,6 +161,19 @@ export default function ProvidersNew() {
   const isSubmitting = navigation.state === "submitting";
 
   const [providerType, setProviderType] = useState<ProviderType>("csv");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [csvDelimiter, setCsvDelimiter] = useState(",");
+  const [apiEndpoint, setApiEndpoint] = useState("");
+  const [apiAuthType, setApiAuthType] = useState("none");
+  const [apiAuthValue, setApiAuthValue] = useState("");
+  const [apiItemsPath, setApiItemsPath] = useState("");
+  const [ftpProtocol, setFtpProtocol] = useState("ftp");
+  const [ftpHost, setFtpHost] = useState("");
+  const [ftpPort, setFtpPort] = useState("21");
+  const [ftpUsername, setFtpUsername] = useState("");
+  const [ftpPassword, setFtpPassword] = useState("");
+  const [ftpPath, setFtpPath] = useState("");
 
   const limitLabel =
     providerLimit === Infinity ? "Unlimited" : String(providerLimit);
@@ -208,6 +221,8 @@ export default function ProvidersNew() {
                     <TextField
                       label="Name"
                       name="name"
+                      value={name}
+                      onChange={setName}
                       autoComplete="off"
                       placeholder="e.g. Forge Motorsport CSV Feed"
                       helpText="A friendly name to identify this data source."
@@ -224,6 +239,8 @@ export default function ProvidersNew() {
                     <TextField
                       label="Description"
                       name="description"
+                      value={description}
+                      onChange={setDescription}
                       autoComplete="off"
                       placeholder="Optional notes about this provider"
                       multiline={2}
@@ -243,6 +260,8 @@ export default function ProvidersNew() {
                       <Select
                         label="Delimiter"
                         name="csv_delimiter"
+                        value={csvDelimiter}
+                        onChange={setCsvDelimiter}
                         options={[
                           { label: "Comma (,)", value: "," },
                           { label: "Tab", value: "\t" },
@@ -299,6 +318,8 @@ export default function ProvidersNew() {
                         <TextField
                           label="Endpoint URL"
                           name="api_endpoint"
+                          value={apiEndpoint}
+                          onChange={setApiEndpoint}
                           autoComplete="off"
                           placeholder="https://api.supplier.com/products"
                           type="url"
@@ -307,6 +328,8 @@ export default function ProvidersNew() {
                         <Select
                           label="Authentication"
                           name="api_auth_type"
+                          value={apiAuthType}
+                          onChange={setApiAuthType}
                           options={[
                             { label: "None", value: "none" },
                             { label: "API Key", value: "api_key" },
@@ -318,6 +341,8 @@ export default function ProvidersNew() {
                         <TextField
                           label="Auth Credentials"
                           name="api_auth_value"
+                          value={apiAuthValue}
+                          onChange={setApiAuthValue}
                           autoComplete="off"
                           placeholder="API key, token, or username:password"
                           helpText="For Basic Auth, use format: username:password"
@@ -325,6 +350,8 @@ export default function ProvidersNew() {
                         <TextField
                           label="Items Path"
                           name="api_items_path"
+                          value={apiItemsPath}
+                          onChange={setApiItemsPath}
                           autoComplete="off"
                           placeholder="e.g. data.products"
                           helpText="Dot-separated path to the array of items in the JSON response. Leave blank for auto-detection."
@@ -363,6 +390,8 @@ export default function ProvidersNew() {
                           <Select
                             label="Protocol"
                             name="ftp_protocol"
+                            value={ftpProtocol}
+                            onChange={setFtpProtocol}
                             options={[
                               { label: "FTP", value: "ftp" },
                               { label: "SFTP", value: "sftp" },
@@ -372,12 +401,16 @@ export default function ProvidersNew() {
                             <TextField
                               label="Host"
                               name="ftp_host"
+                              value={ftpHost}
+                              onChange={setFtpHost}
                               autoComplete="off"
                               placeholder="ftp.supplier.com"
                             />
                             <TextField
                               label="Port"
                               name="ftp_port"
+                              value={ftpPort}
+                              onChange={setFtpPort}
                               autoComplete="off"
                               placeholder="21"
                               type="number"
@@ -387,11 +420,15 @@ export default function ProvidersNew() {
                             <TextField
                               label="Username"
                               name="ftp_username"
+                              value={ftpUsername}
+                              onChange={setFtpUsername}
                               autoComplete="off"
                             />
                             <TextField
                               label="Password"
                               name="ftp_password"
+                              value={ftpPassword}
+                              onChange={setFtpPassword}
                               autoComplete="off"
                               type="password"
                             />
@@ -399,6 +436,8 @@ export default function ProvidersNew() {
                           <TextField
                             label="Remote Path"
                             name="ftp_path"
+                            value={ftpPath}
+                            onChange={setFtpPath}
                             autoComplete="off"
                             placeholder="/feeds/products.csv"
                             helpText="Path to the file on the remote server."
