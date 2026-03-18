@@ -8,7 +8,6 @@ import {
   Divider,
   ProgressBar,
   Icon,
-  Box,
 } from "@shopify/polaris";
 import {
   ImportIcon,
@@ -16,7 +15,7 @@ import {
   ExportIcon,
   CollectionIcon,
   CodeIcon,
-  CheckCircleIcon,
+  CheckSmallIcon,
 } from "@shopify/polaris-icons";
 import { useNavigate } from "react-router";
 
@@ -124,35 +123,26 @@ export function OnboardingChecklist({
   return (
     <Card>
       <BlockStack gap="400">
+        {/* Header */}
         <InlineStack align="space-between" blockAlign="center">
-          <InlineStack gap="200" blockAlign="center">
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: "var(--p-color-bg-fill-success)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon source={CheckCircleIcon} tone="base" />
-            </div>
-            <Text as="h2" variant="headingMd">
-              Getting Started
-            </Text>
-          </InlineStack>
-          <Badge tone={completedCount >= 4 ? "success" : "attention"}>
-            {`${completedCount} / ${steps.length} complete`}
+          <Text as="h2" variant="headingMd">
+            Getting started
+          </Text>
+          <Badge tone={completedCount >= 4 ? "success" : "info"}>
+            {`${completedCount} of ${steps.length} complete`}
           </Badge>
         </InlineStack>
 
-        <ProgressBar progress={progressPercent} size="small" tone="primary" />
+        <ProgressBar
+          progress={progressPercent}
+          size="small"
+          tone="primary"
+        />
 
         <Divider />
 
-        <BlockStack gap="200">
+        {/* Steps */}
+        <BlockStack gap="100">
           {steps.map((step, idx) => {
             const isNext = idx === nextStepIdx;
 
@@ -160,12 +150,11 @@ export function OnboardingChecklist({
               <div
                 key={step.id}
                 style={{
-                  padding: "8px 12px",
-                  borderRadius: 8,
+                  padding: "10px 12px",
+                  borderRadius: "var(--p-border-radius-200)",
                   background: isNext
                     ? "var(--p-color-bg-surface-secondary)"
                     : "transparent",
-                  transition: "background 150ms ease",
                 }}
               >
                 <InlineStack
@@ -173,39 +162,51 @@ export function OnboardingChecklist({
                   blockAlign="center"
                   gap="400"
                 >
+                  {/* Left: step number/check + text */}
                   <InlineStack gap="300" blockAlign="center" wrap={false}>
+                    {/* Step indicator */}
                     <div
                       style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        border: step.complete
+                          ? "none"
+                          : isNext
+                            ? "2px solid var(--p-color-border-interactive)"
+                            : "2px solid var(--p-color-border-secondary)",
                         background: step.complete
                           ? "var(--p-color-bg-fill-success)"
-                          : isNext
-                            ? "var(--p-color-bg-fill-brand)"
-                            : "var(--p-color-bg-fill-secondary)",
+                          : "transparent",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         flexShrink: 0,
+                        color: step.complete
+                          ? "var(--p-color-text-success-on-bg-fill)"
+                          : isNext
+                            ? "var(--p-color-text-interactive)"
+                            : "var(--p-color-text-secondary)",
+                        fontSize: "12px",
+                        fontWeight: 600,
                       }}
                     >
-                      <Icon
-                        source={step.complete ? CheckCircleIcon : step.icon}
-                        tone={
-                          step.complete || isNext ? "base" : "subdued"
-                        }
-                      />
+                      {step.complete ? (
+                        <Icon source={CheckSmallIcon} tone="inherit" />
+                      ) : (
+                        idx + 1
+                      )}
                     </div>
+
+                    {/* Text */}
                     <BlockStack gap="050">
                       <InlineStack gap="200" blockAlign="center">
                         <Text
                           as="span"
                           variant="bodyMd"
-                          fontWeight="semibold"
-                          tone={step.complete ? "success" : undefined}
+                          fontWeight={isNext ? "bold" : "medium"}
                         >
-                          {idx + 1}. {step.title}
+                          {step.title}
                         </Text>
                         {step.complete && (
                           <Badge tone="success" size="small">
@@ -213,25 +214,28 @@ export function OnboardingChecklist({
                           </Badge>
                         )}
                       </InlineStack>
-                      <InlineStack gap="100" blockAlign="center">
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {step.description}
-                        </Text>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {step.timeEstimate}
-                        </Text>
-                      </InlineStack>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {step.description} {step.timeEstimate}
+                      </Text>
                     </BlockStack>
                   </InlineStack>
-                  <Button
-                    onClick={() => navigate(step.ctaPath)}
-                    size="slim"
-                    variant={
-                      step.complete ? "plain" : isNext ? "primary" : "secondary"
-                    }
-                  >
-                    {step.complete ? "View" : step.ctaLabel}
-                  </Button>
+
+                  {/* Right: action button */}
+                  <div style={{ flexShrink: 0 }}>
+                    <Button
+                      onClick={() => navigate(step.ctaPath)}
+                      size="slim"
+                      variant={
+                        step.complete
+                          ? "plain"
+                          : isNext
+                            ? "primary"
+                            : "tertiary"
+                      }
+                    >
+                      {step.complete ? "View" : step.ctaLabel}
+                    </Button>
+                  </div>
                 </InlineStack>
               </div>
             );
