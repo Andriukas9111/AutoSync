@@ -1,20 +1,23 @@
 /**
- * Provider Detail/Edit Page
+ * Provider Detail/Dashboard Page
  *
- * View and edit a single provider: name, type, config, status.
- * Actions: update, delete, trigger fetch.
+ * Tabbed dashboard for a single provider: Overview, Products, Import,
+ * Import History, Mapping, Pricing, Settings.
+ * URL param: ?tab=overview|settings (inline tabs)
+ * Other tabs navigate to sub-routes.
  */
 
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, useSearchParams } from "react-router";
 import { data, redirect } from "react-router";
 import {
   Page,
-  Layout,
+  Tabs,
   Card,
-  BlockStack,
+  InlineGrid,
   InlineStack,
+  BlockStack,
   Text,
   TextField,
   Select,
@@ -24,10 +27,22 @@ import {
   Divider,
   Modal,
   FormLayout,
-  DropZone,
-  Spinner,
-  ProgressBar,
+  Box,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ProductIcon,
+  ImportIcon,
+  ClockIcon,
+  ChartVerticalFilledIcon,
+  ViewIcon,
+  EditIcon,
+  PlusCircleIcon,
+  DeleteIcon,
+  GlobeIcon,
+  EmailIcon,
+  NoteIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -42,13 +57,29 @@ interface Provider {
   id: string;
   shop_id: string;
   name: string;
+  description: string | null;
   type: ProviderType;
   config: Record<string, unknown> | null;
   product_count: number;
   last_fetch_at: string | null;
   status: string;
+  logo_url: string | null;
+  website_url: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  import_count: number;
+  duplicate_strategy: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface ProviderImport {
+  id: string;
+  file_name: string | null;
+  status: string;
+  imported_rows: number;
+  total_rows: number;
+  created_at: string;
 }
 
 const TYPE_OPTIONS = [
@@ -63,6 +94,15 @@ const STATUS_OPTIONS = [
   { label: "Inactive", value: "inactive" },
 ];
 
+const DUPLICATE_OPTIONS = [
+  { label: "Skip duplicates", value: "skip" },
+  { label: "Overwrite duplicates", value: "overwrite" },
+  { label: "Create new entries", value: "create" },
+];
+
+const TAB_IDS = ["overview", "products", "import", "history", "mapping", "pricing", "settings"] as const;
+type TabId = (typeof TAB_IDS)[number];
+
 // ---------------------------------------------------------------------------
 // Loader
 // ---------------------------------------------------------------------------
@@ -76,14 +116,31 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Provider ID required", { status: 400 });
   }
 
-  const [providerResult, tenant] = await Promise.all([
-    db.from("providers")
-      .select("*")
-      .eq("id", providerId)
-      .eq("shop_id", shopId)
-      .single(),
-    getTenant(shopId),
-  ]);
+  const url = new URL(request.url);
+  const tab = (url.searchParams.get("tab") || "overview") as TabId;
+
+  const [providerResult, tenant, importsResult, productCountResult, fitmentCountResult] =
+    await Promise.all([
+      db.from("providers")
+        .select("*")
+        .eq("id", providerId)
+        .eq("shop_id", shopId)
+        .single(),
+      getTenant(shopId),
+      db.from("provider_imports")
+        .select("id, file_name, status, imported_rows, total_rows, created_at")
+        .eq("provider_id", providerId)
+        .eq("shop_id", shopId)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      db.from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("provider_id", providerId),
+      db.from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+    ]);
 
   if (providerResult.error || !providerResult.data) {
     throw new Response("Provider not found", { status: 404 });
@@ -95,8 +152,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return {
     provider: providerResult.data as Provider,
     plan,
+    tab,
     canUseApi: limits.features.apiIntegration,
     canUseFtp: limits.features.ftpImport,
+    recentImports: (importsResult.data || []) as ProviderImport[],
+    productCount: productCountResult.count ?? 0,
+    fitmentCount: fitmentCountResult.count ?? 0,
+    totalProducts: providerResult.data.product_count ?? 0,
   };
 };
 
@@ -116,7 +178,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const _action = String(formData.get("_action") || "");
 
-  // ── Delete provider ────────────────────────────────────────
+  // -- Delete provider --
   if (_action === "delete") {
     const { error } = await db
       .from("providers")
@@ -127,29 +189,31 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     if (error) {
       return data({ error: `Failed to delete: ${error.message}` }, { status: 500 });
     }
-
     return redirect("/app/providers");
   }
 
-  // ── Update provider ────────────────────────────────────────
+  // -- Update provider --
   if (_action === "update") {
     const name = String(formData.get("name") || "").trim();
-    const type = String(formData.get("type") || "csv") as ProviderType;
     const status = String(formData.get("status") || "active");
     const description = String(formData.get("description") || "").trim();
+    const duplicateStrategy = String(formData.get("duplicate_strategy") || "skip");
+    const websiteUrl = String(formData.get("website_url") || "").trim();
+    const contactEmail = String(formData.get("contact_email") || "").trim();
+    const notes = String(formData.get("notes") || "").trim();
 
     if (!name) {
       return data({ error: "Provider name is required." }, { status: 400 });
     }
 
-    // Merge with existing config to avoid losing fields not shown in UI
+    // Merge config to avoid losing fields not shown in UI
     const existingConfig = (
-      await db.from("providers").select("config").eq("id", providerId).eq("shop_id", shopId).single()
-    ).data?.config as Record<string, unknown> || {};
+      await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).single()
+    ).data;
+    const type = existingConfig?.type as ProviderType || "csv";
+    const config: Record<string, unknown> = { ...(existingConfig?.config as Record<string, unknown> || {}) };
 
-    const config: Record<string, unknown> = { ...existingConfig };
-
-    // Type-specific config (keys match app.providers.new.tsx)
+    // Type-specific config
     if (type === "csv") {
       config.delimiter = formData.get("delimiter") || ",";
     } else if (type === "api") {
@@ -166,16 +230,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       config.protocol = String(formData.get("ftp_protocol") || "ftp");
     }
 
-    if (description) {
-      config.description = description;
-    }
-
     const { error } = await db
       .from("providers")
       .update({
         name,
-        type,
         status,
+        description: description || null,
+        duplicate_strategy: duplicateStrategy,
+        website_url: websiteUrl || null,
+        contact_email: contactEmail || null,
+        notes: notes || null,
         config,
         updated_at: new Date().toISOString(),
       })
@@ -185,7 +249,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     if (error) {
       return data({ error: `Failed to update: ${error.message}` }, { status: 500 });
     }
-
     return data({ success: true, message: "Provider updated successfully." });
   }
 
@@ -193,31 +256,63 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function relativeTime(dateStr: string | null): string {
+  if (!dateStr) return "Never";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function importStatusTone(status: string): "success" | "critical" | "attention" | "info" | undefined {
+  switch (status) {
+    case "completed": return "success";
+    case "failed": return "critical";
+    case "running": return "attention";
+    case "pending": return "info";
+    default: return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function ProviderDetail() {
-  const { provider, plan, canUseApi, canUseFtp } = useLoaderData<typeof loader>();
+  const {
+    provider, plan, tab, canUseApi, canUseFtp,
+    recentImports, productCount, fitmentCount, totalProducts,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
+  const [searchParams] = useSearchParams();
 
-  const [name, setName] = useState(provider.name);
-  const [type, setType] = useState<string>(provider.type);
-  const [status, setStatus] = useState(provider.status);
-  const [description, setDescription] = useState(
-    (provider.config as Record<string, unknown>)?.description as string || "",
-  );
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Type-specific config state (keys match app.providers.new.tsx)
+  // Settings form state
+  const [name, setName] = useState(provider.name);
+  const [status, setStatus] = useState(provider.status);
+  const [description, setDescription] = useState(provider.description || "");
+  const [duplicateStrategy, setDuplicateStrategy] = useState(provider.duplicate_strategy || "skip");
+  const [websiteUrl, setWebsiteUrl] = useState(provider.website_url || "");
+  const [contactEmail, setContactEmail] = useState(provider.contact_email || "");
+  const [notes, setNotes] = useState(provider.notes || "");
+
+  // Type-specific config state
   const config = (provider.config || {}) as Record<string, unknown>;
   const [delimiter, setDelimiter] = useState(String(config.delimiter || ","));
-  // API fields
   const [apiEndpoint, setApiEndpoint] = useState(String(config.endpoint || ""));
   const [apiAuthType, setApiAuthType] = useState(String(config.authType || "none"));
   const [apiAuthValue, setApiAuthValue] = useState(String(config.authValue || ""));
   const [apiItemsPath, setApiItemsPath] = useState(String(config.itemsPath || ""));
-  // FTP fields
   const [ftpHost, setFtpHost] = useState(String(config.host || ""));
   const [ftpPort, setFtpPort] = useState(String(config.port || "21"));
   const [ftpUsername, setFtpUsername] = useState(String(config.username || ""));
@@ -225,129 +320,59 @@ export default function ProviderDetail() {
   const [ftpPath, setFtpPath] = useState(String(config.remotePath || "/"));
   const [ftpProtocol, setFtpProtocol] = useState(String(config.protocol || "ftp"));
 
-  // File upload state
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{
-    success?: boolean;
-    imported?: number;
-    total?: number;
-    error?: string;
-    errors?: string[];
-  } | null>(null);
-
-  // Preview state
-  const [previewData, setPreviewData] = useState<{
-    fileName: string;
-    fileSize: string;
-    totalRows: number;
-    headers: string[];
-    columnMapping: Record<string, string | null>;
-    sampleRows: Record<string, string>[];
-    warnings: string[];
-  } | null>(null);
-
-  const handleDrop = useCallback((_dropFiles: File[], acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      setUploadFile(acceptedFiles[0]);
-      setUploadResult(null);
-      setPreviewData(null);
-    }
-  }, []);
-
-  // Preview file before importing
-  const handlePreview = useCallback(async () => {
-    if (!uploadFile) return;
-    setPreviewing(true);
-    setPreviewData(null);
-
-    try {
-      const fd = new FormData();
-      fd.append("file", uploadFile);
-      fd.append("provider_id", provider.id);
-      fd.append("file_type", provider.type === "xml" ? "xml" : "csv");
-      fd.append("delimiter", delimiter);
-
-      const response = await fetch("/app/api/upload-preview", {
-        method: "POST",
-        body: fd,
-      });
-
-      const result = await response.json();
-
-      if (result.error) {
-        setUploadResult({ error: result.error });
-      } else if (result.preview) {
-        setPreviewData(result.preview);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Preview failed";
-      setUploadResult({ error: message });
-    } finally {
-      setPreviewing(false);
-    }
-  }, [uploadFile, provider.id, provider.type, delimiter]);
-
-  // Import after preview confirmation
-  const handleUpload = useCallback(async () => {
-    if (!uploadFile) return;
-    setUploading(true);
-    setUploadResult(null);
-
-    try {
-      const fd = new FormData();
-      fd.append("file", uploadFile);
-      fd.append("provider_id", provider.id);
-      fd.append("file_type", provider.type === "xml" ? "xml" : "csv");
-      fd.append("delimiter", delimiter);
-
-      const response = await fetch("/app/api/upload", {
-        method: "POST",
-        body: fd,
-      });
-
-      const result = await response.json();
-      setUploadResult(result);
-
-      if (result.success) {
-        setUploadFile(null);
-        setPreviewData(null);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Upload failed";
-      setUploadResult({ error: message });
-    } finally {
-      setUploading(false);
-    }
-  }, [uploadFile, provider.id, provider.type, delimiter]);
-
   const isSubmitting = fetcher.state !== "idle";
   const fetcherData = fetcher.data as
     | { success: true; message: string }
     | { error: string }
     | undefined;
 
-  const lastFetch = provider.last_fetch_at
-    ? new Date(provider.last_fetch_at).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : "Never";
+  // -- Tab handling --
+  const currentTab = TAB_IDS.includes(tab as TabId) ? tab : "overview";
+  const selectedTabIndex = TAB_IDS.indexOf(currentTab as TabId);
 
-  const createdAt = new Date(provider.created_at).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const handleTabChange = useCallback(
+    (index: number) => {
+      const tabId = TAB_IDS[index];
+      // Inline tabs: overview, settings
+      if (tabId === "overview" || tabId === "settings") {
+        navigate(`/app/providers/${provider.id}?tab=${tabId}`);
+        return;
+      }
+      // Navigation tabs: route to sub-pages
+      const routes: Record<string, string> = {
+        products: `/app/providers/${provider.id}/products`,
+        import: `/app/providers/${provider.id}/import`,
+        history: `/app/providers/${provider.id}/imports`,
+        mapping: `/app/providers/${provider.id}/mapping`,
+        pricing: `/app/providers/${provider.id}/pricing`,
+      };
+      if (routes[tabId]) navigate(routes[tabId]);
+    },
+    [navigate, provider.id],
+  );
+
+  const tabs = TAB_IDS.map((id) => ({
+    id,
+    content:
+      id === "overview" ? "Overview" :
+      id === "products" ? "Products" :
+      id === "import" ? "Import" :
+      id === "history" ? "Import History" :
+      id === "mapping" ? "Mapping" :
+      id === "pricing" ? "Pricing" :
+      "Settings",
+  }));
+
+  // -- Fitment coverage --
+  const fitmentCoverage = totalProducts > 0
+    ? Math.round((fitmentCount / totalProducts) * 100)
+    : 0;
 
   return (
     <Page
       fullWidth
       title={provider.name}
+      subtitle={provider.description ? (provider.description.length > 80 ? `${provider.description.slice(0, 80)}...` : provider.description) : undefined}
       backAction={{ content: "Providers", onAction: () => navigate("/app/providers") }}
       titleMetadata={
         <InlineStack gap="200">
@@ -357,8 +382,12 @@ export default function ProviderDetail() {
           <Badge tone="info">{provider.type.toUpperCase()}</Badge>
         </InlineStack>
       }
+      primaryAction={{
+        content: "Import Data",
+        onAction: () => navigate(`/app/providers/${provider.id}/import`),
+      }}
     >
-      <BlockStack gap="600">
+      <BlockStack gap="400">
         {/* Success/Error banners */}
         {fetcherData && "success" in fetcherData && (
           <Banner title={fetcherData.message} tone="success" />
@@ -369,445 +398,49 @@ export default function ProviderDetail() {
           </Banner>
         )}
 
-        <Layout>
-          {/* Edit form */}
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Provider Settings
-                </Text>
-                <Divider />
-                <fetcher.Form method="POST">
-                  <input type="hidden" name="_action" value="update" />
-                  <FormLayout>
-                    <TextField
-                      label="Provider Name"
-                      name="name"
-                      value={name}
-                      onChange={setName}
-                      autoComplete="off"
-                    />
-                    <Select
-                      label="Type"
-                      name="type"
-                      options={TYPE_OPTIONS}
-                      value={type}
-                      onChange={setType}
-                    />
-                    <Select
-                      label="Status"
-                      name="status"
-                      options={STATUS_OPTIONS}
-                      value={status}
-                      onChange={setStatus}
-                    />
-                    <TextField
-                      label="Description"
-                      name="description"
-                      value={description}
-                      onChange={setDescription}
-                      multiline={3}
-                      autoComplete="off"
-                    />
-
-                    {/* Type-specific config */}
-                    {type === "csv" && (
-                      <TextField
-                        label="CSV Delimiter"
-                        name="delimiter"
-                        value={delimiter}
-                        onChange={setDelimiter}
-                        helpText="Character used to separate columns (comma, tab, semicolon)"
-                        autoComplete="off"
-                      />
-                    )}
-
-                    {type === "api" && (
-                      <>
-                        {!canUseApi && (
-                          <Banner tone="warning">
-                            <p>API integration requires the Professional plan or higher.</p>
-                          </Banner>
-                        )}
-                        <TextField
-                          label="API Endpoint URL"
-                          name="api_endpoint"
-                          value={apiEndpoint}
-                          onChange={setApiEndpoint}
-                          placeholder="https://api.example.com/products"
-                          autoComplete="off"
-                          disabled={!canUseApi}
-                        />
-                        <Select
-                          label="Authentication Type"
-                          name="api_auth_type"
-                          options={[
-                            { label: "None", value: "none" },
-                            { label: "API Key (Header)", value: "api_key" },
-                            { label: "Bearer Token", value: "bearer" },
-                            { label: "Basic Auth", value: "basic" },
-                          ]}
-                          value={apiAuthType}
-                          onChange={setApiAuthType}
-                          disabled={!canUseApi}
-                        />
-                        {apiAuthType !== "none" && (
-                          <TextField
-                            label={apiAuthType === "basic" ? "Credentials (user:pass)" : apiAuthType === "bearer" ? "Bearer Token" : "API Key"}
-                            name="api_auth_value"
-                            value={apiAuthValue}
-                            onChange={setApiAuthValue}
-                            type="password"
-                            autoComplete="off"
-                            disabled={!canUseApi}
-                          />
-                        )}
-                        <TextField
-                          label="Items JSON Path"
-                          name="api_items_path"
-                          value={apiItemsPath}
-                          onChange={setApiItemsPath}
-                          placeholder="data.products"
-                          helpText="Dot-path to the products array in the JSON response"
-                          autoComplete="off"
-                          disabled={!canUseApi}
-                        />
-                      </>
-                    )}
-
-                    {type === "ftp" && (
-                      <>
-                        {!canUseFtp && (
-                          <Banner tone="warning">
-                            <p>FTP import requires the Business plan or higher.</p>
-                          </Banner>
-                        )}
-                        <Select
-                          label="Protocol"
-                          name="ftp_protocol"
-                          options={[
-                            { label: "FTP", value: "ftp" },
-                            { label: "SFTP", value: "sftp" },
-                            { label: "FTPS", value: "ftps" },
-                          ]}
-                          value={ftpProtocol}
-                          onChange={setFtpProtocol}
-                          disabled={!canUseFtp}
-                        />
-                        <FormLayout.Group>
-                          <TextField
-                            label="Host"
-                            name="ftp_host"
-                            value={ftpHost}
-                            onChange={setFtpHost}
-                            placeholder="ftp.example.com"
-                            autoComplete="off"
-                            disabled={!canUseFtp}
-                          />
-                          <TextField
-                            label="Port"
-                            name="ftp_port"
-                            value={ftpPort}
-                            onChange={setFtpPort}
-                            type="number"
-                            autoComplete="off"
-                            disabled={!canUseFtp}
-                          />
-                        </FormLayout.Group>
-                        <FormLayout.Group>
-                          <TextField
-                            label="Username"
-                            name="ftp_username"
-                            value={ftpUsername}
-                            onChange={setFtpUsername}
-                            autoComplete="off"
-                            disabled={!canUseFtp}
-                          />
-                          <TextField
-                            label="Password"
-                            name="ftp_password"
-                            value={ftpPassword}
-                            onChange={setFtpPassword}
-                            type="password"
-                            autoComplete="off"
-                            disabled={!canUseFtp}
-                          />
-                        </FormLayout.Group>
-                        <TextField
-                          label="Remote Path"
-                          name="ftp_path"
-                          value={ftpPath}
-                          onChange={setFtpPath}
-                          placeholder="/data/products/"
-                          helpText="Path to the file or directory on the remote server"
-                          autoComplete="off"
-                          disabled={!canUseFtp}
-                        />
-                      </>
-                    )}
-
-                    <InlineStack align="end">
-                      <Button
-                        variant="primary"
-                        submit
-                        loading={isSubmitting}
-                        disabled={isSubmitting}
-                      >
-                        Save Changes
-                      </Button>
-                    </InlineStack>
-                  </FormLayout>
-                </fetcher.Form>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-
-          {/* File Upload */}
-          {(provider.type === "csv" || provider.type === "xml") && (
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Upload {provider.type.toUpperCase()} File
-                  </Text>
-                  <Divider />
-
-                  {uploadResult?.success && (
-                    <Banner tone="success" title="Upload successful">
-                      <p>
-                        Imported {uploadResult.imported} of {uploadResult.total} products.
-                      </p>
-                      {uploadResult.errors && uploadResult.errors.length > 0 && (
-                        <p style={{ marginTop: 8 }}>
-                          Warnings: {uploadResult.errors.join("; ")}
-                        </p>
-                      )}
-                    </Banner>
-                  )}
-                  {uploadResult?.error && (
-                    <Banner tone="critical" title="Upload failed">
-                      <p>{uploadResult.error}</p>
-                    </Banner>
-                  )}
-
-                  <DropZone
-                    onDrop={handleDrop}
-                    accept={
-                      provider.type === "xml"
-                        ? ".xml,application/xml,text/xml"
-                        : ".csv,text/csv,application/csv"
-                    }
-                    type="file"
-                    allowMultiple={false}
-                  >
-                    {uploadFile ? (
-                      <div style={{ padding: "16px", textAlign: "center" }}>
-                        <BlockStack gap="200" inlineAlign="center">
-                          <Text as="p" variant="bodyMd" fontWeight="semibold">
-                            {uploadFile.name}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {(uploadFile.size / 1024).toFixed(1)} KB
-                          </Text>
-                        </BlockStack>
-                      </div>
-                    ) : (
-                      <DropZone.FileUpload
-                        actionTitle={`Upload ${provider.type.toUpperCase()}`}
-                        actionHint={`Accepts .${provider.type} files`}
-                      />
-                    )}
-                  </DropZone>
-
-                  {(uploading || previewing) && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Spinner size="small" />
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {previewing ? "Analysing file..." : "Importing products..."}
-                      </Text>
-                    </InlineStack>
-                  )}
-
-                  {/* Preview Results */}
-                  {previewData && (
-                    <BlockStack gap="300">
-                      <Banner tone="info" title="File Preview">
-                        <p>
-                          <strong>{previewData.fileName}</strong> — {previewData.fileSize},{" "}
-                          {previewData.totalRows.toLocaleString()} rows detected,{" "}
-                          {previewData.headers.length} columns
-                        </p>
-                      </Banner>
-
-                      {previewData.warnings.length > 0 && (
-                        <Banner tone="warning" title="Warnings">
-                          {previewData.warnings.map((w, i) => (
-                            <p key={i}>{w}</p>
-                          ))}
-                        </Banner>
-                      )}
-
-                      {/* Column mapping */}
-                      <Text as="h3" variant="headingSm">
-                        Column Mapping
-                      </Text>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
-                        <Text as="span" variant="bodySm" fontWeight="semibold">CSV Column</Text>
-                        <Text as="span" variant="bodySm" fontWeight="semibold">Maps To</Text>
-                        {previewData.headers.map((h) => (
-                          <React.Fragment key={h}>
-                            <Text as="span" variant="bodySm">{h}</Text>
-                            <Text as="span" variant="bodySm" tone={previewData.columnMapping[h] ? "success" : "subdued"}>
-                              {previewData.columnMapping[h] ?? "— unmapped (stored in raw_data)"}
-                            </Text>
-                          </React.Fragment>
-                        ))}
-                      </div>
-
-                      {/* Sample rows */}
-                      <Text as="h3" variant="headingSm">
-                        Sample Data ({Math.min(previewData.sampleRows.length, 5)} of {previewData.totalRows.toLocaleString()} rows)
-                      </Text>
-                      <div style={{ overflowX: "auto", maxHeight: "300px" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-                          <thead>
-                            <tr>
-                              {previewData.headers.slice(0, 6).map((h) => (
-                                <th key={h} style={{ textAlign: "left", padding: "4px 8px", borderBottom: "1px solid var(--p-color-border)", whiteSpace: "nowrap" }}>
-                                  {h}
-                                </th>
-                              ))}
-                              {previewData.headers.length > 6 && (
-                                <th style={{ padding: "4px 8px", borderBottom: "1px solid var(--p-color-border)" }}>
-                                  +{previewData.headers.length - 6} more
-                                </th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {previewData.sampleRows.slice(0, 5).map((row, i) => (
-                              <tr key={i}>
-                                {previewData.headers.slice(0, 6).map((h) => (
-                                  <td key={h} style={{ padding: "4px 8px", borderBottom: "1px solid var(--p-color-border-subdued)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                    {row[h] || "—"}
-                                  </td>
-                                ))}
-                                {previewData.headers.length > 6 && <td style={{ padding: "4px 8px" }}>…</td>}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </BlockStack>
-                  )}
-
-                  <InlineStack align="end" gap="200">
-                    {uploadFile && !uploading && !previewing && (
-                      <Button
-                        onClick={() => {
-                          setUploadFile(null);
-                          setUploadResult(null);
-                          setPreviewData(null);
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    )}
-                    {/* Step 1: Preview */}
-                    {uploadFile && !previewData && !uploading && (
-                      <Button
-                        onClick={handlePreview}
-                        loading={previewing}
-                        disabled={previewing}
-                      >
-                        Preview File
-                      </Button>
-                    )}
-                    {/* Step 2: Confirm Import (only after preview) */}
-                    {previewData && (
-                      <Button
-                        variant="primary"
-                        onClick={handleUpload}
-                        disabled={uploading}
-                        loading={uploading}
-                      >
-                        Import {previewData.totalRows.toLocaleString()} Products
-                      </Button>
-                    )}
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
-
-          {/* Sidebar — info & danger zone */}
-          <Layout.Section variant="oneThird">
-            <BlockStack gap="400">
-              {/* Provider info */}
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">
-                    Provider Info
-                  </Text>
-                  <Divider />
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        Products
-                      </Text>
-                      <Text as="span" variant="bodySm" fontWeight="semibold">
-                        {provider.product_count.toLocaleString()}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        Last Fetch
-                      </Text>
-                      <Text as="span" variant="bodySm" fontWeight="semibold">
-                        {lastFetch}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        Created
-                      </Text>
-                      <Text as="span" variant="bodySm" fontWeight="semibold">
-                        {createdAt}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        Plan
-                      </Text>
-                      <Badge>{plan}</Badge>
-                    </InlineStack>
-                  </BlockStack>
-                </BlockStack>
-              </Card>
-
-              {/* Danger zone */}
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd" tone="critical">
-                    Danger Zone
-                  </Text>
-                  <Divider />
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Permanently delete this provider and all associated configuration.
-                    This action cannot be undone.
-                  </Text>
-                  <Button
-                    tone="critical"
-                    onClick={() => setDeleteModalOpen(true)}
-                  >
-                    Delete Provider
-                  </Button>
-                </BlockStack>
-              </Card>
-            </BlockStack>
-          </Layout.Section>
-        </Layout>
+        <Tabs tabs={tabs} selected={selectedTabIndex} onSelect={handleTabChange}>
+          <Box paddingBlockStart="400">
+            {currentTab === "overview" && (
+              <OverviewTab
+                provider={provider}
+                productCount={productCount}
+                totalProducts={totalProducts}
+                fitmentCoverage={fitmentCoverage}
+                recentImports={recentImports}
+              />
+            )}
+            {currentTab === "settings" && (
+              <SettingsTab
+                provider={provider}
+                fetcher={fetcher}
+                isSubmitting={isSubmitting}
+                canUseApi={canUseApi}
+                canUseFtp={canUseFtp}
+                plan={plan}
+                name={name} setName={setName}
+                status={status} setStatus={setStatus}
+                description={description} setDescription={setDescription}
+                duplicateStrategy={duplicateStrategy} setDuplicateStrategy={setDuplicateStrategy}
+                websiteUrl={websiteUrl} setWebsiteUrl={setWebsiteUrl}
+                contactEmail={contactEmail} setContactEmail={setContactEmail}
+                notes={notes} setNotes={setNotes}
+                delimiter={delimiter} setDelimiter={setDelimiter}
+                apiEndpoint={apiEndpoint} setApiEndpoint={setApiEndpoint}
+                apiAuthType={apiAuthType} setApiAuthType={setApiAuthType}
+                apiAuthValue={apiAuthValue} setApiAuthValue={setApiAuthValue}
+                apiItemsPath={apiItemsPath} setApiItemsPath={setApiItemsPath}
+                ftpHost={ftpHost} setFtpHost={setFtpHost}
+                ftpPort={ftpPort} setFtpPort={setFtpPort}
+                ftpUsername={ftpUsername} setFtpUsername={setFtpUsername}
+                ftpPassword={ftpPassword} setFtpPassword={setFtpPassword}
+                ftpPath={ftpPath} setFtpPath={setFtpPath}
+                ftpProtocol={ftpProtocol} setFtpProtocol={setFtpProtocol}
+                deleteModalOpen={deleteModalOpen}
+                setDeleteModalOpen={setDeleteModalOpen}
+              />
+            )}
+          </Box>
+        </Tabs>
       </BlockStack>
 
       {/* Delete confirmation modal */}
@@ -819,10 +452,7 @@ export default function ProviderDetail() {
           content: "Delete",
           destructive: true,
           onAction: () => {
-            fetcher.submit(
-              { _action: "delete" },
-              { method: "POST" },
-            );
+            fetcher.submit({ _action: "delete" }, { method: "POST" });
             setDeleteModalOpen(false);
           },
           loading: isSubmitting,
@@ -840,5 +470,469 @@ export default function ProviderDetail() {
         </Modal.Section>
       </Modal>
     </Page>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overview Tab
+// ---------------------------------------------------------------------------
+
+function OverviewTab({
+  provider,
+  productCount,
+  totalProducts,
+  fitmentCoverage,
+  recentImports,
+}: {
+  provider: Provider;
+  productCount: number;
+  totalProducts: number;
+  fitmentCoverage: number;
+  recentImports: ProviderImport[];
+}) {
+  const navigate = useNavigate();
+
+  return (
+    <BlockStack gap="400">
+      {/* Stats cards */}
+      <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" variant="bodySm" tone="subdued">Total Products</Text>
+              <Icon source={ProductIcon} tone="base" />
+            </InlineStack>
+            <Text as="p" variant="headingLg" fontWeight="bold">
+              {totalProducts.toLocaleString()}
+            </Text>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" variant="bodySm" tone="subdued">Total Imports</Text>
+              <Icon source={ImportIcon} tone="base" />
+            </InlineStack>
+            <Text as="p" variant="headingLg" fontWeight="bold">
+              {(provider.import_count ?? 0).toLocaleString()}
+            </Text>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" variant="bodySm" tone="subdued">Last Import</Text>
+              <Icon source={ClockIcon} tone="base" />
+            </InlineStack>
+            <Text as="p" variant="headingLg" fontWeight="bold">
+              {relativeTime(provider.last_fetch_at)}
+            </Text>
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" variant="bodySm" tone="subdued">Fitment Coverage</Text>
+              <Icon source={ChartVerticalFilledIcon} tone="base" />
+            </InlineStack>
+            <Text as="p" variant="headingLg" fontWeight="bold">
+              {`${fitmentCoverage}%`}
+            </Text>
+          </BlockStack>
+        </Card>
+      </InlineGrid>
+
+      {/* Recent Imports */}
+      <Card>
+        <BlockStack gap="300">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">Recent Imports</Text>
+            <Button
+              variant="plain"
+              onClick={() => navigate(`/app/providers/${provider.id}/imports`)}
+            >
+              View all
+            </Button>
+          </InlineStack>
+          <Divider />
+          {recentImports.length === 0 ? (
+            <Box paddingBlock="400">
+              <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                No imports yet. Start by importing data from this provider.
+              </Text>
+            </Box>
+          ) : (
+            <BlockStack gap="200">
+              {recentImports.map((imp) => (
+                <Box
+                  key={imp.id}
+                  paddingBlock="200"
+                  paddingInline="100"
+                  borderBlockEndWidth="025"
+                  borderColor="border-secondary"
+                >
+                  <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                    <BlockStack gap="050">
+                      <Text as="span" variant="bodySm" fontWeight="semibold">
+                        {imp.file_name || "Untitled import"}
+                      </Text>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {relativeTime(imp.created_at)}
+                      </Text>
+                    </BlockStack>
+                    <InlineStack gap="300" blockAlign="center">
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {`${imp.imported_rows}/${imp.total_rows}`}
+                      </Text>
+                      <Badge tone={importStatusTone(imp.status)}>
+                        {imp.status.charAt(0).toUpperCase() + imp.status.slice(1)}
+                      </Badge>
+                    </InlineStack>
+                  </InlineStack>
+                </Box>
+              ))}
+            </BlockStack>
+          )}
+        </BlockStack>
+      </Card>
+
+      {/* Quick Actions */}
+      <Card>
+        <BlockStack gap="300">
+          <Text as="h2" variant="headingMd">Quick Actions</Text>
+          <Divider />
+          <InlineStack gap="300">
+            <Button
+              icon={PlusCircleIcon}
+              onClick={() => navigate(`/app/providers/${provider.id}/import`)}
+            >
+              New Import
+            </Button>
+            <Button
+              icon={ViewIcon}
+              onClick={() => navigate(`/app/providers/${provider.id}/products`)}
+            >
+              View All Products
+            </Button>
+            <Button
+              icon={EditIcon}
+              onClick={() => navigate(`/app/providers/${provider.id}/mapping`)}
+            >
+              Edit Mapping
+            </Button>
+          </InlineStack>
+        </BlockStack>
+      </Card>
+    </BlockStack>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Settings Tab
+// ---------------------------------------------------------------------------
+
+function SettingsTab({
+  provider, fetcher, isSubmitting, canUseApi, canUseFtp, plan,
+  name, setName, status, setStatus,
+  description, setDescription,
+  duplicateStrategy, setDuplicateStrategy,
+  websiteUrl, setWebsiteUrl,
+  contactEmail, setContactEmail,
+  notes, setNotes,
+  delimiter, setDelimiter,
+  apiEndpoint, setApiEndpoint,
+  apiAuthType, setApiAuthType,
+  apiAuthValue, setApiAuthValue,
+  apiItemsPath, setApiItemsPath,
+  ftpHost, setFtpHost, ftpPort, setFtpPort,
+  ftpUsername, setFtpUsername, ftpPassword, setFtpPassword,
+  ftpPath, setFtpPath, ftpProtocol, setFtpProtocol,
+  deleteModalOpen, setDeleteModalOpen,
+}: {
+  provider: Provider;
+  fetcher: ReturnType<typeof useFetcher>;
+  isSubmitting: boolean;
+  canUseApi: boolean;
+  canUseFtp: boolean;
+  plan: PlanTier;
+  name: string; setName: (v: string) => void;
+  status: string; setStatus: (v: string) => void;
+  description: string; setDescription: (v: string) => void;
+  duplicateStrategy: string; setDuplicateStrategy: (v: string) => void;
+  websiteUrl: string; setWebsiteUrl: (v: string) => void;
+  contactEmail: string; setContactEmail: (v: string) => void;
+  notes: string; setNotes: (v: string) => void;
+  delimiter: string; setDelimiter: (v: string) => void;
+  apiEndpoint: string; setApiEndpoint: (v: string) => void;
+  apiAuthType: string; setApiAuthType: (v: string) => void;
+  apiAuthValue: string; setApiAuthValue: (v: string) => void;
+  apiItemsPath: string; setApiItemsPath: (v: string) => void;
+  ftpHost: string; setFtpHost: (v: string) => void;
+  ftpPort: string; setFtpPort: (v: string) => void;
+  ftpUsername: string; setFtpUsername: (v: string) => void;
+  ftpPassword: string; setFtpPassword: (v: string) => void;
+  ftpPath: string; setFtpPath: (v: string) => void;
+  ftpProtocol: string; setFtpProtocol: (v: string) => void;
+  deleteModalOpen: boolean;
+  setDeleteModalOpen: (v: boolean) => void;
+}) {
+  const type = provider.type;
+
+  return (
+    <BlockStack gap="400">
+      {/* Provider Details */}
+      <Card>
+        <BlockStack gap="400">
+          <InlineStack align="space-between" blockAlign="center">
+            <Text as="h2" variant="headingMd">Provider Details</Text>
+            <Badge tone="info">{type.toUpperCase()}</Badge>
+          </InlineStack>
+          <Divider />
+          <fetcher.Form method="POST">
+            <input type="hidden" name="_action" value="update" />
+            <FormLayout>
+              <TextField
+                label="Provider Name"
+                name="name"
+                value={name}
+                onChange={setName}
+                autoComplete="off"
+              />
+              <TextField
+                label="Description"
+                name="description"
+                value={description}
+                onChange={setDescription}
+                multiline={3}
+                autoComplete="off"
+              />
+              <Select
+                label="Status"
+                name="status"
+                options={STATUS_OPTIONS}
+                value={status}
+                onChange={setStatus}
+              />
+
+              {/* Connection settings (type-specific) */}
+              {type === "csv" && (
+                <TextField
+                  label="CSV Delimiter"
+                  name="delimiter"
+                  value={delimiter}
+                  onChange={setDelimiter}
+                  helpText="Character used to separate columns (comma, tab, semicolon)"
+                  autoComplete="off"
+                />
+              )}
+
+              {type === "api" && (
+                <>
+                  {!canUseApi && (
+                    <Banner tone="warning">
+                      <p>API integration requires the Professional plan or higher.</p>
+                    </Banner>
+                  )}
+                  <TextField
+                    label="API Endpoint URL"
+                    name="api_endpoint"
+                    value={apiEndpoint}
+                    onChange={setApiEndpoint}
+                    placeholder="https://api.example.com/products"
+                    autoComplete="off"
+                    disabled={!canUseApi}
+                  />
+                  <Select
+                    label="Authentication Type"
+                    name="api_auth_type"
+                    options={[
+                      { label: "None", value: "none" },
+                      { label: "API Key (Header)", value: "api_key" },
+                      { label: "Bearer Token", value: "bearer" },
+                      { label: "Basic Auth", value: "basic" },
+                    ]}
+                    value={apiAuthType}
+                    onChange={setApiAuthType}
+                    disabled={!canUseApi}
+                  />
+                  {apiAuthType !== "none" && (
+                    <TextField
+                      label={apiAuthType === "basic" ? "Credentials (user:pass)" : apiAuthType === "bearer" ? "Bearer Token" : "API Key"}
+                      name="api_auth_value"
+                      value={apiAuthValue}
+                      onChange={setApiAuthValue}
+                      type="password"
+                      autoComplete="off"
+                      disabled={!canUseApi}
+                    />
+                  )}
+                  <TextField
+                    label="Items JSON Path"
+                    name="api_items_path"
+                    value={apiItemsPath}
+                    onChange={setApiItemsPath}
+                    placeholder="data.products"
+                    helpText="Dot-path to the products array in the JSON response"
+                    autoComplete="off"
+                    disabled={!canUseApi}
+                  />
+                </>
+              )}
+
+              {type === "ftp" && (
+                <>
+                  {!canUseFtp && (
+                    <Banner tone="warning">
+                      <p>FTP import requires the Business plan or higher.</p>
+                    </Banner>
+                  )}
+                  <Select
+                    label="Protocol"
+                    name="ftp_protocol"
+                    options={[
+                      { label: "FTP", value: "ftp" },
+                      { label: "SFTP", value: "sftp" },
+                      { label: "FTPS", value: "ftps" },
+                    ]}
+                    value={ftpProtocol}
+                    onChange={setFtpProtocol}
+                    disabled={!canUseFtp}
+                  />
+                  <FormLayout.Group>
+                    <TextField
+                      label="Host"
+                      name="ftp_host"
+                      value={ftpHost}
+                      onChange={setFtpHost}
+                      placeholder="ftp.example.com"
+                      autoComplete="off"
+                      disabled={!canUseFtp}
+                    />
+                    <TextField
+                      label="Port"
+                      name="ftp_port"
+                      value={ftpPort}
+                      onChange={setFtpPort}
+                      type="number"
+                      autoComplete="off"
+                      disabled={!canUseFtp}
+                    />
+                  </FormLayout.Group>
+                  <FormLayout.Group>
+                    <TextField
+                      label="Username"
+                      name="ftp_username"
+                      value={ftpUsername}
+                      onChange={setFtpUsername}
+                      autoComplete="off"
+                      disabled={!canUseFtp}
+                    />
+                    <TextField
+                      label="Password"
+                      name="ftp_password"
+                      value={ftpPassword}
+                      onChange={setFtpPassword}
+                      type="password"
+                      autoComplete="off"
+                      disabled={!canUseFtp}
+                    />
+                  </FormLayout.Group>
+                  <TextField
+                    label="Remote Path"
+                    name="ftp_path"
+                    value={ftpPath}
+                    onChange={setFtpPath}
+                    placeholder="/data/products/"
+                    helpText="Path to the file or directory on the remote server"
+                    autoComplete="off"
+                    disabled={!canUseFtp}
+                  />
+                </>
+              )}
+
+              <Divider />
+
+              {/* Import settings */}
+              <Select
+                label="Duplicate Strategy"
+                name="duplicate_strategy"
+                options={DUPLICATE_OPTIONS}
+                value={duplicateStrategy}
+                onChange={setDuplicateStrategy}
+                helpText="How to handle products that already exist during import"
+              />
+
+              {/* Contact / metadata */}
+              <TextField
+                label="Website URL"
+                name="website_url"
+                value={websiteUrl}
+                onChange={setWebsiteUrl}
+                placeholder="https://supplier.com"
+                autoComplete="off"
+                prefix={<Icon source={GlobeIcon} />}
+              />
+              <TextField
+                label="Contact Email"
+                name="contact_email"
+                value={contactEmail}
+                onChange={setContactEmail}
+                placeholder="sales@supplier.com"
+                type="email"
+                autoComplete="off"
+                prefix={<Icon source={EmailIcon} />}
+              />
+              <TextField
+                label="Notes"
+                name="notes"
+                value={notes}
+                onChange={setNotes}
+                multiline={3}
+                autoComplete="off"
+                placeholder="Internal notes about this provider..."
+              />
+
+              <InlineStack align="end">
+                <Button
+                  variant="primary"
+                  submit
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                >
+                  Save Changes
+                </Button>
+              </InlineStack>
+            </FormLayout>
+          </fetcher.Form>
+        </BlockStack>
+      </Card>
+
+      {/* Danger Zone */}
+      <Card>
+        <BlockStack gap="300">
+          <Text as="h2" variant="headingMd" tone="critical">
+            Danger Zone
+          </Text>
+          <Divider />
+          <Text as="p" variant="bodySm" tone="subdued">
+            Permanently delete this provider and all associated configuration.
+            Products imported from this provider will not be affected.
+            This action cannot be undone.
+          </Text>
+          <InlineStack align="start">
+            <Button
+              tone="critical"
+              icon={DeleteIcon}
+              onClick={() => setDeleteModalOpen(true)}
+            >
+              Delete Provider
+            </Button>
+          </InlineStack>
+        </BlockStack>
+      </Card>
+    </BlockStack>
   );
 }
