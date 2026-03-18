@@ -377,6 +377,28 @@ export async function ensureMetaobjectDefinition(
     checkJson?.data?.metaobjectDefinitionByType?.id;
 
   if (existingId) {
+    // Ensure publishable + renderable capabilities are enabled
+    try {
+      await admin.graphql(`mutation($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
+        metaobjectDefinitionUpdate(id: $id, definition: $definition) {
+          metaobjectDefinition { id }
+          userErrors { field message }
+        }
+      }`, {
+        variables: {
+          id: existingId,
+          definition: {
+            capabilities: {
+              publishable: { enabled: true },
+              renderable: { enabled: true },
+            },
+          },
+        },
+      });
+    } catch {
+      // Ignore update errors — capabilities may already be enabled
+    }
+
     // Save to app_settings if not already stored
     await db
       .from("app_settings")
@@ -419,6 +441,10 @@ export async function ensureMetaobjectDefinition(
         access: {
           admin: "MERCHANT_READ_WRITE",
           storefront: "PUBLIC_READ",
+        },
+        capabilities: {
+          publishable: { enabled: true },
+          renderable: { enabled: true },
         },
       },
     },
