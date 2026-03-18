@@ -319,6 +319,9 @@ export default function TenantDetail() {
   const isSubmitting = fetcher.state !== "idle";
   const [selectedTab, setSelectedTab] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(tenant.plan);
+  const [confirmPurgeFitments, setConfirmPurgeFitments] = useState(false);
+  const [confirmPurgeAll, setConfirmPurgeAll] = useState(false);
 
   const tabs = [
     { id: "overview", content: "Overview" },
@@ -722,9 +725,9 @@ export default function TenantDetail() {
                               { label: "Business", value: "business" },
                               { label: "Enterprise", value: "enterprise" },
                             ]}
-                            value={tenant.plan}
+                            value={selectedPlan}
                             name="new_plan"
-                            onChange={() => {}}
+                            onChange={setSelectedPlan}
                           />
                           <Button submit loading={isSubmitting}>
                             Update Plan
@@ -784,13 +787,29 @@ export default function TenantDetail() {
                         Delete ALL vehicle fitments for this tenant and reset all their products
                         to "unmapped" status. Their products will remain but lose all fitment data.
                       </Text>
-                      <fetcher.Form method="post">
-                        <input type="hidden" name="intent" value="purge-fitments" />
-                        <input type="hidden" name="shop_id" value={shopId} />
-                        <Button submit loading={isSubmitting} tone="critical">
+                      {!confirmPurgeFitments ? (
+                        <Button onClick={() => setConfirmPurgeFitments(true)} tone="critical">
                           Purge All Fitments
                         </Button>
-                      </fetcher.Form>
+                      ) : (
+                        <Banner tone="critical" onDismiss={() => setConfirmPurgeFitments(false)}>
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodySm" fontWeight="semibold">
+                              Are you sure? This will permanently delete all fitments for this tenant.
+                            </Text>
+                            <InlineStack gap="200">
+                              <fetcher.Form method="post">
+                                <input type="hidden" name="intent" value="purge-fitments" />
+                                <input type="hidden" name="shop_id" value={shopId} />
+                                <Button submit loading={isSubmitting} tone="critical">
+                                  Yes, purge all fitments
+                                </Button>
+                              </fetcher.Form>
+                              <Button onClick={() => setConfirmPurgeFitments(false)}>Cancel</Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </Banner>
+                      )}
                     </BlockStack>
                   </Card>
 
@@ -801,13 +820,29 @@ export default function TenantDetail() {
                         Delete ALL products AND fitments for this tenant. This is a complete data
                         wipe — the tenant will need to re-fetch products from Shopify.
                       </Text>
-                      <fetcher.Form method="post">
-                        <input type="hidden" name="intent" value="purge-products" />
-                        <input type="hidden" name="shop_id" value={shopId} />
-                        <Button submit loading={isSubmitting} tone="critical">
+                      {!confirmPurgeAll ? (
+                        <Button onClick={() => setConfirmPurgeAll(true)} tone="critical">
                           Purge All Products & Fitments
                         </Button>
-                      </fetcher.Form>
+                      ) : (
+                        <Banner tone="critical" onDismiss={() => setConfirmPurgeAll(false)}>
+                          <BlockStack gap="200">
+                            <Text as="p" variant="bodySm" fontWeight="semibold">
+                              Are you absolutely sure? This will permanently delete ALL products and fitments. The tenant will need to re-fetch everything from Shopify.
+                            </Text>
+                            <InlineStack gap="200">
+                              <fetcher.Form method="post">
+                                <input type="hidden" name="intent" value="purge-products" />
+                                <input type="hidden" name="shop_id" value={shopId} />
+                                <Button submit loading={isSubmitting} tone="critical">
+                                  Yes, purge everything
+                                </Button>
+                              </fetcher.Form>
+                              <Button onClick={() => setConfirmPurgeAll(false)}>Cancel</Button>
+                            </InlineStack>
+                          </BlockStack>
+                        </Banner>
+                      )}
                     </BlockStack>
                   </Card>
                 </BlockStack>
