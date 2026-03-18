@@ -221,7 +221,7 @@ export default function Products() {
   // Index table selection
   const resourceName = { singular: "product", plural: "products" };
   const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
-    useIndexResourceState(products);
+    useIndexResourceState(products as unknown as { [key: string]: unknown }[]);
 
   // ── Filter Helpers ──────────────────────────────────────────────────────
 

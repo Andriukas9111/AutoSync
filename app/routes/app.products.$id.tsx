@@ -809,6 +809,7 @@ export default function ProductDetails() {
                       return (
                         <ResourceItem
                           id={fitment.id}
+                          onClick={() => {}}
                           accessibilityLabel={`${fitment.make} ${fitment.model}`}
                           shortcutActions={[
                             { content: "Delete", onAction: () => handleDeleteFitment(fitment.id) },
