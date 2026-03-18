@@ -451,7 +451,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
+        subtitle="Enterprise — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
       >
         <Layout>
@@ -540,7 +540,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
+        subtitle="Enterprise — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
       >
         <Layout>
@@ -574,7 +574,7 @@ export default function VehiclePages() {
   return (
     <Page
       title="Vehicle Pages"
-      subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
+      subtitle="Enterprise — SEO-optimized vehicle specification pages"
       backAction={{ url: "/app" }}
       primaryAction={{
         content: "Push All Vehicle Pages",

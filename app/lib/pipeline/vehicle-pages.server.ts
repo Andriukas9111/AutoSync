@@ -6,7 +6,7 @@ import db from "../db.server";
 
 const METAOBJECT_DEFINITION_CHECK = `
   query {
-    metaobjectDefinitionByType(type: "autosync_vehicle_spec") {
+    metaobjectDefinitionByType(type: "$app:vehicle_spec") {
       id
     }
   }
@@ -363,7 +363,7 @@ export function buildFullSpecsJson(
 // ---------------------------------------------------------------------------
 
 /**
- * Creates the "autosync_vehicle_spec" metaobject definition in Shopify if it
+ * Creates the "$app:vehicle_spec" metaobject definition in Shopify if it
  * doesn't already exist. Returns the definition GID.
  */
 export async function ensureMetaobjectDefinition(
@@ -396,7 +396,7 @@ export async function ensureMetaobjectDefinition(
     variables: {
       definition: {
         name: "Vehicle Specification",
-        type: "autosync_vehicle_spec",
+        type: "$app:vehicle_spec",
         fieldDefinitions: [
           { name: "Make", key: "make", type: "single_line_text_field" },
           { name: "Model", key: "model", type: "single_line_text_field" },
@@ -722,7 +722,7 @@ export async function pushVehiclePages(
       const response = await admin.graphql(METAOBJECT_UPSERT, {
         variables: {
           handle: {
-            type: "autosync_vehicle_spec",
+            type: "$app:vehicle_spec",
             handle,
           },
           metaobject: {
@@ -806,7 +806,7 @@ export async function pushVehiclePages(
 // ---------------------------------------------------------------------------
 
 /**
- * Deletes all metaobjects of type "autosync_vehicle_spec" for the store
+ * Deletes all metaobjects of type "$app:vehicle_spec" for the store
  * and clears vehicle_page_sync rows.
  */
 export async function deleteVehiclePages(
@@ -821,7 +821,7 @@ export async function deleteVehiclePages(
   while (hasNextPage) {
     const response: any = await admin.graphql(METAOBJECTS_LIST, {
       variables: {
-        type: "autosync_vehicle_spec",
+        type: "$app:vehicle_spec",
         first: 50,
         after: cursor,
       },
