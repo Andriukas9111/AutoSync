@@ -8,6 +8,12 @@ const METAOBJECT_DEFINITION_CHECK = `
   query {
     metaobjectDefinitionByType(type: "$app:vehicle_spec") {
       id
+      capabilities {
+        publishable { enabled }
+        renderable { enabled data { metaTitleKey metaDescriptionKey } }
+        onlineStore { enabled data { urlHandle } }
+      }
+      fieldDefinitions { key name type { name } }
     }
   }
 `;
@@ -373,8 +379,14 @@ export async function ensureMetaobjectDefinition(
   // Check if definition already exists
   const checkResponse = await admin.graphql(METAOBJECT_DEFINITION_CHECK);
   const checkJson = await checkResponse.json();
-  const existingId =
-    checkJson?.data?.metaobjectDefinitionByType?.id;
+  const existingDef = checkJson?.data?.metaobjectDefinitionByType;
+  const existingId = existingDef?.id;
+
+  // Log current capabilities for debugging
+  if (existingDef) {
+    console.error("[vehicle-pages] Definition capabilities:", JSON.stringify(existingDef.capabilities));
+    console.error("[vehicle-pages] Definition fields:", existingDef.fieldDefinitions?.map((f: any) => f.key).join(", "));
+  }
 
   if (existingId) {
     // Ensure capabilities + new fields are up to date
@@ -416,17 +428,22 @@ export async function ensureMetaobjectDefinition(
         },
       });
       const updateJson = await updateResp.json();
+      const updatedDef = updateJson?.data?.metaobjectDefinitionUpdate?.metaobjectDefinition;
       const updateErrors = updateJson?.data?.metaobjectDefinitionUpdate?.userErrors;
+      console.error("[vehicle-pages] Definition update result:", JSON.stringify({
+        updatedId: updatedDef?.id,
+        errors: updateErrors,
+        fullResponse: JSON.stringify(updateJson).substring(0, 500),
+      }));
       if (updateErrors?.length) {
-        // Field already exists → ignore that specific error
         const realErrors = updateErrors.filter((e: any) =>
           !e.message?.includes("already exists") && !e.message?.includes("already been taken"));
         if (realErrors.length > 0) {
-          console.error("Metaobject definition update errors:", JSON.stringify(realErrors));
+          console.error("[vehicle-pages] REAL definition update errors:", JSON.stringify(realErrors));
         }
       }
-    } catch {
-      // Ignore update errors — capabilities may already be enabled
+    } catch (err) {
+      console.error("[vehicle-pages] Definition update EXCEPTION:", err instanceof Error ? err.message : err);
     }
 
     // Save to app_settings if not already stored
