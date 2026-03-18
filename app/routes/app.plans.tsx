@@ -554,7 +554,7 @@ export default function Plans() {
                   style={{
                     width: "100%",
                     borderCollapse: "collapse",
-                    minWidth: "800px",
+                    minWidth: "640px",
                   }}
                 >
                   <thead>

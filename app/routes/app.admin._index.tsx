@@ -1015,7 +1015,7 @@ export default function AdminPanel() {
                           <Divider />
 
                           {/* Delay & specs controls */}
-                          <InlineGrid columns={2} gap="200">
+                          <InlineGrid columns={{ xs: 1, sm: 2 }} gap="200">
                             <Select
                               label="Delay between requests"
                               options={[
@@ -1087,7 +1087,7 @@ export default function AdminPanel() {
                                   </>
                                 )}
 
-                                <InlineGrid columns={3} gap="200">
+                                <InlineGrid columns={{ xs: 1, sm: 3 }} gap="200">
                                   <Box background="bg-surface-secondary" padding="200" borderRadius="100">
                                     <BlockStack gap="100" inlineAlign="center">
                                       <Text as="p" variant="bodySm" tone="subdued">Models</Text>
