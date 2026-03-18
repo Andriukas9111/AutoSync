@@ -37,6 +37,8 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
+import { SuggestionCard } from "../components/SuggestionCard";
+import type { SuggestedFitment } from "./app.api.suggest-fitments";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -327,7 +329,7 @@ export default function FitmentManual() {
     setFitmentList((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const handleAcceptSuggestion = useCallback((suggestion: any) => {
+  const handleAcceptSuggestion = useCallback((suggestion: SuggestedFitment) => {
     const entry: FitmentEntry = {
       make: suggestion.make.name,
       model: suggestion.model?.name || "",
@@ -704,84 +706,18 @@ export default function FitmentManual() {
                         </Box>
                       ) : (
                         <BlockStack gap="200">
-                          {(showAllSuggestions ? suggestions : suggestions.slice(0, 8)).map((s: any, i: number) => {
-                            const yearRange = s.yearFrom && s.yearTo
-                              ? `${s.yearFrom}–${s.yearTo}`
-                              : s.yearFrom ? `${s.yearFrom}+` : "";
+                          {(showAllSuggestions ? suggestions : suggestions.slice(0, 8)).map((s: SuggestedFitment, i: number) => {
                             const alreadyAdded = fitmentList.some(
                               (f) => f.makeId === s.make.id && f.modelId === (s.model?.id || "") && f.engineId === (s.engine?.id || null)
                             );
 
                             return (
-                              <div
+                              <SuggestionCard
                                 key={`${s.make.id}-${s.model?.id || ""}-${s.engine?.id || ""}-${i}`}
-                                style={{
-                                  padding: "10px 12px",
-                                  borderRadius: "var(--p-border-radius-200)",
-                                  border: `1px solid ${alreadyAdded ? "var(--p-color-border-success)" : s.confidence >= 0.8 ? "var(--p-color-border-interactive)" : "var(--p-color-border-secondary)"}`,
-                                  background: alreadyAdded ? "var(--p-color-bg-surface-success)" : "var(--p-color-bg-surface)",
-                                  opacity: alreadyAdded ? 0.6 : 1,
-                                }}
-                              >
-                                <BlockStack gap="100">
-                                  {/* Make + Model + Actions */}
-                                  <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                                    <Text as="span" variant="bodyMd" fontWeight="bold">
-                                      {s.make.name} {s.model?.name || ""}
-                                    </Text>
-                                    <InlineStack gap="100" blockAlign="center">
-                                      <Badge tone={s.confidence >= 0.8 ? "success" : s.confidence >= 0.5 ? "info" : "warning"}>
-                                        {`${Math.round(s.confidence * 100)}%`}
-                                      </Badge>
-                                      {alreadyAdded ? (
-                                        <Badge tone="success">Added</Badge>
-                                      ) : (
-                                        <Button size="slim" variant="primary" icon={CheckCircleIcon} onClick={() => handleAcceptSuggestion(s)}>Add</Button>
-                                      )}
-                                    </InlineStack>
-                                  </InlineStack>
-
-                                  {/* Year + Generation */}
-                                  {(yearRange || s.model?.generation) && (
-                                    <InlineStack gap="200" blockAlign="center" wrap>
-                                      {yearRange && <Text as="span" variant="bodySm" tone="subdued">{`Years: ${yearRange}`}</Text>}
-                                      {s.model?.generation && <Badge>{s.model.generation}</Badge>}
-                                    </InlineStack>
-                                  )}
-
-                                  {/* Engine details */}
-                                  {s.engine && (
-                                    <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-secondary)" }}>
-                                      <InlineStack gap="200" blockAlign="center" wrap>
-                                        <Text as="span" variant="bodySm" fontWeight="medium">
-                                          {s.engine.displayName || s.engine.name || s.engine.code || "Engine"}
-                                        </Text>
-                                        {s.engine.powerHp && <Badge tone="info">{`${s.engine.powerHp}hp`}</Badge>}
-                                        {s.engine.displacementCc && <Badge>{`${(s.engine.displacementCc / 1000).toFixed(1)}L`}</Badge>}
-                                        {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
-                                      </InlineStack>
-                                    </div>
-                                  )}
-
-                                  {/* Tags preview */}
-                                  <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-info)" }}>
-                                    <InlineStack gap="100" blockAlign="center" wrap>
-                                      <Text as="span" variant="bodySm" tone="subdued">Tags:</Text>
-                                      <Badge size="small">{`_autosync_${s.make.name}`}</Badge>
-                                      {s.model?.name && <Badge size="small">{`_autosync_${s.model.name}`}</Badge>}
-                                    </InlineStack>
-                                  </div>
-
-                                  {/* Matched hints */}
-                                  {s.matchedHints && s.matchedHints.length > 0 && (
-                                    <InlineStack gap="100" wrap>
-                                      {s.matchedHints.map((hint: string, hi: number) => (
-                                        <Badge key={hi} tone="attention">{hint}</Badge>
-                                      ))}
-                                    </InlineStack>
-                                  )}
-                                </BlockStack>
-                              </div>
+                                suggestion={s}
+                                onAccept={handleAcceptSuggestion}
+                                alreadyAdded={alreadyAdded}
+                              />
                             );
                           })}
                           {suggestions.length > 4 && (

@@ -330,8 +330,11 @@ function resolvePatternFitments(
     }
 
     // Expand year: if year_to is null (open-ended "2016+"), use current year
+    // Also treat yearFrom === yearTo as open-ended (single year = "this year and beyond")
     const yearFrom = fit.year_from;
-    const yearTo = fit.year_to ?? (yearFrom ? currentYear : null);
+    const yearTo = (fit.year_to != null && fit.year_to === fit.year_from)
+      ? null
+      : fit.year_to ?? (yearFrom ? currentYear : null);
 
     // Find matching engines
     if (modelEntry) {

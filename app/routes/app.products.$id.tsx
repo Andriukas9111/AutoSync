@@ -45,6 +45,8 @@ import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
+import { SuggestionCard } from "../components/SuggestionCard";
+import type { SuggestedFitment } from "./app.api.suggest-fitments";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -419,7 +421,7 @@ export default function ProductDetails() {
   }, [vehicleSelection, yearFrom, yearTo, submit]);
 
   const handleAcceptSuggestion = useCallback(
-    (suggestion: any) => {
+    (suggestion: SuggestedFitment) => {
       const formData = new FormData();
       formData.set("_action", "add_suggestion");
       formData.set("make", suggestion.make.name);
@@ -708,84 +710,14 @@ export default function ProductDetails() {
                   </Box>
                 ) : (
                   <BlockStack gap="200">
-                    {displayedSuggestions.map((s: any, i: number) => {
-                      const confLevel = getConfidenceLevel(s.confidence);
-                      const confBadge = CONFIDENCE_BADGES[confLevel];
-                      const yearRange = s.yearFrom && s.yearTo
-                        ? `${s.yearFrom}–${s.yearTo}`
-                        : s.yearFrom ? `${s.yearFrom}+` : "";
-
-                      return (
-                        <div
-                          key={`${s.make.id}-${s.model?.id || ""}-${s.engine?.id || ""}-${i}`}
-                          style={{
-                            padding: "12px",
-                            borderRadius: "var(--p-border-radius-200)",
-                            border: "1px solid var(--p-color-border-secondary)",
-                            background: s.confidence >= 0.8
-                              ? "var(--p-color-bg-fill-success-secondary)"
-                              : s.confidence >= 0.5
-                                ? "var(--p-color-bg-surface-secondary)"
-                                : "var(--p-color-bg-surface)",
-                          }}
-                        >
-                          <BlockStack gap="100">
-                            {/* Make + Model + Actions */}
-                            <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                              <Text as="span" variant="bodyMd" fontWeight="bold">
-                                {s.make.name} {s.model?.name || ""}
-                              </Text>
-                              <InlineStack gap="100" blockAlign="center">
-                                <Badge tone={confBadge.tone}>{`${Math.round(s.confidence * 100)}%`}</Badge>
-                                <Button variant="primary" size="slim" icon={CheckCircleIcon} onClick={() => handleAcceptSuggestion(s)} loading={isSubmitting}>
-                                  Accept
-                                </Button>
-                              </InlineStack>
-                            </InlineStack>
-
-                            {/* Year + Generation */}
-                            {(yearRange || s.model?.generation) && (
-                              <InlineStack gap="200" blockAlign="center" wrap>
-                                {yearRange && <Text as="span" variant="bodySm" tone="subdued">{`Years: ${yearRange}`}</Text>}
-                                {s.model?.generation && <Badge>{s.model.generation}</Badge>}
-                              </InlineStack>
-                            )}
-
-                            {/* Engine details */}
-                            {s.engine && (
-                              <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-secondary)" }}>
-                                <InlineStack gap="200" blockAlign="center" wrap>
-                                  <Text as="span" variant="bodySm" fontWeight="medium">
-                                    {s.engine.displayName || s.engine.name || s.engine.code || "Engine"}
-                                  </Text>
-                                  {s.engine.powerHp && <Badge tone="info">{`${s.engine.powerHp}hp`}</Badge>}
-                                  {s.engine.displacementCc && <Badge>{`${(s.engine.displacementCc / 1000).toFixed(1)}L`}</Badge>}
-                                  {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
-                                </InlineStack>
-                              </div>
-                            )}
-
-                            {/* Tags preview */}
-                            <div style={{ padding: "4px 8px", borderRadius: "var(--p-border-radius-100)", background: "var(--p-color-bg-surface-info)" }}>
-                              <InlineStack gap="100" blockAlign="center" wrap>
-                                <Text as="span" variant="bodySm" tone="subdued">Tags:</Text>
-                                <Badge size="small">{`_autosync_${s.make.name}`}</Badge>
-                                {s.model?.name && <Badge size="small">{`_autosync_${s.model.name}`}</Badge>}
-                              </InlineStack>
-                            </div>
-
-                            {/* Matched hints */}
-                            {s.matchedHints?.length > 0 && (
-                              <InlineStack gap="100" wrap>
-                                {s.matchedHints.map((h: string, hi: number) => (
-                                  <Badge key={hi} tone="attention">{h}</Badge>
-                                ))}
-                              </InlineStack>
-                            )}
-                          </BlockStack>
-                        </div>
-                      );
-                    })}
+                    {displayedSuggestions.map((s: SuggestedFitment, i: number) => (
+                      <SuggestionCard
+                        key={`${s.make.id}-${s.model?.id || ""}-${s.engine?.id || ""}-${i}`}
+                        suggestion={s}
+                        onAccept={handleAcceptSuggestion}
+                        isSubmitting={isSubmitting}
+                      />
+                    ))}
 
                     {availableSuggestions.length > 5 && (
                       <InlineStack align="center">

@@ -41,7 +41,13 @@ export interface ScanResult {
 const YEAR_ONWARDS_REGEX = /\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)(?:\s|$|,|\.)/i
 
 function extractYearsNearby(text: string): { from: number | null; to: number | null } {
-  // Try range first: (2013-2020), 2013-2020, 2013 - 2020
+  // Try "YYYY+" / "YYYY onwards" FIRST (before range, so "2016+" isn't misread)
+  const onwardsMatch = text.match(YEAR_ONWARDS_REGEX)
+  if (onwardsMatch) {
+    return { from: parseInt(onwardsMatch[1]), to: null }
+  }
+
+  // Try range: (2013-2020), 2013-2020, 2013 - 2020
   const rangeMatch = text.match(/\(?\b((?:19|20)\d{2})\s*[-\u2013\u2014]\s*((?:19|20)\d{2})?\s*\)?/)
   if (rangeMatch) {
     return {
@@ -50,18 +56,12 @@ function extractYearsNearby(text: string): { from: number | null; to: number | n
     }
   }
 
-  // Try "YYYY onwards"
-  const onwardsMatch = text.match(YEAR_ONWARDS_REGEX)
-  if (onwardsMatch) {
-    return { from: parseInt(onwardsMatch[1]), to: null }
-  }
-
-  // Try single year
+  // Try single year — returns open-ended (year and beyond), not "only this year"
   const singleMatch = text.match(/\b((?:19|20)\d{2})\b/)
   if (singleMatch) {
     const year = parseInt(singleMatch[1])
     if (year >= 1980 && year <= new Date().getFullYear() + 2) {
-      return { from: year, to: year }
+      return { from: year, to: null }
     }
   }
 
