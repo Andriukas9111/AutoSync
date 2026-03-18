@@ -473,18 +473,22 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
 
   const torqueLabel = vehicle.torqueNm ? `${vehicle.torqueNm} Nm` : "";
 
+  // --- SVG Icons for each spec section ---
   const sectionIcons: Record<string, string> = {
-    Performance: "&#x1F3CE;&#xFE0F;",
-    Engine: "&#x2699;&#xFE0F;",
-    "Electric / Hybrid": "&#x26A1;",
-    "Fuel & Emissions": "&#x26FD;",
-    Transmission: "&#x1F527;",
-    Dimensions: "&#x1F4D0;",
-    Weight: "&#x2696;&#xFE0F;",
-    Capacity: "&#x1F4E6;",
-    "Suspension & Brakes": "&#x1F6DE;",
-    Wheels: "&#x1F518;",
+    Performance: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/><path d="M16.24 7.76l-1.42 1.42"/><path d="M12 2v2"/><path d="M22 12h-2"/><path d="M2 12h2"/></svg>`,
+    Engine: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/></svg>`,
+    "Electric / Hybrid": `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
+    "Fuel & Emissions": `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V6a2 2 0 012-2h8a2 2 0 012 2v16"/><path d="M3 22h12"/><path d="M15 10h2a2 2 0 012 2v2a2 2 0 01-2 2h0"/><path d="M19 6V4a1 1 0 00-1-1h0a1 1 0 00-1 1v2"/><line x1="7" y1="10" x2="11" y2="10"/><line x1="7" y1="14" x2="11" y2="14"/></svg>`,
+    Transmission: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/></svg>`,
+    Dimensions: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l20 0"/><path d="M2 2l0 4"/><path d="M22 2l0 4"/><path d="M6 8l12 0l0 12l-12 0z"/><path d="M2 22l4 0"/><path d="M2 22l0-4"/><path d="M22 22l-4 0"/><path d="M22 22l0-4"/></svg>`,
+    Weight: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a4 4 0 00-4 4h8a4 4 0 00-4-4z"/><path d="M5 7l-1 13a2 2 0 002 2h12a2 2 0 002-2L19 7H5z"/></svg>`,
+    Capacity: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+    "Suspension & Brakes": `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`,
+    Wheels: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/></svg>`,
   };
+
+  // Fallback icon for any unlisted category
+  const fallbackIcon = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
 
   // --- Quick specs items ---
   const quickSpecItems: Array<{ label: string; value: string }> = [];
@@ -496,17 +500,36 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   if (vehicle.driveType) quickSpecItems.push({ label: "Drive", value: escapeHtml(vehicle.driveType) });
   if (vehicle.transmission) quickSpecItems.push({ label: "Transmission", value: escapeHtml(vehicle.transmission) });
 
+  // Quick spec icons for the stat cards
+  const quickSpecIcons: Record<string, string> = {
+    Engine: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`,
+    Displacement: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
+    Power: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`,
+    Torque: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>`,
+    Fuel: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 22V6a2 2 0 012-2h8a2 2 0 012 2v16"/><path d="M15 10h2a2 2 0 012 2v2"/></svg>`,
+    Drive: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>`,
+    Transmission: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><line x1="6" y1="9" x2="6" y2="21"/><line x1="18" y1="9" x2="18" y2="21"/><line x1="6" y1="15" x2="18" y2="15"/></svg>`,
+  };
+
   const quickSpecsHtml = quickSpecItems
     .map(
       (item) =>
-        `<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">${item.label}</div><div class="avsp-quickspecs__value">${item.value}</div></div>`,
+        `<div class="avsp-qs-card"><div class="avsp-qs-card__icon">${quickSpecIcons[item.label] ?? ""}</div><div class="avsp-qs-card__label">${item.label}</div><div class="avsp-qs-card__value">${item.value}</div></div>`,
     )
     .join("");
 
-  // --- Hero image ---
+  // --- Hero image or car silhouette fallback ---
+  const carSilhouetteSvg = `<svg viewBox="0 0 480 220" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-width:420px;opacity:0.18;">
+    <path d="M60 160 C60 160 80 100 120 85 L200 70 C220 65 260 60 300 60 L360 65 C380 68 400 80 410 100 L430 140 C435 150 435 155 430 160 L60 160Z" fill="white"/>
+    <path d="M140 85 L160 55 C170 45 190 40 220 38 L300 38 C320 40 340 48 350 58 L370 80" stroke="white" stroke-width="2" fill="none" opacity="0.5"/>
+    <circle cx="130" cy="165" r="28" fill="white" opacity="0.25"/><circle cx="130" cy="165" r="16" fill="white" opacity="0.15"/>
+    <circle cx="370" cy="165" r="28" fill="white" opacity="0.25"/><circle cx="370" cy="165" r="16" fill="white" opacity="0.15"/>
+    <rect x="50" y="165" width="390" height="4" rx="2" fill="white" opacity="0.06"/>
+  </svg>`;
+
   const heroImageHtml = vehicle.heroImageUrl
     ? `<div class="avsp-hero__image"><img src="${escapeHtml(vehicle.heroImageUrl)}" alt="${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model)} ${escapeHtml(vehicle.variant)}" loading="lazy"></div>`
-    : "";
+    : `<div class="avsp-hero__silhouette">${carSilhouetteSvg}</div>`;
 
   // --- Generation ---
   const generationHtml = vehicle.generation
@@ -515,13 +538,13 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
 
   // --- Year range badge ---
   const yearBadgeHtml = yearRange
-    ? `<span class="avsp-hero__year"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${escapeHtml(yearRange)}</span>`
+    ? `<span class="avsp-hero__year"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${escapeHtml(yearRange)}</span>`
     : "";
 
   // --- Spec sections ---
   const specSectionsHtml = Object.entries(fullSpecs)
     .map(([category, specEntries]) => {
-      const icon = sectionIcons[category] ?? "&#x1F4CB;";
+      const icon = sectionIcons[category] ?? fallbackIcon;
       const rows = Object.entries(specEntries)
         .filter(([, val]) => val != null && val !== "")
         .map(
@@ -532,9 +555,9 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
       if (!rows) return "";
       return `<div class="avsp-section">
         <div class="avsp-section__header" onclick="this.setAttribute('aria-expanded',this.getAttribute('aria-expanded')==='true'?'false':'true');this.nextElementSibling.style.display=this.getAttribute('aria-expanded')==='true'?'block':'none'" aria-expanded="true">
-          <span>${icon}</span>
+          <span class="avsp-section__icon">${icon}</span>
           <h3>${escapeHtml(category)}</h3>
-          <span class="avsp-chevron">&#x25BC;</span>
+          <svg class="avsp-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div class="avsp-section__body">
           <table class="avsp-spec-table">${rows}</table>
@@ -544,18 +567,23 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     .filter(Boolean)
     .join("\n    ");
 
-  // --- Compatible products section (handles only — Liquid can't resolve from Pages) ---
+  // --- Compatible products section ---
   let productsHtml = "";
   if (vehicle.linkedProductIds.length > 0) {
+    const formatHandle = (handle: string) => handle.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     const productLinks = vehicle.linkedProductIds
       .map(
         (handle) =>
-          `<a href="/products/${escapeHtml(handle)}" style="display:inline-block;padding:6px 14px;margin:4px;background:#f0f0f0;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:#1f2937;font-size:0.85rem;font-weight:500;">${escapeHtml(handle)}</a>`,
+          `<a href="/products/${escapeHtml(handle)}" class="avsp-product-pill"><span>${escapeHtml(formatHandle(handle))}</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></a>`,
       )
       .join("");
-    productsHtml = `<div class="avsp-products" style="margin-top:2rem;">
-        <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:1rem;">Compatible Products (${vehicle.linkedProductIds.length})</h2>
-        <div style="display:flex;flex-wrap:wrap;">${productLinks}</div>
+    productsHtml = `<div class="avsp-products">
+        <div class="avsp-products__header">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+          <h2>Compatible Products</h2>
+          <span class="avsp-products__count">${vehicle.linkedProductIds.length}</span>
+        </div>
+        <div class="avsp-products__grid">${productLinks}</div>
       </div>`;
   }
 
@@ -581,50 +609,101 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     2,
   );
 
+  // --- AutoSync brand triangle SVG ---
+  const autosyncLogo = `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><polygon points="16,2 30,28 2,28" fill="#0066ff"/><text x="16" y="23" text-anchor="middle" font-size="12" font-weight="700" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,sans-serif">A</text></svg>`;
+
   // --- Assemble full HTML ---
   return `<style>
-  .avsp { --avsp-primary: #1a1a2e; --avsp-accent: #0066ff; --avsp-bg: #f8f9fa; --avsp-border: #e5e7eb; --avsp-text: #1f2937; --avsp-muted: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--avsp-text); }
-  .avsp-hero { background: linear-gradient(135deg, var(--avsp-primary) 0%, #16213e 100%); color: #fff; padding: 3rem 2rem; }
-  .avsp-hero__inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 2rem; align-items: center; flex-wrap: wrap; }
-  .avsp-hero__image { flex: 0 0 400px; max-width: 100%; }
-  .avsp-hero__image img { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  /* ---- Base ---- */
+  .avsp { --avsp-primary: #0f1729; --avsp-accent: #0066ff; --avsp-accent-light: #e8f0fe; --avsp-bg: #f8f9fb; --avsp-card: #ffffff; --avsp-border: #e2e5ea; --avsp-text: #1a1d26; --avsp-muted: #6c737f; --avsp-radius: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; color: var(--avsp-text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+  /* ---- Hero ---- */
+  .avsp-hero { position: relative; background: linear-gradient(145deg, var(--avsp-primary) 0%, #1a2744 50%, #0d2137 100%); color: #fff; padding: 3.5rem 2rem 3rem; overflow: hidden; }
+  .avsp-hero::before { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); pointer-events: none; }
+  .avsp-hero::after { content: ''; position: absolute; top: -50%; right: -20%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(0,102,255,0.12) 0%, transparent 70%); pointer-events: none; }
+  .avsp-hero__inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 2.5rem; align-items: center; flex-wrap: wrap; position: relative; z-index: 1; }
+  .avsp-hero__image { flex: 0 0 420px; max-width: 100%; }
+  .avsp-hero__image img { width: 100%; height: auto; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.08); }
+  .avsp-hero__silhouette { flex: 0 0 420px; max-width: 100%; display: flex; align-items: center; justify-content: center; padding: 1rem; }
   .avsp-hero__content { flex: 1; min-width: 280px; }
-  .avsp-hero__badge { display: inline-block; background: var(--avsp-accent); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
-  .avsp-hero__make { font-size: 1rem; opacity: 0.8; margin: 0 0 0.25rem; }
-  .avsp-hero__title { font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; line-height: 1.2; }
-  .avsp-hero__gen { font-size: 1rem; opacity: 0.7; margin: 0 0 1rem; }
-  .avsp-hero__year { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 8px; font-size: 0.9rem; }
-  .avsp-quickspecs { background: #fff; border-bottom: 1px solid var(--avsp-border); padding: 1.25rem 2rem; }
-  .avsp-quickspecs__inner { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 0; }
-  .avsp-quickspecs__item { flex: 1; min-width: 120px; padding: 0.75rem 1rem; text-align: center; border-right: 1px solid var(--avsp-border); }
-  .avsp-quickspecs__item:last-child { border-right: none; }
-  .avsp-quickspecs__label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--avsp-muted); margin-bottom: 0.25rem; }
-  .avsp-quickspecs__value { font-size: 0.95rem; font-weight: 600; color: var(--avsp-text); }
-  .avsp-content { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-  .avsp-overview { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 2rem; line-height: 1.7; color: var(--avsp-muted); font-size: 0.95rem; }
-  .avsp-section { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden; }
-  .avsp-section__header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem; background: var(--avsp-bg); border-bottom: 1px solid var(--avsp-border); cursor: pointer; user-select: none; }
-  .avsp-section__header h3 { margin: 0; font-size: 1rem; font-weight: 600; flex: 1; }
-  .avsp-section__header .avsp-chevron { transition: transform 0.2s; font-size: 0.8rem; color: var(--avsp-muted); }
+  .avsp-hero__badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--avsp-accent) 0%, #0052cc 100%); color: #fff; padding: 5px 14px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,102,255,0.35); }
+  .avsp-hero__badge::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #4dd495; border-radius: 50%; }
+  .avsp-hero__make { font-size: 0.9rem; opacity: 0.55; margin: 0 0 0.35rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+  .avsp-hero__title { font-size: 2.25rem; font-weight: 800; margin: 0 0 0.5rem; line-height: 1.15; letter-spacing: -0.02em; }
+  .avsp-hero__gen { font-size: 0.95rem; opacity: 0.5; margin: 0 0 1.25rem; font-weight: 400; }
+  .avsp-hero__year { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 8px 18px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
+
+  /* ---- Quick Specs Cards ---- */
+  .avsp-quickspecs { background: var(--avsp-card); border-bottom: 1px solid var(--avsp-border); padding: 1.5rem 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .avsp-quickspecs__inner { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; }
+  .avsp-qs-card { flex: 1; min-width: 130px; background: var(--avsp-bg); border: 1px solid var(--avsp-border); border-radius: 10px; padding: 14px 16px; text-align: center; transition: border-color 0.2s, box-shadow 0.2s; }
+  .avsp-qs-card:hover { border-color: var(--avsp-accent); box-shadow: 0 0 0 3px rgba(0,102,255,0.08); }
+  .avsp-qs-card__icon { display: flex; justify-content: center; margin-bottom: 6px; color: var(--avsp-accent); }
+  .avsp-qs-card__label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--avsp-muted); margin-bottom: 4px; font-weight: 600; }
+  .avsp-qs-card__value { font-size: 0.88rem; font-weight: 700; color: var(--avsp-text); }
+
+  /* ---- Content Area ---- */
+  .avsp-content { max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem; }
+
+  /* ---- Overview ---- */
+  .avsp-overview { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); padding: 1.75rem 2rem; margin-bottom: 2rem; line-height: 1.75; color: var(--avsp-muted); font-size: 0.92rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+
+  /* ---- Spec Sections ---- */
+  .avsp-section { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); margin-bottom: 1rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: box-shadow 0.2s; }
+  .avsp-section:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+  .avsp-section__header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--avsp-card); border-bottom: 1px solid var(--avsp-border); border-left: 3px solid var(--avsp-accent); cursor: pointer; user-select: none; transition: background-color 0.15s; }
+  .avsp-section__header:hover { background: var(--avsp-bg); }
+  .avsp-section__icon { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: var(--avsp-accent-light); border-radius: 8px; color: var(--avsp-accent); flex-shrink: 0; }
+  .avsp-section__header h3 { margin: 0; font-size: 0.95rem; font-weight: 650; flex: 1; color: var(--avsp-text); }
+  .avsp-section__header .avsp-chevron { transition: transform 0.25s ease; color: var(--avsp-muted); flex-shrink: 0; }
   .avsp-section__header[aria-expanded="false"] .avsp-chevron { transform: rotate(-90deg); }
   .avsp-section__body { padding: 0; }
   .avsp-spec-table { width: 100%; border-collapse: collapse; }
-  .avsp-spec-table tr { border-bottom: 1px solid var(--avsp-border); }
+  .avsp-spec-table tr { border-bottom: 1px solid var(--avsp-border); transition: background-color 0.1s; }
   .avsp-spec-table tr:last-child { border-bottom: none; }
-  .avsp-spec-table tr:nth-child(even) { background: var(--avsp-bg); }
-  .avsp-spec-table td { padding: 0.75rem 1.5rem; font-size: 0.9rem; }
+  .avsp-spec-table tr:hover { background: var(--avsp-accent-light); }
+  .avsp-spec-table td { padding: 11px 20px; font-size: 0.88rem; }
   .avsp-spec-table td:first-child { color: var(--avsp-muted); width: 40%; font-weight: 500; }
-  .avsp-spec-table td:last-child { font-weight: 600; }
-  .avsp-footer { text-align: center; padding: 2rem; color: var(--avsp-muted); font-size: 0.75rem; }
+  .avsp-spec-table td:last-child { font-weight: 600; color: var(--avsp-text); }
+
+  /* ---- Compatible Products ---- */
+  .avsp-products { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); padding: 20px 24px; margin-top: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  .avsp-products__header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: var(--avsp-text); }
+  .avsp-products__header svg { color: var(--avsp-accent); }
+  .avsp-products__header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; flex: 1; }
+  .avsp-products__count { display: inline-flex; align-items: center; justify-content: center; background: var(--avsp-accent); color: #fff; font-size: 0.72rem; font-weight: 700; min-width: 24px; height: 24px; padding: 0 8px; border-radius: 12px; }
+  .avsp-products__grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  .avsp-product-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; background: var(--avsp-bg); border: 1px solid var(--avsp-border); border-radius: 10px; text-decoration: none; color: var(--avsp-text); font-size: 0.84rem; font-weight: 600; transition: all 0.2s; }
+  .avsp-product-pill:hover { background: var(--avsp-accent-light); border-color: var(--avsp-accent); color: var(--avsp-accent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,255,0.12); }
+  .avsp-product-pill svg { opacity: 0.4; transition: opacity 0.2s, transform 0.2s; }
+  .avsp-product-pill:hover svg { opacity: 1; transform: translateX(2px); }
+
+  /* ---- Footer ---- */
+  .avsp-footer { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 2rem; border-top: 1px solid var(--avsp-border); }
+  .avsp-footer__text { color: var(--avsp-muted); font-size: 0.78rem; font-weight: 500; }
+  .avsp-footer__brand { font-weight: 700; color: var(--avsp-accent); }
+
+  /* ---- Mobile ---- */
   @media (max-width: 768px) {
-    .avsp-hero { padding: 2rem 1rem; }
-    .avsp-hero__image { flex: 0 0 100%; }
-    .avsp-hero__title { font-size: 1.5rem; }
-    .avsp-quickspecs__item { min-width: 100px; padding: 0.5rem; }
-    .avsp-quickspecs__label { font-size: 0.65rem; }
-    .avsp-quickspecs__value { font-size: 0.8rem; }
-    .avsp-content { padding: 1rem; }
-    .avsp-spec-table td { padding: 0.5rem 1rem; font-size: 0.8rem; }
+    .avsp-hero { padding: 2rem 1.25rem; }
+    .avsp-hero__image, .avsp-hero__silhouette { flex: 0 0 100%; }
+    .avsp-hero__title { font-size: 1.6rem; }
+    .avsp-quickspecs { padding: 1rem; }
+    .avsp-quickspecs__inner { gap: 8px; }
+    .avsp-qs-card { min-width: calc(50% - 8px); padding: 10px 12px; }
+    .avsp-qs-card__label { font-size: 0.6rem; }
+    .avsp-qs-card__value { font-size: 0.78rem; }
+    .avsp-content { padding: 1.25rem 1rem; }
+    .avsp-section__header { padding: 12px 14px; }
+    .avsp-section__icon { width: 28px; height: 28px; }
+    .avsp-spec-table td { padding: 9px 14px; font-size: 0.82rem; }
+    .avsp-products { padding: 16px; }
+    .avsp-product-pill { padding: 8px 12px; font-size: 0.8rem; }
+  }
+  @media (max-width: 480px) {
+    .avsp-hero__title { font-size: 1.35rem; }
+    .avsp-qs-card { min-width: 100%; }
+    .avsp-hero__inner { gap: 1.5rem; }
   }
 </style>
 
@@ -633,7 +712,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     <div class="avsp-hero__inner">
       ${heroImageHtml}
       <div class="avsp-hero__content">
-        <span class="avsp-hero__badge">${escapeHtml(vehicle.fuelType ?? "Vehicle")}</span>
+        <span class="avsp-hero__badge">${escapeHtml(vehicle.fuelType ?? "Vehicle Specifications")}</span>
         <p class="avsp-hero__make">${escapeHtml(vehicle.make)}</p>
         <h1 class="avsp-hero__title">${escapeHtml(vehicle.model)} ${escapeHtml(vehicle.variant)}</h1>
         ${generationHtml}
@@ -656,7 +735,10 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     ${productsHtml}
   </div>
 
-  <div class="avsp-footer">Vehicle specifications provided by AutoSync</div>
+  <div class="avsp-footer">
+    ${autosyncLogo}
+    <span class="avsp-footer__text">Powered by <span class="avsp-footer__brand">AutoSync</span></span>
+  </div>
 </div>
 
 <script type="application/ld+json">

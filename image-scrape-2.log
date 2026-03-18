@@ -1,0 +1,13 @@
+=== Vehicle Image Backfill ===
+Delay: 800ms | Batch: 50 | Limit: 500 | Dry run: false
+
+Found 33381 specs rows with source_url but missing hero_image_url
+Will process 500 rows
+
+Processed 10/500, 8 with images, 2 no images, 0 errors | Elapsed: 8s | ETA: 7m 5s
+Processed 20/500, 17 with images, 3 no images, 0 errors | Elapsed: 17s | ETA: 7m 8s
+Processed 30/500, 27 with images, 3 no images, 0 errors | Elapsed: 27s | ETA: 7m 5s
+Processed 40/500, 37 with images, 3 no images, 0 errors | Elapsed: 36s | ETA: 6m 59s
+Processed 50/500, 47 with images, 3 no images, 0 errors | Elapsed: 45s | ETA: 6m 52s
+Processed 60/500, 53 with images, 7 no images, 0 errors | Elapsed: 54s | ETA: 6m 42s
+Processed 70/500, 63 with images, 7 no images, 0 errors | Elapsed: 1m 4s | ETA: 6m 33s
