@@ -769,7 +769,20 @@ export async function pushVehiclePages(
     ];
 
     try {
-      const isUpdate = existingByEngine.has(vehicle.engineId);
+      const existing = existingByEngine.get(vehicle.engineId);
+      const isUpdate = !!existing;
+
+      // If updating, delete the old metaobject first (Shopify upsert doesn't overwrite fields)
+      if (isUpdate && existing?.gid) {
+        try {
+          await admin.graphql(`mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { field message } } }`, {
+            variables: { id: existing.gid },
+          });
+          await new Promise((r) => setTimeout(r, 300));
+        } catch {
+          // Ignore delete errors — the object might already be gone
+        }
+      }
 
       const response = await admin.graphql(METAOBJECT_UPSERT, {
         variables: {
