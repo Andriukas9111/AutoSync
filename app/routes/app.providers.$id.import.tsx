@@ -1,0 +1,805 @@
+/**
+ * Provider Import Wizard — Multi-step import flow
+ *
+ * Step 1: Upload file (any format) or fetch from API
+ * Step 2: Preview & map columns (with smart memory)
+ * Step 3: Validate & configure duplicate strategy
+ * Step 4: Import with progress
+ */
+
+import { useState, useCallback } from "react";
+import type { LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
+import { data } from "react-router";
+import {
+  Page,
+  Card,
+  BlockStack,
+  InlineStack,
+  InlineGrid,
+  Text,
+  Badge,
+  Banner,
+  Button,
+  DropZone,
+  Select,
+  DataTable,
+  ProgressBar,
+  Spinner,
+  Box,
+  Divider,
+  Thumbnail,
+  Icon,
+} from "@shopify/polaris";
+import {
+  ImportIcon,
+  FileIcon,
+  ChevronLeftIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
+  DeleteIcon,
+  RefreshIcon,
+} from "@shopify/polaris-icons";
+
+import { authenticate } from "../shopify.server";
+import db from "../lib/db.server";
+import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTargetFields } from "../lib/providers/column-mapper.server";
+import type { PlanTier } from "../lib/types";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface ColumnMappingUI {
+  sourceColumn: string;
+  targetField: string | null;
+  transformRule?: string;
+  isUserEdited?: boolean;
+  sampleValue?: string;
+}
+
+type ImportStep = "upload" | "preview" | "validate" | "importing" | "complete";
+
+// ---------------------------------------------------------------------------
+// Loader
+// ---------------------------------------------------------------------------
+
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+  const providerId = params.id;
+
+  if (!providerId) {
+    throw new Response("Provider ID required", { status: 400 });
+  }
+
+  const { data: provider } = await db
+    .from("providers")
+    .select("id, name, type, logo_url, duplicate_strategy, config")
+    .eq("id", providerId)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  if (!provider) {
+    throw new Response("Provider not found", { status: 404 });
+  }
+
+  const tenant = await getTenant(shopId);
+  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const targetFields = getTargetFields();
+
+  return {
+    provider,
+    plan,
+    targetFields,
+    shopId,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+const ACCEPTED_TYPES = [
+  "text/csv",
+  "text/tab-separated-values",
+  "application/json",
+  "text/xml",
+  "application/xml",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/plain",
+];
+
+const FORMAT_LABELS: Record<string, string> = {
+  csv: "CSV",
+  tsv: "TSV",
+  json: "JSON",
+  jsonl: "JSON Lines",
+  xml: "XML",
+  xlsx: "Excel (XLSX)",
+  xls: "Excel (XLS)",
+  txt: "Text",
+};
+
+export default function ProviderImportWizard() {
+  const { provider, targetFields } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+
+  // Step state
+  const [step, setStep] = useState<ImportStep>("upload");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Preview state
+  const [preview, setPreview] = useState<{
+    fileName: string;
+    fileSize: string;
+    format: string;
+    totalRows: number;
+    headers: string[];
+    sampleRows: Record<string, string>[];
+    warnings: string[];
+    sheetNames?: string[];
+    detectedPaths?: string[];
+  } | null>(null);
+
+  const [mappings, setMappings] = useState<ColumnMappingUI[]>([]);
+  const [hasSavedMappings, setHasSavedMappings] = useState(false);
+  const [duplicatePreview, setDuplicatePreview] = useState<{
+    duplicateCount: number;
+    duplicateSkus: string[];
+  }>({ duplicateCount: 0, duplicateSkus: [] });
+
+  // Validate/Import state
+  const [duplicateStrategy, setDuplicateStrategy] = useState(
+    provider.duplicate_strategy ?? "skip",
+  );
+  const [importResult, setImportResult] = useState<{
+    importId: string;
+    totalRows: number;
+    importedRows: number;
+    skippedRows: number;
+    duplicateRows: number;
+    errorRows: number;
+    errors: { row: number; field?: string; message: string }[];
+  } | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
+
+  // ---------------------------------------------------------------------------
+  // Step 1: File Upload
+  // ---------------------------------------------------------------------------
+
+  const handleDropFile = useCallback(
+    (_droppedFiles: File[], acceptedFiles: File[]) => {
+      if (acceptedFiles.length > 0) {
+        setFile(acceptedFiles[0]);
+        setError(null);
+      }
+    },
+    [],
+  );
+
+  const handlePreviewFile = useCallback(async () => {
+    if (!file) return;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("provider_id", provider.id);
+
+      const response = await fetch("/app/api/upload-preview", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        setError(result.error || "Failed to parse file");
+        setLoading(false);
+        return;
+      }
+
+      setPreview(result.preview);
+
+      // Populate mappings with sample values
+      const enrichedMappings: ColumnMappingUI[] = (result.mappings || []).map(
+        (m: ColumnMappingUI) => ({
+          ...m,
+          sampleValue:
+            result.preview.sampleRows[0]?.[m.sourceColumn] ?? "",
+        }),
+      );
+      setMappings(enrichedMappings);
+      setHasSavedMappings(result.hasSavedMappings ?? false);
+      setDuplicatePreview(
+        result.duplicatePreview ?? { duplicateCount: 0, duplicateSkus: [] },
+      );
+      if (result.duplicateStrategy) {
+        setDuplicateStrategy(result.duplicateStrategy);
+      }
+
+      setStep("preview");
+    } catch (err) {
+      setError("Network error — please try again");
+    } finally {
+      setLoading(false);
+    }
+  }, [file, provider.id]);
+
+  // ---------------------------------------------------------------------------
+  // Step 2: Column Mapping
+  // ---------------------------------------------------------------------------
+
+  const handleMappingChange = useCallback(
+    (index: number, targetField: string) => {
+      setMappings((prev) =>
+        prev.map((m, i) =>
+          i === index
+            ? { ...m, targetField: targetField === "skip" ? null : targetField, isUserEdited: true }
+            : m,
+        ),
+      );
+    },
+    [],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Step 3/4: Import
+  // ---------------------------------------------------------------------------
+
+  const handleStartImport = useCallback(async () => {
+    if (!file || !preview) return;
+    setStep("importing");
+    setImportProgress(10);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("provider_id", provider.id);
+      formData.set("mappings", JSON.stringify(mappings));
+      formData.set("duplicate_strategy", duplicateStrategy);
+
+      setImportProgress(30);
+
+      const response = await fetch("/app/api/provider-import", {
+        method: "POST",
+        body: formData,
+      });
+
+      setImportProgress(80);
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        setError(result.error || "Import failed");
+        setStep("validate");
+        return;
+      }
+
+      setImportResult(result);
+      setImportProgress(100);
+      setStep("complete");
+    } catch (err) {
+      setError("Network error during import");
+      setStep("validate");
+    }
+  }, [file, preview, provider.id, mappings, duplicateStrategy]);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  const mappedCount = mappings.filter((m) => m.targetField).length;
+  const totalColumns = mappings.length;
+
+  return (
+    <Page
+      fullWidth
+      title={`Import Data — ${provider.name}`}
+      subtitle="Upload a file or fetch from API to import products"
+      backAction={{
+        content: "Back to Provider",
+        onAction: () => navigate(`/app/providers/${provider.id}`),
+      }}
+    >
+      <BlockStack gap="600">
+        {/* Step Indicator */}
+        <Card>
+          <InlineStack gap="400" align="center" blockAlign="center">
+            <StepBadge
+              step={1}
+              label="Upload"
+              active={step === "upload"}
+              completed={step !== "upload"}
+            />
+            <Text as="span" tone="subdued">→</Text>
+            <StepBadge
+              step={2}
+              label="Map Columns"
+              active={step === "preview"}
+              completed={["validate", "importing", "complete"].includes(step)}
+            />
+            <Text as="span" tone="subdued">→</Text>
+            <StepBadge
+              step={3}
+              label="Validate"
+              active={step === "validate"}
+              completed={["importing", "complete"].includes(step)}
+            />
+            <Text as="span" tone="subdued">→</Text>
+            <StepBadge
+              step={4}
+              label="Import"
+              active={step === "importing" || step === "complete"}
+              completed={step === "complete"}
+            />
+          </InlineStack>
+        </Card>
+
+        {/* Error Banner */}
+        {error && (
+          <Banner tone="critical" onDismiss={() => setError(null)}>
+            <p>{error}</p>
+          </Banner>
+        )}
+
+        {/* ============================================================ */}
+        {/* STEP 1: UPLOAD */}
+        {/* ============================================================ */}
+        {step === "upload" && (
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Upload Data File
+              </Text>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
+              </Text>
+
+              <DropZone
+                onDrop={handleDropFile}
+                accept={ACCEPTED_TYPES.join(",")}
+                variableHeight
+              >
+                {file ? (
+                  <Box padding="600">
+                    <BlockStack gap="200" inlineAlign="center">
+                      <Icon source={FileIcon} tone="info" />
+                      <Text as="p" variant="bodyMd" fontWeight="semibold">
+                        {file.name}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {(file.size / 1024).toFixed(1)} KB
+                      </Text>
+                      <Button
+                        size="slim"
+                        onClick={() => setFile(null)}
+                        icon={DeleteIcon}
+                        tone="critical"
+                      >
+                        Remove
+                      </Button>
+                    </BlockStack>
+                  </Box>
+                ) : (
+                  <DropZone.FileUpload
+                    actionTitle="Choose file"
+                    actionHint="or drag and drop CSV, JSON, XML, Excel, or TSV"
+                  />
+                )}
+              </DropZone>
+
+              {file && (
+                <InlineStack align="end">
+                  <Button
+                    variant="primary"
+                    onClick={handlePreviewFile}
+                    loading={loading}
+                    icon={ImportIcon}
+                  >
+                    Parse & Preview
+                  </Button>
+                </InlineStack>
+              )}
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* ============================================================ */}
+        {/* STEP 2: PREVIEW & MAP COLUMNS */}
+        {/* ============================================================ */}
+        {step === "preview" && preview && (
+          <>
+            {/* File Info Banner */}
+            <Card>
+              <InlineGrid columns={4} gap="400">
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">File</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{preview.fileName}</Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Format</Text>
+                  <Badge>{FORMAT_LABELS[preview.format] ?? preview.format}</Badge>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Size</Text>
+                  <Text as="p" variant="bodyMd">{preview.fileSize}</Text>
+                </BlockStack>
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Rows</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {preview.totalRows.toLocaleString()}
+                  </Text>
+                </BlockStack>
+              </InlineGrid>
+            </Card>
+
+            {/* Saved Mapping Banner */}
+            {hasSavedMappings && (
+              <Banner tone="info">
+                <p>
+                  Column mappings loaded from your previous import. Adjust as needed — changes are saved automatically.
+                </p>
+              </Banner>
+            )}
+
+            {/* Warnings */}
+            {preview.warnings.length > 0 && (
+              <Banner tone="warning">
+                <BlockStack gap="100">
+                  {preview.warnings.map((w, i) => (
+                    <p key={i}>{w}</p>
+                  ))}
+                </BlockStack>
+              </Banner>
+            )}
+
+            {/* Column Mapping Table */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between">
+                  <Text as="h2" variant="headingMd">
+                    Column Mapping
+                  </Text>
+                  <Badge tone={mappedCount === totalColumns ? "success" : undefined}>
+                    {`${mappedCount} / ${totalColumns} mapped`}
+                  </Badge>
+                </InlineStack>
+
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Map each source column to a product field. Unmapped columns are stored in raw data for future use.
+                </Text>
+
+                <DataTable
+                  columnContentTypes={["text", "text", "text"]}
+                  headings={["Source Column", "Sample Value", "Map To"]}
+                  rows={mappings.map((m, index) => [
+                    m.sourceColumn,
+                    m.sampleValue
+                      ? (m.sampleValue.length > 50
+                          ? m.sampleValue.slice(0, 50) + "..."
+                          : m.sampleValue)
+                      : "—",
+                    <Select
+                      key={index}
+                      label=""
+                      labelHidden
+                      value={m.targetField ?? "skip"}
+                      onChange={(val) => handleMappingChange(index, val)}
+                      options={[
+                        { label: "— Skip —", value: "skip" },
+                        ...targetFields.map((f: { label: string; value: string }) => ({
+                          label: f.label,
+                          value: f.value,
+                        })),
+                      ]}
+                    />,
+                  ])}
+                />
+              </BlockStack>
+            </Card>
+
+            {/* Sample Data Preview */}
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  Data Preview (First 5 Rows)
+                </Text>
+
+                <div style={{ overflowX: "auto" }}>
+                  <DataTable
+                    columnContentTypes={preview.headers.map(() => "text" as const)}
+                    headings={preview.headers.map((h) => {
+                      const mapping = mappings.find((m) => m.sourceColumn === h);
+                      return mapping?.targetField
+                        ? `${h} → ${mapping.targetField}`
+                        : h;
+                    })}
+                    rows={preview.sampleRows.slice(0, 5).map((row) =>
+                      preview.headers.map((h) => {
+                        const val = row[h] ?? "";
+                        return val.length > 40 ? val.slice(0, 40) + "..." : val;
+                      }),
+                    )}
+                  />
+                </div>
+              </BlockStack>
+            </Card>
+
+            {/* Actions */}
+            <InlineStack align="space-between">
+              <Button onClick={() => { setStep("upload"); setPreview(null); }}>
+                Back to Upload
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setStep("validate")}
+                disabled={mappedCount === 0}
+              >
+                Continue to Validation
+              </Button>
+            </InlineStack>
+          </>
+        )}
+
+        {/* ============================================================ */}
+        {/* STEP 3: VALIDATE */}
+        {/* ============================================================ */}
+        {step === "validate" && preview && (
+          <>
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  Import Validation
+                </Text>
+
+                <InlineGrid columns={3} gap="400">
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Total Rows</Text>
+                    <Text as="p" variant="headingLg">
+                      {preview.totalRows.toLocaleString()}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Mapped Columns</Text>
+                    <Text as="p" variant="headingLg">
+                      {`${mappedCount} / ${totalColumns}`}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="100">
+                    <Text as="p" variant="bodySm" tone="subdued">Potential Duplicates</Text>
+                    <Text as="p" variant="headingLg" tone={duplicatePreview.duplicateCount > 0 ? "caution" : undefined}>
+                      {String(duplicatePreview.duplicateCount)}
+                    </Text>
+                  </BlockStack>
+                </InlineGrid>
+              </BlockStack>
+            </Card>
+
+            {/* Duplicate Strategy */}
+            {duplicatePreview.duplicateCount > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">
+                    Duplicate Handling
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {`Found ${duplicatePreview.duplicateCount} products with matching SKUs already in your database.`}
+                  </Text>
+                  <Select
+                    label="When a duplicate is found"
+                    value={duplicateStrategy}
+                    onChange={setDuplicateStrategy}
+                    options={[
+                      { label: "Skip duplicate rows (keep existing)", value: "skip" },
+                      { label: "Update existing products with new data", value: "update" },
+                      { label: "Create new products (allow duplicates)", value: "create_new" },
+                    ]}
+                  />
+                </BlockStack>
+              </Card>
+            )}
+
+            <InlineStack align="space-between">
+              <Button onClick={() => setStep("preview")}>
+                Back to Mapping
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleStartImport}
+                icon={ImportIcon}
+              >
+                {`Import ${preview.totalRows.toLocaleString()} Products`}
+              </Button>
+            </InlineStack>
+          </>
+        )}
+
+        {/* ============================================================ */}
+        {/* STEP 4: IMPORTING */}
+        {/* ============================================================ */}
+        {step === "importing" && (
+          <Card>
+            <BlockStack gap="400" inlineAlign="center">
+              <Spinner size="large" />
+              <Text as="h2" variant="headingMd">
+                Importing Products...
+              </Text>
+              <Box paddingInline="1200" width="100%">
+                <ProgressBar progress={importProgress} tone="primary" size="small" />
+              </Box>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Processing {preview?.totalRows.toLocaleString() ?? "?"} rows. This may take a moment for large files.
+              </Text>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* ============================================================ */}
+        {/* STEP 5: COMPLETE */}
+        {/* ============================================================ */}
+        {step === "complete" && importResult && (
+          <>
+            <Banner
+              tone={importResult.errorRows > 0 ? "warning" : "success"}
+              title={
+                importResult.errorRows > 0
+                  ? "Import completed with some issues"
+                  : "Import completed successfully"
+              }
+            >
+              <p>
+                {`Imported ${importResult.importedRows.toLocaleString()} of ${importResult.totalRows.toLocaleString()} products.`}
+                {importResult.skippedRows > 0 &&
+                  ` Skipped ${importResult.skippedRows} duplicates.`}
+                {importResult.errorRows > 0 &&
+                  ` ${importResult.errorRows} rows had errors.`}
+              </p>
+            </Banner>
+
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">Import Summary</Text>
+                <InlineGrid columns={4} gap="400">
+                  <StatCard label="Total Rows" value={importResult.totalRows} />
+                  <StatCard label="Imported" value={importResult.importedRows} tone="success" />
+                  <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
+                  <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
+                </InlineGrid>
+              </BlockStack>
+            </Card>
+
+            {importResult.errors.length > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">Errors</Text>
+                  <DataTable
+                    columnContentTypes={["numeric", "text", "text"]}
+                    headings={["Row", "Field", "Error"]}
+                    rows={importResult.errors.slice(0, 20).map((e) => [
+                      String(e.row),
+                      e.field ?? "—",
+                      e.message,
+                    ])}
+                  />
+                  {importResult.errors.length > 20 && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {`Showing 20 of ${importResult.errors.length} errors.`}
+                    </Text>
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            <InlineStack gap="300">
+              <Button
+                variant="primary"
+                onClick={() => navigate(`/app/providers/${provider.id}?tab=products`)}
+              >
+                View Products
+              </Button>
+              <Button
+                onClick={() => {
+                  setStep("upload");
+                  setFile(null);
+                  setPreview(null);
+                  setImportResult(null);
+                  setImportProgress(0);
+                }}
+                icon={RefreshIcon}
+              >
+                Import Another File
+              </Button>
+              <Button
+                onClick={() => navigate(`/app/providers/${provider.id}`)}
+              >
+                Back to Provider
+              </Button>
+            </InlineStack>
+          </>
+        )}
+      </BlockStack>
+    </Page>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function StepBadge({
+  step,
+  label,
+  active,
+  completed,
+}: {
+  step: number;
+  label: string;
+  active: boolean;
+  completed: boolean;
+}) {
+  return (
+    <InlineStack gap="200" blockAlign="center">
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: "12px",
+          fontWeight: 600,
+          background: completed
+            ? "var(--p-color-bg-fill-success)"
+            : active
+              ? "var(--p-color-bg-fill-brand)"
+              : "var(--p-color-bg-fill-secondary)",
+          color: completed || active
+            ? "var(--p-color-text-inverse)"
+            : "var(--p-color-text-secondary)",
+        }}
+      >
+        {completed ? "✓" : step}
+      </div>
+      <Text
+        as="span"
+        variant="bodySm"
+        fontWeight={active ? "semibold" : "regular"}
+        tone={!active && !completed ? "subdued" : undefined}
+      >
+        {label}
+      </Text>
+    </InlineStack>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "success" | "critical" | "subdued";
+}) {
+  return (
+    <BlockStack gap="100">
+      <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+      <Text
+        as="p"
+        variant="headingLg"
+        tone={tone === "success" ? "success" : tone === "critical" ? "critical" : undefined}
+      >
+        {value.toLocaleString()}
+      </Text>
+    </BlockStack>
+  );
+}
