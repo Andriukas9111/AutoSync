@@ -594,6 +594,13 @@ export default function VehiclePages() {
           onAction: () => setDeleteModalOpen(true),
           disabled: syncStats.synced === 0 || isLoading,
         },
+        {
+          content: "Reset Definition",
+          onAction: () => {
+            fetcher.submit({ intent: "recreate_definition" }, { method: "post", action: "/app/api/vehicle-pages" });
+          },
+          disabled: isLoading,
+        },
       ]}
     >
       <BlockStack gap="500">
