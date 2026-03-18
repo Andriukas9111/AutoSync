@@ -29,6 +29,12 @@ declare global {
         HTMLElement
       >;
       "s-text": DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>;
+      "s-link": DetailedHTMLProps<
+        HTMLAttributes<HTMLElement> & {
+          href?: string;
+        },
+        HTMLElement
+      >;
       "s-button": DetailedHTMLProps<
         HTMLAttributes<HTMLElement> & {
           href?: string;
