@@ -586,13 +586,11 @@ export async function getVehiclesForPages(
   if (specsError) {
     console.error("[vehicle-pages] Specs query error:", specsError.message);
   }
-  console.log(`[vehicle-pages] Specs query: ${engineIds.length} engine IDs, got ${specs?.length ?? 0} specs rows`);
 
   const specsMap = new Map<string, any>();
   for (const s of specs ?? []) {
     specsMap.set(s.engine_id, s);
   }
-  console.log(`[vehicle-pages] specsMap size: ${specsMap.size}, keys: ${[...specsMap.keys()].join(", ")}`);
 
   // Build result
   const result: VehiclePageData[] = [];
@@ -614,7 +612,6 @@ export async function getVehiclesForPages(
     }
 
     const vehicleSpecs = specsMap.get(engine.id) ?? null;
-    console.log(`[vehicle-pages] Engine ${engine.id}: specs found = ${!!vehicleSpecs}, system_combined_hp = ${vehicleSpecs?.system_combined_hp}, raw Power = ${(vehicleSpecs?.raw_specs as any)?.Power?.substring?.(0, 30)}`);
 
     // Pull power/torque from specs if engine record is missing them
     let powerHp: number | null = engine.power_hp;
@@ -754,7 +751,6 @@ export async function pushVehiclePages(
       ? vehicle.variant
       : (specs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? vehicle.variant;
 
-    console.log(`[vehicle-pages] Push fields: power=${finalPowerHp}HP/${finalPowerKw}kW, torque=${finalTorqueNm}Nm, gen=${finalGeneration}, variant=${finalVariant}`);
 
     const fields: Array<{ key: string; value: string }> = [
       { key: "make", value: vehicle.make },
@@ -818,6 +814,9 @@ export async function pushVehiclePages(
           },
           metaobject: {
             fields,
+            capabilities: {
+              publishable: { status: "ACTIVE" },
+            },
           },
         },
       });
