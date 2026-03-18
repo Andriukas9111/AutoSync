@@ -104,8 +104,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
+  // Additional metadata
+  const websiteUrl = String(formData.get("website_url") || "").trim();
+  const contactEmail = String(formData.get("contact_email") || "").trim();
+  const duplicateStrategy = String(formData.get("duplicate_strategy") || "skip");
+
   // Build config based on type
-  const config: Record<string, unknown> = { description };
+  const config: Record<string, unknown> = {};
 
   if (type === "api") {
     config.endpoint = String(formData.get("api_endpoint") || "").trim();
@@ -132,8 +137,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     shop_id: shopId,
     name,
     type,
+    description: description || null,
+    website_url: websiteUrl || null,
+    contact_email: contactEmail || null,
+    duplicate_strategy: duplicateStrategy,
     config,
     product_count: 0,
+    import_count: 0,
     status: "pending",
   });
 
