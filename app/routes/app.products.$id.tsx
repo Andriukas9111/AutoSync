@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useSubmit, useNavigation, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -351,6 +351,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function ProductDetails() {
   const { product, fitments, shopDomain, engineDisplayFormat } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -491,6 +492,22 @@ export default function ProductDetails() {
       titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
     >
       <Layout>
+        {/* Action result banners */}
+        {actionData && "error" in actionData && (
+          <Layout.Section>
+            <Banner tone="critical">
+              <p>{(actionData as any).error}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {actionData && "success" in actionData && actionData.message && (
+          <Layout.Section>
+            <Banner tone="success">
+              <p>{(actionData as any).message}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         {/* ── Main Column ── */}
         <Layout.Section>
           <BlockStack gap="400">

@@ -450,7 +450,7 @@ export default function PricingPage() {
                         </Text>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
-                        <Badge>{rule.priority}</Badge>
+                        <Badge>{`${rule.priority}`}</Badge>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm" tone="subdued">

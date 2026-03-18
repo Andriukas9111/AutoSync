@@ -650,7 +650,7 @@ export default function FitmentManual() {
                           <Text as="h2" variant="headingMd">Smart Suggestions</Text>
                           {suggestionsLoading && <Spinner size="small" />}
                           {!suggestionsLoading && suggestions.length > 0 && (
-                            <Badge tone="success">{suggestions.length}</Badge>
+                            <Badge tone="success">{`${suggestions.length}`}</Badge>
                           )}
                         </InlineStack>
                         <Button
