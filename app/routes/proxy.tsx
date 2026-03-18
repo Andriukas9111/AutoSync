@@ -852,6 +852,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleVinDecode(params, null);
     case "vehicle-specs":
       return handleVehicleSpecs(params);
+    case "heartbeat":
+      return json({ ok: true, ts: Date.now() });
     default:
       return json(
         { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search, vehicle-specs. POST: plate-lookup, vin-decode, track` },
