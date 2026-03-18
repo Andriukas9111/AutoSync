@@ -141,8 +141,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         )
         .eq("model_id", modelId)
         .eq("active", true)
-        .not("year_from", "is", null) // Skip engines with no year data
-        .order("name");
+        .order("name")
+        .limit(200);
 
       // If a year is provided, filter engines whose range includes that year
       if (year) {
