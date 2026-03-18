@@ -622,8 +622,8 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     2,
   );
 
-  // --- AutoSync brand triangle SVG ---
-  const autosyncLogo = `<svg width="24" height="24" viewBox="0 0 100 100" fill="none"><path d="M50 5 L88 90 C88 92 86 94 84 94 L68 94 C66 94 64 92 63 90 L50 55 L50 5Z" fill="#0066ff"/><path d="M50 5 L12 90 C12 92 14 94 16 94 L32 94 C34 94 36 92 37 90 L50 55 C48 50 44 48 42 52 L35 70 C34 72 35 74 37 74 L50 74 L50 5Z" fill="#0066ff"/></svg>`;
+  // --- AutoSync brand logo SVG (from official AutosyncIcoSVG.svg) ---
+  const autosyncLogo = `<svg width="24" height="24" viewBox="0 0 1200 1200" fill="none"><path fill="#005bd2" d="M475.97,954.05l1.15-2.09c.26-.47.74-1.38.9-1.88,3.43-2.52,6.07-7.05,5.08-11.15.27-.44.68-1.39.85-1.87,3.7-2.85,6.29-7.47,6.15-12.07.3-.43.61-1.46.86-1.93l2.59-1.43c.75-.41.14-2.37-.47-2.71l.87-1.86,2.58-1.38c.75-.4.05-2.55-.44-2.87.23-.45.77-1.24,1.07-1.69,2-1.41,3.82-4.02,2.99-6.2l.79-1.86,2.64-1.4c.76-.41.1-2.42-.52-2.74l.87-1.86,2.5-1.27c.72-.37-.15-2.16-.37-2.88.23-.76.59-2.16.93-2.82,4.78-3.57,19-34.98,21.07-40.92.09-.25-.15-.79-.03-1.03,2.43-1.98,3.74-4.54,5.38-7.85l46.96-94.81c1.69-3.41,2.79-6.31,2.73-9.53,10.04-20.44,16.99-42.51,29.07-62.04,1.51-.81,2.45-3.2,2.96-4.78.18-.57.81-1.61,1.07-2.17,4.55-3.53,6.73-9.47,9.88-14.92,2.97-5.15,7.64-9.61,7.93-15.01.6-.88,1.65-2.22,2.17-3.08,2.18-1.23,4.45-3.6,3.83-5.93.56-.79,1.83-2.17,2.12-3.05,3.84-2.5,5.83-6.93,7.75-11.18,9.67-13.7,19.34-27.27,30.77-39.85l19.64-21.62c9.69-10.67,18.68-20.01,29.53-29.6l19.62-17.35,31.01-25.01c3.32-2.68,8.39-6.65,5.99-11.54l-25.43-51.94-75.53-151.3-67.09-134.73c-4.27-8.57-13.25-13.64-21.47-14.59-8.62-1-21.01,1.61-25.31,10.39l-47.54,96.96-13.24,28.33-80.24,165.62-48.41,99.53-250.39,517.49c-4.44,9.18-7.86,15.46-5.58,27.17,2.52,13,18.9,25.22,34.53,19.43l297.19-110.08c8.82-3.27,14-9.71,18.05-17.06Z"/><path fill="#005bd2" d="M728.87,955.34c4.84,9.54,10.97,15.02,20.54,18.57l289.84,107.29c10.02,3.71,21.67-.68,27.65-6.95s11.2-18.55,6.35-28.37l-69.4-140.74-123.43-248.48-41.65-84.41-36.42-72.5c-.98-1.95-3.81-4.07-5.45-4.64s-5.59.13-7.09,1.43c-13.12,11.34-37.55,39.1-48.25,53.11-47.54,62.24-86.7,138.7-92.9,217.9-.78,9.91-3.53,20.04.33,29.51,6.35,15.6,14.58,29.51,22.26,44.66l57.62,113.62Z"/></svg>`;
 
   // --- Assemble full HTML ---
   return `<style>
@@ -643,7 +643,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   .avsp-hero__badge--hybrid { background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 2px 8px rgba(16,185,129,0.35); }
   .avsp-hero__badge::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #4dd495; border-radius: 50%; }
   .avsp-hero__make { font-size: 0.9rem; opacity: 0.75; margin: 0 0 0.35rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
-  .avsp-hero__title { font-size: 2.25rem; font-weight: 800; margin: 0 0 0.5rem; line-height: 1.15; letter-spacing: -0.02em; text-shadow: 0 2px 20px rgba(0,0,0,0.5); }
+  .avsp-hero__title { font-size: 2.25rem; font-weight: 800; margin: 0 0 0.5rem; line-height: 1.15; letter-spacing: -0.02em; color: #fff; }
   .avsp-hero__gen { font-size: 0.95rem; opacity: 0.5; margin: 0 0 1.25rem; font-weight: 400; }
   .avsp-hero__year { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 8px 18px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
 
@@ -662,11 +662,8 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   /* ---- Overview ---- */
   .avsp-overview { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); padding: 1.75rem 2rem; margin-bottom: 2rem; line-height: 1.75; color: var(--avsp-muted); font-size: 0.92rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 
-  /* ---- Specs Grid ---- */
-  .avsp-specs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
-
   /* ---- Spec Sections ---- */
-  .avsp-section { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); margin-bottom: 0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: box-shadow 0.2s; }
+  .avsp-section { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); margin-bottom: 1rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: box-shadow 0.2s; }
   .avsp-section:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
   .avsp-section__header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--avsp-card); border-bottom: 1px solid var(--avsp-border); border-left: 3px solid var(--avsp-accent); cursor: pointer; user-select: none; transition: background-color 0.15s; }
   .avsp-section__header:hover { background: var(--avsp-bg); }
@@ -711,7 +708,6 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     .avsp-qs-card__label { font-size: 0.6rem; }
     .avsp-qs-card__value { font-size: 0.78rem; }
     .avsp-content { padding: 1.25rem 1rem; }
-    .avsp-specs-grid { grid-template-columns: 1fr; }
     .avsp-section__header { padding: 12px 14px; }
     .avsp-section__icon { width: 28px; height: 28px; }
     .avsp-spec-table td { padding: 9px 14px; font-size: 0.82rem; }
@@ -748,9 +744,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   <div class="avsp-content">
     ${overview ? `<div class="avsp-overview">${escapeHtml(overview)}</div>` : ""}
 
-    <div class="avsp-specs-grid">
     ${specSectionsHtml}
-    </div>
 
     ${productsHtml}
   </div>
