@@ -245,7 +245,7 @@ export function scanTextForVehicles(
           seenKeys.add(key)
           const yearText = text.slice(Math.max(0, position - 30), Math.min(text.length, position + 200))
           const years = extractYearsNearby(yearText)
-          const engine = findEngineInText(text, genModel.id, index)
+          const engine = findEngineInText(text, genModel.id, index, years?.from)
 
           mentions.push({
             make, model: genModel, engine,
@@ -283,7 +283,7 @@ export function scanTextForVehicles(
 
           const yearText = text.slice(Math.max(0, position - 30), Math.min(text.length, position + 200))
           const years = extractYearsNearby(yearText)
-          const engine = findEngineInText(text, seriesModel.id, index)
+          const engine = findEngineInText(text, seriesModel.id, index, years?.from)
 
           mentions.push({
             make, model: seriesModel, engine,
