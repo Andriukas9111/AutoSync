@@ -28,14 +28,7 @@ import {
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, FitmentStatus } from "../lib/types";
-
-// ---------------------------------------------------------------------------
-// Admin access control
-// ---------------------------------------------------------------------------
-const ADMIN_SHOPS = [
-  "autosync-9.myshopify.com",
-  "performancehq-3.myshopify.com",
-];
+import { isAdminShop } from "../lib/admin.server";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -73,7 +66,7 @@ const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "cr
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
-  if (!ADMIN_SHOPS.includes(session.shop)) {
+  if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 
@@ -197,7 +190,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
-  if (!ADMIN_SHOPS.includes(session.shop)) {
+  if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 

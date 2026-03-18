@@ -275,6 +275,61 @@ export default function ProvidersIndex() {
       }}
     >
       <BlockStack gap="400">
+        {/* Stats Dashboard */}
+        <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+          <Card>
+            <BlockStack gap="100">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="bodySm" as="p" tone="subdued">Total Providers</Text>
+                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-info)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon source={DataTableIcon} tone="info" />
+                </div>
+              </InlineStack>
+              <Text variant="headingLg" as="p">{`${providerCount}`}</Text>
+              <Text variant="bodySm" as="p" tone="subdued">{`of ${limitLabel} allowed`}</Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="100">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="bodySm" as="p" tone="subdued">Total Products</Text>
+                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-success)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon source={PackageIcon} tone="info" />
+                </div>
+              </InlineStack>
+              <Text variant="headingLg" as="p">{`${providers.reduce((sum, p) => sum + (p.product_count || 0), 0)}`}</Text>
+              <Text variant="bodySm" as="p" tone="subdued">across all providers</Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="100">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="bodySm" as="p" tone="subdued">Total Imports</Text>
+                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-caution)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon source={ImportIcon} tone="info" />
+                </div>
+              </InlineStack>
+              <Text variant="headingLg" as="p">{`${providers.reduce((sum, p) => sum + (p.import_count || 0), 0)}`}</Text>
+              <Text variant="bodySm" as="p" tone="subdued">files imported</Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="100">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="bodySm" as="p" tone="subdued">Source Types</Text>
+                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon source={DataTableIcon} tone="subdued" />
+                </div>
+              </InlineStack>
+              <InlineStack gap="100" wrap>
+                {Object.entries(providers.reduce((acc: Record<string, number>, p) => { acc[p.type] = (acc[p.type] || 0) + 1; return acc; }, {})).map(([type, count]) => (
+                  <Badge key={type} tone={getTypeBadgeTone(type as any)}>{`${count} ${type.toUpperCase()}`}</Badge>
+                ))}
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
         {/* Plan usage banner */}
         {(nearLimit || atLimit) && (
           <Card>

@@ -25,17 +25,13 @@ import {
   resolveLogoUrl,
   sleep,
 } from "../lib/scrapers/autodata.server";
-
-const ADMIN_SHOPS = [
-  "autosync-9.myshopify.com",
-  "performancehq-3.myshopify.com",
-];
+import { isAdminShop } from "../lib/admin.server";
 
 const DELAY_MS = 500;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  if (!ADMIN_SHOPS.includes(session.shop)) {
+  if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 

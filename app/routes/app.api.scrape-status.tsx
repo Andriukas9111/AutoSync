@@ -8,15 +8,11 @@ import type { LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-
-const ADMIN_SHOPS = [
-  "autosync-9.myshopify.com",
-  "performancehq-3.myshopify.com",
-];
+import { isAdminShop } from "../lib/admin.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  if (!ADMIN_SHOPS.includes(session.shop)) {
+  if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 
