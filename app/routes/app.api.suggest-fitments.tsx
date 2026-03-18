@@ -337,25 +337,48 @@ function resolvePatternFitments(
     if (modelEntry) {
       const modelEngines = index.enginesByModelId.get(modelEntry.id) || [];
 
-      // Filter engines by year range and engine code hint
+      // Filter engines by year range
       const matchingEngines = modelEngines.filter((eng) => {
-        // Year filter
         if (yearFrom && eng.yearTo && eng.yearTo < yearFrom) return false;
         if (yearTo && eng.yearFrom && eng.yearFrom > yearTo) return false;
-
-        // Engine code filter (if we have a hint)
-        if (fit.engine_code) {
-          const code = fit.engine_code.toLowerCase();
-          if (eng.code && eng.code.toLowerCase().startsWith(code)) return true;
-          // Still include if no code match but within year range
-        }
-
         return true;
       });
 
-      // Score engines against hints
+      // Score engines: use name-based matching since many DBs lack engine codes
+      // Match by: engine code in name, model code in name, power hint, aspiration
       const scoredEngines = matchingEngines
         .map((engine) => {
+          let score = 0.1; // Base score for year-matching engine
+          const engName = (engine.name || "").toLowerCase();
+
+          // Check if engine name contains the detected model code (e.g., "140i" in "140i (326 Hp)")
+          if (fit.model) {
+            const modelLower = fit.model.toLowerCase();
+            if (engName.includes(modelLower)) score += 0.5;
+          }
+
+          // Check if engine code hint appears in engine name or code
+          if (fit.engine_code) {
+            const codeLower = fit.engine_code.toLowerCase();
+            if (engine.code && engine.code.toLowerCase().startsWith(codeLower)) score += 0.4;
+            if (engName.includes(codeLower)) score += 0.3;
+          }
+
+          // Check power hint
+          const powerHint = hints.find((h) => h.type === "power");
+          if (powerHint && engine.powerHp) {
+            if (Math.abs(engine.powerHp - parseInt(powerHint.normalized)) <= 20) score += 0.2;
+          }
+
+          // Check aspiration hint
+          const aspirationHint = hints.find((h) => h.type === "aspiration");
+          if (aspirationHint && engine.aspiration) {
+            if (engine.aspiration.toLowerCase().includes(aspirationHint.normalized.toLowerCase())) score += 0.15;
+          } else if (aspirationHint) {
+            // Check in engine name
+            if (engName.includes(aspirationHint.normalized.toLowerCase())) score += 0.1;
+          }
+
           const engineData: EngineDisplayData = {
             code: engine.code,
             name: engine.name,
@@ -372,12 +395,12 @@ function resolvePatternFitments(
             modification: engine.modification,
             generation: fit.variant,
           };
-          const score = scoreEngineMatch(engineData, hints);
+
           return { engine, score, displayName: formatEngineDisplay(engineData, engineFormatTemplate) };
         })
-        .filter((e) => e.score > 0.05)
+        .filter((e) => e.score > 0.15) // Only show engines with meaningful match
         .sort((a, b) => b.score - a.score)
-        .slice(0, 8);
+        .slice(0, 5);
 
       if (scoredEngines.length > 0) {
         // Create one suggestion per matching engine
