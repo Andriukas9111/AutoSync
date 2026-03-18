@@ -584,23 +584,43 @@ export async function getVehiclesForPages(
     const vehicleSpecs = specsMap.get(engine.id) ?? null;
 
     // Pull power/torque from specs if engine record is missing them
-    const powerHp = engine.power_hp ?? vehicleSpecs?.system_combined_hp ?? (vehicleSpecs?.raw_specs as any)?.Power?.match?.(/(\d+)\s*Hp/i)?.[1] ? parseInt(((vehicleSpecs?.raw_specs as any)?.Power?.match?.(/(\d+)\s*Hp/i) ?? [])[1]) || null : null;
-    const powerKw = engine.power_kw ?? (powerHp ? Math.round(powerHp * 0.7457) : null);
-    const torqueNm = engine.torque_nm ?? vehicleSpecs?.system_combined_torque_nm ?? (vehicleSpecs?.raw_specs as any)?.Torque?.match?.(/(\d+)\s*Nm/i)?.[1] ? parseInt(((vehicleSpecs?.raw_specs as any)?.Torque?.match?.(/(\d+)\s*Nm/i) ?? [])[1]) || null : null;
+    let powerHp: number | null = engine.power_hp;
+    if (powerHp == null && vehicleSpecs?.system_combined_hp) {
+      powerHp = vehicleSpecs.system_combined_hp;
+    }
+    if (powerHp == null) {
+      const rawPower = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Power;
+      const match = rawPower?.match(/(\d+)\s*Hp/i);
+      if (match) powerHp = parseInt(match[1]);
+    }
+    const powerKw: number | null = engine.power_kw ?? (powerHp ? Math.round(powerHp * 0.7457) : null);
+
+    let torqueNm: number | null = engine.torque_nm;
+    if (torqueNm == null && vehicleSpecs?.system_combined_torque_nm) {
+      torqueNm = vehicleSpecs.system_combined_torque_nm;
+    }
+    if (torqueNm == null) {
+      const rawTorque = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Torque;
+      const match = rawTorque?.match(/(\d+)\s*Nm/i);
+      if (match) torqueNm = parseInt(match[1]);
+    }
 
     // Build a better variant name from raw_specs or engine fields
-    const rawModification = (vehicleSpecs?.raw_specs as any)?.["Modification (Engine)"] ?? null;
+    const rawModification = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? null;
     const variantName = engine.name ?? rawModification ?? (
       engine.displacement_cc
         ? `${(engine.displacement_cc / 1000).toFixed(1)}L ${engine.fuel_type ?? ""}${powerHp ? ` (${powerHp} HP)` : ""}`.trim()
         : `${engine.fuel_type ?? "Unknown"}`
     );
 
+    // Pull generation from raw_specs if model lacks it
+    const generation = model.generation ?? (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Generation ?? null;
+
     result.push({
       engineId: engine.id,
       make: makeName,
       model: model.name,
-      generation: model.generation ?? (vehicleSpecs?.raw_specs as any)?.Generation ?? null,
+      generation,
       variant: variantName,
       yearFrom: engine.year_from,
       yearTo: engine.year_to,
