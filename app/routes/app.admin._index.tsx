@@ -40,14 +40,7 @@ import {
   removeAllCollections,
 } from "../lib/pipeline/cleanup.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
-
-// ---------------------------------------------------------------------------
-// Admin access control
-// ---------------------------------------------------------------------------
-const ADMIN_SHOPS = [
-  "autosync-9.myshopify.com",
-  "performancehq-3.myshopify.com",
-];
+import { ADMIN_SHOPS, isAdminShop } from "../lib/admin.server";
 
 // ---------------------------------------------------------------------------
 // Plan tier config
@@ -84,7 +77,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  if (!ADMIN_SHOPS.includes(shopId)) {
+  if (!isAdminShop(shopId)) {
     throw new Response("Forbidden — you are not an app admin.", { status: 403 });
   }
 
@@ -179,7 +172,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
-  if (!ADMIN_SHOPS.includes(session.shop)) {
+  if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
 

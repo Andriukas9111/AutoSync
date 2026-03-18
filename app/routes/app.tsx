@@ -9,18 +9,13 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits } from "../lib/billing.server";
+import { isAdminShop } from "../lib/admin.server";
 import type { PlanTier } from "../lib/types";
-
-// Admin shops get auto-promoted to enterprise plan (app owners)
-const ADMIN_SHOPS = [
-  "autosync-9.myshopify.com",
-  "performancehq-3.myshopify.com",
-];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
-  const isAdmin = ADMIN_SHOPS.includes(shopId);
+  const isAdmin = isAdminShop(shopId);
 
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db

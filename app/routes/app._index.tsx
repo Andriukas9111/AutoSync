@@ -76,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeEnginesResult,
     ymmeSpecsResult,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).single(),
+    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     db.from("sync_jobs")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)

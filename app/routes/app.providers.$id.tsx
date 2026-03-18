@@ -120,7 +120,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const tab = (url.searchParams.get("tab") || "overview") as TabId;
 
   const [providerResult, tenant, importsResult, fitmentCountResult] = await Promise.all([
-    db.from("providers").select("*").eq("id", providerId).eq("shop_id", shopId).single(),
+    db.from("providers").select("*").eq("id", providerId).eq("shop_id", shopId).maybeSingle(),
     getTenant(shopId),
     db.from("provider_imports")
       .select("id, file_name, status, imported_rows, total_rows, created_at")
@@ -175,7 +175,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const notes = String(formData.get("notes") || "").trim();
     if (!name) return data({ error: "Provider name is required." }, { status: 400 });
 
-    const existing = (await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).single()).data;
+    const existing = (await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).maybeSingle()).data;
     const type = existing?.type as ProviderType || "csv";
     const config: Record<string, unknown> = { ...(existing?.config as Record<string, unknown> || {}) };
 

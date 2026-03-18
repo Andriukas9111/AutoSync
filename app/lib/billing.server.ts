@@ -239,7 +239,7 @@ export async function getTenant(shopId: string): Promise<Tenant | null> {
     .from("tenants")
     .select("*")
     .eq("shop_id", shopId)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
   return data as Tenant;
