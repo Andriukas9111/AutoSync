@@ -893,7 +893,7 @@ export default function Dashboard() {
                                 alignItems: "center",
                                 justifyContent: "center",
                                 color: "var(--p-color-text-inverse)",
-                                fontSize: "11px",
+                                fontSize: "12px",
                                 fontWeight: 700,
                                 flexShrink: 0,
                               }}

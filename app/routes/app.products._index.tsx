@@ -153,6 +153,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currentPage: page,
     filters: { search, status, source },
     statusBreakdown: breakdown,
+    queryError: error?.message || null,
   };
 };
 
@@ -201,6 +202,7 @@ export default function Products() {
     currentPage,
     filters,
     statusBreakdown,
+    queryError,
   } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -209,6 +211,7 @@ export default function Products() {
 
   const [searchValue, setSearchValue] = useState(filters.search);
   const [dismissed, setDismissed] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const isFetching = fetcher.state !== "idle";
   const isBulkAction = bulkFetcher.state !== "idle";
@@ -316,13 +319,7 @@ export default function Products() {
       content: "Delete Selected",
       destructive: true,
       onAction: () => {
-        if (confirm(`Delete ${selectedResources.length} products? This cannot be undone.`)) {
-          bulkFetcher.submit(
-            { intent: "bulk-delete", ids: selectedResources.join(",") },
-            { method: "POST" },
-          );
-          clearSelection();
-        }
+        setShowDeleteConfirm(true);
       },
     },
   ];
@@ -483,6 +480,11 @@ export default function Products() {
     >
       <BlockStack gap="400">
         {/* ── Banners ── */}
+        {queryError && (
+          <Banner tone="critical" title="Failed to load products">
+            <p>{queryError}</p>
+          </Banner>
+        )}
         {fetcherData && "success" in fetcherData && (
           <Banner
             tone="success"
@@ -507,6 +509,30 @@ export default function Products() {
             <InlineStack gap="200" blockAlign="center">
               <Spinner size="small" />
               <Text as="span" variant="bodyMd">Fetching products from Shopify...</Text>
+            </InlineStack>
+          </Banner>
+        )}
+        {showDeleteConfirm && (
+          <Banner
+            tone="critical"
+            title={`Delete ${selectedResources.length} product${selectedResources.length === 1 ? "" : "s"}? This cannot be undone.`}
+            onDismiss={() => setShowDeleteConfirm(false)}
+          >
+            <InlineStack gap="200">
+              <Button
+                tone="critical"
+                onClick={() => {
+                  bulkFetcher.submit(
+                    { intent: "bulk-delete", ids: selectedResources.join(",") },
+                    { method: "POST" },
+                  );
+                  clearSelection();
+                  setShowDeleteConfirm(false);
+                }}
+              >
+                Yes, delete
+              </Button>
+              <Button onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
             </InlineStack>
           </Banner>
         )}

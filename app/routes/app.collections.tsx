@@ -91,6 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     appSettings: appSettingsResult.data,
     uniqueMakes,
     uniqueMakeModelCount: uniqueMakeModels.length,
+    loaderError: collectionsResult.error?.message ?? null,
   };
 };
 
@@ -178,6 +179,7 @@ export default function Collections() {
     appSettings,
     uniqueMakes,
     uniqueMakeModelCount,
+    loaderError,
   } = useLoaderData<typeof loader>();
 
   const actionData = useActionData<typeof action>();
@@ -210,6 +212,13 @@ export default function Collections() {
           <Layout.Section>
             <Banner tone="critical">
               <p>{(actionData as any).error}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {loaderError && (
+          <Layout.Section>
+            <Banner tone="warning">
+              <p>Failed to load collection data: {loaderError}</p>
             </Banner>
           </Layout.Section>
         )}

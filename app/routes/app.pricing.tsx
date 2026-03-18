@@ -394,7 +394,7 @@ export default function PricingPage() {
               {rules.length === 0 ? (
                 <EmptyState
                   heading="No pricing rules yet"
-                  image=""
+                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                   action={{
                     content: "Create your first rule",
                     onAction: () => setShowCreateModal(true),
