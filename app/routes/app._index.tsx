@@ -504,6 +504,7 @@ export default function Dashboard() {
                 productCount={totalProducts}
                 fitmentCount={fitmentCount}
                 hasPushed={hasPushed}
+                collectionCount={collectionCount}
               />
             )}
 
