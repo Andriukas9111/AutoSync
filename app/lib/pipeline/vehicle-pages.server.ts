@@ -377,9 +377,9 @@ export async function ensureMetaobjectDefinition(
     checkJson?.data?.metaobjectDefinitionByType?.id;
 
   if (existingId) {
-    // Ensure publishable + renderable + onlineStore capabilities are enabled
+    // Ensure capabilities + new fields are up to date
     try {
-      await admin.graphql(`mutation($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
+      const updateResp = await admin.graphql(`mutation($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
         metaobjectDefinitionUpdate(id: $id, definition: $definition) {
           metaobjectDefinition { id }
           userErrors { field message }
@@ -401,9 +401,22 @@ export async function ensureMetaobjectDefinition(
               },
               onlineStore: { enabled: true },
             },
+            // Add hero_image_url field if it doesn't exist yet
+            fieldDefinitions: [
+              { create: { name: "Hero Image", key: "hero_image_url", type: "single_line_text_field" } },
+            ],
           },
         },
       });
+      const updateJson = await updateResp.json();
+      const updateErrors = updateJson?.data?.metaobjectDefinitionUpdate?.userErrors;
+      if (updateErrors?.length) {
+        // Field already exists → ignore that specific error
+        const realErrors = updateErrors.filter((e: any) => !e.message?.includes("already exists"));
+        if (realErrors.length > 0) {
+          console.error("Metaobject definition update errors:", JSON.stringify(realErrors));
+        }
+      }
     } catch {
       // Ignore update errors — capabilities may already be enabled
     }
@@ -822,23 +835,30 @@ export async function pushVehiclePages(
         }
       }
 
-      const response = await admin.graphql(METAOBJECT_UPSERT, {
+      // Try pushing with all fields; if hero_image_url fails, retry without it
+      let pushFields = fields;
+      let response = await admin.graphql(METAOBJECT_UPSERT, {
         variables: {
-          handle: {
-            type: "$app:vehicle_spec",
-            handle,
-          },
-          metaobject: {
-            fields,
-            capabilities: {
-              publishable: { status: "ACTIVE" },
-            },
-          },
+          handle: { type: "$app:vehicle_spec", handle },
+          metaobject: { fields: pushFields, capabilities: { publishable: { status: "ACTIVE" } } },
         },
       });
 
-      const json = await response.json();
-      const userErrors = json?.data?.metaobjectUpsert?.userErrors;
+      let json = await response.json();
+      let userErrors = json?.data?.metaobjectUpsert?.userErrors;
+
+      // Retry without hero_image_url if it caused the error
+      if (userErrors?.length && userErrors.some((e: any) => e.message?.includes("hero_image_url"))) {
+        pushFields = fields.filter((f) => f.key !== "hero_image_url");
+        response = await admin.graphql(METAOBJECT_UPSERT, {
+          variables: {
+            handle: { type: "$app:vehicle_spec", handle },
+            metaobject: { fields: pushFields, capabilities: { publishable: { status: "ACTIVE" } } },
+          },
+        });
+        json = await response.json();
+        userErrors = json?.data?.metaobjectUpsert?.userErrors;
+      }
 
       if (userErrors && userErrors.length > 0) {
         const errorMsg = `${vehicle.make} ${vehicle.model} ${vehicle.variant}: ${userErrors.map((e: any) => e.message).join(", ")}`;
