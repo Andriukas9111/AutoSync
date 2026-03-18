@@ -134,7 +134,7 @@ function resolveToken(token: string, data: EngineDisplayData): string | null {
       if (fuel.includes("hydrogen") || fuel === "fcev") return "Hydrogen";
       if (fuel.includes("lpg")) return "LPG";
       if (fuel.includes("cng")) return "CNG";
-      return data.fuel_type;
+      return data.fuel_type ?? null;
     }
 
     case "code":
@@ -164,7 +164,7 @@ function resolveToken(token: string, data: EngineDisplayData): string | null {
       if (dt.includes("AWD") || dt.includes("4WD") || dt.includes("ALL")) return "AWD";
       if (dt.includes("RWD") || dt.includes("REAR")) return "RWD";
       if (dt.includes("FWD") || dt.includes("FRONT")) return "FWD";
-      return data.drive_type;
+      return data.drive_type ?? null;
     }
 
     case "transmission": {
@@ -174,7 +174,7 @@ function resolveToken(token: string, data: EngineDisplayData): string | null {
       if (tx.includes("cvt")) return "CVT";
       if (tx.includes("manual")) return "Manual";
       if (tx.includes("auto") || tx.includes("steptronic") || tx.includes("tiptronic")) return "Auto";
-      return data.transmission_type;
+      return data.transmission_type ?? null;
     }
 
     case "modification":

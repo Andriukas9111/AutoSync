@@ -34,6 +34,7 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
   vinDecode: "VIN Decode",
   widgetCustomisation: "Widget Customisation",
   dashboardAnalytics: "Dashboard Analytics",
+  pricingEngine: "Competitive Pricing Engine",
   prioritySupport: "Priority Support",
 };
 
