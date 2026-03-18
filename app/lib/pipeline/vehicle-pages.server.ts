@@ -396,10 +396,17 @@ export async function ensureMetaobjectDefinition(
               publishable: { enabled: true },
               renderable: {
                 enabled: true,
-                metaTitleKey: "variant",
-                metaDescriptionKey: "overview",
+                data: {
+                  metaTitleKey: "variant",
+                  metaDescriptionKey: "overview",
+                },
               },
-              onlineStore: { enabled: true },
+              onlineStore: {
+                enabled: true,
+                data: {
+                  urlHandle: "vehicle-specs",
+                },
+              },
             },
             // Add hero_image_url field if it doesn't exist yet
             fieldDefinitions: [
@@ -412,7 +419,8 @@ export async function ensureMetaobjectDefinition(
       const updateErrors = updateJson?.data?.metaobjectDefinitionUpdate?.userErrors;
       if (updateErrors?.length) {
         // Field already exists → ignore that specific error
-        const realErrors = updateErrors.filter((e: any) => !e.message?.includes("already exists"));
+        const realErrors = updateErrors.filter((e: any) =>
+          !e.message?.includes("already exists") && !e.message?.includes("already been taken"));
         if (realErrors.length > 0) {
           console.error("Metaobject definition update errors:", JSON.stringify(realErrors));
         }
@@ -469,10 +477,17 @@ export async function ensureMetaobjectDefinition(
           publishable: { enabled: true },
           renderable: {
             enabled: true,
-            metaTitleKey: "variant",
-            metaDescriptionKey: "overview",
+            data: {
+              metaTitleKey: "variant",
+              metaDescriptionKey: "overview",
+            },
           },
-          onlineStore: { enabled: true },
+          onlineStore: {
+            enabled: true,
+            data: {
+              urlHandle: "vehicle-specs",
+            },
+          },
         },
       },
     },
