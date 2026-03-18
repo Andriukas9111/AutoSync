@@ -672,7 +672,7 @@ export default function PricingPage() {
                       onChange={setScopeValue}
                       autoComplete="off"
                       placeholder={
-                        scopeType === "vendor" ? "Forge Motorsport" :
+                        scopeType === "vendor" ? "Acme Parts" :
                         scopeType === "tag" ? "clearance" :
                         scopeType === "sku_prefix" ? "FM-" : "Value"
                       }
