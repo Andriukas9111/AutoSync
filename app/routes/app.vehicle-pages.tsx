@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -15,11 +15,14 @@ import {
   Banner,
   Box,
   Divider,
-  IndexTable,
   EmptyState,
   Icon,
   Spinner,
   Modal,
+  ProgressBar,
+  Collapsible,
+  TextField,
+  Select,
 } from "@shopify/polaris";
 import {
   PageIcon,
@@ -29,6 +32,12 @@ import {
   ViewIcon,
   DeleteIcon,
   ProductIcon,
+  SearchIcon,
+  RefreshIcon,
+  ChartVerticalFilledIcon,
+  LinkIcon,
+  SettingsIcon,
+  ArrowRightIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -44,53 +53,83 @@ import { PlanGate } from "../components/PlanGate";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface VehicleRow {
+  engineId: string;
+  makeName: string;
+  modelName: string;
+  generation: string | null;
+  engineName: string | null;
+  engineCode: string | null;
+  displacementCc: number | null;
+  powerHp: number | null;
+  fuelType: string | null;
+  yearFrom: number | null;
+  yearTo: number | null;
+  bodyType: string | null;
+  aspiration: string | null;
+  productCount: number;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function relativeTime(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  const now = Date.now();
-  const then = new Date(dateStr).getTime();
-  const diffMs = now - then;
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return "Just now";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 30) return `${diffDay}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+function formatDisplacement(cc: number | null): string {
+  if (!cc) return "";
+  const litres = (cc / 1000).toFixed(1);
+  return `${litres}L`;
 }
 
-const STATUS_BADGES: Record<
-  string,
-  { tone: "success" | "info" | "critical" | undefined; label: string }
-> = {
-  synced: { tone: "success", label: "Synced" },
-  pending: { tone: "info", label: "Pending" },
-  failed: { tone: "critical", label: "Failed" },
-};
+function formatYearRange(from: number | null, to: number | null): string {
+  if (!from && !to) return "All years";
+  if (from && !to) return `${from}+`;
+  if (!from && to) return `–${to}`;
+  if (from === to) return `${from}`;
+  return `${from}–${to}`;
+}
 
-const sectionIconStyle = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "var(--p-border-radius-200)",
-  background: "var(--p-color-bg-surface-secondary)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--p-color-icon-emphasis)",
-} as const;
+function formatPower(hp: number | null): string {
+  if (!hp) return "";
+  return `${hp} HP`;
+}
 
-const statCardStyle = {
-  flex: "1 1 0",
-  minWidth: "140px",
-} as const;
+const iconBadgeStyle = (
+  bg: string = "var(--p-color-bg-surface-secondary)",
+  color: string = "var(--p-color-icon-emphasis)",
+) =>
+  ({
+    width: "32px",
+    height: "32px",
+    borderRadius: "var(--p-border-radius-200)",
+    background: bg,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color,
+    flexShrink: 0,
+  }) as const;
+
+const stepNumberStyle = (active: boolean) =>
+  ({
+    width: "28px",
+    height: "28px",
+    borderRadius: "var(--p-border-radius-full)",
+    background: active
+      ? "var(--p-color-bg-fill-emphasis)"
+      : "var(--p-color-bg-surface-secondary)",
+    color: active
+      ? "var(--p-color-text-inverse)"
+      : "var(--p-color-text-secondary)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 600,
+    fontSize: "13px",
+    flexShrink: 0,
+  }) as const;
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -116,7 +155,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           allLimits: PLAN_LIMITS,
           syncStats: { synced: 0, pending: 0, failed: 0 },
           availableVehicles: 0,
-          recentSyncs: [] as any[],
+          vehicles: [] as VehicleRow[],
+          syncedEngineIds: [] as string[],
+          vehiclePagesEnabled: false,
+          totalLinkedProducts: 0,
         },
         { status: 403 },
       );
@@ -128,46 +170,73 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
-  // Run queries in parallel
-  const [syncStatsResult, availableResult, recentSyncsResult] =
-    await Promise.all([
-      // Count by sync_status
-      db
-        .from("vehicle_page_sync")
-        .select("sync_status")
-        .eq("shop_id", shopId),
-      // Count unique engines linked to this tenant's products via fitments
-      db
-        .from("vehicle_fitments")
-        .select("engine_id")
-        .eq("shop_id", shopId)
-        .not("engine_id", "is", null),
-      // Recent syncs with engine/model/make names
-      db
-        .from("vehicle_page_sync")
-        .select(
-          `
+  // Run all queries in parallel
+  const [
+    syncStatsResult,
+    availableResult,
+    vehiclesResult,
+    syncedResult,
+    settingsResult,
+  ] = await Promise.all([
+    // 1. Count by sync_status
+    db
+      .from("vehicle_page_sync")
+      .select("sync_status")
+      .eq("shop_id", shopId),
+
+    // 2. Count unique engines linked to this tenant's products
+    db
+      .from("vehicle_fitments")
+      .select("ymme_engine_id")
+      .eq("shop_id", shopId)
+      .not("ymme_engine_id", "is", null),
+
+    // 3. Fetch 50 vehicles with full YMME data via joins
+    db
+      .from("vehicle_fitments")
+      .select(
+        `
+        ymme_engine_id,
+        product_id,
+        engine:ymme_engines!ymme_engine_id (
           id,
-          sync_status,
-          synced_at,
-          metaobject_handle,
-          error,
-          engine:ymme_engines!engine_id (
-            id,
-            engine_code,
-            model:ymme_models!model_id (
-              name,
-              make:ymme_makes!make_id (
-                name
-              )
+          name,
+          code,
+          displacement_cc,
+          power_hp,
+          fuel_type,
+          year_from,
+          year_to,
+          body_type,
+          aspiration,
+          model:ymme_models!model_id (
+            name,
+            generation,
+            make:ymme_makes!make_id (
+              name
             )
           )
-        `,
         )
-        .eq("shop_id", shopId)
-        .order("synced_at", { ascending: false, nullsFirst: false })
-        .limit(10),
-    ]);
+      `,
+      )
+      .eq("shop_id", shopId)
+      .not("ymme_engine_id", "is", null)
+      .limit(500),
+
+    // 4. Fetch synced engine IDs
+    db
+      .from("vehicle_page_sync")
+      .select("engine_id, linked_product_count")
+      .eq("shop_id", shopId)
+      .eq("sync_status", "synced"),
+
+    // 5. Fetch app_settings
+    db
+      .from("app_settings")
+      .select("vehicle_pages_enabled")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
+  ]);
 
   // Aggregate sync stats
   const syncStats = { synced: 0, pending: 0, failed: 0 };
@@ -181,8 +250,65 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Count unique engines
   const uniqueEngineIds = availableResult.data
-    ? new Set(availableResult.data.map((r: any) => r.engine_id))
-    : new Set();
+    ? new Set(availableResult.data.map((r: any) => r.ymme_engine_id))
+    : new Set<string>();
+
+  // Build vehicle rows grouped by engine_id
+  const engineMap = new Map<string, VehicleRow>();
+  if (vehiclesResult.data) {
+    for (const row of vehiclesResult.data as any[]) {
+      const engine = row.engine;
+      if (!engine?.id) continue;
+      const eid = engine.id as string;
+
+      if (engineMap.has(eid)) {
+        // Just increment product count
+        const existing = engineMap.get(eid)!;
+        existing.productCount++;
+      } else {
+        const model = engine.model;
+        const make = model?.make;
+        engineMap.set(eid, {
+          engineId: eid,
+          makeName: make?.name ?? "Unknown",
+          modelName: model?.name ?? "Unknown",
+          generation: model?.generation ?? null,
+          engineName: engine.name ?? null,
+          engineCode: engine.code ?? null,
+          displacementCc: engine.displacement_cc ?? null,
+          powerHp: engine.power_hp ?? null,
+          fuelType: engine.fuel_type ?? null,
+          yearFrom: engine.year_from ?? null,
+          yearTo: engine.year_to ?? null,
+          bodyType: engine.body_type ?? null,
+          aspiration: engine.aspiration ?? null,
+          productCount: 1,
+        });
+      }
+    }
+  }
+
+  // Sort by make, then model, then engine name — take first 50
+  const vehicles = Array.from(engineMap.values())
+    .sort((a, b) => {
+      const makeCompare = a.makeName.localeCompare(b.makeName);
+      if (makeCompare !== 0) return makeCompare;
+      const modelCompare = a.modelName.localeCompare(b.modelName);
+      if (modelCompare !== 0) return modelCompare;
+      return (a.engineName ?? "").localeCompare(b.engineName ?? "");
+    })
+    .slice(0, 50);
+
+  // Synced engine IDs
+  const syncedEngineIds = (syncedResult.data ?? []).map(
+    (r: any) => r.engine_id as string,
+  );
+
+  // Total linked products across synced pages
+  const totalLinkedProducts = (syncedResult.data ?? []).reduce(
+    (sum: number, r: any) => sum + (r.linked_product_count ?? 0),
+    0,
+  );
 
   return {
     gated: false as const,
@@ -191,7 +317,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     allLimits: PLAN_LIMITS,
     syncStats,
     availableVehicles: uniqueEngineIds.size,
-    recentSyncs: recentSyncsResult.data ?? [],
+    vehicles,
+    syncedEngineIds,
+    vehiclePagesEnabled: settingsResult.data?.vehicle_pages_enabled ?? false,
+    totalLinkedProducts,
   };
 };
 
@@ -217,7 +346,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "push_all") {
     try {
-      // Import the pipeline dynamically to avoid build errors if it doesn't exist yet
       const { pushVehiclePages } = await import(
         "../lib/pipeline/vehicle-pages.server"
       );
@@ -251,8 +379,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "sync_status") {
-    // Simply revalidate — the loader will re-fetch sync stats
     return data({ success: true, message: "Status refreshed." });
+  }
+
+  if (intent === "toggle_enabled") {
+    const enabled = formData.get("enabled") === "true";
+    const { error } = await db
+      .from("app_settings")
+      .upsert(
+        {
+          shop_id: shopId,
+          vehicle_pages_enabled: enabled,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "shop_id" },
+      );
+
+    if (error) {
+      return data(
+        { error: `Failed to update setting: ${error.message}` },
+        { status: 500 },
+      );
+    }
+
+    return data({
+      success: true,
+      message: enabled
+        ? "Vehicle pages enabled."
+        : "Vehicle pages disabled.",
+    });
   }
 
   return data({ error: "Unknown action" }, { status: 400 });
@@ -268,6 +423,9 @@ export default function VehiclePages() {
   const fetcher = useFetcher();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [filterValue, setFilterValue] = useState("all");
 
   const isLoading = fetcher.state !== "idle";
   const fetcherData = fetcher.data as
@@ -292,7 +450,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Publish rich vehicle specification pages to your storefront"
+        subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
       >
         <Layout>
@@ -311,8 +469,53 @@ export default function VehiclePages() {
     );
   }
 
-  const { syncStats, availableVehicles, recentSyncs } = loaderData;
+  const {
+    syncStats,
+    availableVehicles,
+    vehicles,
+    syncedEngineIds,
+    totalLinkedProducts,
+  } = loaderData;
+
+  const syncedSet = useMemo(
+    () => new Set(syncedEngineIds),
+    [syncedEngineIds],
+  );
+
   const noVehiclesAvailable = availableVehicles === 0;
+
+  // Coverage percentage
+  const coveragePercent =
+    availableVehicles > 0
+      ? Math.round((syncStats.synced / availableVehicles) * 100)
+      : 0;
+
+  // Filtered vehicles
+  const filteredVehicles = useMemo(() => {
+    let result = vehicles;
+
+    // Apply search filter
+    if (searchValue.trim()) {
+      const query = searchValue.toLowerCase().trim();
+      result = result.filter(
+        (v: VehicleRow) =>
+          v.makeName.toLowerCase().includes(query) ||
+          v.modelName.toLowerCase().includes(query) ||
+          (v.engineName ?? "").toLowerCase().includes(query) ||
+          (v.engineCode ?? "").toLowerCase().includes(query) ||
+          (v.generation ?? "").toLowerCase().includes(query),
+      );
+    }
+
+    // Apply status filter
+    if (filterValue === "published") {
+      result = result.filter((v: VehicleRow) => syncedSet.has(v.engineId));
+    } else if (filterValue === "not_published") {
+      result = result.filter((v: VehicleRow) => !syncedSet.has(v.engineId));
+    }
+
+    return result;
+  }, [vehicles, searchValue, filterValue, syncedSet]);
 
   const handlePushAll = useCallback(() => {
     fetcher.submit({ intent: "push_all" }, { method: "post" });
@@ -323,16 +526,20 @@ export default function VehiclePages() {
     setDeleteModalOpen(false);
   }, [fetcher]);
 
-  const handleRefreshStatus = useCallback(() => {
+  const handleRefresh = useCallback(() => {
     fetcher.submit({ intent: "sync_status" }, { method: "post" });
   }, [fetcher]);
 
   // Empty state — no fitments mapped yet
-  if (noVehiclesAvailable && syncStats.synced === 0 && syncStats.pending === 0) {
+  if (
+    noVehiclesAvailable &&
+    syncStats.synced === 0 &&
+    syncStats.pending === 0
+  ) {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Publish rich vehicle specification pages to your storefront"
+        subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
       >
         <Layout>
@@ -345,10 +552,15 @@ export default function VehiclePages() {
                   content: "Map Fitments",
                   url: "/app/fitment/manual",
                 }}
+                secondaryAction={{
+                  content: "Learn more",
+                  url: "/app/help",
+                }}
               >
                 <p>
-                  Map fitments to your products first, then come back to publish
-                  vehicle pages to your storefront.
+                  Map vehicle fitments to your products first, then come back to
+                  publish SEO-optimized vehicle specification pages to your
+                  storefront.
                 </p>
               </EmptyState>
             </Card>
@@ -361,293 +573,507 @@ export default function VehiclePages() {
   return (
     <Page
       title="Vehicle Pages"
-      subtitle="Publish rich vehicle specification pages to your storefront"
+      subtitle="Enterprise \u00b7 SEO-optimized vehicle specification pages"
       backAction={{ url: "/app" }}
       primaryAction={{
-        content: "Push Vehicle Pages",
+        content: "Push All Vehicle Pages",
         disabled: noVehiclesAvailable || isLoading,
         loading: isLoading,
         onAction: handlePushAll,
       }}
       secondaryActions={[
         {
-          content: "Refresh Status",
-          onAction: handleRefreshStatus,
+          content: "Refresh",
+          onAction: handleRefresh,
           disabled: isLoading,
+        },
+        {
+          content: "Delete All Pages",
+          destructive: true,
+          onAction: () => setDeleteModalOpen(true),
+          disabled: syncStats.synced === 0 || isLoading,
         },
       ]}
     >
-      <Layout>
+      <BlockStack gap="500">
         {/* Action banners */}
         {showError && (
-          <Layout.Section>
-            <Banner tone="critical">
-              <p>{errorMessage}</p>
-            </Banner>
-          </Layout.Section>
+          <Banner tone="critical" onDismiss={() => {}}>
+            <p>{errorMessage}</p>
+          </Banner>
         )}
 
         {showSuccess && (
-          <Layout.Section>
-            <Banner tone="success">
-              <p>{successMessage}</p>
-            </Banner>
-          </Layout.Section>
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>{successMessage}</p>
+          </Banner>
         )}
 
-        {/* Loading spinner during operations */}
+        {/* Loading overlay */}
         {isLoading && (
-          <Layout.Section>
-            <Card>
-              <InlineStack gap="200" blockAlign="center">
-                <Spinner size="small" />
-                <Text as="p" variant="bodyMd">
+          <Card>
+            <InlineStack gap="300" blockAlign="center">
+              <Spinner size="small" />
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
                   Processing vehicle pages...
                 </Text>
-              </InlineStack>
-            </Card>
-          </Layout.Section>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  This may take a moment depending on the number of vehicles.
+                </Text>
+              </BlockStack>
+            </InlineStack>
+          </Card>
         )}
 
-        {/* Section 1: Feature Overview Banner */}
-        <Layout.Section>
-          <Banner tone="info">
-            <p>
-              Vehicle Pages creates SEO-optimized specification pages for every
-              vehicle your products fit. Each page includes engine specs,
-              performance data, dimensions, and links to compatible products.
-            </p>
-          </Banner>
-        </Layout.Section>
-
-        {/* Section 2: Stats Row */}
-        <Layout.Section>
-          <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
-            {/* Available Vehicles */}
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={sectionIconStyle}>
-                    <Icon source={ProductIcon} />
-                  </div>
-                  <Text as="h3" variant="headingSm">
-                    Available
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {`${availableVehicles}`}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Unique vehicles from fitments
-                </Text>
-              </BlockStack>
-            </Card>
-
-            {/* Published Pages */}
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={sectionIconStyle}>
-                    <Icon source={CheckCircleIcon} />
-                  </div>
-                  <Text as="h3" variant="headingSm">
-                    Published
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {`${syncStats.synced}`}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Pages live on storefront
-                </Text>
-              </BlockStack>
-            </Card>
-
-            {/* Pending */}
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={sectionIconStyle}>
-                    <Icon source={ClockIcon} />
-                  </div>
-                  <Text as="h3" variant="headingSm">
-                    Pending
-                  </Text>
-                </InlineStack>
-                <Text as="p" variant="headingXl" fontWeight="bold">
-                  {`${syncStats.pending}`}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Awaiting sync
-                </Text>
-              </BlockStack>
-            </Card>
-
-            {/* Failed */}
-            <Card>
-              <BlockStack gap="200">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={sectionIconStyle}>
-                    <Icon source={AlertCircleIcon} />
-                  </div>
-                  <Text as="h3" variant="headingSm">
-                    Failed
-                  </Text>
-                </InlineStack>
-                <Text
-                  as="p"
-                  variant="headingXl"
-                  fontWeight="bold"
-                  tone={syncStats.failed > 0 ? "critical" : undefined}
-                >
-                  {`${syncStats.failed}`}
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Sync errors
-                </Text>
-              </BlockStack>
-            </Card>
-          </InlineGrid>
-        </Layout.Section>
-
-        {/* Section 3: Recent Vehicle Pages */}
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
+        {/* ── Section 1: How It Works (Collapsible) ── */}
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <div style={sectionIconStyle}>
+                <div style={iconBadgeStyle()}>
                   <Icon source={PageIcon} />
                 </div>
                 <Text as="h2" variant="headingMd">
-                  Recent Vehicle Pages
+                  How Vehicle Pages Work
                 </Text>
               </InlineStack>
+              <Button
+                variant="plain"
+                onClick={() => setHowItWorksOpen(!howItWorksOpen)}
+              >
+                {howItWorksOpen ? "Hide" : "Show"}
+              </Button>
+            </InlineStack>
 
-              {recentSyncs.length === 0 ? (
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  No vehicle pages have been synced yet. Click "Push Vehicle
-                  Pages" to get started.
-                </Text>
-              ) : (
-                <IndexTable
-                  resourceName={{
-                    singular: "vehicle page",
-                    plural: "vehicle pages",
-                  }}
-                  itemCount={recentSyncs.length}
-                  headings={[
-                    { title: "Vehicle" },
-                    { title: "Engine Code" },
-                    { title: "Status" },
-                    { title: "Synced" },
-                    { title: "Actions" },
-                  ]}
-                  selectable={false}
-                >
-                  {recentSyncs.map((sync: any, index: number) => {
-                    const engine = sync.engine;
-                    const model = engine?.model;
-                    const make = model?.make;
-
-                    const vehicleName = [
-                      make?.name,
-                      model?.name,
-                    ]
-                      .filter(Boolean)
-                      .join(" ") || "Unknown Vehicle";
-
-                    const engineCode = engine?.engine_code || "—";
-
-                    const statusBadge = STATUS_BADGES[sync.sync_status] ?? {
-                      tone: undefined as undefined,
-                      label: sync.sync_status,
-                    };
-
-                    return (
-                      <IndexTable.Row
-                        id={sync.id}
-                        key={sync.id}
-                        position={index}
-                      >
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">
-                            {vehicleName}
-                          </Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd">
-                            {engineCode}
-                          </Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Badge tone={statusBadge.tone}>
-                            {statusBadge.label}
-                          </Badge>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          <Text as="span" variant="bodyMd">
-                            {relativeTime(sync.synced_at)}
-                          </Text>
-                        </IndexTable.Cell>
-                        <IndexTable.Cell>
-                          {sync.metaobject_handle && (
-                            <Button
-                              variant="plain"
-                              url={`https://admin.shopify.com/store/${sync.metaobject_handle}`}
-                              target="_blank"
-                              icon={ViewIcon}
-                            >
-                              View
-                            </Button>
-                          )}
-                        </IndexTable.Cell>
-                      </IndexTable.Row>
-                    );
-                  })}
-                </IndexTable>
-              )}
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-
-        {/* Section 4: Danger Zone */}
-        {syncStats.synced > 0 && (
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
+            <Collapsible
+              open={howItWorksOpen}
+              id="how-it-works-collapsible"
+              transition={{
+                duration: "var(--p-motion-duration-200)",
+                timingFunction: "var(--p-motion-ease-in-out)",
+              }}
+            >
+              <Box paddingBlockStart="300">
+                <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+                  {/* Step 1 */}
                   <div
                     style={{
-                      ...sectionIconStyle,
-                      background: "var(--p-color-bg-surface-critical)",
-                      color: "var(--p-color-icon-critical)",
+                      padding: "var(--p-space-400)",
+                      borderRadius: "var(--p-border-radius-300)",
+                      background: "var(--p-color-bg-surface-secondary)",
                     }}
+                  >
+                    <BlockStack gap="300">
+                      <InlineStack gap="200" blockAlign="center">
+                        <div style={stepNumberStyle(true)}>1</div>
+                        <Text as="h3" variant="headingSm">
+                          Map Fitments
+                        </Text>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Link your products to specific vehicles using the
+                        fitment mapping tool. Each product-vehicle link becomes a
+                        potential vehicle page.
+                      </Text>
+                      <Button
+                        variant="plain"
+                        url="/app/fitment/manual"
+                        icon={ArrowRightIcon}
+                      >
+                        Go to Fitment Mapping
+                      </Button>
+                    </BlockStack>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div
+                    style={{
+                      padding: "var(--p-space-400)",
+                      borderRadius: "var(--p-border-radius-300)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                    }}
+                  >
+                    <BlockStack gap="300">
+                      <InlineStack gap="200" blockAlign="center">
+                        <div style={stepNumberStyle(true)}>2</div>
+                        <Text as="h3" variant="headingSm">
+                          Push Vehicle Pages
+                        </Text>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Click "Push All Vehicle Pages" to create Shopify
+                        metaobjects for every unique vehicle in your fitments.
+                        Pages include full engine specs and linked products.
+                      </Text>
+                    </BlockStack>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div
+                    style={{
+                      padding: "var(--p-space-400)",
+                      borderRadius: "var(--p-border-radius-300)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                    }}
+                  >
+                    <BlockStack gap="300">
+                      <InlineStack gap="200" blockAlign="center">
+                        <div style={stepNumberStyle(true)}>3</div>
+                        <Text as="h3" variant="headingSm">
+                          SEO Pages Go Live
+                        </Text>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Auto-generated URLs appear on your storefront with rich
+                        vehicle data, helping you rank for long-tail automotive
+                        search terms.
+                      </Text>
+                    </BlockStack>
+                  </div>
+                </InlineGrid>
+              </Box>
+            </Collapsible>
+          </BlockStack>
+        </Card>
+
+        {/* ── Section 2: Stats Dashboard ── */}
+        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
+          {/* Total Vehicles Available */}
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div
+                  style={iconBadgeStyle(
+                    "var(--p-color-bg-fill-info-secondary)",
+                    "var(--p-color-icon-info)",
+                  )}
+                >
+                  <Icon source={ProductIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Total Available
+                </Text>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {`${availableVehicles}`}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Unique vehicles from fitments
+              </Text>
+            </BlockStack>
+          </Card>
+
+          {/* Published Pages */}
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div
+                  style={iconBadgeStyle(
+                    "var(--p-color-bg-fill-success-secondary)",
+                    "var(--p-color-icon-success)",
+                  )}
+                >
+                  <Icon source={CheckCircleIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Published Pages
+                </Text>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {`${syncStats.synced}`}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Live on storefront
+              </Text>
+            </BlockStack>
+          </Card>
+
+          {/* Products Linked */}
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div
+                  style={iconBadgeStyle(
+                    "var(--p-color-bg-surface-secondary)",
+                    "var(--p-color-icon-emphasis)",
+                  )}
+                >
+                  <Icon source={LinkIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Products Linked
+                </Text>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {`${totalLinkedProducts}`}
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Across all vehicle pages
+              </Text>
+            </BlockStack>
+          </Card>
+
+          {/* Sync Coverage */}
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div
+                  style={iconBadgeStyle(
+                    "var(--p-color-bg-surface-secondary)",
+                    "var(--p-color-icon-emphasis)",
+                  )}
+                >
+                  <Icon source={ChartVerticalFilledIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Sync Coverage
+                </Text>
+              </InlineStack>
+              <Text as="p" variant="headingXl" fontWeight="bold">
+                {`${syncStats.synced} / ${availableVehicles}`}
+              </Text>
+              <Box paddingBlockStart="100">
+                <ProgressBar
+                  progress={coveragePercent}
+                  size="small"
+                  tone="primary"
+                />
+              </Box>
+              <Text as="p" variant="bodySm" tone="subdued">
+                {`${coveragePercent}% coverage`}
+              </Text>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
+
+        {/* ── Section 3: Vehicle Browser ── */}
+        <Card>
+          <BlockStack gap="400">
+            <InlineStack align="space-between" blockAlign="center" wrap>
+              <InlineStack gap="200" blockAlign="center">
+                <div style={iconBadgeStyle()}>
+                  <Icon source={SearchIcon} />
+                </div>
+                <Text as="h2" variant="headingMd">
+                  Vehicle Browser
+                </Text>
+                <Badge tone="info">{`${filteredVehicles.length} vehicles`}</Badge>
+              </InlineStack>
+            </InlineStack>
+
+            {/* Filter bar */}
+            <InlineGrid columns={{ xs: 1, md: "2fr 1fr" }} gap="300">
+              <TextField
+                label="Search"
+                labelHidden
+                placeholder="Search by make, model, engine..."
+                value={searchValue}
+                onChange={setSearchValue}
+                prefix={<Icon source={SearchIcon} />}
+                clearButton
+                onClearButtonClick={() => setSearchValue("")}
+                autoComplete="off"
+              />
+              <Select
+                label="Filter"
+                labelHidden
+                options={[
+                  { label: "All Vehicles", value: "all" },
+                  { label: "Published", value: "published" },
+                  { label: "Not Published", value: "not_published" },
+                ]}
+                value={filterValue}
+                onChange={setFilterValue}
+              />
+            </InlineGrid>
+
+            <Divider />
+
+            {/* Vehicle cards grid */}
+            {filteredVehicles.length === 0 ? (
+              <Box padding="400">
+                <BlockStack gap="200" inlineAlign="center">
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    No vehicles match your search or filter criteria.
+                  </Text>
+                  <Button
+                    variant="plain"
+                    onClick={() => {
+                      setSearchValue("");
+                      setFilterValue("all");
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </BlockStack>
+              </Box>
+            ) : (
+              <InlineGrid columns={{ xs: 1, sm: 2, lg: 3 }} gap="300">
+                {filteredVehicles.map((vehicle: VehicleRow) => {
+                  const isSynced = syncedSet.has(vehicle.engineId);
+                  const heading = [
+                    vehicle.makeName,
+                    vehicle.modelName,
+                    vehicle.generation ? `(${vehicle.generation})` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+
+                  const engineLabel = vehicle.engineName
+                    ? `${vehicle.engineName}${vehicle.powerHp ? ` (${formatPower(vehicle.powerHp)})` : ""}`
+                    : vehicle.engineCode ?? "Engine";
+
+                  const displacement = formatDisplacement(
+                    vehicle.displacementCc,
+                  );
+                  const years = formatYearRange(
+                    vehicle.yearFrom,
+                    vehicle.yearTo,
+                  );
+
+                  return (
+                    <div
+                      key={vehicle.engineId}
+                      style={{
+                        borderRadius: "var(--p-border-radius-300)",
+                        border: "var(--p-border-width-025) solid var(--p-color-border)",
+                        padding: "var(--p-space-400)",
+                        background: "var(--p-color-bg-surface)",
+                        transition:
+                          "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+                      }}
+                    >
+                      <BlockStack gap="200">
+                        {/* Header row: heading + status */}
+                        <InlineStack
+                          align="space-between"
+                          blockAlign="start"
+                          wrap={false}
+                        >
+                          <BlockStack gap="050">
+                            <Text
+                              as="h3"
+                              variant="headingSm"
+                              truncate
+                            >
+                              {heading}
+                            </Text>
+                            <Text
+                              as="p"
+                              variant="bodySm"
+                              tone="subdued"
+                              truncate
+                            >
+                              {engineLabel}
+                            </Text>
+                          </BlockStack>
+                          {isSynced && (
+                            <Badge tone="success">{`Published`}</Badge>
+                          )}
+                        </InlineStack>
+
+                        {/* Spec badges row */}
+                        <InlineStack gap="100" wrap>
+                          {vehicle.engineCode && (
+                            <Badge tone="info">
+                              {`${vehicle.engineCode}`}
+                            </Badge>
+                          )}
+                          {displacement && (
+                            <Badge>{displacement}</Badge>
+                          )}
+                          {vehicle.fuelType && (
+                            <Badge>{`${vehicle.fuelType}`}</Badge>
+                          )}
+                          {vehicle.aspiration &&
+                            vehicle.aspiration !== "NA" && (
+                              <Badge>{`${vehicle.aspiration}`}</Badge>
+                            )}
+                          {vehicle.bodyType && (
+                            <Badge>{`${vehicle.bodyType}`}</Badge>
+                          )}
+                        </InlineStack>
+
+                        {/* Footer row: years + product count */}
+                        <Divider />
+                        <InlineStack
+                          align="space-between"
+                          blockAlign="center"
+                        >
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`Years: ${years}`}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""} linked`}
+                          </Text>
+                        </InlineStack>
+                      </BlockStack>
+                    </div>
+                  );
+                })}
+              </InlineGrid>
+            )}
+
+            {vehicles.length >= 50 && (
+              <Box paddingBlockStart="200">
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                  {`Showing first 50 of ${availableVehicles} vehicles. Use search to find specific vehicles.`}
+                </Text>
+              </Box>
+            )}
+          </BlockStack>
+        </Card>
+
+        {/* ── Section 4: Danger Zone ── */}
+        {syncStats.synced > 0 && (
+          <Card>
+            <div
+              style={{
+                borderLeft: `3px solid var(--p-color-border-critical)`,
+                paddingLeft: "var(--p-space-400)",
+              }}
+            >
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <div
+                    style={iconBadgeStyle(
+                      "var(--p-color-bg-fill-critical-secondary)",
+                      "var(--p-color-icon-critical)",
+                    )}
                   >
                     <Icon source={DeleteIcon} />
                   </div>
-                  <Text as="h2" variant="headingMd">
-                    Danger Zone
-                  </Text>
+                  <BlockStack gap="050">
+                    <Text as="h2" variant="headingMd">
+                      Danger Zone
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Permanently remove all vehicle pages from your storefront
+                    </Text>
+                  </BlockStack>
                 </InlineStack>
 
                 <Text as="p" variant="bodyMd" tone="subdued">
-                  Remove all published vehicle pages from your storefront. This
-                  will delete the metaobjects and unlink them from products. This
-                  action cannot be undone.
+                  This will delete all {`${syncStats.synced}`} published
+                  metaobjects and unlink them from products. This action cannot
+                  be undone.
                 </Text>
 
-                <Button
-                  tone="critical"
-                  onClick={() => setDeleteModalOpen(true)}
-                  disabled={isLoading}
-                >
-                  Delete All Vehicle Pages
-                </Button>
+                <div>
+                  <Button
+                    tone="critical"
+                    onClick={() => setDeleteModalOpen(true)}
+                    disabled={isLoading}
+                  >
+                    Delete All Vehicle Pages
+                  </Button>
+                </div>
               </BlockStack>
-            </Card>
-          </Layout.Section>
+            </div>
+          </Card>
         )}
-      </Layout>
+      </BlockStack>
 
       {/* Delete confirmation modal */}
       <Modal
@@ -668,15 +1094,15 @@ export default function VehiclePages() {
         ]}
       >
         <Modal.Section>
-          <BlockStack gap="200">
+          <BlockStack gap="300">
             <Text as="p" variant="bodyMd">
               This will permanently delete all {`${syncStats.synced}`} published
-              vehicle pages from your storefront. The metaobjects will be removed
-              and product links will be cleared.
+              vehicle pages from your storefront. The metaobjects will be
+              removed and product links will be cleared.
             </Text>
-            <Text as="p" variant="bodyMd" tone="critical" fontWeight="semibold">
-              This action cannot be undone.
-            </Text>
+            <Banner tone="critical">
+              <p>This action cannot be undone.</p>
+            </Banner>
           </BlockStack>
         </Modal.Section>
       </Modal>
