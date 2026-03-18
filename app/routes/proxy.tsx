@@ -70,6 +70,104 @@ function logSearchEvent(
     });
 }
 
+// ---------- Conversion event logging (fire-and-forget) ----------
+const VALID_CONVERSION_EVENTS = ["product_view", "add_to_cart", "purchase"] as const;
+type ConversionEventType = typeof VALID_CONVERSION_EVENTS[number];
+
+function logConversionEvent(
+  shop: string,
+  eventType: ConversionEventType,
+  data: {
+    productId?: string;
+    shopifyProductId?: string;
+    vehicleMake?: string;
+    vehicleModel?: string;
+    vehicleYear?: string;
+    source?: string;
+    sessionId?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  db.from("conversion_events")
+    .insert({
+      shop_id: shop,
+      event_type: eventType,
+      product_id: data.productId ?? null,
+      shopify_product_id: data.shopifyProductId ?? null,
+      vehicle_make: data.vehicleMake ?? null,
+      vehicle_model: data.vehicleModel ?? null,
+      vehicle_year: data.vehicleYear ?? null,
+      source: data.source ?? "widget",
+      session_id: data.sessionId ?? null,
+      metadata: data.metadata ?? null,
+      created_at: new Date().toISOString(),
+    })
+    .then(() => {})
+    .catch(() => {
+      // Silently ignore — table may not exist yet
+    });
+}
+
+async function handleTrack(params: URLSearchParams, body: string | null) {
+  const shop = params.get("shop") ?? "";
+
+  // Parse tracking data from POST body
+  let events: Array<{
+    event: string;
+    product_id?: string;
+    shopify_product_id?: string;
+    vehicle_make?: string;
+    vehicle_model?: string;
+    vehicle_year?: string;
+    source?: string;
+    session_id?: string;
+    quantity?: number;
+    order_total?: number;
+  }> = [];
+
+  if (body) {
+    try {
+      const parsed = JSON.parse(body);
+      // Accept single event or array of events
+      events = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return json({ error: "Invalid JSON body" }, 400);
+    }
+  }
+
+  if (events.length === 0) {
+    return json({ error: "No events provided" }, 400);
+  }
+
+  // Cap batch size at 50 events per request
+  if (events.length > 50) {
+    events = events.slice(0, 50);
+  }
+
+  let tracked = 0;
+  for (const evt of events) {
+    if (!evt.event || !VALID_CONVERSION_EVENTS.includes(evt.event as ConversionEventType)) {
+      continue;
+    }
+
+    logConversionEvent(shop, evt.event as ConversionEventType, {
+      productId: evt.product_id,
+      shopifyProductId: evt.shopify_product_id,
+      vehicleMake: evt.vehicle_make,
+      vehicleModel: evt.vehicle_model,
+      vehicleYear: evt.vehicle_year,
+      source: evt.source,
+      sessionId: evt.session_id,
+      metadata: evt.quantity || evt.order_total
+        ? { quantity: evt.quantity, order_total: evt.order_total }
+        : undefined,
+    });
+    tracked++;
+  }
+
+  return json({ tracked, message: `${tracked} event(s) queued` });
+}
+
 // ---------- Sub-route handlers ----------
 
 async function handleMakes(shop: string) {
@@ -585,7 +683,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleVinDecode(params, null);
     default:
       return json(
-        { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search. POST: plate-lookup, vin-decode` },
+        { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search. POST: plate-lookup, vin-decode, track` },
         400,
       );
   }
@@ -621,5 +719,9 @@ export async function action({ request }: ActionFunctionArgs) {
     return handleVinDecode(params, body);
   }
 
-  return json({ error: "POST only supported for plate-lookup and vin-decode" }, 405);
+  if (path === "track") {
+    return handleTrack(params, body);
+  }
+
+  return json({ error: "POST only supported for plate-lookup, vin-decode, and track" }, 405);
 }

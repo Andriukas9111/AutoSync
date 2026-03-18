@@ -208,6 +208,11 @@
         engineName: state.engineName || null,
       });
 
+      // Mark session as coming from YMME widget for source attribution
+      try {
+        sessionStorage.setItem('autosync_search_source', 'widget');
+      } catch (e) { /* ignore */ }
+
       var searchQuery = encodeURIComponent(state.makeName + ' ' + state.modelName);
       window.location.href = '/search?q=' + searchQuery + '&type=product';
     });
@@ -651,6 +656,140 @@
     });
   }
 
+  // --------------- Conversion Tracking ---------------
+
+  var TRACKING_SESSION_KEY = 'autosync_session_id';
+
+  function getSessionId() {
+    try {
+      var sid = sessionStorage.getItem(TRACKING_SESSION_KEY);
+      if (!sid) {
+        sid = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : 'ses_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+        sessionStorage.setItem(TRACKING_SESSION_KEY, sid);
+      }
+      return sid;
+    } catch (e) { return null; }
+  }
+
+  function trackEvent(proxyUrl, eventType, data) {
+    if (!proxyUrl) return;
+    var vehicle = getStoredVehicle();
+    var payload = {
+      event: eventType,
+      product_id: data.productId || null,
+      shopify_product_id: data.shopifyProductId || null,
+      vehicle_make: vehicle ? vehicle.makeName : null,
+      vehicle_model: vehicle ? vehicle.modelName : null,
+      vehicle_year: vehicle ? vehicle.year : null,
+      source: data.source || 'widget',
+      session_id: getSessionId(),
+    };
+
+    // Fire-and-forget — don't block user interaction
+    try {
+      var url = proxyUrl + (proxyUrl.indexOf('?') !== -1 ? '&' : '?') + 'path=track';
+      navigator.sendBeacon
+        ? navigator.sendBeacon(url, JSON.stringify(payload))
+        : fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          }).catch(function () {});
+    } catch (e) { /* silently ignore */ }
+  }
+
+  function initConversionTracking() {
+    // Find proxy URL from any widget on the page
+    var widgetEl = document.querySelector('[data-proxy-url]');
+    var proxyUrl = widgetEl ? widgetEl.dataset.proxyUrl : null;
+    if (!proxyUrl) return;
+
+    // --- Track product views ---
+    var ogType = document.querySelector('meta[property="og:type"]');
+    if (ogType && ogType.content === 'og:product' || ogType && ogType.content === 'product') {
+      var productIdMeta = document.querySelector('meta[name="product-id"]') ||
+                          document.querySelector('[data-product-id]');
+      var shopifyIdMeta = document.querySelector('meta[name="shopify-product-id"]') ||
+                          document.querySelector('[data-shopify-product-id]');
+      // Determine source — did user arrive via YMME widget search?
+      var viewSource = 'direct';
+      try {
+        var searchSource = sessionStorage.getItem('autosync_search_source');
+        if (searchSource) {
+          viewSource = searchSource;
+          sessionStorage.removeItem('autosync_search_source');
+        } else if (document.referrer && document.referrer.indexOf('/search') !== -1) {
+          viewSource = 'search';
+        }
+      } catch (e) { /* ignore */ }
+
+      trackEvent(proxyUrl, 'product_view', {
+        productId: productIdMeta ? (productIdMeta.content || productIdMeta.dataset.productId) : null,
+        shopifyProductId: shopifyIdMeta ? (shopifyIdMeta.content || shopifyIdMeta.dataset.shopifyProductId) : null,
+        source: viewSource,
+      });
+    }
+
+    // --- Track add-to-cart via fetch interception ---
+    var originalFetch = window.fetch;
+    if (originalFetch) {
+      window.fetch = function () {
+        var args = arguments;
+        var url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
+        var isCartAdd = url.indexOf('/cart/add') !== -1;
+
+        var result = originalFetch.apply(this, args);
+
+        if (isCartAdd) {
+          result.then(function (response) {
+            if (response.ok) {
+              trackEvent(proxyUrl, 'add_to_cart', { source: 'direct' });
+            }
+          }).catch(function () {});
+        }
+
+        return result;
+      };
+    }
+
+    // --- Track add-to-cart via XMLHttpRequest (fallback for older themes) ---
+    var originalXhrOpen = XMLHttpRequest.prototype.open;
+    var originalXhrSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function (method, url) {
+      this._autosyncUrl = url;
+      return originalXhrOpen.apply(this, arguments);
+    };
+
+    XMLHttpRequest.prototype.send = function () {
+      var self = this;
+      if (self._autosyncUrl && self._autosyncUrl.indexOf('/cart/add') !== -1) {
+        self.addEventListener('load', function () {
+          if (self.status >= 200 && self.status < 300) {
+            trackEvent(proxyUrl, 'add_to_cart', { source: 'direct' });
+          }
+        });
+      }
+      return originalXhrSend.apply(this, arguments);
+    };
+
+    // --- Track form-based add-to-cart (non-AJAX themes) ---
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      if (form && form.action && form.action.indexOf('/cart/add') !== -1) {
+        trackEvent(proxyUrl, 'add_to_cart', { source: 'direct' });
+      }
+    });
+
+    // Expose globally for merchants who want custom tracking
+    window.autosyncTrack = function (eventType, data) {
+      trackEvent(proxyUrl, eventType, data || {});
+    };
+  }
+
   // --------------- Init on DOM ready ---------------
 
   function init() {
@@ -661,6 +800,7 @@
     document.querySelectorAll('[data-autosync-plate-lookup]').forEach(initPlateLookup);
     document.querySelectorAll('[data-autosync-wheel-finder]').forEach(initWheelFinder);
     document.querySelectorAll('[data-autosync-vin-decode]').forEach(initVinDecode);
+    initConversionTracking();
   }
 
   if (document.readyState === 'loading') {

@@ -34,6 +34,9 @@ import {
   DatabaseIcon,
   SearchIcon,
   AlertTriangleIcon,
+  CartIcon,
+  ViewIcon,
+  OrderIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -92,6 +95,32 @@ interface PopularSearch {
   count: number;
 }
 
+interface ConversionFunnel {
+  searches: number;
+  productViews: number;
+  addToCarts: number;
+  purchases: number;
+  searchToViewRate: number;
+  viewToCartRate: number;
+  cartToPurchaseRate: number;
+  overallRate: number;
+}
+
+interface ConversionBySource {
+  source: string;
+  views: number;
+  carts: number;
+  purchases: number;
+}
+
+interface ConversionByVehicle {
+  make: string;
+  model: string;
+  views: number;
+  carts: number;
+  purchases: number;
+}
+
 interface AnalyticsData {
   plan: PlanTier;
   analyticsLevel: string;
@@ -105,6 +134,9 @@ interface AnalyticsData {
   totalMakes: number;
   totalModels: number;
   popularSearches: PopularSearch[];
+  conversionFunnel: ConversionFunnel;
+  conversionBySource: ConversionBySource[];
+  conversionByVehicle: ConversionByVehicle[];
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +167,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       totalMakes: 0,
       totalModels: 0,
       popularSearches: [],
+      conversionFunnel: { searches: 0, productViews: 0, addToCarts: 0, purchases: 0, searchToViewRate: 0, viewToCartRate: 0, cartToPurchaseRate: 0, overallRate: 0 },
+      conversionBySource: [],
+      conversionByVehicle: [],
     } satisfies AnalyticsData;
   }
 
@@ -150,6 +185,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     makesRes,
     modelsRes,
     searchEventsRes,
+    conversionEventsRes,
   ] = await Promise.all([
     // Total products for this tenant
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
@@ -195,6 +231,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       .not("search_make", "is", null),
+
+    // Conversion events (last 30 days)
+    db.from("conversion_events")
+      .select("event_type, source, vehicle_make, vehicle_model")
+      .eq("shop_id", shopId)
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
   ]);
 
   // ── Compute fitment coverage ───────────────────────────────
@@ -325,6 +367,68 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .sort((a, b) => b.count - a.count)
     .slice(0, 15);
 
+  // ── Conversion funnel (last 30 days) ────────────────────
+  const conversionEvents = (conversionEventsRes.data ?? []) as Array<{
+    event_type: string;
+    source: string;
+    vehicle_make: string | null;
+    vehicle_model: string | null;
+  }>;
+
+  const searchCount = (searchEventsRes.data ?? []).length;
+  let viewCount = 0;
+  let cartCount = 0;
+  let purchaseCount = 0;
+
+  const sourceCounts: Record<string, { views: number; carts: number; purchases: number }> = {};
+  const vehicleCounts: Record<string, { views: number; carts: number; purchases: number }> = {};
+
+  for (const evt of conversionEvents) {
+    if (evt.event_type === "product_view") viewCount++;
+    else if (evt.event_type === "add_to_cart") cartCount++;
+    else if (evt.event_type === "purchase") purchaseCount++;
+
+    // Source breakdown
+    const src = evt.source || "direct";
+    if (!sourceCounts[src]) sourceCounts[src] = { views: 0, carts: 0, purchases: 0 };
+    if (evt.event_type === "product_view") sourceCounts[src].views++;
+    else if (evt.event_type === "add_to_cart") sourceCounts[src].carts++;
+    else if (evt.event_type === "purchase") sourceCounts[src].purchases++;
+
+    // Vehicle breakdown (only if vehicle context exists)
+    if (evt.vehicle_make) {
+      const vKey = `${evt.vehicle_make}|||${evt.vehicle_model || "(any)"}`;
+      if (!vehicleCounts[vKey]) vehicleCounts[vKey] = { views: 0, carts: 0, purchases: 0 };
+      if (evt.event_type === "product_view") vehicleCounts[vKey].views++;
+      else if (evt.event_type === "add_to_cart") vehicleCounts[vKey].carts++;
+      else if (evt.event_type === "purchase") vehicleCounts[vKey].purchases++;
+    }
+  }
+
+  const conversionFunnel: ConversionFunnel = {
+    searches: searchCount,
+    productViews: viewCount,
+    addToCarts: cartCount,
+    purchases: purchaseCount,
+    searchToViewRate: searchCount > 0 ? Math.round((viewCount / searchCount) * 1000) / 10 : 0,
+    viewToCartRate: viewCount > 0 ? Math.round((cartCount / viewCount) * 1000) / 10 : 0,
+    cartToPurchaseRate: cartCount > 0 ? Math.round((purchaseCount / cartCount) * 1000) / 10 : 0,
+    overallRate: searchCount > 0 ? Math.round((purchaseCount / searchCount) * 1000) / 10 : 0,
+  };
+
+  const conversionBySource: ConversionBySource[] = Object.entries(sourceCounts)
+    .map(([source, counts]) => ({ source, ...counts }))
+    .sort((a, b) => (b.views + b.carts + b.purchases) - (a.views + a.carts + a.purchases))
+    .slice(0, 10);
+
+  const conversionByVehicle: ConversionByVehicle[] = Object.entries(vehicleCounts)
+    .map(([key, counts]) => {
+      const [make, model] = key.split("|||");
+      return { make, model, ...counts };
+    })
+    .sort((a, b) => (b.views + b.carts + b.purchases) - (a.views + a.carts + a.purchases))
+    .slice(0, 15);
+
   return {
     plan,
     analyticsLevel,
@@ -338,6 +442,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalMakes,
     totalModels: modelsRes.count ?? 0,
     popularSearches,
+    conversionFunnel,
+    conversionBySource,
+    conversionByVehicle,
   } satisfies AnalyticsData;
 };
 
@@ -369,6 +476,9 @@ export default function AnalyticsPage() {
     totalMakes,
     totalModels,
     popularSearches,
+    conversionFunnel,
+    conversionBySource,
+    conversionByVehicle,
   } = useLoaderData<typeof loader>();
 
   const [showExport, setShowExport] = useState(false);
@@ -818,6 +928,213 @@ export default function AnalyticsPage() {
                       s.make,
                       s.model,
                       s.count.toLocaleString(),
+                    ])}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
+          {/* ── Conversion Funnel ─────────────────────────── */}
+          {!isBasic && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={CartIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Conversion Funnel (Last 30 Days)
+                    </Text>
+                  </InlineStack>
+
+                  {conversionFunnel.searches === 0 && conversionFunnel.productViews === 0 ? (
+                    <Banner tone="info">
+                      <p>
+                        No conversion data yet. As customers use your storefront YMME widget,
+                        product views, add-to-cart, and purchase events will appear here
+                        automatically.
+                      </p>
+                    </Banner>
+                  ) : (
+                    <BlockStack gap="400">
+                      {/* Funnel stats row */}
+                      <InlineGrid columns={{ xs: 2, sm: 4 }} gap="400">
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="center">
+                            <div style={{
+                              width: "20px", height: "20px",
+                              borderRadius: "var(--p-border-radius-100)",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "var(--p-color-icon-emphasis)",
+                            }}>
+                              <Icon source={SearchIcon} />
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">Searches</Text>
+                          </InlineStack>
+                          <Text as="p" variant="headingLg">{conversionFunnel.searches.toLocaleString()}</Text>
+                        </BlockStack>
+
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="center">
+                            <div style={{
+                              width: "20px", height: "20px",
+                              borderRadius: "var(--p-border-radius-100)",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "var(--p-color-icon-emphasis)",
+                            }}>
+                              <Icon source={ViewIcon} />
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">Product Views</Text>
+                          </InlineStack>
+                          <Text as="p" variant="headingLg">{conversionFunnel.productViews.toLocaleString()}</Text>
+                          {conversionFunnel.searchToViewRate > 0 && (
+                            <Badge tone="info">{conversionFunnel.searchToViewRate}% from search</Badge>
+                          )}
+                        </BlockStack>
+
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="center">
+                            <div style={{
+                              width: "20px", height: "20px",
+                              borderRadius: "var(--p-border-radius-100)",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "var(--p-color-icon-emphasis)",
+                            }}>
+                              <Icon source={CartIcon} />
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">Add to Cart</Text>
+                          </InlineStack>
+                          <Text as="p" variant="headingLg">{conversionFunnel.addToCarts.toLocaleString()}</Text>
+                          {conversionFunnel.viewToCartRate > 0 && (
+                            <Badge tone="success">{conversionFunnel.viewToCartRate}% of views</Badge>
+                          )}
+                        </BlockStack>
+
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="center">
+                            <div style={{
+                              width: "20px", height: "20px",
+                              borderRadius: "var(--p-border-radius-100)",
+                              background: "var(--p-color-bg-surface-secondary)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              color: "var(--p-color-icon-emphasis)",
+                            }}>
+                              <Icon source={OrderIcon} />
+                            </div>
+                            <Text as="p" variant="bodySm" tone="subdued">Purchases</Text>
+                          </InlineStack>
+                          <Text as="p" variant="headingLg">{conversionFunnel.purchases.toLocaleString()}</Text>
+                          {conversionFunnel.overallRate > 0 && (
+                            <Badge tone="success">{conversionFunnel.overallRate}% overall</Badge>
+                          )}
+                        </BlockStack>
+                      </InlineGrid>
+
+                      {/* Funnel progress bars */}
+                      <BlockStack gap="200">
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">Search → View</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.searchToViewRate}%</Text>
+                        </InlineStack>
+                        <ProgressBar progress={Math.min(conversionFunnel.searchToViewRate, 100)} tone="primary" size="small" />
+
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">View → Cart</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.viewToCartRate}%</Text>
+                        </InlineStack>
+                        <ProgressBar progress={Math.min(conversionFunnel.viewToCartRate, 100)} tone="primary" size="small" />
+
+                        <InlineStack align="space-between">
+                          <Text as="p" variant="bodySm" tone="subdued">Cart → Purchase</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.cartToPurchaseRate}%</Text>
+                        </InlineStack>
+                        <ProgressBar progress={Math.min(conversionFunnel.cartToPurchaseRate, 100)} tone="primary" size="small" />
+                      </BlockStack>
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
+          {/* ── Conversions by Source ──────────────────────── */}
+          {!isBasic && conversionBySource.length > 0 && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                    }}>
+                      <Icon source={TargetIcon} />
+                    </div>
+                    <Text as="h2" variant="headingMd">
+                      Conversions by Source
+                    </Text>
+                  </InlineStack>
+                  <DataTable
+                    columnContentTypes={["text", "numeric", "numeric", "numeric"]}
+                    headings={["Source", "Views", "Add to Cart", "Purchases"]}
+                    rows={conversionBySource.map((s) => [
+                      s.source.replace(/_/g, " "),
+                      s.views.toLocaleString(),
+                      s.carts.toLocaleString(),
+                      s.purchases.toLocaleString(),
+                    ])}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
+          {/* ── Conversions by Vehicle ─────────────────────── */}
+          {!isBasic && conversionByVehicle.length > 0 && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={DatabaseIcon} />
+                      </div>
+                      <Text as="h2" variant="headingMd">
+                        Conversions by Vehicle Type (Top 15)
+                      </Text>
+                    </InlineStack>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      Last 30 days
+                    </Text>
+                  </InlineStack>
+                  <DataTable
+                    columnContentTypes={["text", "text", "numeric", "numeric", "numeric"]}
+                    headings={["Make", "Model", "Views", "Carts", "Purchases"]}
+                    rows={conversionByVehicle.map((v) => [
+                      v.make,
+                      v.model,
+                      v.views.toLocaleString(),
+                      v.carts.toLocaleString(),
+                      v.purchases.toLocaleString(),
                     ])}
                   />
                 </BlockStack>
