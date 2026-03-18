@@ -51,6 +51,7 @@ let totalUpdated = 0;
 let totalSkipped = 0;
 let totalErrors = 0;
 let totalSpecsUpserted = 0;
+let totalImagesFound = 0;
 const startTime = Date.now();
 
 // ── Label to Field Mapping (mirrors autodata.server.ts LABEL_MAP) ────────
@@ -503,6 +504,56 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ── Image Extractor ──────────────────────────────────────────────────────────
+
+/**
+ * Extracts vehicle images from an auto-data.net engine detail page.
+ * Images are stored in JavaScript arrays: bigs[] (full-size) and smalls[] (thumbnails).
+ * Also looks for <img> tags with /images/ src paths as fallback.
+ *
+ * Returns { heroImageUrl, galleryImages } where galleryImages is an array of
+ * full-size image URLs (excludes the hero to avoid duplication).
+ */
+function extractImages(html) {
+  const IMAGE_BASE = "https://www.auto-data.net/images/";
+  const allFullUrls = [];
+
+  // Strategy 1: Parse bigs[] JavaScript array (most reliable, full-size images)
+  const bigsPattern = /bigs\[\d+\]\s*=\s*"([^"]+)"/g;
+  let bigsMatch;
+  while ((bigsMatch = bigsPattern.exec(html)) !== null) {
+    const relPath = bigsMatch[1].trim();
+    if (relPath) {
+      allFullUrls.push(IMAGE_BASE + relPath);
+    }
+  }
+
+  // Strategy 2: Fallback — parse <img> tags with /images/ src (if no JS arrays found)
+  if (allFullUrls.length === 0) {
+    const imgPattern = /<img[^>]+src="(\/images\/[^"]+)"/gi;
+    let imgMatch;
+    while ((imgMatch = imgPattern.exec(html)) !== null) {
+      const src = imgMatch[1].trim();
+      // Skip thumbnails — we want full-size only
+      if (src.includes("_thumb.")) continue;
+      const fullUrl = "https://www.auto-data.net" + src;
+      if (!allFullUrls.includes(fullUrl)) {
+        allFullUrls.push(fullUrl);
+      }
+    }
+  }
+
+  if (allFullUrls.length === 0) {
+    return { heroImageUrl: null, galleryImages: [] };
+  }
+
+  // First image is the hero; rest are gallery
+  const heroImageUrl = allFullUrls[0];
+  const galleryImages = allFullUrls.slice(1);
+
+  return { heroImageUrl, galleryImages };
+}
+
 // ── Spec Page Parser ─────────────────────────────────────────────────────────
 
 /**
@@ -651,7 +702,7 @@ async function updateEngine(engineId, specs) {
 /**
  * Upsert full specs into ymme_vehicle_specs.
  */
-async function upsertVehicleSpecs(engineId, specs, sourceUrl) {
+async function upsertVehicleSpecs(engineId, specs, sourceUrl, images) {
   const row = {
     engine_id: engineId,
     body_type: specs.bodyType ?? null,
@@ -756,6 +807,9 @@ async function upsertVehicleSpecs(engineId, specs, sourceUrl) {
     tyre_size: specs.tyreSize ?? null,
     wheel_rims: specs.wheelRims ?? null,
     raw_specs: specs.rawSpecs ?? {},
+    hero_image_url: images?.heroImageUrl ?? null,
+    gallery_images: images?.galleryImages?.length ? images.galleryImages : null,
+    image_scraped_at: images?.heroImageUrl ? new Date().toISOString() : null,
     source: "auto-data.net",
     source_url: sourceUrl,
     scraped_at: new Date().toISOString(),
@@ -812,6 +866,7 @@ async function processEngine(engine) {
   try {
     const html = await fetchPage(url);
     const specs = parseSpecPage(html);
+    const images = extractImages(html);
 
     // Check if we got any useful data
     const hasData =
@@ -829,7 +884,8 @@ async function processEngine(engine) {
         ": cc=" + specs.displacementCc +
         ", cyl=" + specs.cylinders +
         ", asp=" + specs.aspiration +
-        ", fuel=" + specs.fuelTypeDetail
+        ", fuel=" + specs.fuelTypeDetail +
+        ", images=" + (images.heroImageUrl ? (1 + images.galleryImages.length) : 0)
       );
       totalUpdated++;
       return;
@@ -838,8 +894,10 @@ async function processEngine(engine) {
     // Update ymme_engines
     const engineUpdated = await updateEngine(engine.id, specs);
 
-    // Upsert ymme_vehicle_specs (full 90+ field row)
-    const specsOk = await upsertVehicleSpecs(engine.id, specs, url);
+    // Upsert ymme_vehicle_specs (full 90+ field row + images)
+    const specsOk = await upsertVehicleSpecs(engine.id, specs, url, images);
+
+    if (images.heroImageUrl) totalImagesFound++;
 
     if (engineUpdated) totalUpdated++;
     else totalSkipped++;
@@ -930,7 +988,8 @@ async function main() {
         console.log(
           "Processed " + processed + "/" + effectiveTotal + " engines, " +
           totalUpdated + " updated, " + totalErrors + " errors, " +
-          totalSpecsUpserted + " specs upserted | " +
+          totalSpecsUpserted + " specs upserted, " +
+          totalImagesFound + " images | " +
           "Elapsed: " + elapsed + " | ETA: " + eta
         );
       }
@@ -946,6 +1005,7 @@ async function main() {
   console.log("Total processed: " + processed);
   console.log("Engines updated: " + totalUpdated);
   console.log("Specs upserted:  " + totalSpecsUpserted);
+  console.log("Images found:    " + totalImagesFound);
   console.log("Skipped (no data): " + totalSkipped);
   console.log("Errors: " + totalErrors);
   console.log("Duration: " + elapsed);

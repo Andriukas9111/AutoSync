@@ -1,7 +1,7 @@
 import { type ActionFunctionArgs, data } from "react-router";
 import { authenticate } from "../shopify.server";
 import { assertFeature, BillingGateError } from "../lib/billing.server";
-import { pushVehiclePages, deleteVehiclePages, getVehiclePageStats } from "../lib/pipeline/vehicle-pages.server";
+import { pushVehiclePages, deleteVehiclePages, getVehiclePageStats, pushThemeTemplate } from "../lib/pipeline/vehicle-pages.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -46,6 +46,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         const stats = await getVehiclePageStats(shopId);
         return data({ success: true, stats });
+      } catch (e) {
+        return data({ error: (e as Error).message }, { status: 500 });
+      }
+    }
+
+    case "push_template": {
+      try {
+        const result = await pushThemeTemplate(admin, shopId);
+        if (result.success) {
+          return data({ success: true, message: `Theme template pushed to theme ${result.themeId}` });
+        }
+        return data({ error: result.error ?? "Failed to push template" }, { status: 500 });
       } catch (e) {
         return data({ error: (e as Error).message }, { status: 500 });
       }

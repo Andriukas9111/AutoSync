@@ -1,0 +1,9 @@
+{
+  "sections": {
+    "main": {
+      "type": "autosync-vehicle-spec",
+      "settings": {}
+    }
+  },
+  "order": ["main"]
+}

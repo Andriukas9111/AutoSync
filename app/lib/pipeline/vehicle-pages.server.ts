@@ -377,7 +377,7 @@ export async function ensureMetaobjectDefinition(
     checkJson?.data?.metaobjectDefinitionByType?.id;
 
   if (existingId) {
-    // Ensure publishable + renderable capabilities are enabled
+    // Ensure publishable + renderable + onlineStore capabilities are enabled
     try {
       await admin.graphql(`mutation($id: ID!, $definition: MetaobjectDefinitionUpdateInput!) {
         metaobjectDefinitionUpdate(id: $id, definition: $definition) {
@@ -388,9 +388,18 @@ export async function ensureMetaobjectDefinition(
         variables: {
           id: existingId,
           definition: {
+            access: {
+              admin: "MERCHANT_READ_WRITE",
+              storefront: "PUBLIC_READ",
+            },
             capabilities: {
               publishable: { enabled: true },
-              renderable: { enabled: true },
+              renderable: {
+                enabled: true,
+                metaTitleKey: "variant",
+                metaDescriptionKey: "overview",
+              },
+              onlineStore: { enabled: true },
             },
           },
         },
@@ -433,6 +442,7 @@ export async function ensureMetaobjectDefinition(
           { name: "Body Type", key: "body_type", type: "single_line_text_field" },
           { name: "Drive Type", key: "drive_type", type: "single_line_text_field" },
           { name: "Transmission", key: "transmission", type: "single_line_text_field" },
+          { name: "Hero Image", key: "hero_image_url", type: "single_line_text_field" },
           { name: "Overview", key: "overview", type: "multi_line_text_field" },
           { name: "Full Specs", key: "full_specs", type: "json" },
           { name: "Linked Products", key: "linked_products", type: "json" },
@@ -444,7 +454,12 @@ export async function ensureMetaobjectDefinition(
         },
         capabilities: {
           publishable: { enabled: true },
-          renderable: { enabled: true },
+          renderable: {
+            enabled: true,
+            metaTitleKey: "variant",
+            metaDescriptionKey: "overview",
+          },
+          onlineStore: { enabled: true },
         },
       },
     },
@@ -782,6 +797,7 @@ export async function pushVehiclePages(
       { key: "body_type", value: vehicle.bodyType ?? "" },
       { key: "drive_type", value: vehicle.driveType ?? "" },
       { key: "transmission", value: vehicle.transmission ?? "" },
+      { key: "hero_image_url", value: vehicle.specs?.hero_image_url ?? "" },
       { key: "overview", value: overview },
       { key: "full_specs", value: JSON.stringify(fullSpecs) },
       {
@@ -1021,4 +1037,282 @@ export async function getVehiclePageStats(
     failed,
     linkedProducts,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 6. Push Theme Template for Metaobject Pages
+// ---------------------------------------------------------------------------
+
+/**
+ * Pushes a Liquid template to the merchant's active theme so that
+ * vehicle spec metaobject pages render beautifully on the storefront.
+ * Uses Shopify REST Admin API to write theme assets.
+ */
+export async function pushThemeTemplate(
+  admin: any,
+  shopId: string,
+): Promise<{ success: boolean; themeId?: string; error?: string }> {
+  try {
+    // 1. Get the active/published theme
+    const themesResponse = await admin.rest.get({ path: "themes" });
+    const themes = themesResponse?.body?.themes ?? [];
+    const activeTheme = themes.find((t: any) => t.role === "main");
+
+    if (!activeTheme) {
+      return { success: false, error: "No active theme found" };
+    }
+
+    const themeId = activeTheme.id;
+
+    // 2. Build the JSON template that references our section
+    const templateJson = JSON.stringify({
+      sections: {
+        main: {
+          type: "autosync-vehicle-spec-page",
+          settings: {},
+        },
+      },
+      order: ["main"],
+    }, null, 2);
+
+    // 3. Push the JSON template to the theme
+    // The template key uses the app-prefixed metaobject type
+    const templateKey = "templates/metaobject/app--334692253697--vehicle_spec.json";
+
+    await admin.rest.put({
+      path: `themes/${themeId}/assets`,
+      data: {
+        asset: {
+          key: templateKey,
+          value: templateJson,
+        },
+      },
+    });
+
+    // 4. Push the section Liquid file
+    // Read the section template from our extension
+    const sectionLiquid = getVehicleSpecSectionLiquid();
+
+    await admin.rest.put({
+      path: `themes/${themeId}/assets`,
+      data: {
+        asset: {
+          key: "sections/autosync-vehicle-spec-page.liquid",
+          value: sectionLiquid,
+        },
+      },
+    });
+
+    return { success: true, themeId: String(themeId) };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Returns the Liquid section template for rendering vehicle spec pages.
+ * This is embedded in the code to avoid file-system reads at runtime.
+ */
+function getVehicleSpecSectionLiquid(): string {
+  return `{%- comment -%}AutoSync Vehicle Specification Page — Enterprise Feature{%- endcomment -%}
+{%- assign v = metaobject -%}
+{%- assign specs_json = v.full_specs.value | default: '{}' -%}
+{%- assign specs = specs_json | parse_json -%}
+
+<style>
+  .avsp { --avsp-primary: #1a1a2e; --avsp-accent: #0066ff; --avsp-bg: #f8f9fa; --avsp-border: #e5e7eb; --avsp-text: #1f2937; --avsp-muted: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--avsp-text); }
+  .avsp-hero { background: linear-gradient(135deg, var(--avsp-primary) 0%, #16213e 100%); color: #fff; padding: 3rem 2rem; }
+  .avsp-hero__inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 2rem; align-items: center; flex-wrap: wrap; }
+  .avsp-hero__image { flex: 0 0 400px; max-width: 100%; }
+  .avsp-hero__image img { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .avsp-hero__content { flex: 1; min-width: 280px; }
+  .avsp-hero__badge { display: inline-block; background: var(--avsp-accent); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+  .avsp-hero__make { font-size: 1rem; opacity: 0.8; margin: 0 0 0.25rem; }
+  .avsp-hero__title { font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; line-height: 1.2; }
+  .avsp-hero__gen { font-size: 1rem; opacity: 0.7; margin: 0 0 1rem; }
+  .avsp-hero__year { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 8px; font-size: 0.9rem; }
+  .avsp-quickspecs { background: #fff; border-bottom: 1px solid var(--avsp-border); padding: 1.25rem 2rem; }
+  .avsp-quickspecs__inner { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 0; }
+  .avsp-quickspecs__item { flex: 1; min-width: 120px; padding: 0.75rem 1rem; text-align: center; border-right: 1px solid var(--avsp-border); }
+  .avsp-quickspecs__item:last-child { border-right: none; }
+  .avsp-quickspecs__label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--avsp-muted); margin-bottom: 0.25rem; }
+  .avsp-quickspecs__value { font-size: 0.95rem; font-weight: 600; color: var(--avsp-text); }
+  .avsp-content { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+  .avsp-overview { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 2rem; line-height: 1.7; color: var(--avsp-muted); font-size: 0.95rem; }
+  .avsp-section { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden; }
+  .avsp-section__header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem; background: var(--avsp-bg); border-bottom: 1px solid var(--avsp-border); cursor: pointer; user-select: none; }
+  .avsp-section__header h3 { margin: 0; font-size: 1rem; font-weight: 600; flex: 1; }
+  .avsp-section__header .avsp-chevron { transition: transform 0.2s; font-size: 0.8rem; color: var(--avsp-muted); }
+  .avsp-section__header[aria-expanded="false"] .avsp-chevron { transform: rotate(-90deg); }
+  .avsp-section__body { padding: 0; }
+  .avsp-spec-table { width: 100%; border-collapse: collapse; }
+  .avsp-spec-table tr { border-bottom: 1px solid var(--avsp-border); }
+  .avsp-spec-table tr:last-child { border-bottom: none; }
+  .avsp-spec-table tr:nth-child(even) { background: var(--avsp-bg); }
+  .avsp-spec-table td { padding: 0.75rem 1.5rem; font-size: 0.9rem; }
+  .avsp-spec-table td:first-child { color: var(--avsp-muted); width: 40%; font-weight: 500; }
+  .avsp-spec-table td:last-child { font-weight: 600; }
+  .avsp-products { margin-top: 2rem; }
+  .avsp-products__heading { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
+  .avsp-products__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; }
+  .avsp-product-card { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; overflow: hidden; transition: box-shadow 0.2s, transform 0.2s; }
+  .avsp-product-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-2px); }
+  .avsp-product-card img { width: 100%; height: 200px; object-fit: cover; }
+  .avsp-product-card__body { padding: 1rem; }
+  .avsp-product-card__title { font-size: 0.85rem; font-weight: 600; margin: 0 0 0.5rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .avsp-product-card__price { font-size: 1rem; font-weight: 700; color: var(--avsp-accent); }
+  .avsp-product-card__btn { display: block; text-align: center; padding: 0.6rem; background: var(--avsp-primary); color: #fff; text-decoration: none; font-size: 0.8rem; font-weight: 600; border-radius: 0 0 12px 12px; margin-top: 0.5rem; }
+  .avsp-product-card__btn:hover { background: var(--avsp-accent); }
+  .avsp-footer { text-align: center; padding: 2rem; color: var(--avsp-muted); font-size: 0.75rem; }
+  @media (max-width: 768px) {
+    .avsp-hero { padding: 2rem 1rem; }
+    .avsp-hero__image { flex: 0 0 100%; }
+    .avsp-hero__title { font-size: 1.5rem; }
+    .avsp-quickspecs__item { min-width: 100px; padding: 0.5rem; }
+    .avsp-quickspecs__label { font-size: 0.65rem; }
+    .avsp-quickspecs__value { font-size: 0.8rem; }
+    .avsp-content { padding: 1rem; }
+    .avsp-spec-table td { padding: 0.5rem 1rem; font-size: 0.8rem; }
+  }
+</style>
+
+<div class="avsp">
+  {%- comment -%}── Hero Section ──{%- endcomment -%}
+  <div class="avsp-hero">
+    <div class="avsp-hero__inner">
+      {%- if v.hero_image_url.value != blank -%}
+        <div class="avsp-hero__image">
+          <img src="{{ v.hero_image_url.value }}" alt="{{ v.make.value }} {{ v.model.value }} {{ v.variant.value }}" loading="lazy">
+        </div>
+      {%- endif -%}
+      <div class="avsp-hero__content">
+        <span class="avsp-hero__badge">{{ v.fuel_type.value | default: 'Vehicle' }}</span>
+        <p class="avsp-hero__make">{{ v.make.value }}</p>
+        <h1 class="avsp-hero__title">{{ v.model.value }} {{ v.variant.value }}</h1>
+        {%- if v.generation.value != blank -%}
+          <p class="avsp-hero__gen">{{ v.generation.value }}</p>
+        {%- endif -%}
+        {%- if v.year_range.value != blank -%}
+          <span class="avsp-hero__year">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            {{ v.year_range.value }}
+          </span>
+        {%- endif -%}
+      </div>
+    </div>
+  </div>
+
+  {%- comment -%}── Quick Specs Bar ──{%- endcomment -%}
+  <div class="avsp-quickspecs">
+    <div class="avsp-quickspecs__inner">
+      {%- if v.engine_code.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Engine</div><div class="avsp-quickspecs__value">{{ v.engine_code.value }}</div></div>{%- endif -%}
+      {%- if v.displacement.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Displacement</div><div class="avsp-quickspecs__value">{{ v.displacement.value }}</div></div>{%- endif -%}
+      {%- if v.power.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Power</div><div class="avsp-quickspecs__value">{{ v.power.value }}</div></div>{%- endif -%}
+      {%- if v.torque.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Torque</div><div class="avsp-quickspecs__value">{{ v.torque.value }}</div></div>{%- endif -%}
+      {%- if v.fuel_type.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Fuel</div><div class="avsp-quickspecs__value">{{ v.fuel_type.value }}</div></div>{%- endif -%}
+      {%- if v.drive_type.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Drive</div><div class="avsp-quickspecs__value">{{ v.drive_type.value }}</div></div>{%- endif -%}
+      {%- if v.transmission.value != blank -%}<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">Transmission</div><div class="avsp-quickspecs__value">{{ v.transmission.value }}</div></div>{%- endif -%}
+    </div>
+  </div>
+
+  <div class="avsp-content">
+    {%- comment -%}── Overview ──{%- endcomment -%}
+    {%- if v.overview.value != blank -%}
+      <div class="avsp-overview">{{ v.overview.value }}</div>
+    {%- endif -%}
+
+    {%- comment -%}── Specification Sections ──{%- endcomment -%}
+    {%- assign section_icons = 'Performance|🏎️,Engine|⚙️,Electric / Hybrid|⚡,Fuel & Emissions|⛽,Transmission|🔧,Dimensions|📐,Weight|⚖️,Capacity|📦,Suspension & Brakes|🛞,Wheels|🔘' | split: ',' -%}
+    {%- for category in specs -%}
+      {%- assign cat_name = category | first -%}
+      {%- assign cat_data = category | last -%}
+      {%- assign icon = '📋' -%}
+      {%- for si in section_icons -%}
+        {%- assign si_parts = si | split: '|' -%}
+        {%- if si_parts[0] == cat_name -%}{%- assign icon = si_parts[1] -%}{%- endif -%}
+      {%- endfor -%}
+      <div class="avsp-section">
+        <div class="avsp-section__header" onclick="this.setAttribute('aria-expanded',this.getAttribute('aria-expanded')==='true'?'false':'true');this.nextElementSibling.style.display=this.getAttribute('aria-expanded')==='true'?'block':'none'" aria-expanded="true">
+          <span>{{ icon }}</span>
+          <h3>{{ cat_name }}</h3>
+          <span class="avsp-chevron">▼</span>
+        </div>
+        <div class="avsp-section__body">
+          <table class="avsp-spec-table">
+            {%- for spec in cat_data -%}
+              {%- assign spec_key = spec | first -%}
+              {%- assign spec_val = spec | last -%}
+              {%- if spec_val != blank and spec_val != '' -%}
+                <tr><td>{{ spec_key }}</td><td>{{ spec_val }}</td></tr>
+              {%- endif -%}
+            {%- endfor -%}
+          </table>
+        </div>
+      </div>
+    {%- endfor -%}
+
+    {%- comment -%}── Compatible Products ──{%- endcomment -%}
+    {%- assign products_json = v.linked_products.value | default: '[]' -%}
+    {%- assign product_handles = products_json | remove: '[' | remove: ']' | remove: '"' | split: ',' -%}
+    {%- if product_handles.size > 0 -%}
+      <div class="avsp-products">
+        <h2 class="avsp-products__heading">Compatible Products ({{ product_handles.size }})</h2>
+        <div class="avsp-products__grid">
+          {%- for handle in product_handles -%}
+            {%- assign handle_clean = handle | strip -%}
+            {%- if handle_clean != blank -%}
+              {%- assign p = all_products[handle_clean] -%}
+              {%- if p -%}
+                <div class="avsp-product-card">
+                  {%- if p.featured_image -%}
+                    <img src="{{ p.featured_image | image_url: width: 400 }}" alt="{{ p.title }}" loading="lazy">
+                  {%- endif -%}
+                  <div class="avsp-product-card__body">
+                    <h3 class="avsp-product-card__title">{{ p.title }}</h3>
+                    <div class="avsp-product-card__price">{{ p.price | money }}</div>
+                  </div>
+                  <a href="{{ p.url }}" class="avsp-product-card__btn">View Product</a>
+                </div>
+              {%- endif -%}
+            {%- endif -%}
+          {%- endfor -%}
+        </div>
+      </div>
+    {%- endif -%}
+  </div>
+
+  <div class="avsp-footer">Vehicle specifications provided by AutoSync</div>
+</div>
+
+{%- comment -%}── JSON-LD Schema for SEO ──{%- endcomment -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Car",
+  "name": "{{ v.make.value }} {{ v.model.value }} {{ v.variant.value | escape }}",
+  "brand": { "@type": "Brand", "name": "{{ v.make.value | escape }}" },
+  "model": "{{ v.model.value | escape }}",
+  "vehicleEngine": {
+    "@type": "EngineSpecification",
+    "engineDisplacement": "{{ v.displacement.value | escape }}",
+    "fuelType": "{{ v.fuel_type.value | escape }}"
+  },
+  "bodyType": "{{ v.body_type.value | escape }}",
+  "driveWheelConfiguration": "{{ v.drive_type.value | escape }}",
+  "vehicleTransmission": "{{ v.transmission.value | escape }}",
+  "productionDate": "{{ v.year_range.value | escape }}"
+}
+</script>
+
+{% schema %}
+{
+  "name": "Vehicle Specification Page",
+  "tag": "section",
+  "class": "autosync-vehicle-spec-section",
+  "settings": []
+}
+{% endschema %}`;
 }
