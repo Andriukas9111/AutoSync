@@ -254,8 +254,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // Status badge helper
 // ---------------------------------------------------------------------------
 
-const JOB_STATUS_BADGES: Record<string, { tone: "success" | "info" | "warning" | "critical" | "default"; label: string }> = {
-  pending: { tone: "default", label: "Pending" },
+const JOB_STATUS_BADGES: Record<string, { tone: "success" | "info" | "warning" | "critical" | undefined; label: string }> = {
+  pending: { tone: undefined, label: "Pending" },
   running: { tone: "info", label: "Running" },
   completed: { tone: "success", label: "Completed" },
   failed: { tone: "critical", label: "Failed" },
@@ -625,7 +625,7 @@ export default function Push() {
                 >
                   {pushHistory.map((job: any, index: number) => {
                     const statusBadge = JOB_STATUS_BADGES[job.status] ?? {
-                      tone: "default" as const,
+                      tone: undefined as undefined,
                       label: job.status,
                     };
                     return (

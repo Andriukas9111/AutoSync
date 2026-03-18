@@ -370,15 +370,11 @@ export default function FitmentManual() {
   const percentage =
     totalProducts > 0 ? Math.round((localMapped / totalProducts) * 100) : 0;
 
-  const tags = nextProduct?.tags
-    ? typeof nextProduct.tags === "string"
-      ? nextProduct.tags
-          .split(",")
-          .map((t: string) => t.trim())
-          .filter(Boolean)
-      : Array.isArray(nextProduct.tags)
-        ? nextProduct.tags.filter(Boolean)
-        : []
+  const tags: string[] = nextProduct?.tags
+    ? nextProduct.tags
+        .split(",")
+        .map((t: string) => t.trim())
+        .filter(Boolean)
     : [];
 
   // Strip HTML from description for display
@@ -445,9 +441,9 @@ export default function FitmentManual() {
               </InlineStack>
               <InlineStack gap="200" blockAlign="center">
                 <Badge tone={percentage === 100 ? "success" : "info"}>
-                  {percentage}%
+                  {`${percentage}%`}
                 </Badge>
-                <Badge tone="warning">{localUnmapped} remaining</Badge>
+                <Badge tone="warning">{`${localUnmapped} remaining`}</Badge>
               </InlineStack>
             </InlineStack>
           </Card>
@@ -681,7 +677,7 @@ export default function FitmentManual() {
                               hint.type === "displacement" ? "warning" :
                               hint.type === "power" ? "success" : "info"
                             }>
-                              {hint.type.replace(/_/g, " ")}: {hint.value}
+                              {`${hint.type.replace(/_/g, " ")}: ${hint.value}`}
                             </Badge>
                           ))}
                         </InlineStack>
@@ -750,7 +746,7 @@ export default function FitmentManual() {
                                   </BlockStack>
                                   <InlineStack gap="100" blockAlign="center">
                                     <Badge tone={s.confidence >= 0.8 ? "success" : s.confidence >= 0.5 ? "info" : "warning"}>
-                                      {Math.round(s.confidence * 100)}%
+                                      {`${Math.round(s.confidence * 100)}%`}
                                     </Badge>
                                     {alreadyAdded ? (
                                       <Badge tone="success">Added</Badge>
@@ -841,7 +837,7 @@ export default function FitmentManual() {
                         </Text>
                         {fitmentList.length > 0 && (
                           <Badge tone="success">
-                            {fitmentList.length} added
+                            {`${fitmentList.length} added`}
                           </Badge>
                         )}
                       </InlineStack>
@@ -967,7 +963,7 @@ export default function FitmentManual() {
                           fullWidth
                           size="large"
                         >
-                          Save & Next ({fitmentList.length})
+                          {`Save & Next (${fitmentList.length})`}
                         </Button>
                       </div>
                     </InlineStack>

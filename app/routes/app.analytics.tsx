@@ -628,7 +628,7 @@ export default function AnalyticsPage() {
                     {fitmentCoverage.withFitments.toLocaleString()}
                   </Text>
                   <Badge tone="success">
-                    {fitmentCoverage.coveragePercent}% coverage
+                    {`${fitmentCoverage.coveragePercent}% coverage`}
                   </Badge>
                 </BlockStack>
               </Card>
@@ -998,7 +998,7 @@ export default function AnalyticsPage() {
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.productViews.toLocaleString()}</Text>
                           {conversionFunnel.searchToViewRate > 0 && (
-                            <Badge tone="info">{conversionFunnel.searchToViewRate}% from search</Badge>
+                            <Badge tone="info">{`${conversionFunnel.searchToViewRate}% from search`}</Badge>
                           )}
                         </BlockStack>
 
@@ -1017,7 +1017,7 @@ export default function AnalyticsPage() {
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.addToCarts.toLocaleString()}</Text>
                           {conversionFunnel.viewToCartRate > 0 && (
-                            <Badge tone="success">{conversionFunnel.viewToCartRate}% of views</Badge>
+                            <Badge tone="success">{`${conversionFunnel.viewToCartRate}% of views`}</Badge>
                           )}
                         </BlockStack>
 
@@ -1036,7 +1036,7 @@ export default function AnalyticsPage() {
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.purchases.toLocaleString()}</Text>
                           {conversionFunnel.overallRate > 0 && (
-                            <Badge tone="success">{conversionFunnel.overallRate}% overall</Badge>
+                            <Badge tone="success">{`${conversionFunnel.overallRate}% overall`}</Badge>
                           )}
                         </BlockStack>
                       </InlineGrid>

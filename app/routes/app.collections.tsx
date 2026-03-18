@@ -379,7 +379,7 @@ export default function Collections() {
                       </Badge>
                     ))}
                     {uniqueMakes.length > 20 && (
-                      <Badge>+{uniqueMakes.length - 20} more</Badge>
+                      <Badge>{`+${uniqueMakes.length - 20} more`}</Badge>
                     )}
                   </InlineStack>
                 </Box>

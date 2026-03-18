@@ -219,8 +219,8 @@ function formatYearRange(from: number | null, to: number | null): string {
   return `${from}\u2013${to}`;
 }
 
-const STATUS_TONE: Record<string, "default" | "info" | "success" | "warning" | "critical"> = {
-  unmapped: "default",
+const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | undefined> = {
+  unmapped: undefined,
   auto_mapped: "info",
   manual_mapped: "success",
   partial: "warning",
@@ -580,7 +580,7 @@ export default function Fitment() {
                                   ? group.product_title.slice(0, 60) + "\u2026"
                                   : group.product_title}
                               </Text>
-                              <Badge tone={STATUS_TONE[group.fitment_status] ?? "default"}>
+                              <Badge tone={STATUS_TONE[group.fitment_status]}>
                                 {STATUS_LABEL[group.fitment_status] ?? group.fitment_status}
                               </Badge>
                             </InlineStack>
@@ -606,7 +606,7 @@ export default function Fitment() {
                                 <Badge key={m} tone="info">{m as string}</Badge>
                               ))}
                               {uniqueMakes.length > 4 && (
-                                <Badge>+{uniqueMakes.length - 4}</Badge>
+                                <Badge>{`+${uniqueMakes.length - 4}`}</Badge>
                               )}
                             </InlineStack>
                             <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />

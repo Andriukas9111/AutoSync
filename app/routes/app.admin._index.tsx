@@ -54,9 +54,9 @@ const ADMIN_SHOPS = [
 // ---------------------------------------------------------------------------
 const PLAN_BADGE_TONE: Record<
   PlanTier,
-  "default" | "info" | "success" | "warning" | "critical" | "attention"
+  "info" | "success" | "warning" | "critical" | "attention" | undefined
 > = {
-  free: "default",
+  free: undefined,
   starter: "info",
   growth: "success",
   professional: "attention",
@@ -293,11 +293,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Reset all product fitment statuses for a tenant (useful for re-extraction)
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-reset-fitment-status", message: "No shop specified" });
-      const { count, error } = await db
+      const { data: updatedRows, error } = await db
         .from("products")
         .update({ fitment_status: "pending" })
         .eq("shop_id", targetShop)
-        .select("id", { count: "exact", head: true });
+        .select("id");
+      const count = updatedRows?.length ?? 0;
       if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
       return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count ?? 0} products reset to pending for re-extraction.` });
     }
@@ -651,14 +652,14 @@ export default function AdminPanel() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodyMd" tone="subdued">Total Tenants</Text>
-                  <Badge tone="info">{totalTenants} installed</Badge>
+                  <Badge tone="info">{`${totalTenants} installed`}</Badge>
                 </InlineStack>
                 <Text as="p" variant="heading2xl" fontWeight="bold">{totalTenants}</Text>
                 <Divider />
                 <InlineStack gap="100" wrap>
                   {Object.entries(planBreakdown).map(([p, c]) => (
-                    <Badge key={p} tone={PLAN_BADGE_TONE[p as PlanTier] ?? "default"}>
-                      {cap(p)}: {c}
+                    <Badge key={p} tone={PLAN_BADGE_TONE[p as PlanTier]}>
+                      {`${cap(p)}: ${c}`}
                     </Badge>
                   ))}
                 </InlineStack>
@@ -703,7 +704,7 @@ export default function AdminPanel() {
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="bodyMd" tone="subdued">YMME Database</Text>
                   <Badge tone={ymmeTotal > 100 ? "success" : "warning"}>
-                    {ymmePct}% filled
+                    {`${ymmePct}% filled`}
                   </Badge>
                 </InlineStack>
                 <Text as="p" variant="heading2xl" fontWeight="bold">{ymmeTotal.toLocaleString()}</Text>
@@ -892,13 +893,11 @@ export default function AdminPanel() {
                           <IndexTable.Row id={t.shop_id} key={t.shop_id} position={i}>
                             <IndexTable.Cell>
                               <Button variant="plain" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
-                                <Text as="span" variant="bodyMd" fontWeight="bold">
-                                  {(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
-                                </Text>
+                                {(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
                               </Button>
                             </IndexTable.Cell>
                             <IndexTable.Cell>
-                              <Badge tone={PLAN_BADGE_TONE[t.plan as PlanTier] ?? "default"}>
+                              <Badge tone={PLAN_BADGE_TONE[t.plan as PlanTier]}>
                                 {cap(t.plan)}
                               </Badge>
                             </IndexTable.Cell>

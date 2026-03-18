@@ -54,8 +54,8 @@ function logSearchEvent(
   resultCount: number,
 ) {
   // Non-blocking insert — don't await, don't fail the request
-  db.from("search_events")
-    .insert({
+  Promise.resolve(
+    db.from("search_events").insert({
       shop_id: shop,
       event_type: eventType,
       search_make: searchParams.make ?? null,
@@ -63,11 +63,10 @@ function logSearchEvent(
       search_year: searchParams.year ?? null,
       result_count: resultCount,
       created_at: new Date().toISOString(),
-    })
-    .then(() => {})
-    .catch(() => {
-      // Silently ignore — table may not exist yet
-    });
+    }),
+  ).catch(() => {
+    // Silently ignore — table may not exist yet
+  });
 }
 
 // ---------- Conversion event logging (fire-and-forget) ----------
@@ -88,8 +87,8 @@ function logConversionEvent(
     metadata?: Record<string, unknown>;
   },
 ) {
-  db.from("conversion_events")
-    .insert({
+  Promise.resolve(
+    db.from("conversion_events").insert({
       shop_id: shop,
       event_type: eventType,
       product_id: data.productId ?? null,
@@ -101,11 +100,10 @@ function logConversionEvent(
       session_id: data.sessionId ?? null,
       metadata: data.metadata ?? null,
       created_at: new Date().toISOString(),
-    })
-    .then(() => {})
-    .catch(() => {
-      // Silently ignore — table may not exist yet
-    });
+    }),
+  ).catch(() => {
+    // Silently ignore — table may not exist yet
+  });
 }
 
 async function handleTrack(params: URLSearchParams, body: string | null) {

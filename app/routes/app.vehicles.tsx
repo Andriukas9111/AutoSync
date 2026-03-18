@@ -222,14 +222,14 @@ function formatDisplacement(cc: number | null): string {
   return `${(cc / 1000).toFixed(1)}L`;
 }
 
-function fuelBadgeTone(fuel: string | null): "default" | "info" | "success" | "warning" | "critical" {
-  if (!fuel) return "default";
+function fuelBadgeTone(fuel: string | null): "info" | "success" | "warning" | "critical" | undefined {
+  if (!fuel) return undefined;
   const f = fuel.toLowerCase();
   if (f.includes("petrol") || f.includes("gasoline")) return "warning";
   if (f.includes("diesel")) return "info";
   if (f.includes("electric")) return "success";
   if (f.includes("hybrid")) return "success";
-  return "default";
+  return undefined;
 }
 
 function makeInitials(name: string): string {
@@ -573,7 +573,7 @@ export default function Vehicles() {
                         <InlineStack gap="200" blockAlign="center">
                           {make.productCount > 0 && (
                             <Badge tone="info">
-                              {make.productCount} fitment{make.productCount !== 1 ? "s" : ""}
+                              {`${make.productCount} fitment${make.productCount !== 1 ? "s" : ""}`}
                             </Badge>
                           )}
                           {make.isActive ? (

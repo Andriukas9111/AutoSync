@@ -68,21 +68,21 @@ export async function fetchProductsFromShopify({
 
   try {
     while (hasNextPage) {
-      const response = await admin.graphql(PRODUCTS_QUERY, {
+      const response: Response = await admin.graphql(PRODUCTS_QUERY, {
         variables: {
           first: pageSize,
           after: cursor,
         },
       });
 
-      const { data } = await response.json();
+      const { data: gqlData }: { data: Record<string, any> | undefined } = await response.json();
 
-      if (!data?.products) {
+      if (!gqlData?.products) {
         errors.push("Failed to fetch products from Shopify");
         break;
       }
 
-      const { edges, pageInfo } = data.products;
+      const { edges, pageInfo }: { edges: Array<{ node: Record<string, any> }>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } = gqlData.products;
 
       // Upsert each product into our database
       for (const { node: product } of edges) {

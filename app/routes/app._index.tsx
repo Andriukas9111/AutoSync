@@ -434,7 +434,7 @@ export default function Dashboard() {
                   </Text>
                   {unmapped > 0 && (
                     <Badge tone="warning">
-                      {unmapped} unmapped
+                      {`${unmapped} unmapped`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -811,7 +811,7 @@ export default function Dashboard() {
                           Total Mapped
                         </Text>
                         <Badge tone={coverage >= 80 ? "success" : "info"}>
-                          {mapped} / {totalProducts} ({coverage}%)
+                          {`${mapped} / ${totalProducts} (${coverage}%)`}
                         </Badge>
                       </InlineStack>
 

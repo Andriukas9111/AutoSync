@@ -71,7 +71,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // If plan doesn't support pricing engine, return minimal data
   if (!limits.features.pricingEngine) {
-    return data({ plan, hasPricing: false, rules: [], stats: null, alerts: [], history: [] });
+    return data({ plan, hasPricing: false, limits, rules: [], stats: null, alerts: [], history: [] });
   }
 
   const [rules, stats, alerts, history] = await Promise.all([
@@ -81,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getPriceHistory(shopId, 20),
   ]);
 
-  return data({ plan, hasPricing: true, rules, stats, alerts, history });
+  return data({ plan, hasPricing: true, limits, rules, stats, alerts, history });
 };
 
 // ---------------------------------------------------------------------------
@@ -165,7 +165,7 @@ export default function PricingPage() {
   const isSubmitting = navigation.state === "submitting";
   const fetcher = useFetcher();
 
-  const { plan, hasPricing, rules, stats, alerts, history } = loaderData;
+  const { plan, hasPricing, limits, rules, stats, alerts, history } = loaderData;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -204,10 +204,12 @@ export default function PricingPage() {
         <Layout>
           <Layout.Section>
             <PlanGate
-              feature="Pricing Engine"
-              requiredPlan="professional"
+              feature="pricingEngine"
               currentPlan={plan}
-            />
+              limits={limits}
+            >
+              {null}
+            </PlanGate>
           </Layout.Section>
         </Layout>
       </Page>
@@ -371,7 +373,7 @@ export default function PricingPage() {
                 <InlineStack gap="300" blockAlign="center">
                   <IconBadge icon={CashDollarIcon} color="var(--p-color-icon-info)" bg="var(--p-color-bg-fill-info-secondary)" />
                   <Text as="h2" variant="headingMd" fontWeight="semibold">Pricing Rules</Text>
-                  <Badge tone="info">{rules.length} total</Badge>
+                  <Badge tone="info">{`${rules.length} total`}</Badge>
                 </InlineStack>
                 <Form method="post">
                   <input type="hidden" name="intent" value="apply_rules" />
@@ -495,7 +497,7 @@ export default function PricingPage() {
                 <InlineStack gap="300" blockAlign="center">
                   <IconBadge icon={AlertTriangleIcon} color="var(--p-color-icon-caution)" bg="var(--p-color-bg-fill-caution-secondary)" />
                   <Text as="h2" variant="headingMd" fontWeight="semibold">Price Alerts</Text>
-                  <Badge tone="warning">{alerts.length}</Badge>
+                  <Badge tone="warning">{String(alerts.length)}</Badge>
                 </InlineStack>
 
                 <Divider />
@@ -749,7 +751,7 @@ export default function PricingPage() {
         open={showPreview}
         onClose={() => setShowPreview(false)}
         title="Price Change Preview"
-        large
+        size="large"
         secondaryActions={[
           { content: "Close", onAction: () => setShowPreview(false) },
         ]}
@@ -760,9 +762,9 @@ export default function PricingPage() {
           ) : fetcher.data && "preview" in fetcher.data ? (
             <BlockStack gap="400">
               <InlineStack gap="400">
-                <Badge tone="info">{(fetcher.data as any).preview.total_affected} products affected</Badge>
-                <Badge tone="success">Avg markup: {(fetcher.data as any).preview.avg_markup_percent}%</Badge>
-                <Badge>Revenue change: £{(fetcher.data as any).preview.total_revenue_change.toFixed(2)}</Badge>
+                <Badge tone="info">{`${(fetcher.data as any).preview.total_affected} products affected`}</Badge>
+                <Badge tone="success">{`Avg markup: ${(fetcher.data as any).preview.avg_markup_percent}%`}</Badge>
+                <Badge>{`Revenue change: £${(fetcher.data as any).preview.total_revenue_change.toFixed(2)}`}</Badge>
               </InlineStack>
 
               {(fetcher.data as any).preview.changes.length > 0 ? (

@@ -53,9 +53,9 @@ const PAGE_SIZE = 50;
 
 const STATUS_CONFIG: Record<
   string,
-  { tone: "default" | "info" | "success" | "warning" | "critical"; label: string }
+  { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
 > = {
-  unmapped: { tone: "default", label: "Unmapped" },
+  unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },

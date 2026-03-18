@@ -238,12 +238,12 @@ function addModelLevelSuggestion(
 }
 
 function findEngineById(
-  index: { enginesByModelId: Map<string, Array<{ id: string; [key: string]: unknown }>> },
+  index: { enginesByModelId: Map<string, import("../lib/extraction/ymme-index").YmmeIndexEngine[]> },
   engineId: string,
-) {
+): import("../lib/extraction/ymme-index").YmmeIndexEngine | null {
   for (const engines of index.enginesByModelId.values()) {
     const found = engines.find((e) => e.id === engineId);
-    if (found) return found as import("../lib/extraction/ymme-index").YmmeIndexEngine;
+    if (found) return found;
   }
   return null;
 }

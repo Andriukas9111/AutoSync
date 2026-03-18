@@ -37,8 +37,8 @@ const ADMIN_SHOPS = [
   "performancehq-3.myshopify.com",
 ];
 
-const PLAN_BADGE_TONE: Record<PlanTier, "default" | "info" | "success" | "warning" | "critical" | "attention"> = {
-  free: "default",
+const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
+  free: undefined,
   starter: "info",
   growth: "success",
   professional: "attention",
@@ -59,8 +59,8 @@ function capitalisePlan(plan: string): string {
   return PLAN_DISPLAY_NAME[plan as PlanTier] ?? plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
-const STATUS_BADGES: Record<string, { tone: "default" | "info" | "success" | "warning" | "critical"; label: string }> = {
-  unmapped: { tone: "default", label: "Unmapped" },
+const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
+  unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
   manual_mapped: { tone: "success", label: "Manual" },
   partial: { tone: "warning", label: "Partial" },
@@ -359,7 +359,7 @@ export default function TenantDetail() {
       backAction={{ content: "Admin Panel", onAction: () => navigate("/app/admin") }}
       titleMetadata={
         <InlineStack gap="200">
-          <Badge tone={PLAN_BADGE_TONE[tenant.plan as PlanTier] ?? "default"}>
+          <Badge tone={PLAN_BADGE_TONE[tenant.plan as PlanTier]}>
             {capitalisePlan(tenant.plan)}
           </Badge>
           <Badge tone={isActive ? "success" : "critical"}>
@@ -466,7 +466,7 @@ export default function TenantDetail() {
                         <Text as="h3" variant="headingSm">Fitment Status Breakdown</Text>
                         <BlockStack gap="200">
                           {Object.entries(statusBreakdown).map(([status, count]) => {
-                            const badge = STATUS_BADGES[status] ?? { tone: "default" as const, label: status };
+                            const badge = STATUS_BADGES[status] ?? { tone: undefined as undefined, label: status };
                             const pct = totalProductCount > 0 ? Math.round((count / totalProductCount) * 100) : 0;
                             return (
                               <InlineStack key={status} align="space-between" blockAlign="center">
@@ -493,7 +493,7 @@ export default function TenantDetail() {
                         <InlineStack gap="200" wrap>
                           {topMakes.map((m) => (
                             <Badge key={m.make} tone="info">
-                              {m.make}: {m.count}
+                              {`${m.make}: ${m.count}`}
                             </Badge>
                           ))}
                         </InlineStack>

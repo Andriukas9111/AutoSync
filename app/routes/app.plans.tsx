@@ -670,7 +670,7 @@ export default function Plans() {
             : `Downgrade to ${confirmPlanInfo?.name}`,
           onAction: handleConfirm,
           loading: isSubmitting,
-          tone: isUpgrade ? undefined : "critical",
+          destructive: !isUpgrade,
         }}
         secondaryActions={[
           { content: "Cancel", onAction: () => setConfirmTier(null) },

@@ -1061,7 +1061,7 @@ export async function fetchSpecsForEngine(specPageUrl: string): Promise<ScrapedV
       if (key) {
         const parsed = parseSpecValue(key, rawValue);
         if (parsed !== null && parsed !== "") {
-          (specs as Record<string, unknown>)[key] = parsed;
+          (specs as unknown as Record<string, unknown>)[key] = parsed;
         }
       } else {
         // Store in overflow JSONB — we don't want to lose ANY data

@@ -48,10 +48,10 @@ const TYPE_BADGES: Record<
 
 const STATUS_BADGES: Record<
   string,
-  { tone: "success" | "info" | "warning" | "critical" | "default"; label: string }
+  { tone: "success" | "info" | "warning" | "critical" | undefined; label: string }
 > = {
   active: { tone: "success", label: "Active" },
-  inactive: { tone: "default", label: "Inactive" },
+  inactive: { tone: undefined, label: "Inactive" },
   error: { tone: "critical", label: "Error" },
   pending: { tone: "info", label: "Pending" },
 };
@@ -216,7 +216,7 @@ export default function Providers() {
                   label: provider.type.toUpperCase(),
                 };
                 const statusBadge = STATUS_BADGES[provider.status] ?? {
-                  tone: "default" as const,
+                  tone: undefined as undefined,
                   label: provider.status,
                 };
 

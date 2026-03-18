@@ -137,14 +137,14 @@ export function OnboardingChecklist({
                 justifyContent: "center",
               }}
             >
-              <Icon source={CheckCircleIcon} tone="textInverse" />
+              <Icon source={CheckCircleIcon} tone="base" />
             </div>
             <Text as="h2" variant="headingMd">
               Getting Started
             </Text>
           </InlineStack>
           <Badge tone={completedCount >= 4 ? "success" : "attention"}>
-            {completedCount} / {steps.length} complete
+            {`${completedCount} / ${steps.length} complete`}
           </Badge>
         </InlineStack>
 
@@ -193,7 +193,7 @@ export function OnboardingChecklist({
                       <Icon
                         source={step.complete ? CheckCircleIcon : step.icon}
                         tone={
-                          step.complete || isNext ? "textInverse" : "subdued"
+                          step.complete || isNext ? "base" : "subdued"
                         }
                       />
                     </div>

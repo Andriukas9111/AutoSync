@@ -116,8 +116,8 @@ function formatEngine(fitment: Fitment, format: EngineDisplayFormat): string | n
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
-const STATUS_BADGES: Record<string, { tone: "default" | "info" | "success" | "warning" | "critical"; label: string }> = {
-  unmapped: { tone: "default", label: "Unmapped" },
+const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
+  unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
@@ -583,8 +583,7 @@ export default function ProductDetails() {
                       <InlineStack gap="200" wrap>
                         {variants.slice(0, 10).map((v: any, i: number) => (
                           <Badge key={i}>
-                            {v.title || v.option1 || `Variant ${i + 1}`}
-                            {v.price ? ` — £${Number(v.price).toFixed(2)}` : ""}
+                            {`${v.title || v.option1 || `Variant ${i + 1}`}${v.price ? ` — £${Number(v.price).toFixed(2)}` : ""}`}
                           </Badge>
                         ))}
                         {variants.length > 10 && (
@@ -624,7 +623,7 @@ export default function ProductDetails() {
                     <Text as="h2" variant="headingMd" fontWeight="semibold">Smart Suggestions</Text>
                     {suggestionsLoading && <Spinner size="small" />}
                     {!suggestionsLoading && suggestions.length > 0 && (
-                      <Badge tone="success">{suggestions.length} found</Badge>
+                      <Badge tone="success">{`${suggestions.length} found`}</Badge>
                     )}
                   </InlineStack>
                   <Button
@@ -657,7 +656,7 @@ export default function ProductDetails() {
                           hint.type === "displacement" ? "warning" :
                           hint.type === "power" ? "success" : "info"
                         }>
-                          {hint.type.replace(/_/g, " ")}: {hint.value}
+                          {`${hint.type.replace(/_/g, " ")}: ${hint.value}`}
                         </Badge>
                       ))}
                     </InlineStack>
@@ -723,9 +722,9 @@ export default function ProductDetails() {
                                     {s.engine.displayName || s.engine.name || s.engine.code}
                                   </Text>
                                   {s.engine.fuelType && <Badge tone="info">{s.engine.fuelType}</Badge>}
-                                  {s.engine.powerHp && <Badge>{s.engine.powerHp}hp</Badge>}
+                                  {s.engine.powerHp && <Badge>{`${s.engine.powerHp}hp`}</Badge>}
                                   {s.engine.displacementCc && (
-                                    <Badge>{(s.engine.displacementCc / 1000).toFixed(1)}L</Badge>
+                                    <Badge>{`${(s.engine.displacementCc / 1000).toFixed(1)}L`}</Badge>
                                   )}
                                 </InlineStack>
                               )}
@@ -738,7 +737,7 @@ export default function ProductDetails() {
                               )}
                             </BlockStack>
                             <InlineStack gap="200" blockAlign="center">
-                              <Badge tone={confBadge.tone}>{Math.round(s.confidence * 100)}%</Badge>
+                              <Badge tone={confBadge.tone}>{`${Math.round(s.confidence * 100)}%`}</Badge>
                               <Button
                                 variant="primary"
                                 size="slim"
@@ -812,7 +811,7 @@ export default function ProductDetails() {
                           id={fitment.id}
                           accessibilityLabel={`${fitment.make} ${fitment.model}`}
                           shortcutActions={[
-                            { content: "Delete", destructive: true, onAction: () => handleDeleteFitment(fitment.id) },
+                            { content: "Delete", onAction: () => handleDeleteFitment(fitment.id) },
                           ]}
                         >
                           <InlineStack gap="400" align="space-between" blockAlign="center" wrap>
