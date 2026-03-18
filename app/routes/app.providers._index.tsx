@@ -222,7 +222,7 @@ export default function ProvidersIndex() {
         title="Providers"
         primaryAction={{
           content: "Add Provider",
-          url: "/app/providers/new",
+          onAction: () => navigate("/app/providers/new"),
           disabled: atLimit,
         }}
       >
@@ -242,7 +242,7 @@ export default function ProvidersIndex() {
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               action={{
                 content: "Add Provider",
-                url: "/app/providers/new",
+                onAction: () => navigate("/app/providers/new"),
                 disabled: atLimit,
               }}
             >
@@ -266,7 +266,7 @@ export default function ProvidersIndex() {
       title="Providers"
       primaryAction={{
         content: "Add Provider",
-        url: "/app/providers/new",
+        onAction: () => navigate("/app/providers/new"),
         disabled: atLimit,
       }}
     >
