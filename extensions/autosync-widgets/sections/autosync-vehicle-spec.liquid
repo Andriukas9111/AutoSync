@@ -1,0 +1,1398 @@
+{% comment %}
+  AutoSync Vehicle Specification Section
+  Renders a full vehicle spec page from a metaobject.
+  Enterprise plan feature ($299/month).
+
+  Metaobject fields:
+    make, model, generation, variant, year_range, engine_code,
+    displacement, power, torque, fuel_type, body_type, drive_type,
+    transmission, overview, full_specs (JSON), linked_products (list)
+{% endcomment %}
+
+{%- liquid
+  assign vsp_make = metaobject.make.value | default: metaobject.make
+  assign vsp_model = metaobject.model.value | default: metaobject.model
+  assign vsp_generation = metaobject.generation.value | default: metaobject.generation
+  assign vsp_variant = metaobject.variant.value | default: metaobject.variant
+  assign vsp_year_range = metaobject.year_range.value | default: metaobject.year_range
+  assign vsp_engine_code = metaobject.engine_code.value | default: metaobject.engine_code
+  assign vsp_displacement = metaobject.displacement.value | default: metaobject.displacement
+  assign vsp_power = metaobject.power.value | default: metaobject.power
+  assign vsp_torque = metaobject.torque.value | default: metaobject.torque
+  assign vsp_fuel_type = metaobject.fuel_type.value | default: metaobject.fuel_type
+  assign vsp_body_type = metaobject.body_type.value | default: metaobject.body_type
+  assign vsp_drive_type = metaobject.drive_type.value | default: metaobject.drive_type
+  assign vsp_transmission = metaobject.transmission.value | default: metaobject.transmission
+  assign vsp_overview = metaobject.overview.value | default: metaobject.overview
+  assign vsp_full_specs = metaobject.full_specs.value | default: metaobject.full_specs
+  assign vsp_linked_products = metaobject.linked_products.value | default: metaobject.linked_products
+
+  assign vsp_title = vsp_make | append: ' ' | append: vsp_model
+  if vsp_variant != blank
+    assign vsp_full_title = vsp_title | append: ' ' | append: vsp_variant
+  else
+    assign vsp_full_title = vsp_title
+  endif
+-%}
+
+<div
+  class="autosync-vsp"
+  id="autosync-vsp-{{ section.id }}"
+  style="
+    --vsp-accent: {{ section.settings.accent_color }};
+    --vsp-accent-light: {{ section.settings.accent_color }}1a;
+    --vsp-hero-bg: {{ section.settings.hero_bg_color }};
+    --vsp-hero-text: {{ section.settings.hero_text_color }};
+    --vsp-body-bg: {{ section.settings.body_bg_color }};
+    --vsp-card-bg: {{ section.settings.card_bg_color }};
+    --vsp-text: {{ section.settings.text_color }};
+    --vsp-text-muted: {{ section.settings.muted_text_color }};
+    --vsp-border: {{ section.settings.border_color }};
+    --vsp-row-alt: {{ section.settings.alt_row_color }};
+    --vsp-radius: {{ section.settings.border_radius }}px;
+  "
+>
+
+  {%- comment -%} ══════════════════════════════════════════
+    HERO SECTION
+  ══════════════════════════════════════════ {%- endcomment -%}
+  <header class="autosync-vsp__hero">
+    <div class="autosync-vsp__hero-inner">
+      <div class="autosync-vsp__hero-content">
+        {%- if section.settings.show_breadcrumb -%}
+          <nav class="autosync-vsp__breadcrumb" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span aria-hidden="true">&rsaquo;</span>
+            <a href="/pages/vehicles">Vehicles</a>
+            <span aria-hidden="true">&rsaquo;</span>
+            <span>{{ vsp_make }}</span>
+            <span aria-hidden="true">&rsaquo;</span>
+            <span>{{ vsp_model }}</span>
+          </nav>
+        {%- endif -%}
+
+        <div class="autosync-vsp__hero-badges">
+          {%- if vsp_year_range != blank -%}
+            <span class="autosync-vsp__badge autosync-vsp__badge--year">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              {{ vsp_year_range }}
+            </span>
+          {%- endif -%}
+          {%- if vsp_generation != blank -%}
+            <span class="autosync-vsp__badge autosync-vsp__badge--gen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              {{ vsp_generation }}
+            </span>
+          {%- endif -%}
+          {%- if vsp_body_type != blank -%}
+            <span class="autosync-vsp__badge autosync-vsp__badge--body">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14v-5H5z"/><path d="M2 12h20"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M7 12V7h4l3 5"/></svg>
+              {{ vsp_body_type }}
+            </span>
+          {%- endif -%}
+        </div>
+
+        <h1 class="autosync-vsp__hero-title">{{ vsp_title }}</h1>
+
+        {%- if vsp_variant != blank -%}
+          <p class="autosync-vsp__hero-variant">{{ vsp_variant }}</p>
+        {%- endif -%}
+
+        {%- if vsp_power != blank or vsp_engine_code != blank -%}
+          <div class="autosync-vsp__hero-highlight">
+            {%- if vsp_power != blank -%}
+              <span class="autosync-vsp__hero-stat">
+                <span class="autosync-vsp__hero-stat-value">{{ vsp_power }}</span>
+              </span>
+            {%- endif -%}
+            {%- if vsp_engine_code != blank -%}
+              <span class="autosync-vsp__hero-stat">
+                <span class="autosync-vsp__hero-stat-label">Engine</span>
+                <span class="autosync-vsp__hero-stat-value">{{ vsp_engine_code }}</span>
+              </span>
+            {%- endif -%}
+            {%- if vsp_displacement != blank -%}
+              <span class="autosync-vsp__hero-stat">
+                <span class="autosync-vsp__hero-stat-label">Displacement</span>
+                <span class="autosync-vsp__hero-stat-value">{{ vsp_displacement }}</span>
+              </span>
+            {%- endif -%}
+          </div>
+        {%- endif -%}
+      </div>
+
+      <div class="autosync-vsp__hero-graphic" aria-hidden="true">
+        <svg class="autosync-vsp__hero-icon" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="60" cy="60" r="56" stroke="currentColor" stroke-width="1" opacity="0.15"/>
+          <circle cx="60" cy="60" r="40" stroke="currentColor" stroke-width="1" opacity="0.1"/>
+          <path d="M30 72 L45 55 L55 58 L65 48 L75 55 L90 45" stroke="currentColor" stroke-width="2" opacity="0.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="60" y="65" text-anchor="middle" fill="currentColor" font-size="28" font-weight="700" opacity="0.12">{{ vsp_make | truncate: 3, '' | upcase }}</text>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+
+  {%- comment -%} ══════════════════════════════════════════
+    QUICK SPECS BAR
+  ══════════════════════════════════════════ {%- endcomment -%}
+  <div class="autosync-vsp__quickbar">
+    <div class="autosync-vsp__quickbar-inner">
+
+      {%- if vsp_engine_code != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v3"/><path d="M15 1v3"/><path d="M9 20v3"/><path d="M15 20v3"/><path d="M20 9h3"/><path d="M20 14h3"/><path d="M1 9h3"/><path d="M1 14h3"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Engine Code</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_engine_code }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_displacement != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Displacement</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_displacement }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_power != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Power</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_power }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_torque != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 12l7-7"/><path d="M16 2h6v6"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Torque</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_torque }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_fuel_type != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v17"/><path d="M13 10h4a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 1 1 0 0 0 1-1V9l-3-3"/><path d="M3 22h10"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Fuel</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_fuel_type }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_drive_type != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="1" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Drive</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_drive_type }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+      {%- if vsp_transmission != blank -%}
+        <div class="autosync-vsp__quickbar-item">
+          <div class="autosync-vsp__quickbar-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="18" y1="9" x2="18" y2="15"/><line x1="9" y1="6" x2="15" y2="6"/></svg>
+          </div>
+          <div class="autosync-vsp__quickbar-text">
+            <span class="autosync-vsp__quickbar-label">Transmission</span>
+            <span class="autosync-vsp__quickbar-value">{{ vsp_transmission }}</span>
+          </div>
+        </div>
+      {%- endif -%}
+
+    </div>
+  </div>
+
+
+  <div class="autosync-vsp__body">
+
+    {%- comment -%} ══════════════════════════════════════════
+      OVERVIEW SECTION
+    ══════════════════════════════════════════ {%- endcomment -%}
+    {%- if vsp_overview != blank -%}
+      <section class="autosync-vsp__section autosync-vsp__overview">
+        <div class="autosync-vsp__section-header">
+          <svg class="autosync-vsp__section-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <h2 class="autosync-vsp__section-title">Overview</h2>
+        </div>
+        <div class="autosync-vsp__overview-text">
+          {{ vsp_overview | newline_to_br }}
+        </div>
+      </section>
+    {%- endif -%}
+
+
+    {%- comment -%} ══════════════════════════════════════════
+      FULL SPECIFICATIONS — Parsed from JSON
+    ══════════════════════════════════════════ {%- endcomment -%}
+    {%- if vsp_full_specs != blank -%}
+      <section class="autosync-vsp__section autosync-vsp__specs" id="vsp-specs-{{ section.id }}">
+        <div class="autosync-vsp__section-header">
+          <svg class="autosync-vsp__section-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+          <h2 class="autosync-vsp__section-title">Full Specifications</h2>
+        </div>
+        <div class="autosync-vsp__specs-accordion" data-vsp-specs='{{ vsp_full_specs | escape }}'>
+          {%- comment -%}
+            Specs are rendered via JavaScript since Liquid cannot natively
+            iterate arbitrary JSON keys. The data attribute holds the escaped
+            JSON, and the script below parses and renders it using safe DOM
+            methods (createElement, textContent).
+          {%- endcomment -%}
+          <div class="autosync-vsp__specs-loading">
+            <span class="autosync-vsp__spinner"></span>
+            Loading specifications...
+          </div>
+        </div>
+      </section>
+    {%- endif -%}
+
+
+    {%- comment -%} ══════════════════════════════════════════
+      COMPATIBLE PRODUCTS
+    ══════════════════════════════════════════ {%- endcomment -%}
+    {%- if vsp_linked_products != blank -%}
+      {%- assign linked_handles = vsp_linked_products -%}
+      {%- assign has_products = false -%}
+
+      {%- comment -%} Check if any linked products exist {%- endcomment -%}
+      {%- for handle in linked_handles -%}
+        {%- assign lp = all_products[handle] -%}
+        {%- if lp != blank -%}
+          {%- assign has_products = true -%}
+          {%- break -%}
+        {%- endif -%}
+      {%- endfor -%}
+
+      {%- if has_products -%}
+        <section class="autosync-vsp__section autosync-vsp__products">
+          <div class="autosync-vsp__section-header">
+            <svg class="autosync-vsp__section-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <h2 class="autosync-vsp__section-title">Compatible Products</h2>
+            <span class="autosync-vsp__badge autosync-vsp__badge--count" data-vsp-product-count></span>
+          </div>
+          <div class="autosync-vsp__product-grid">
+            {%- assign product_count = 0 -%}
+            {%- for handle in linked_handles -%}
+              {%- assign lp = all_products[handle] -%}
+              {%- if lp != blank -%}
+                {%- assign product_count = product_count | plus: 1 -%}
+                <a href="{{ lp.url }}" class="autosync-vsp__product-card">
+                  <div class="autosync-vsp__product-image-wrap">
+                    {%- if lp.featured_image != blank -%}
+                      <img
+                        class="autosync-vsp__product-image"
+                        src="{{ lp.featured_image | image_url: width: 400 }}"
+                        alt="{{ lp.title | escape }}"
+                        width="400"
+                        height="400"
+                        loading="lazy"
+                      >
+                    {%- else -%}
+                      <div class="autosync-vsp__product-no-image">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      </div>
+                    {%- endif -%}
+                    {%- if lp.compare_at_price > lp.price -%}
+                      <span class="autosync-vsp__product-sale-badge">Sale</span>
+                    {%- endif -%}
+                  </div>
+                  <div class="autosync-vsp__product-info">
+                    <h3 class="autosync-vsp__product-title">{{ lp.title }}</h3>
+                    <div class="autosync-vsp__product-price">
+                      <span class="autosync-vsp__product-price-current">{{ lp.price | money }}</span>
+                      {%- if lp.compare_at_price > lp.price -%}
+                        <span class="autosync-vsp__product-price-compare">{{ lp.compare_at_price | money }}</span>
+                      {%- endif -%}
+                    </div>
+                    <span class="autosync-vsp__product-cta">
+                      View Product
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    </span>
+                  </div>
+                </a>
+              {%- endif -%}
+            {%- endfor -%}
+          </div>
+        </section>
+
+        <script>
+          (function() {
+            var countBadge = document.querySelector('[data-vsp-product-count]');
+            if (countBadge) countBadge.textContent = '{{ product_count }}';
+          })();
+        </script>
+      {%- endif -%}
+    {%- endif -%}
+
+  </div><!-- .autosync-vsp__body -->
+
+
+  {%- comment -%} ══════════════════════════════════════════
+    POWERED BY FOOTER
+  ══════════════════════════════════════════ {%- endcomment -%}
+  {%- if section.settings.show_powered_by -%}
+    <footer class="autosync-vsp__footer">
+      <span>Vehicle data powered by <strong>AutoSync</strong></span>
+    </footer>
+  {%- endif -%}
+
+</div>
+
+
+{%- comment -%} ══════════════════════════════════════════
+  STRUCTURED DATA (JSON-LD)
+══════════════════════════════════════════ {%- endcomment -%}
+{%- if section.settings.enable_seo_schema -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Car",
+  "name": {{ vsp_full_title | json }},
+  "brand": {
+    "@type": "Brand",
+    "name": {{ vsp_make | json }}
+  },
+  "model": {{ vsp_model | json }},
+  "vehicleModelDate": {{ vsp_year_range | json }},
+  {%- if vsp_body_type != blank -%}
+  "bodyType": {{ vsp_body_type | json }},
+  {%- endif -%}
+  {%- if vsp_drive_type != blank -%}
+  "driveWheelConfiguration": {{ vsp_drive_type | json }},
+  {%- endif -%}
+  {%- if vsp_fuel_type != blank -%}
+  "fuelType": {{ vsp_fuel_type | json }},
+  {%- endif -%}
+  {%- if vsp_transmission != blank -%}
+  "vehicleTransmission": {{ vsp_transmission | json }},
+  {%- endif -%}
+  "vehicleEngine": {
+    "@type": "EngineSpecification",
+    {%- if vsp_engine_code != blank -%}
+    "engineType": {{ vsp_engine_code | json }},
+    {%- endif -%}
+    {%- if vsp_displacement != blank -%}
+    "engineDisplacement": {
+      "@type": "QuantitativeValue",
+      "value": {{ vsp_displacement | json }}
+    },
+    {%- endif -%}
+    {%- if vsp_torque != blank -%}
+    "torque": {
+      "@type": "QuantitativeValue",
+      "value": {{ vsp_torque | json }}
+    },
+    {%- endif -%}
+    "enginePower": {
+      "@type": "QuantitativeValue",
+      "value": {{ vsp_power | default: "N/A" | json }}
+    }
+  },
+  "description": {{ vsp_overview | default: vsp_full_title | truncate: 300 | json }},
+  "url": "{{ canonical_url }}"
+}
+</script>
+{%- endif -%}
+
+
+{%- comment -%} ══════════════════════════════════════════
+  JAVASCRIPT — Specs Accordion (safe DOM construction)
+══════════════════════════════════════════ {%- endcomment -%}
+<script>
+(function() {
+  'use strict';
+
+  /* SVG icon templates keyed by category name fragments */
+  var CATEGORY_SVGS = {
+    'Performance': 'M13 2L3 14h9l-1 8 10-12h-9l1-8',
+    'Engine': 'M4 4h16v16H4zM9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3',
+    'Fuel': 'M3 22V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v17M13 10h4a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h0a1 1 0 0 0 1-1V9l-3-3M3 22h10',
+    'Transmission': 'M6 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 6m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 18m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M6 9v6M18 9v6M9 6h6',
+    'Dimensions': 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
+    'Weight': 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18',
+    'Capacity': 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18',
+    'Suspension': 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22V15',
+    'Brakes': 'M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 12m-4 0a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
+    'Wheels': 'M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0M12 2v3M12 19v3M2 12h3M19 12h3',
+    'Tyres': 'M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 12m-6 0a6 6 0 1 0 12 0a6 6 0 1 0-12 0M12 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0',
+    'Electric': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',
+    'Hybrid': 'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3',
+    'Emissions': 'M12 12m-10 0a10 10 0 1 0 20 0a10 10 0 1 0-20 0M12 16v-4M12 8h0'
+  };
+
+  function makeSvgIcon(pathData) {
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="' + pathData + '"/></svg>';
+  }
+
+  function getIconForCategory(cat) {
+    var lc = cat.toLowerCase();
+    var keys = Object.keys(CATEGORY_SVGS);
+    for (var i = 0; i < keys.length; i++) {
+      if (lc.indexOf(keys[i].toLowerCase()) !== -1) {
+        return makeSvgIcon(CATEGORY_SVGS[keys[i]]);
+      }
+    }
+    return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+  }
+
+  var CHEVRON_SVG = '<svg class="autosync-vsp__spec-group-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  function renderSpecs() {
+    var containers = document.querySelectorAll('[data-vsp-specs]');
+    for (var c = 0; c < containers.length; c++) {
+      var container = containers[c];
+      var raw = container.getAttribute('data-vsp-specs');
+      if (!raw) continue;
+
+      var specs;
+      try {
+        specs = JSON.parse(raw);
+      } catch (e) {
+        container.textContent = 'Unable to parse specifications data.';
+        continue;
+      }
+
+      var categories = Object.keys(specs);
+      if (categories.length === 0) {
+        container.textContent = 'No specification data available.';
+        continue;
+      }
+
+      /* Build DOM with safe methods */
+      var fragment = document.createDocumentFragment();
+
+      for (var ci = 0; ci < categories.length; ci++) {
+        var catName = categories[ci];
+        var entries = specs[catName];
+        if (!entries || typeof entries !== 'object') continue;
+        var entryKeys = Object.keys(entries);
+        if (entryKeys.length === 0) continue;
+
+        var isOpen = ci < 3;
+        var group = document.createElement('div');
+        group.className = 'autosync-vsp__spec-group' + (isOpen ? ' autosync-vsp__spec-group--open' : '');
+
+        /* Header button */
+        var btn = document.createElement('button');
+        btn.className = 'autosync-vsp__spec-group-header';
+        btn.type = 'button';
+        btn.setAttribute('aria-expanded', String(isOpen));
+        btn.addEventListener('click', function() {
+          var p = this.parentElement;
+          p.classList.toggle('autosync-vsp__spec-group--open');
+          this.setAttribute('aria-expanded', p.classList.contains('autosync-vsp__spec-group--open'));
+        });
+
+        /* Icon + name + count (these use static SVG templates, not user data) */
+        var iconSpan = document.createElement('span');
+        iconSpan.className = 'autosync-vsp__spec-group-icon';
+        iconSpan.innerHTML = getIconForCategory(catName);
+
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'autosync-vsp__spec-group-name';
+        nameSpan.textContent = catName;
+
+        var countSpan = document.createElement('span');
+        countSpan.className = 'autosync-vsp__spec-group-count';
+        countSpan.textContent = entryKeys.length + ' specs';
+
+        var chevSpan = document.createElement('span');
+        chevSpan.innerHTML = CHEVRON_SVG;
+
+        btn.appendChild(iconSpan);
+        btn.appendChild(nameSpan);
+        btn.appendChild(countSpan);
+        btn.appendChild(chevSpan);
+        group.appendChild(btn);
+
+        /* Table body */
+        var bodyDiv = document.createElement('div');
+        bodyDiv.className = 'autosync-vsp__spec-group-body';
+
+        var table = document.createElement('table');
+        table.className = 'autosync-vsp__spec-table';
+        var tbody = document.createElement('tbody');
+
+        for (var ri = 0; ri < entryKeys.length; ri++) {
+          var tr = document.createElement('tr');
+          tr.className = 'autosync-vsp__spec-row ' + (ri % 2 === 0 ? 'autosync-vsp__spec-row--even' : 'autosync-vsp__spec-row--odd');
+
+          var tdKey = document.createElement('td');
+          tdKey.className = 'autosync-vsp__spec-key';
+          tdKey.textContent = entryKeys[ri];
+
+          var tdVal = document.createElement('td');
+          tdVal.className = 'autosync-vsp__spec-val';
+          tdVal.textContent = String(entries[entryKeys[ri]]);
+
+          tr.appendChild(tdKey);
+          tr.appendChild(tdVal);
+          tbody.appendChild(tr);
+        }
+
+        table.appendChild(tbody);
+        bodyDiv.appendChild(table);
+        group.appendChild(bodyDiv);
+        fragment.appendChild(group);
+      }
+
+      /* Clear loading state and append rendered specs */
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      container.appendChild(fragment);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderSpecs);
+  } else {
+    renderSpecs();
+  }
+})();
+</script>
+
+
+{%- comment -%} ══════════════════════════════════════════
+  STYLES
+══════════════════════════════════════════ {%- endcomment -%}
+<style>
+  /* --- Reset & Container --- */
+  .autosync-vsp {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    color: var(--vsp-text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    background: var(--vsp-body-bg);
+  }
+
+  .autosync-vsp *,
+  .autosync-vsp *::before,
+  .autosync-vsp *::after {
+    box-sizing: border-box;
+  }
+
+  /* --- Hero --- */
+  .autosync-vsp__hero {
+    background: var(--vsp-hero-bg);
+    color: var(--vsp-hero-text);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .autosync-vsp__hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, rgba(255,255,255,0.03) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .autosync-vsp__hero-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 48px 24px 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .autosync-vsp__hero-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .autosync-vsp__hero-graphic {
+    flex: 0 0 auto;
+    width: 140px;
+    height: 140px;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .autosync-vsp__hero-icon {
+    width: 100%;
+    height: 100%;
+  }
+
+  .autosync-vsp__breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    opacity: 0.7;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .autosync-vsp__breadcrumb a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .autosync-vsp__breadcrumb a:hover {
+    text-decoration: underline;
+    opacity: 1;
+  }
+
+  .autosync-vsp__hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .autosync-vsp__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  .autosync-vsp__badge--year {
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  .autosync-vsp__badge--gen {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .autosync-vsp__badge--body {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+
+  .autosync-vsp__badge--count {
+    background: var(--vsp-accent);
+    color: #fff;
+    font-size: 12px;
+    padding: 2px 10px;
+    border-radius: 100px;
+    margin-left: auto;
+  }
+
+  .autosync-vsp__hero-title {
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 800;
+    line-height: 1.15;
+    margin: 0 0 8px;
+    letter-spacing: -0.02em;
+  }
+
+  .autosync-vsp__hero-variant {
+    font-size: clamp(15px, 2.2vw, 19px);
+    opacity: 0.75;
+    margin: 0 0 24px;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+
+  .autosync-vsp__hero-highlight {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+  }
+
+  .autosync-vsp__hero-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .autosync-vsp__hero-stat-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.5;
+    font-weight: 600;
+  }
+
+  .autosync-vsp__hero-stat-value {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  /* --- Quick Specs Bar --- */
+  .autosync-vsp__quickbar {
+    background: var(--vsp-card-bg);
+    border-bottom: 1px solid var(--vsp-border);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+    position: relative;
+    z-index: 2;
+  }
+
+  .autosync-vsp__quickbar-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    gap: 0;
+  }
+
+  .autosync-vsp__quickbar-inner::-webkit-scrollbar {
+    display: none;
+  }
+
+  .autosync-vsp__quickbar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px;
+    white-space: nowrap;
+    border-right: 1px solid var(--vsp-border);
+    flex-shrink: 0;
+    min-width: 0;
+    transition: background 0.15s ease;
+  }
+
+  .autosync-vsp__quickbar-item:first-child {
+    border-left: 1px solid var(--vsp-border);
+  }
+
+  .autosync-vsp__quickbar-item:hover {
+    background: var(--vsp-accent-light);
+  }
+
+  .autosync-vsp__quickbar-icon {
+    color: var(--vsp-accent);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .autosync-vsp__quickbar-text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .autosync-vsp__quickbar-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--vsp-text-muted);
+    font-weight: 600;
+  }
+
+  .autosync-vsp__quickbar-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--vsp-text);
+  }
+
+  /* --- Body / Section Wrappers --- */
+  .autosync-vsp__body {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .autosync-vsp__section {
+    background: var(--vsp-card-bg);
+    border-radius: var(--vsp-radius);
+    border: 1px solid var(--vsp-border);
+    overflow: hidden;
+  }
+
+  .autosync-vsp__section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--vsp-border);
+  }
+
+  .autosync-vsp__section-icon {
+    color: var(--vsp-accent);
+    flex-shrink: 0;
+  }
+
+  .autosync-vsp__section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--vsp-text);
+    letter-spacing: -0.01em;
+  }
+
+  /* --- Overview --- */
+  .autosync-vsp__overview-text {
+    padding: 24px;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--vsp-text);
+  }
+
+  /* --- Specs Accordion --- */
+  .autosync-vsp__specs-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+    color: var(--vsp-text-muted);
+    font-size: 14px;
+  }
+
+  .autosync-vsp__spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--vsp-border);
+    border-top-color: var(--vsp-accent);
+    border-radius: 50%;
+    animation: vsp-spin 0.6s linear infinite;
+  }
+
+  @keyframes vsp-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .autosync-vsp__spec-group {
+    border-bottom: 1px solid var(--vsp-border);
+  }
+
+  .autosync-vsp__spec-group:last-child {
+    border-bottom: none;
+  }
+
+  .autosync-vsp__spec-group-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 16px 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--vsp-text);
+    transition: background 0.15s ease;
+  }
+
+  .autosync-vsp__spec-group-header:hover {
+    background: var(--vsp-row-alt);
+  }
+
+  .autosync-vsp__spec-group-icon {
+    color: var(--vsp-accent);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .autosync-vsp__spec-group-name {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .autosync-vsp__spec-group-count {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--vsp-text-muted);
+    white-space: nowrap;
+  }
+
+  .autosync-vsp__spec-group-chevron {
+    flex-shrink: 0;
+    color: var(--vsp-text-muted);
+    transition: transform 0.25s ease;
+  }
+
+  .autosync-vsp__spec-group--open > .autosync-vsp__spec-group-header .autosync-vsp__spec-group-chevron {
+    transform: rotate(180deg);
+  }
+
+  .autosync-vsp__spec-group-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .autosync-vsp__spec-group--open > .autosync-vsp__spec-group-body {
+    max-height: 2000px;
+  }
+
+  .autosync-vsp__spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .autosync-vsp__spec-row--even {
+    background: var(--vsp-row-alt);
+  }
+
+  .autosync-vsp__spec-row--odd {
+    background: var(--vsp-card-bg);
+  }
+
+  .autosync-vsp__spec-key,
+  .autosync-vsp__spec-val {
+    padding: 11px 24px;
+    vertical-align: top;
+  }
+
+  .autosync-vsp__spec-key {
+    width: 40%;
+    color: var(--vsp-text-muted);
+    font-weight: 500;
+    border-right: 1px solid var(--vsp-border);
+  }
+
+  .autosync-vsp__spec-val {
+    width: 60%;
+    font-weight: 600;
+    color: var(--vsp-text);
+  }
+
+  /* --- Products --- */
+  .autosync-vsp__product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .autosync-vsp__product-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--vsp-card-bg);
+    border: 1px solid var(--vsp-border);
+    border-radius: var(--vsp-radius);
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .autosync-vsp__product-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+  }
+
+  .autosync-vsp__product-image-wrap {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--vsp-row-alt);
+    overflow: hidden;
+  }
+
+  .autosync-vsp__product-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+  }
+
+  .autosync-vsp__product-card:hover .autosync-vsp__product-image {
+    transform: scale(1.05);
+  }
+
+  .autosync-vsp__product-no-image {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .autosync-vsp__product-sale-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .autosync-vsp__product-info {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .autosync-vsp__product-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--vsp-text);
+  }
+
+  .autosync-vsp__product-price {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: auto;
+  }
+
+  .autosync-vsp__product-price-current {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--vsp-text);
+  }
+
+  .autosync-vsp__product-price-compare {
+    font-size: 13px;
+    color: var(--vsp-text-muted);
+    text-decoration: line-through;
+  }
+
+  .autosync-vsp__product-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--vsp-accent);
+    margin-top: 4px;
+    transition: gap 0.2s ease;
+  }
+
+  .autosync-vsp__product-card:hover .autosync-vsp__product-cta {
+    gap: 10px;
+  }
+
+  /* --- Footer --- */
+  .autosync-vsp__footer {
+    padding: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--vsp-text-muted);
+    border-top: 1px solid var(--vsp-border);
+  }
+
+  .autosync-vsp__footer strong {
+    color: var(--vsp-accent);
+    font-weight: 700;
+  }
+
+  /* --- Responsive --- */
+  @media (max-width: 768px) {
+    .autosync-vsp__hero-inner {
+      padding: 32px 20px 40px;
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .autosync-vsp__hero-graphic {
+      width: 100px;
+      height: 100px;
+      order: -1;
+    }
+
+    .autosync-vsp__hero-badges {
+      justify-content: center;
+    }
+
+    .autosync-vsp__hero-highlight {
+      justify-content: center;
+    }
+
+    .autosync-vsp__breadcrumb {
+      justify-content: center;
+    }
+
+    .autosync-vsp__quickbar-inner {
+      padding: 0 16px;
+    }
+
+    .autosync-vsp__quickbar-item {
+      padding: 14px 16px;
+      gap: 8px;
+    }
+
+    .autosync-vsp__body {
+      padding: 20px 16px 40px;
+      gap: 20px;
+    }
+
+    .autosync-vsp__section-header {
+      padding: 16px 16px;
+    }
+
+    .autosync-vsp__overview-text {
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    .autosync-vsp__spec-group-header {
+      padding: 14px 16px;
+      font-size: 14px;
+    }
+
+    .autosync-vsp__spec-key,
+    .autosync-vsp__spec-val {
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+
+    .autosync-vsp__spec-key {
+      width: 45%;
+    }
+
+    .autosync-vsp__spec-val {
+      width: 55%;
+    }
+
+    .autosync-vsp__product-grid {
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+      padding: 16px;
+    }
+
+    .autosync-vsp__product-info {
+      padding: 12px;
+    }
+
+    .autosync-vsp__product-title {
+      font-size: 13px;
+    }
+
+    .autosync-vsp__product-price-current {
+      font-size: 14px;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .autosync-vsp__hero-inner {
+      padding: 24px 16px 32px;
+    }
+
+    .autosync-vsp__hero-title {
+      font-size: 24px;
+    }
+
+    .autosync-vsp__hero-variant {
+      font-size: 14px;
+    }
+
+    .autosync-vsp__hero-highlight {
+      gap: 16px;
+    }
+
+    .autosync-vsp__quickbar-item {
+      padding: 12px 12px;
+    }
+
+    .autosync-vsp__quickbar-label {
+      font-size: 9px;
+    }
+
+    .autosync-vsp__quickbar-value {
+      font-size: 12px;
+    }
+
+    .autosync-vsp__product-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .autosync-vsp__spec-key {
+      width: 50%;
+    }
+
+    .autosync-vsp__spec-val {
+      width: 50%;
+    }
+  }
+
+  /* --- Print --- */
+  @media print {
+    .autosync-vsp__hero {
+      background: #1a1a2e !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .autosync-vsp__spec-group-body {
+      max-height: none !important;
+    }
+
+    .autosync-vsp__product-card:hover {
+      transform: none;
+      box-shadow: none;
+    }
+  }
+</style>
+
+
+{% schema %}
+{
+  "name": "Vehicle Specification",
+  "tag": "section",
+  "class": "autosync-vehicle-spec-section",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Colors"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#2563eb",
+      "info": "Used for icons, badges, and interactive elements"
+    },
+    {
+      "type": "color",
+      "id": "hero_bg_color",
+      "label": "Hero background",
+      "default": "#0f172a"
+    },
+    {
+      "type": "color",
+      "id": "hero_text_color",
+      "label": "Hero text",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "body_bg_color",
+      "label": "Page background",
+      "default": "#f8fafc"
+    },
+    {
+      "type": "color",
+      "id": "card_bg_color",
+      "label": "Card background",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text color",
+      "default": "#0f172a"
+    },
+    {
+      "type": "color",
+      "id": "muted_text_color",
+      "label": "Muted text color",
+      "default": "#64748b"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border color",
+      "default": "#e2e8f0"
+    },
+    {
+      "type": "color",
+      "id": "alt_row_color",
+      "label": "Alternating row background",
+      "default": "#f8fafc"
+    },
+    {
+      "type": "header",
+      "content": "Layout"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border radius",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "default": 10,
+      "unit": "px"
+    },
+    {
+      "type": "header",
+      "content": "Features"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_breadcrumb",
+      "label": "Show breadcrumb navigation",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_powered_by",
+      "label": "Show 'Powered by AutoSync' footer",
+      "default": true,
+      "info": "Displays attribution in footer"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_seo_schema",
+      "label": "Enable SEO structured data",
+      "default": true,
+      "info": "Adds JSON-LD Car schema for search engines"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Vehicle Specification"
+    }
+  ]
+}
+{% endschema %}

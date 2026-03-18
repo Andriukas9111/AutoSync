@@ -22,10 +22,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (intent) {
     case "push": {
       try {
+        // Also push the theme template so pages render properly
+        const templateResult = await pushThemeTemplate(admin, shopId);
         const result = await pushVehiclePages(admin, shopId);
+        const templateNote = templateResult.success ? " Theme template installed." : "";
         return data({
           success: true,
-          message: `Published ${result.created} vehicle pages, updated ${result.updated}`,
+          message: `Published ${result.created} vehicle pages, updated ${result.updated}.${templateNote}`,
           stats: result,
         });
       } catch (e) {
