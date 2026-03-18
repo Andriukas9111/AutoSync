@@ -78,6 +78,47 @@ const METAOBJECTS_LIST = `
 `;
 
 // ---------------------------------------------------------------------------
+// GraphQL: Shopify Pages API
+// ---------------------------------------------------------------------------
+
+const PAGE_CREATE = `
+  mutation pageCreate($page: PageCreateInput!) {
+    pageCreate(page: $page) {
+      page { id handle title }
+      userErrors { field message }
+    }
+  }
+`;
+
+const PAGE_UPDATE = `
+  mutation pageUpdate($id: ID!, $page: PageUpdateInput!) {
+    pageUpdate(id: $id, page: $page) {
+      page { id handle title }
+      userErrors { field message }
+    }
+  }
+`;
+
+const PAGE_DELETE = `
+  mutation pageDelete($id: ID!) {
+    pageDelete(id: $id) {
+      deletedId
+      userErrors { field message }
+    }
+  }
+`;
+
+const PAGE_BY_HANDLE = `
+  query pageByHandle($handle: String!) {
+    pageByHandle(handle: $handle) {
+      id
+      handle
+      title
+    }
+  }
+`;
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -362,6 +403,265 @@ export function buildFullSpecsJson(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// HTML Builder for Shopify Pages
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the page handle for a vehicle spec Shopify Page.
+ * Format: vehicle-specs-{make}-{model}-{variant-slug}
+ */
+export function buildPageHandle(
+  make: string,
+  model: string,
+  variant: string,
+): string {
+  const raw = `vehicle-specs-${make}-${model}-${variant}`;
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 255);
+}
+
+/**
+ * Escape HTML special characters for safe embedding in page body.
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Escape a value for embedding inside a JSON-LD script tag.
+ */
+function escapeJsonLd(str: string): string {
+  return str.replace(/"/g, '\\"').replace(/\n/g, " ");
+}
+
+/**
+ * Builds a full static HTML body for a Shopify Page from vehicle data.
+ * Mirrors the layout of the Liquid template but with all values baked in.
+ */
+export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
+  const overview = buildOverviewText(vehicle);
+  const fullSpecs = buildFullSpecsJson(vehicle.specs);
+
+  const yearRange =
+    vehicle.yearFrom && vehicle.yearTo
+      ? `${vehicle.yearFrom}-${vehicle.yearTo}`
+      : vehicle.yearFrom
+        ? `${vehicle.yearFrom}+`
+        : "";
+
+  const displacementLabel = vehicle.displacementCc
+    ? `${(vehicle.displacementCc / 1000).toFixed(1)}L (${vehicle.displacementCc}cc)`
+    : "";
+
+  const powerLabel =
+    vehicle.powerHp && vehicle.powerKw
+      ? `${vehicle.powerHp} HP (${vehicle.powerKw} kW)`
+      : vehicle.powerHp
+        ? `${vehicle.powerHp} HP`
+        : "";
+
+  const torqueLabel = vehicle.torqueNm ? `${vehicle.torqueNm} Nm` : "";
+
+  const sectionIcons: Record<string, string> = {
+    Performance: "&#x1F3CE;&#xFE0F;",
+    Engine: "&#x2699;&#xFE0F;",
+    "Electric / Hybrid": "&#x26A1;",
+    "Fuel & Emissions": "&#x26FD;",
+    Transmission: "&#x1F527;",
+    Dimensions: "&#x1F4D0;",
+    Weight: "&#x2696;&#xFE0F;",
+    Capacity: "&#x1F4E6;",
+    "Suspension & Brakes": "&#x1F6DE;",
+    Wheels: "&#x1F518;",
+  };
+
+  // --- Quick specs items ---
+  const quickSpecItems: Array<{ label: string; value: string }> = [];
+  if (vehicle.engineCode) quickSpecItems.push({ label: "Engine", value: escapeHtml(vehicle.engineCode) });
+  if (displacementLabel) quickSpecItems.push({ label: "Displacement", value: escapeHtml(displacementLabel) });
+  if (powerLabel) quickSpecItems.push({ label: "Power", value: escapeHtml(powerLabel) });
+  if (torqueLabel) quickSpecItems.push({ label: "Torque", value: escapeHtml(torqueLabel) });
+  if (vehicle.fuelType) quickSpecItems.push({ label: "Fuel", value: escapeHtml(vehicle.fuelType) });
+  if (vehicle.driveType) quickSpecItems.push({ label: "Drive", value: escapeHtml(vehicle.driveType) });
+  if (vehicle.transmission) quickSpecItems.push({ label: "Transmission", value: escapeHtml(vehicle.transmission) });
+
+  const quickSpecsHtml = quickSpecItems
+    .map(
+      (item) =>
+        `<div class="avsp-quickspecs__item"><div class="avsp-quickspecs__label">${item.label}</div><div class="avsp-quickspecs__value">${item.value}</div></div>`,
+    )
+    .join("");
+
+  // --- Hero image ---
+  const heroImageHtml = vehicle.heroImageUrl
+    ? `<div class="avsp-hero__image"><img src="${escapeHtml(vehicle.heroImageUrl)}" alt="${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model)} ${escapeHtml(vehicle.variant)}" loading="lazy"></div>`
+    : "";
+
+  // --- Generation ---
+  const generationHtml = vehicle.generation
+    ? `<p class="avsp-hero__gen">${escapeHtml(vehicle.generation)}</p>`
+    : "";
+
+  // --- Year range badge ---
+  const yearBadgeHtml = yearRange
+    ? `<span class="avsp-hero__year"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${escapeHtml(yearRange)}</span>`
+    : "";
+
+  // --- Spec sections ---
+  const specSectionsHtml = Object.entries(fullSpecs)
+    .map(([category, specEntries]) => {
+      const icon = sectionIcons[category] ?? "&#x1F4CB;";
+      const rows = Object.entries(specEntries)
+        .filter(([, val]) => val != null && val !== "")
+        .map(
+          ([key, val]) =>
+            `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(String(val))}</td></tr>`,
+        )
+        .join("");
+      if (!rows) return "";
+      return `<div class="avsp-section">
+        <div class="avsp-section__header" onclick="this.setAttribute('aria-expanded',this.getAttribute('aria-expanded')==='true'?'false':'true');this.nextElementSibling.style.display=this.getAttribute('aria-expanded')==='true'?'block':'none'" aria-expanded="true">
+          <span>${icon}</span>
+          <h3>${escapeHtml(category)}</h3>
+          <span class="avsp-chevron">&#x25BC;</span>
+        </div>
+        <div class="avsp-section__body">
+          <table class="avsp-spec-table">${rows}</table>
+        </div>
+      </div>`;
+    })
+    .filter(Boolean)
+    .join("\n    ");
+
+  // --- Compatible products section (handles only — Liquid can't resolve from Pages) ---
+  let productsHtml = "";
+  if (vehicle.linkedProductIds.length > 0) {
+    const productLinks = vehicle.linkedProductIds
+      .map(
+        (handle) =>
+          `<a href="/products/${escapeHtml(handle)}" style="display:inline-block;padding:6px 14px;margin:4px;background:#f0f0f0;border:1px solid #e5e7eb;border-radius:8px;text-decoration:none;color:#1f2937;font-size:0.85rem;font-weight:500;">${escapeHtml(handle)}</a>`,
+      )
+      .join("");
+    productsHtml = `<div class="avsp-products" style="margin-top:2rem;">
+        <h2 style="font-size:1.25rem;font-weight:700;margin-bottom:1rem;">Compatible Products (${vehicle.linkedProductIds.length})</h2>
+        <div style="display:flex;flex-wrap:wrap;">${productLinks}</div>
+      </div>`;
+  }
+
+  // --- JSON-LD ---
+  const jsonLd = JSON.stringify(
+    {
+      "@context": "https://schema.org",
+      "@type": "Car",
+      name: `${vehicle.make} ${vehicle.model} ${vehicle.variant}`,
+      brand: { "@type": "Brand", name: vehicle.make },
+      model: vehicle.model,
+      vehicleEngine: {
+        "@type": "EngineSpecification",
+        engineDisplacement: displacementLabel,
+        fuelType: vehicle.fuelType ?? "",
+      },
+      bodyType: vehicle.bodyType ?? "",
+      driveWheelConfiguration: vehicle.driveType ?? "",
+      vehicleTransmission: vehicle.transmission ?? "",
+      productionDate: yearRange,
+    },
+    null,
+    2,
+  );
+
+  // --- Assemble full HTML ---
+  return `<style>
+  .avsp { --avsp-primary: #1a1a2e; --avsp-accent: #0066ff; --avsp-bg: #f8f9fa; --avsp-border: #e5e7eb; --avsp-text: #1f2937; --avsp-muted: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--avsp-text); }
+  .avsp-hero { background: linear-gradient(135deg, var(--avsp-primary) 0%, #16213e 100%); color: #fff; padding: 3rem 2rem; }
+  .avsp-hero__inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 2rem; align-items: center; flex-wrap: wrap; }
+  .avsp-hero__image { flex: 0 0 400px; max-width: 100%; }
+  .avsp-hero__image img { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+  .avsp-hero__content { flex: 1; min-width: 280px; }
+  .avsp-hero__badge { display: inline-block; background: var(--avsp-accent); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; }
+  .avsp-hero__make { font-size: 1rem; opacity: 0.8; margin: 0 0 0.25rem; }
+  .avsp-hero__title { font-size: 2rem; font-weight: 700; margin: 0 0 0.5rem; line-height: 1.2; }
+  .avsp-hero__gen { font-size: 1rem; opacity: 0.7; margin: 0 0 1rem; }
+  .avsp-hero__year { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.15); padding: 6px 16px; border-radius: 8px; font-size: 0.9rem; }
+  .avsp-quickspecs { background: #fff; border-bottom: 1px solid var(--avsp-border); padding: 1.25rem 2rem; }
+  .avsp-quickspecs__inner { max-width: 1200px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 0; }
+  .avsp-quickspecs__item { flex: 1; min-width: 120px; padding: 0.75rem 1rem; text-align: center; border-right: 1px solid var(--avsp-border); }
+  .avsp-quickspecs__item:last-child { border-right: none; }
+  .avsp-quickspecs__label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--avsp-muted); margin-bottom: 0.25rem; }
+  .avsp-quickspecs__value { font-size: 0.95rem; font-weight: 600; color: var(--avsp-text); }
+  .avsp-content { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+  .avsp-overview { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; padding: 1.5rem 2rem; margin-bottom: 2rem; line-height: 1.7; color: var(--avsp-muted); font-size: 0.95rem; }
+  .avsp-section { background: #fff; border: 1px solid var(--avsp-border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden; }
+  .avsp-section__header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem; background: var(--avsp-bg); border-bottom: 1px solid var(--avsp-border); cursor: pointer; user-select: none; }
+  .avsp-section__header h3 { margin: 0; font-size: 1rem; font-weight: 600; flex: 1; }
+  .avsp-section__header .avsp-chevron { transition: transform 0.2s; font-size: 0.8rem; color: var(--avsp-muted); }
+  .avsp-section__header[aria-expanded="false"] .avsp-chevron { transform: rotate(-90deg); }
+  .avsp-section__body { padding: 0; }
+  .avsp-spec-table { width: 100%; border-collapse: collapse; }
+  .avsp-spec-table tr { border-bottom: 1px solid var(--avsp-border); }
+  .avsp-spec-table tr:last-child { border-bottom: none; }
+  .avsp-spec-table tr:nth-child(even) { background: var(--avsp-bg); }
+  .avsp-spec-table td { padding: 0.75rem 1.5rem; font-size: 0.9rem; }
+  .avsp-spec-table td:first-child { color: var(--avsp-muted); width: 40%; font-weight: 500; }
+  .avsp-spec-table td:last-child { font-weight: 600; }
+  .avsp-footer { text-align: center; padding: 2rem; color: var(--avsp-muted); font-size: 0.75rem; }
+  @media (max-width: 768px) {
+    .avsp-hero { padding: 2rem 1rem; }
+    .avsp-hero__image { flex: 0 0 100%; }
+    .avsp-hero__title { font-size: 1.5rem; }
+    .avsp-quickspecs__item { min-width: 100px; padding: 0.5rem; }
+    .avsp-quickspecs__label { font-size: 0.65rem; }
+    .avsp-quickspecs__value { font-size: 0.8rem; }
+    .avsp-content { padding: 1rem; }
+    .avsp-spec-table td { padding: 0.5rem 1rem; font-size: 0.8rem; }
+  }
+</style>
+
+<div class="avsp">
+  <div class="avsp-hero">
+    <div class="avsp-hero__inner">
+      ${heroImageHtml}
+      <div class="avsp-hero__content">
+        <span class="avsp-hero__badge">${escapeHtml(vehicle.fuelType ?? "Vehicle")}</span>
+        <p class="avsp-hero__make">${escapeHtml(vehicle.make)}</p>
+        <h1 class="avsp-hero__title">${escapeHtml(vehicle.model)} ${escapeHtml(vehicle.variant)}</h1>
+        ${generationHtml}
+        ${yearBadgeHtml}
+      </div>
+    </div>
+  </div>
+
+  <div class="avsp-quickspecs">
+    <div class="avsp-quickspecs__inner">
+      ${quickSpecsHtml}
+    </div>
+  </div>
+
+  <div class="avsp-content">
+    ${overview ? `<div class="avsp-overview">${escapeHtml(overview)}</div>` : ""}
+
+    ${specSectionsHtml}
+
+    ${productsHtml}
+  </div>
+
+  <div class="avsp-footer">Vehicle specifications provided by AutoSync</div>
+</div>
+
+<script type="application/ld+json">
+${jsonLd}
+</script>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -737,7 +1037,10 @@ export async function getVehiclesForPages(
 // ---------------------------------------------------------------------------
 
 /**
- * Main orchestrator for creating/updating vehicle spec metaobjects in Shopify.
+ * Main orchestrator for creating/updating vehicle spec pages in Shopify.
+ * Creates BOTH:
+ *   1. Metaobject (structured data for admin display)
+ *   2. Shopify Page (HTML content for storefront rendering at /pages/vehicle-specs-*)
  */
 export async function pushVehiclePages(
   admin: any,
@@ -752,7 +1055,7 @@ export async function pushVehiclePages(
     errors: [],
   };
 
-  // 1. Ensure metaobject definition exists
+  // 1. Ensure metaobject definition exists (for admin structured data)
   await ensureMetaobjectDefinition(admin, shopId);
 
   // 2. Get vehicles with fitment data
@@ -770,22 +1073,30 @@ export async function pushVehiclePages(
   // 3. Check for existing sync records to determine create vs update
   const { data: existingSyncs } = await db
     .from("vehicle_page_sync")
-    .select("engine_id, metaobject_gid, metaobject_handle")
+    .select("engine_id, metaobject_gid, metaobject_handle, page_gid, page_handle")
     .eq("shop_id", shopId);
 
-  const existingByEngine = new Map<string, { gid: string; handle: string }>();
+  const existingByEngine = new Map<
+    string,
+    { metaobjectGid: string | null; metaobjectHandle: string | null; pageGid: string | null; pageHandle: string | null }
+  >();
   for (const sync of existingSyncs ?? []) {
-    if (sync.metaobject_gid) {
-      existingByEngine.set(sync.engine_id, {
-        gid: sync.metaobject_gid,
-        handle: sync.metaobject_handle,
-      });
-    }
+    existingByEngine.set(sync.engine_id, {
+      metaobjectGid: sync.metaobject_gid ?? null,
+      metaobjectHandle: sync.metaobject_handle ?? null,
+      pageGid: sync.page_gid ?? null,
+      pageHandle: sync.page_handle ?? null,
+    });
   }
 
   // 4. Process each vehicle
   for (const vehicle of vehicles) {
-    const handle = buildMetaobjectHandle(
+    const moHandle = buildMetaobjectHandle(
+      vehicle.make,
+      vehicle.model,
+      vehicle.variant,
+    );
+    const pageHandle = buildPageHandle(
       vehicle.make,
       vehicle.model,
       vehicle.variant,
@@ -810,7 +1121,6 @@ export async function pushVehiclePages(
     const finalVariant = vehicle.variant !== `${vehicle.displacementCc ?? ""}cc ${vehicle.fuelType ?? ""}`.trim()
       ? vehicle.variant
       : (specs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? vehicle.variant;
-
 
     const fields: Array<{ key: string; value: string }> = [
       { key: "make", value: vehicle.make },
@@ -853,13 +1163,17 @@ export async function pushVehiclePages(
 
     try {
       const existing = existingByEngine.get(vehicle.engineId);
-      const isUpdate = !!existing;
+      const isUpdate = !!(existing?.metaobjectGid || existing?.pageGid);
+
+      // ── A. Metaobject upsert (admin structured data) ──────────────
+      let metaobjectGid: string | null = null;
+      let metaobjectHandle: string | null = moHandle;
 
       // If updating, delete the old metaobject first (Shopify upsert doesn't overwrite fields)
-      if (isUpdate && existing?.gid) {
+      if (existing?.metaobjectGid) {
         try {
           await admin.graphql(`mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { field message } } }`, {
-            variables: { id: existing.gid },
+            variables: { id: existing.metaobjectGid },
           });
           await new Promise((r) => setTimeout(r, 300));
         } catch {
@@ -869,66 +1183,180 @@ export async function pushVehiclePages(
 
       // Try pushing with all fields; if hero_image_url fails, retry without it
       let pushFields = fields;
-      let response = await admin.graphql(METAOBJECT_UPSERT, {
+      let moResponse = await admin.graphql(METAOBJECT_UPSERT, {
         variables: {
-          handle: { type: "$app:vehicle_spec", handle },
+          handle: { type: "$app:vehicle_spec", handle: moHandle },
           metaobject: { fields: pushFields, capabilities: { publishable: { status: "ACTIVE" } } },
         },
       });
 
-      let json = await response.json();
-      let userErrors = json?.data?.metaobjectUpsert?.userErrors;
+      let moJson = await moResponse.json();
+      let moErrors = moJson?.data?.metaobjectUpsert?.userErrors;
 
       // Retry without hero_image_url if it caused the error
-      if (userErrors?.length && userErrors.some((e: any) => e.message?.includes("hero_image_url"))) {
+      if (moErrors?.length && moErrors.some((e: any) => e.message?.includes("hero_image_url"))) {
         pushFields = fields.filter((f) => f.key !== "hero_image_url");
-        response = await admin.graphql(METAOBJECT_UPSERT, {
+        moResponse = await admin.graphql(METAOBJECT_UPSERT, {
           variables: {
-            handle: { type: "$app:vehicle_spec", handle },
+            handle: { type: "$app:vehicle_spec", handle: moHandle },
             metaobject: { fields: pushFields, capabilities: { publishable: { status: "ACTIVE" } } },
           },
         });
-        json = await response.json();
-        userErrors = json?.data?.metaobjectUpsert?.userErrors;
+        moJson = await moResponse.json();
+        moErrors = moJson?.data?.metaobjectUpsert?.userErrors;
       }
 
-      if (userErrors && userErrors.length > 0) {
-        const errorMsg = `${vehicle.make} ${vehicle.model} ${vehicle.variant}: ${userErrors.map((e: any) => e.message).join(", ")}`;
-        result.errors.push(errorMsg);
-        result.failed++;
-
-        // Update sync record with error
-        await db.from("vehicle_page_sync").upsert(
-          {
-            shop_id: shopId,
-            engine_id: vehicle.engineId,
-            sync_status: "failed",
-            error: errorMsg,
-            linked_product_count: vehicle.linkedProductIds.length,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "shop_id,engine_id" },
-        );
+      if (moErrors && moErrors.length > 0) {
+        console.error(`[vehicle-pages] Metaobject errors for ${vehicle.make} ${vehicle.model}: ${moErrors.map((e: any) => e.message).join(", ")}`);
+        // Non-fatal: we still try to create the page
       } else {
-        const metaobject = json?.data?.metaobjectUpsert?.metaobject;
+        metaobjectGid = moJson?.data?.metaobjectUpsert?.metaobject?.id ?? null;
+        metaobjectHandle = moJson?.data?.metaobjectUpsert?.metaobject?.handle ?? moHandle;
+      }
 
+      await new Promise((r) => setTimeout(r, 300));
+
+      // ── B. Shopify Page create/update (storefront HTML) ───────────
+      const pageTitle = `${vehicle.make} ${vehicle.model} ${finalVariant}${yearRange ? ` (${yearRange})` : ""}`;
+      const pageBody = buildVehiclePageHtml(vehicle);
+      let pageGid: string | null = null;
+      let finalPageHandle: string | null = pageHandle;
+
+      // Check if page already exists (either from sync record or by handle lookup)
+      let existingPageGid = existing?.pageGid ?? null;
+      if (!existingPageGid) {
+        // Look up by handle in case it was created outside our sync tracking
+        try {
+          const lookupResp = await admin.graphql(PAGE_BY_HANDLE, {
+            variables: { handle: pageHandle },
+          });
+          const lookupJson = await lookupResp.json();
+          existingPageGid = lookupJson?.data?.pageByHandle?.id ?? null;
+        } catch {
+          // Ignore lookup errors
+        }
+      }
+
+      if (existingPageGid) {
+        // Update existing page
+        try {
+          const updateResp = await admin.graphql(PAGE_UPDATE, {
+            variables: {
+              id: existingPageGid,
+              page: {
+                title: pageTitle,
+                handle: pageHandle,
+                body: pageBody,
+                isPublished: true,
+              },
+            },
+          });
+          const updateJson = await updateResp.json();
+          const pageErrors = updateJson?.data?.pageUpdate?.userErrors;
+          if (pageErrors?.length) {
+            console.error(`[vehicle-pages] Page update errors for ${pageHandle}: ${pageErrors.map((e: any) => e.message).join(", ")}`);
+          } else {
+            const updatedPage = updateJson?.data?.pageUpdate?.page;
+            pageGid = updatedPage?.id ?? existingPageGid;
+            finalPageHandle = updatedPage?.handle ?? pageHandle;
+          }
+        } catch (err) {
+          console.error(`[vehicle-pages] Page update exception for ${pageHandle}:`, err instanceof Error ? err.message : err);
+        }
+      } else {
+        // Create new page
+        try {
+          const createResp = await admin.graphql(PAGE_CREATE, {
+            variables: {
+              page: {
+                title: pageTitle,
+                handle: pageHandle,
+                body: pageBody,
+                isPublished: true,
+                metafields: [
+                  {
+                    namespace: "autosync",
+                    key: "vehicle_type",
+                    value: "vehicle_spec",
+                    type: "single_line_text_field",
+                  },
+                  {
+                    namespace: "autosync",
+                    key: "engine_id",
+                    value: vehicle.engineId,
+                    type: "single_line_text_field",
+                  },
+                  {
+                    namespace: "autosync",
+                    key: "make",
+                    value: vehicle.make,
+                    type: "single_line_text_field",
+                  },
+                  {
+                    namespace: "autosync",
+                    key: "model",
+                    value: vehicle.model,
+                    type: "single_line_text_field",
+                  },
+                ],
+              },
+            },
+          });
+          const createJson = await createResp.json();
+          const pageErrors = createJson?.data?.pageCreate?.userErrors;
+          if (pageErrors?.length) {
+            console.error(`[vehicle-pages] Page create errors for ${pageHandle}: ${pageErrors.map((e: any) => e.message).join(", ")}`);
+          } else {
+            const createdPage = createJson?.data?.pageCreate?.page;
+            pageGid = createdPage?.id ?? null;
+            finalPageHandle = createdPage?.handle ?? pageHandle;
+          }
+        } catch (err) {
+          console.error(`[vehicle-pages] Page create exception for ${pageHandle}:`, err instanceof Error ? err.message : err);
+        }
+      }
+
+      // ── C. Determine overall success ──────────────────────────────
+      // We consider the vehicle "synced" if the page was created/updated
+      // (metaobject is nice-to-have for admin data, page is what matters)
+      if (pageGid) {
         if (isUpdate) {
           result.updated++;
         } else {
           result.created++;
         }
 
-        // Update sync record with success
         await db.from("vehicle_page_sync").upsert(
           {
             shop_id: shopId,
             engine_id: vehicle.engineId,
-            metaobject_gid: metaobject?.id ?? null,
-            metaobject_handle: metaobject?.handle ?? handle,
+            metaobject_gid: metaobjectGid,
+            metaobject_handle: metaobjectHandle,
+            page_gid: pageGid,
+            page_handle: finalPageHandle,
             sync_status: "synced",
             error: null,
             linked_product_count: vehicle.linkedProductIds.length,
             synced_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "shop_id,engine_id" },
+        );
+      } else {
+        // Page creation/update failed
+        const errorMsg = `${vehicle.make} ${vehicle.model} ${vehicle.variant}: Failed to create/update Shopify page`;
+        result.errors.push(errorMsg);
+        result.failed++;
+
+        await db.from("vehicle_page_sync").upsert(
+          {
+            shop_id: shopId,
+            engine_id: vehicle.engineId,
+            metaobject_gid: metaobjectGid,
+            metaobject_handle: metaobjectHandle,
+            sync_status: "failed",
+            error: errorMsg,
+            linked_product_count: vehicle.linkedProductIds.length,
             updated_at: new Date().toISOString(),
           },
           { onConflict: "shop_id,engine_id" },
@@ -964,7 +1392,7 @@ export async function pushVehiclePages(
 // ---------------------------------------------------------------------------
 
 /**
- * Deletes all metaobjects of type "$app:vehicle_spec" for the store
+ * Deletes all vehicle spec metaobjects AND Shopify Pages for the store,
  * and clears vehicle_page_sync rows.
  */
 export async function deleteVehiclePages(
@@ -972,10 +1400,40 @@ export async function deleteVehiclePages(
   shopId: string,
 ): Promise<{ deleted: number }> {
   let deleted = 0;
+
+  // ── 1. Delete Shopify Pages tracked in vehicle_page_sync ──────────
+  const { data: syncRows } = await db
+    .from("vehicle_page_sync")
+    .select("page_gid")
+    .eq("shop_id", shopId)
+    .not("page_gid", "is", null);
+
+  for (const row of syncRows ?? []) {
+    if (!row.page_gid) continue;
+    try {
+      const deleteResp = await admin.graphql(PAGE_DELETE, {
+        variables: { id: row.page_gid },
+      });
+      const deleteJson = await deleteResp.json();
+      const userErrors = deleteJson?.data?.pageDelete?.userErrors;
+      if (!userErrors || userErrors.length === 0) {
+        deleted++;
+      } else {
+        console.error(`[vehicle-pages] Page delete errors for ${row.page_gid}: ${userErrors.map((e: any) => e.message).join(", ")}`);
+      }
+    } catch (err) {
+      console.error(
+        `[vehicle-pages] Failed to delete page ${row.page_gid}:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+
+  // ── 2. Delete metaobjects (paginated) ─────────────────────────────
   let hasNextPage = true;
   let cursor: string | null = null;
 
-  // Paginate through all metaobjects and delete them
   while (hasNextPage) {
     const response: any = await admin.graphql(METAOBJECTS_LIST, {
       variables: {
@@ -1005,7 +1463,7 @@ export async function deleteVehiclePages(
         }
       } catch (err) {
         console.error(
-          `Failed to delete metaobject ${edge.node.id}:`,
+          `[vehicle-pages] Failed to delete metaobject ${edge.node.id}:`,
           err instanceof Error ? err.message : err,
         );
       }
@@ -1018,7 +1476,7 @@ export async function deleteVehiclePages(
     cursor = pageInfo?.endCursor ?? null;
   }
 
-  // Clear sync records for this shop
+  // ── 3. Clear sync records ─────────────────────────────────────────
   await db
     .from("vehicle_page_sync")
     .delete()
