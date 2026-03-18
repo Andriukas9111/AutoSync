@@ -583,19 +583,32 @@ export async function getVehiclesForPages(
 
     const vehicleSpecs = specsMap.get(engine.id) ?? null;
 
+    // Pull power/torque from specs if engine record is missing them
+    const powerHp = engine.power_hp ?? vehicleSpecs?.system_combined_hp ?? (vehicleSpecs?.raw_specs as any)?.Power?.match?.(/(\d+)\s*Hp/i)?.[1] ? parseInt(((vehicleSpecs?.raw_specs as any)?.Power?.match?.(/(\d+)\s*Hp/i) ?? [])[1]) || null : null;
+    const powerKw = engine.power_kw ?? (powerHp ? Math.round(powerHp * 0.7457) : null);
+    const torqueNm = engine.torque_nm ?? vehicleSpecs?.system_combined_torque_nm ?? (vehicleSpecs?.raw_specs as any)?.Torque?.match?.(/(\d+)\s*Nm/i)?.[1] ? parseInt(((vehicleSpecs?.raw_specs as any)?.Torque?.match?.(/(\d+)\s*Nm/i) ?? [])[1]) || null : null;
+
+    // Build a better variant name from raw_specs or engine fields
+    const rawModification = (vehicleSpecs?.raw_specs as any)?.["Modification (Engine)"] ?? null;
+    const variantName = engine.name ?? rawModification ?? (
+      engine.displacement_cc
+        ? `${(engine.displacement_cc / 1000).toFixed(1)}L ${engine.fuel_type ?? ""}${powerHp ? ` (${powerHp} HP)` : ""}`.trim()
+        : `${engine.fuel_type ?? "Unknown"}`
+    );
+
     result.push({
       engineId: engine.id,
       make: makeName,
       model: model.name,
-      generation: model.generation ?? null,
-      variant: engine.name ?? `${engine.displacement_cc ?? ""}cc ${engine.fuel_type ?? ""}`.trim(),
+      generation: model.generation ?? (vehicleSpecs?.raw_specs as any)?.Generation ?? null,
+      variant: variantName,
       yearFrom: engine.year_from,
       yearTo: engine.year_to,
-      engineCode: engine.code,
+      engineCode: engine.code ?? vehicleSpecs?.engine_model_code ?? null,
       displacementCc: engine.displacement_cc,
-      powerHp: engine.power_hp,
-      powerKw: engine.power_kw,
-      torqueNm: engine.torque_nm,
+      powerHp,
+      powerKw,
+      torqueNm,
       fuelType: engine.fuel_type,
       bodyType: engine.body_type ?? vehicleSpecs?.body_type ?? null,
       driveType: engine.drive_type ?? vehicleSpecs?.drive_type ?? null,
