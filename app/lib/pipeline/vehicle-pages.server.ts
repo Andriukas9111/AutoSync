@@ -728,6 +728,8 @@ export async function pushVehiclePages(
       ? vehicle.variant
       : (specs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? vehicle.variant;
 
+    console.log(`[vehicle-pages] Push fields: power=${finalPowerHp}HP/${finalPowerKw}kW, torque=${finalTorqueNm}Nm, gen=${finalGeneration}, variant=${finalVariant}`);
+
     const fields: Array<{ key: string; value: string }> = [
       { key: "make", value: vehicle.make },
       { key: "model", value: vehicle.model },
