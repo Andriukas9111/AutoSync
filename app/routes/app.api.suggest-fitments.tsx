@@ -16,8 +16,8 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { extractFitmentDataV2 } from "../lib/extraction/ymme-extract";
 import { extractVehiclePatterns } from "../lib/extraction/patterns";
-import { extractEngineHints, scoreEngineMatch, formatEngineDisplay } from "../lib/engine-format";
-import type { EngineHint, EngineDisplayData } from "../lib/engine-format";
+import { extractEngineHints, scoreEngineMatch, formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
+import type { EngineHint, EngineDisplayData, EngineFormatPreset } from "../lib/engine-format";
 import { getYmmeIndex } from "../lib/extraction/ymme-index";
 import type { YmmeIndex } from "../lib/extraction/ymme-index";
 
@@ -58,6 +58,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ suggestions: [], hints: [], diagnostics: ["No title provided"] });
   }
 
+  // Load tenant's engine display format preference
+  const { data: appSettings } = await db
+    .from("app_settings")
+    .select("engine_display_format")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  const engineFormat = (appSettings?.engine_display_format as EngineFormatPreset) || "full";
+  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormat] || DEFAULT_ENGINE_FORMAT;
+
   try {
     // Step 1: Run the full V2 extraction pipeline
     const extraction = await extractFitmentDataV2(db, {
@@ -77,7 +86,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Step 2.5: Run pattern-based extraction for multi-model detection
     // This catches slash-separated models like "140i/240i/340i/440i"
     const patternResult = extractVehiclePatterns(allText);
-    const patternSuggestions = resolvePatternFitments(patternResult.result.fitments, index, hints);
+    const patternSuggestions = resolvePatternFitments(patternResult.result.fitments, index, hints, engineFormatTemplate);
 
     // Step 4: Convert extraction results to ranked suggestions
     const suggestions: SuggestedFitment[] = [...patternSuggestions];
@@ -108,7 +117,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             };
 
             const score = scoreEngineMatch(engineData, hints);
-            const displayName = engine.displayName || formatEngineDisplay(engineData);
+            const displayName = formatEngineDisplay(engineData, engineFormatTemplate);
 
             return { engine, score, displayName };
           })
@@ -174,7 +183,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               id: engine.id,
               code: engine.code,
               name: engine.name,
-              displayName: engine.displayName || formatEngineDisplay({
+              displayName: formatEngineDisplay({
                 code: engine.code,
                 name: engine.name,
                 displacement_cc: engine.displacementCc,
@@ -183,7 +192,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 cylinders: engine.cylinders,
                 cylinder_config: engine.cylinderConfig,
                 aspiration: engine.aspiration,
-              }),
+              }, engineFormatTemplate),
               displacementCc: engine.displacementCc,
               fuelType: engine.fuelType,
               powerHp: engine.powerHp,
@@ -284,6 +293,7 @@ function resolvePatternFitments(
   }>,
   index: YmmeIndex,
   hints: EngineHint[],
+  engineFormatTemplate: string,
 ): SuggestedFitment[] {
   const results: SuggestedFitment[] = [];
   const currentYear = new Date().getFullYear();
@@ -363,7 +373,7 @@ function resolvePatternFitments(
             generation: fit.variant,
           };
           const score = scoreEngineMatch(engineData, hints);
-          return { engine, score, displayName: engine.displayName || formatEngineDisplay(engineData) };
+          return { engine, score, displayName: formatEngineDisplay(engineData, engineFormatTemplate) };
         })
         .filter((e) => e.score > 0.05)
         .sort((a, b) => b.score - a.score)
