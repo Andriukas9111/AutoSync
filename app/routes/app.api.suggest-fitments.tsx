@@ -15,9 +15,11 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { extractFitmentDataV2 } from "../lib/extraction/ymme-extract";
+import { extractVehiclePatterns } from "../lib/extraction/patterns";
 import { extractEngineHints, scoreEngineMatch, formatEngineDisplay } from "../lib/engine-format";
 import type { EngineHint, EngineDisplayData } from "../lib/engine-format";
 import { getYmmeIndex } from "../lib/extraction/ymme-index";
+import type { YmmeIndex } from "../lib/extraction/ymme-index";
 
 export interface SuggestedFitment {
   make: { id: string; name: string };
@@ -72,8 +74,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Step 3: Get the YMME index for engine scoring
     const index = await getYmmeIndex(db);
 
+    // Step 2.5: Run pattern-based extraction for multi-model detection
+    // This catches slash-separated models like "140i/240i/340i/440i"
+    const patternResult = extractVehiclePatterns(allText);
+    const patternSuggestions = resolvePatternFitments(patternResult.result.fitments, index, hints);
+
     // Step 4: Convert extraction results to ranked suggestions
-    const suggestions: SuggestedFitment[] = [];
+    const suggestions: SuggestedFitment[] = [...patternSuggestions];
 
     for (const row of extraction.fitmentRows) {
       // If we have a model but no engine, try to find matching engines
@@ -256,4 +263,174 @@ function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitme
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Resolve pattern-based fitments against YMME database.
+ * This handles multi-model detection (slash-separated) and creates
+ * full suggestions with YMME IDs, engine matching, and year expansion.
+ */
+function resolvePatternFitments(
+  fitments: Array<{
+    make: string;
+    model: string | null;
+    variant: string | null;
+    year_from: number | null;
+    year_to: number | null;
+    engine: string | null;
+    engine_code: string | null;
+    fuel_type: string | null;
+    confidence: number;
+  }>,
+  index: YmmeIndex,
+  hints: EngineHint[],
+): SuggestedFitment[] {
+  const results: SuggestedFitment[] = [];
+  const currentYear = new Date().getFullYear();
+
+  for (const fit of fitments) {
+    if (!fit.make) continue;
+
+    // Resolve make
+    const makeEntry = Array.from(index.makeById.values()).find(
+      (m) => m.name.toLowerCase() === fit.make.toLowerCase(),
+    );
+    if (!makeEntry) continue;
+
+    // Resolve model — try exact match first, then substring
+    let modelEntry = fit.model
+      ? Array.from(index.modelById.values()).find(
+          (m) =>
+            m.makeId === makeEntry.id &&
+            m.name.toLowerCase() === fit.model!.toLowerCase(),
+        )
+      : null;
+
+    // Fallback: try resolving BMW-style codes to series (e.g., "440i" -> "4 Series")
+    if (!modelEntry && fit.model) {
+      const seriesMatch = fit.model.match(/^(\d)/);
+      if (seriesMatch) {
+        const seriesName = `${seriesMatch[1]} Series`;
+        modelEntry = Array.from(index.modelById.values()).find(
+          (m) =>
+            m.makeId === makeEntry.id &&
+            m.name.toLowerCase() === seriesName.toLowerCase(),
+        );
+      }
+    }
+
+    // Expand year: if year_to is null (open-ended "2016+"), use current year
+    const yearFrom = fit.year_from;
+    const yearTo = fit.year_to ?? (yearFrom ? currentYear : null);
+
+    // Find matching engines
+    if (modelEntry) {
+      const modelEngines = index.enginesByModelId.get(modelEntry.id) || [];
+
+      // Filter engines by year range and engine code hint
+      const matchingEngines = modelEngines.filter((eng) => {
+        // Year filter
+        if (yearFrom && eng.yearTo && eng.yearTo < yearFrom) return false;
+        if (yearTo && eng.yearFrom && eng.yearFrom > yearTo) return false;
+
+        // Engine code filter (if we have a hint)
+        if (fit.engine_code) {
+          const code = fit.engine_code.toLowerCase();
+          if (eng.code && eng.code.toLowerCase().startsWith(code)) return true;
+          // Still include if no code match but within year range
+        }
+
+        return true;
+      });
+
+      // Score engines against hints
+      const scoredEngines = matchingEngines
+        .map((engine) => {
+          const engineData: EngineDisplayData = {
+            code: engine.code,
+            name: engine.name,
+            displacement_cc: engine.displacementCc,
+            fuel_type: engine.fuelType,
+            power_hp: engine.powerHp,
+            power_kw: engine.powerKw,
+            torque_nm: engine.torqueNm,
+            cylinders: engine.cylinders,
+            cylinder_config: engine.cylinderConfig,
+            aspiration: engine.aspiration,
+            drive_type: engine.driveType,
+            transmission_type: engine.transmissionType,
+            modification: engine.modification,
+            generation: fit.variant,
+          };
+          const score = scoreEngineMatch(engineData, hints);
+          return { engine, score, displayName: engine.displayName || formatEngineDisplay(engineData) };
+        })
+        .filter((e) => e.score > 0.05)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8);
+
+      if (scoredEngines.length > 0) {
+        // Create one suggestion per matching engine
+        for (const { engine, score, displayName } of scoredEngines) {
+          const matchedHints = hints
+            .filter((h) => {
+              if (h.type === "engine_code" && engine.code?.toLowerCase().includes(h.normalized.toLowerCase())) return true;
+              if (h.type === "power" && engine.powerHp && Math.abs(engine.powerHp - parseInt(h.normalized)) <= 15) return true;
+              if (h.type === "fuel_type" && engine.fuelType?.toLowerCase().includes(h.normalized)) return true;
+              if (h.type === "aspiration" && engine.aspiration?.toLowerCase().includes(h.normalized)) return true;
+              return false;
+            })
+            .map((h) => h.value);
+
+          results.push({
+            make: { id: makeEntry.id, name: makeEntry.name },
+            model: { id: modelEntry.id, name: modelEntry.name, generation: modelEntry.generation },
+            engine: {
+              id: engine.id,
+              code: engine.code,
+              name: engine.name,
+              displayName,
+              displacementCc: engine.displacementCc,
+              fuelType: engine.fuelType,
+              powerHp: engine.powerHp,
+              aspiration: engine.aspiration,
+              cylinders: engine.cylinders,
+              cylinderConfig: engine.cylinderConfig,
+            },
+            yearFrom: engine.yearFrom ?? yearFrom,
+            yearTo: engine.yearTo ?? yearTo,
+            confidence: Math.min(1.0, fit.confidence * 0.7 + score * 0.3),
+            source: "pattern",
+            matchedHints,
+          });
+        }
+      } else {
+        // No engine match — add model-level suggestion
+        results.push({
+          make: { id: makeEntry.id, name: makeEntry.name },
+          model: { id: modelEntry.id, name: modelEntry.name, generation: modelEntry.generation },
+          engine: null,
+          yearFrom,
+          yearTo,
+          confidence: fit.confidence * 0.8,
+          source: "pattern",
+          matchedHints: [],
+        });
+      }
+    } else {
+      // No model resolved — make-only suggestion
+      results.push({
+        make: { id: makeEntry.id, name: makeEntry.name },
+        model: fit.model ? { id: "", name: fit.model, generation: fit.variant } : null,
+        engine: null,
+        yearFrom,
+        yearTo,
+        confidence: fit.confidence * 0.5,
+        source: "pattern",
+        matchedHints: [],
+      });
+    }
+  }
+
+  return results;
 }
