@@ -712,11 +712,21 @@ export async function pushVehiclePages(
     const overview = buildOverviewText(vehicle);
     const fullSpecs = buildFullSpecsJson(vehicle.specs);
 
+    // Direct fallback for power/torque/generation from specs object
+    const specs = vehicle.specs;
+    const finalPowerHp = vehicle.powerHp ?? specs?.system_combined_hp ?? null;
+    const finalPowerKw = vehicle.powerKw ?? (finalPowerHp ? Math.round(finalPowerHp * 0.7457) : null);
+    const finalTorqueNm = vehicle.torqueNm ?? specs?.system_combined_torque_nm ?? null;
+    const finalGeneration = vehicle.generation ?? (specs?.raw_specs as Record<string, string> | null)?.Generation ?? "";
+    const finalVariant = vehicle.variant !== `${vehicle.displacementCc ?? ""}cc ${vehicle.fuelType ?? ""}`.trim()
+      ? vehicle.variant
+      : (specs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? vehicle.variant;
+
     const fields: Array<{ key: string; value: string }> = [
       { key: "make", value: vehicle.make },
       { key: "model", value: vehicle.model },
-      { key: "generation", value: vehicle.generation ?? "" },
-      { key: "variant", value: vehicle.variant },
+      { key: "generation", value: finalGeneration },
+      { key: "variant", value: finalVariant },
       { key: "year_range", value: yearRange },
       { key: "engine_code", value: vehicle.engineCode ?? "" },
       {
@@ -728,15 +738,15 @@ export async function pushVehiclePages(
       {
         key: "power",
         value:
-          vehicle.powerHp && vehicle.powerKw
-            ? `${vehicle.powerHp} HP (${vehicle.powerKw} kW)`
-            : vehicle.powerHp
-              ? `${vehicle.powerHp} HP`
+          finalPowerHp && finalPowerKw
+            ? `${finalPowerHp} HP (${finalPowerKw} kW)`
+            : finalPowerHp
+              ? `${finalPowerHp} HP`
               : "",
       },
       {
         key: "torque",
-        value: vehicle.torqueNm ? `${vehicle.torqueNm} Nm` : "",
+        value: finalTorqueNm ? `${finalTorqueNm} Nm` : "",
       },
       { key: "fuel_type", value: vehicle.fuelType ?? "" },
       { key: "body_type", value: vehicle.bodyType ?? "" },
