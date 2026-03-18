@@ -1,4 +1,4 @@
-import { db } from "./db.server";
+import db from "./db.server";
 import type { PlanTier, PlanLimits, Tenant } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -292,6 +292,188 @@ export function getMinimumPlanForFeature(
     if (value !== false && value !== "none") return plan;
   }
   return "enterprise";
+}
+
+// ---------------------------------------------------------------------------
+// Shopify Billing API — create & manage recurring app subscriptions
+// ---------------------------------------------------------------------------
+
+/** Monthly prices for each paid tier (must match PLANS in app.plans.tsx) */
+const PLAN_PRICES: Record<PlanTier, number> = {
+  free: 0,
+  starter: 19,
+  growth: 49,
+  professional: 99,
+  business: 179,
+  enterprise: 299,
+};
+
+const PLAN_NAMES: Record<PlanTier, string> = {
+  free: "Free",
+  starter: "Starter",
+  growth: "Growth",
+  professional: "Professional",
+  business: "Business",
+  enterprise: "Enterprise",
+};
+
+/**
+ * Create a Shopify AppSubscription for a plan change.
+ * Returns the confirmationUrl where the merchant must approve the charge.
+ * For the "free" plan, cancels any existing subscription instead.
+ */
+export async function createBillingSubscription(
+  admin: { graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response> },
+  shopId: string,
+  newPlan: PlanTier,
+  returnUrl: string,
+): Promise<{ confirmationUrl: string } | { cancelled: true }> {
+  // Free plan: cancel existing subscription
+  if (newPlan === "free") {
+    await cancelBillingSubscription(admin, shopId);
+    // Update tenant plan immediately for downgrades to free
+    await db
+      .from("tenants")
+      .update({ plan: "free", plan_status: "active", updated_at: new Date().toISOString() })
+      .eq("shop_id", shopId);
+    return { cancelled: true };
+  }
+
+  const price = PLAN_PRICES[newPlan];
+  const name = `AutoSync ${PLAN_NAMES[newPlan]}`;
+
+  const response = await admin.graphql(
+    `#graphql
+      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+        appSubscriptionCreate(
+          name: $name
+          returnUrl: $returnUrl
+          lineItems: $lineItems
+          test: $test
+        ) {
+          appSubscription {
+            id
+            status
+          }
+          confirmationUrl
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        name,
+        returnUrl,
+        test: true, // Always test mode in development — remove for production
+        lineItems: [
+          {
+            plan: {
+              appRecurringPricingDetails: {
+                price: { amount: price, currencyCode: "USD" },
+                interval: "EVERY_30_DAYS",
+              },
+            },
+          },
+        ],
+      },
+    },
+  );
+
+  const json = await response.json();
+  const result = json.data?.appSubscriptionCreate;
+
+  if (result?.userErrors?.length > 0) {
+    throw new Error(`Billing error: ${result.userErrors.map((e: { message: string }) => e.message).join(", ")}`);
+  }
+
+  if (!result?.confirmationUrl) {
+    throw new Error("Failed to create billing subscription — no confirmation URL returned");
+  }
+
+  // Store the pending plan change so we can activate it on callback
+  await db
+    .from("tenants")
+    .update({
+      pending_plan: newPlan,
+      billing_subscription_id: result.appSubscription?.id ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId);
+
+  return { confirmationUrl: result.confirmationUrl };
+}
+
+/**
+ * Cancel the current Shopify subscription for a shop.
+ */
+async function cancelBillingSubscription(
+  admin: { graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response> },
+  shopId: string,
+): Promise<void> {
+  // Get current subscription ID from tenant record
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("billing_subscription_id")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  if (!tenant?.billing_subscription_id) return;
+
+  await admin.graphql(
+    `#graphql
+      mutation appSubscriptionCancel($id: ID!) {
+        appSubscriptionCancel(id: $id) {
+          appSubscription { id status }
+          userErrors { field message }
+        }
+      }
+    `,
+    { variables: { id: tenant.billing_subscription_id } },
+  );
+
+  // Clear the subscription ID
+  await db
+    .from("tenants")
+    .update({
+      billing_subscription_id: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId);
+}
+
+/**
+ * Confirm a billing subscription after Shopify redirects back.
+ * Called from the billing callback route.
+ */
+export async function confirmBillingSubscription(
+  shopId: string,
+  chargeId: string,
+): Promise<{ plan: PlanTier }> {
+  // Get the pending plan from the tenant record
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("pending_plan")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  const newPlan = (tenant?.pending_plan as PlanTier) || "free";
+
+  // Activate the plan
+  await db
+    .from("tenants")
+    .update({
+      plan: newPlan,
+      plan_status: "active",
+      pending_plan: null,
+      billing_charge_id: chargeId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId);
+
+  return { plan: newPlan };
 }
 
 /** Increment the tenant's product_count via Supabase RPC. */

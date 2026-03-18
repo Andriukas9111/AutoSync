@@ -19,7 +19,7 @@ import {
 import { StarFilledIcon } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import { getTenant } from "../lib/billing.server";
+import { getTenant, createBillingSubscription, confirmBillingSubscription } from "../lib/billing.server";
 import db from "../lib/db.server";
 import type { PlanTier } from "../lib/types";
 
@@ -273,22 +273,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
+  // Handle billing confirmation callback from Shopify
+  const url = new URL(request.url);
+  const billingConfirmed = url.searchParams.get("billing_confirmed");
+  const chargeId = url.searchParams.get("charge_id");
+
+  let billingSuccess = false;
+  if (billingConfirmed === "true" && chargeId) {
+    try {
+      await confirmBillingSubscription(shopId, chargeId);
+      billingSuccess = true;
+    } catch {
+      // Confirmation failed — continue to show current plan
+    }
+  }
+
   const tenant = await getTenant(shopId);
   const currentPlan: PlanTier = tenant?.plan ?? "free";
 
   return {
     currentPlan,
     shopId,
+    billingSuccess,
   };
 };
 
 // ---------------------------------------------------------------------------
-// Action — change plan (development mode: direct DB update)
-// In production, this would redirect to Shopify billing confirmation
+// Action — change plan via Shopify Billing API
+// Creates an AppSubscription and redirects merchant to Shopify approval page
 // ---------------------------------------------------------------------------
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shopId = session.shop;
 
   const formData = await request.formData();
@@ -298,24 +314,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "Invalid plan selected." }, { status: 400 });
   }
 
-  const { error: updateError } = await db
-    .from("tenants")
-    .update({
+  try {
+    const appUrl = process.env.SHOPIFY_APP_URL || `https://${request.headers.get("host")}`;
+    const returnUrl = `${appUrl}/app/plans?billing_confirmed=true`;
+
+    const result = await createBillingSubscription(admin, shopId, newPlan, returnUrl);
+
+    if ("cancelled" in result) {
+      // Downgrade to free — no Shopify confirmation needed
+      return data({ success: true, plan: "free" as PlanTier, planName: "Free" });
+    }
+
+    // Redirect merchant to Shopify billing approval page
+    return data({
+      redirectUrl: result.confirmationUrl,
       plan: newPlan,
-      plan_status: "active",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("shop_id", shopId);
-
-  if (updateError) {
-    return data(
-      { error: `Failed to update plan: ${updateError.message}` },
-      { status: 500 },
-    );
+      planName: PLANS.find((p) => p.tier === newPlan)?.name ?? newPlan,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Billing error";
+    return data({ error: message }, { status: 500 });
   }
-
-  const planName = PLANS.find((p) => p.tier === newPlan)?.name ?? newPlan;
-  return data({ success: true, plan: newPlan, planName });
 };
 
 // ---------------------------------------------------------------------------
@@ -325,7 +344,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Plans() {
   useResponsiveGridStyles();
 
-  const { currentPlan } = useLoaderData<typeof loader>();
+  const { currentPlan, billingSuccess } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
@@ -333,8 +352,19 @@ export default function Plans() {
 
   const fetcherData = fetcher.data as
     | { success: true; plan: PlanTier; planName: string }
+    | { redirectUrl: string; plan: PlanTier; planName: string }
     | { error: string }
     | undefined;
+
+  // Handle Shopify billing redirect
+  useEffect(() => {
+    if (fetcherData && "redirectUrl" in fetcherData) {
+      // Redirect to Shopify billing approval page
+      window.top
+        ? (window.top.location.href = fetcherData.redirectUrl)
+        : (window.location.href = fetcherData.redirectUrl);
+    }
+  }, [fetcherData]);
 
   const activePlan: PlanTier =
     fetcherData && "success" in fetcherData ? fetcherData.plan : currentPlan;
@@ -381,6 +411,12 @@ export default function Plans() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
         <BlockStack gap="600">
+          {/* Billing confirmation success */}
+          {billingSuccess && (
+            <Banner title="Plan activated successfully" tone="success" onDismiss={() => {}}>
+              <p>Your subscription has been confirmed by Shopify. All features are now active.</p>
+            </Banner>
+          )}
           {/* Success/Error banners */}
           {fetcherData && "success" in fetcherData && (
             <Banner
@@ -682,7 +718,7 @@ export default function Plans() {
               <Text as="p" variant="bodyMd">
                 You are upgrading from <strong>{PLANS.find((p) => p.tier === activePlan)?.name}</strong> to{" "}
                 <strong>{confirmPlanInfo?.name}</strong> ({confirmPlanInfo?.price}/{confirmPlanInfo?.priceNote}).
-                This will unlock all features included in the {confirmPlanInfo?.name} plan.
+                You will be redirected to Shopify to confirm the charge.
               </Text>
             ) : (
               <Text as="p" variant="bodyMd">
