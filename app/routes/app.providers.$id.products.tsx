@@ -1,0 +1,534 @@
+/**
+ * Provider Products Browser — browse/manage products scoped to a specific provider
+ *
+ * IndexTable with search, filters, pagination, bulk actions.
+ * Same pattern as app.products._index.tsx but filtered by provider_id.
+ */
+
+import { useState, useCallback } from "react";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { data } from "react-router";
+import {
+  Page,
+  Card,
+  IndexTable,
+  Text,
+  Badge,
+  InlineStack,
+  BlockStack,
+  TextField,
+  Select,
+  Pagination,
+  EmptyState,
+  Banner,
+  Thumbnail,
+  Box,
+  Button,
+  Divider,
+  Modal,
+  useIndexResourceState,
+} from "@shopify/polaris";
+import {
+  SearchIcon,
+  DeleteIcon,
+  ImportIcon,
+  ExportIcon,
+} from "@shopify/polaris-icons";
+
+import { authenticate } from "../shopify.server";
+import db from "../lib/db.server";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PAGE_SIZE = 50;
+
+const STATUS_CONFIG: Record<
+  string,
+  { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
+> = {
+  unmapped: { tone: undefined, label: "Unmapped" },
+  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  manual_mapped: { tone: "success", label: "Manual Mapped" },
+  review: { tone: "warning", label: "Review" },
+  error: { tone: "critical", label: "Error" },
+};
+
+// ---------------------------------------------------------------------------
+// Loader
+// ---------------------------------------------------------------------------
+
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+  const providerId = params.id;
+
+  if (!providerId) {
+    throw new Response("Provider ID required", { status: 400 });
+  }
+
+  // Fetch provider info
+  const { data: provider } = await db
+    .from("providers")
+    .select("id, name, type, logo_url, product_count")
+    .eq("id", providerId)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  if (!provider) {
+    throw new Response("Provider not found", { status: 404 });
+  }
+
+  // Parse URL params
+  const url = new URL(request.url);
+  const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
+  const search = url.searchParams.get("search") ?? "";
+  const statusFilter = url.searchParams.get("status") ?? "";
+  const sortField = url.searchParams.get("sort") ?? "created_at";
+  const sortDir = url.searchParams.get("dir") ?? "desc";
+
+  // Build query
+  let query = db
+    .from("products")
+    .select("id, title, sku, provider_sku, price, cost_price, vendor, product_type, image_url, fitment_status, import_id, created_at", { count: "exact" })
+    .eq("shop_id", shopId)
+    .eq("provider_id", providerId);
+
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,sku.ilike.%${search}%,provider_sku.ilike.%${search}%`);
+  }
+
+  if (statusFilter) {
+    query = query.eq("fitment_status", statusFilter);
+  }
+
+  const ascending = sortDir === "asc";
+  query = query.order(sortField, { ascending });
+
+  // Pagination
+  const from = (page - 1) * PAGE_SIZE;
+  query = query.range(from, from + PAGE_SIZE - 1);
+
+  const { data: products, count, error } = await query;
+
+  if (error) {
+    console.error("Products query error:", error.message);
+  }
+
+  const totalProducts = count ?? 0;
+  const totalPages = Math.ceil(totalProducts / PAGE_SIZE);
+
+  // Status breakdown
+  const { data: statusCounts } = await db
+    .from("products")
+    .select("fitment_status")
+    .eq("shop_id", shopId)
+    .eq("provider_id", providerId);
+
+  const statusBreakdown: Record<string, number> = {};
+  if (statusCounts) {
+    for (const row of statusCounts) {
+      const status = row.fitment_status ?? "unmapped";
+      statusBreakdown[status] = (statusBreakdown[status] ?? 0) + 1;
+    }
+  }
+
+  return {
+    provider,
+    products: products ?? [],
+    totalProducts,
+    totalPages,
+    currentPage: page,
+    search,
+    statusFilter,
+    sortField,
+    sortDir,
+    statusBreakdown,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Action — bulk operations
+// ---------------------------------------------------------------------------
+
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+  const providerId = params.id;
+
+  const formData = await request.formData();
+  const actionType = String(formData.get("_action") || "");
+
+  if (actionType === "bulk_delete") {
+    const ids = JSON.parse(String(formData.get("ids") || "[]")) as string[];
+    if (ids.length === 0) {
+      return data({ error: "No products selected" }, { status: 400 });
+    }
+
+    const { error } = await db
+      .from("products")
+      .delete()
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .in("id", ids);
+
+    if (error) {
+      return data({ error: `Delete failed: ${error.message}` }, { status: 500 });
+    }
+
+    // Update provider product count
+    const { count } = await db
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    await db
+      .from("providers")
+      .update({ product_count: count ?? 0, updated_at: new Date().toISOString() })
+      .eq("id", providerId)
+      .eq("shop_id", shopId);
+
+    return data({ success: true, deleted: ids.length });
+  }
+
+  if (actionType === "delete_all") {
+    const { error } = await db
+      .from("products")
+      .delete()
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    if (error) {
+      return data({ error: `Delete all failed: ${error.message}` }, { status: 500 });
+    }
+
+    await db
+      .from("providers")
+      .update({ product_count: 0, updated_at: new Date().toISOString() })
+      .eq("id", providerId)
+      .eq("shop_id", shopId);
+
+    return data({ success: true, deletedAll: true });
+  }
+
+  return data({ error: "Unknown action" }, { status: 400 });
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function ProviderProducts() {
+  const {
+    provider,
+    products,
+    totalProducts,
+    totalPages,
+    currentPage,
+    search: initialSearch,
+    statusFilter: initialStatus,
+    statusBreakdown,
+  } = useLoaderData<typeof loader>();
+
+  const navigate = useNavigate();
+  const fetcher = useFetcher();
+
+  const [searchValue, setSearchValue] = useState(initialSearch);
+  const [statusValue, setStatusValue] = useState(initialStatus);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
+
+  const resourceName = { singular: "product", plural: "products" };
+  const {
+    selectedResources,
+    allResourcesSelected,
+    handleSelectionChange,
+    clearSelection,
+  } = useIndexResourceState(products.map((p: { id: string }) => ({ id: p.id })));
+
+  // Navigation with filters
+  const applyFilters = useCallback(
+    (overrides: Record<string, string> = {}) => {
+      const params = new URLSearchParams();
+      const s = overrides.search ?? searchValue;
+      const st = overrides.status ?? statusValue;
+      if (s) params.set("search", s);
+      if (st) params.set("status", st);
+      params.set("page", overrides.page ?? "1");
+      navigate(`/app/providers/${provider.id}/products?${params.toString()}`);
+    },
+    [searchValue, statusValue, provider.id, navigate],
+  );
+
+  const handleSearch = useCallback(() => applyFilters(), [applyFilters]);
+
+  const handleBulkDelete = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    fetcher.submit(
+      { _action: "bulk_delete", ids: JSON.stringify(selectedResources) },
+      { method: "POST" },
+    );
+    clearSelection();
+  }, [selectedResources, fetcher, clearSelection]);
+
+  const handleDeleteAll = useCallback(() => {
+    fetcher.submit({ _action: "delete_all" }, { method: "POST" });
+    setDeleteModalOpen(false);
+  }, [fetcher]);
+
+  const promotedBulkActions = [
+    {
+      content: `Delete ${selectedResources.length} selected`,
+      onAction: handleBulkDelete,
+    },
+  ];
+
+  return (
+    <Page
+      fullWidth
+      title={`${provider.name} — Products`}
+      subtitle={`${totalProducts.toLocaleString()} products from this provider`}
+      backAction={{
+        content: "Back to Provider",
+        onAction: () => navigate(`/app/providers/${provider.id}`),
+      }}
+      primaryAction={{
+        content: "Import More",
+        onAction: () => navigate(`/app/providers/${provider.id}/import`),
+        icon: ImportIcon,
+      }}
+      secondaryActions={[
+        {
+          content: "Delete All Products",
+          onAction: () => setDeleteModalOpen(true),
+          icon: DeleteIcon,
+          destructive: true,
+        },
+      ]}
+    >
+      <BlockStack gap="400">
+        {/* Success/Error Banners */}
+        {fetcherData?.success && fetcherData.deleted && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>{`Successfully deleted ${fetcherData.deleted} product${fetcherData.deleted !== 1 ? "s" : ""}.`}</p>
+          </Banner>
+        )}
+        {fetcherData?.success && fetcherData.deletedAll && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>All products from this provider have been deleted.</p>
+          </Banner>
+        )}
+        {fetcherData?.error && (
+          <Banner tone="critical">
+            <p>{fetcherData.error}</p>
+          </Banner>
+        )}
+
+        {/* Status Breakdown */}
+        {totalProducts > 0 && (
+          <Card>
+            <InlineStack gap="400" wrap>
+              {Object.entries(statusBreakdown).map(([status, count]) => {
+                const config = STATUS_CONFIG[status] ?? { tone: undefined, label: status };
+                return (
+                  <Button
+                    key={status}
+                    size="slim"
+                    variant={statusValue === status ? "primary" : "tertiary"}
+                    onClick={() => {
+                      setStatusValue(statusValue === status ? "" : status);
+                      applyFilters({ status: statusValue === status ? "" : status });
+                    }}
+                  >
+                    {`${config.label} (${count})`}
+                  </Button>
+                );
+              })}
+              {statusValue && (
+                <Button
+                  size="slim"
+                  variant="tertiary"
+                  onClick={() => {
+                    setStatusValue("");
+                    applyFilters({ status: "" });
+                  }}
+                >
+                  Clear Filter
+                </Button>
+              )}
+            </InlineStack>
+          </Card>
+        )}
+
+        {/* Search */}
+        <Card>
+          <InlineStack gap="300" blockAlign="end">
+            <div style={{ flex: 1 }}>
+              <TextField
+                label="Search"
+                labelHidden
+                value={searchValue}
+                onChange={setSearchValue}
+                placeholder="Search by title, SKU, or provider SKU..."
+                autoComplete="off"
+                clearButton
+                onClearButtonClick={() => {
+                  setSearchValue("");
+                  applyFilters({ search: "" });
+                }}
+              />
+            </div>
+            <Button onClick={handleSearch} icon={SearchIcon}>
+              Search
+            </Button>
+          </InlineStack>
+        </Card>
+
+        {/* Products Table */}
+        {products.length === 0 ? (
+          <Card>
+            <EmptyState
+              heading={searchValue || statusValue ? "No matching products" : "No products imported yet"}
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+              action={{
+                content: "Import Products",
+                onAction: () => navigate(`/app/providers/${provider.id}/import`),
+              }}
+            >
+              <p>
+                {searchValue || statusValue
+                  ? "Try adjusting your search or filters."
+                  : "Upload a data file to import products from this provider."}
+              </p>
+            </EmptyState>
+          </Card>
+        ) : (
+          <Card padding="0">
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={products.length}
+              selectedItemsCount={
+                allResourcesSelected ? "All" : selectedResources.length
+              }
+              onSelectionChange={handleSelectionChange}
+              headings={[
+                { title: "Product" },
+                { title: "SKU" },
+                { title: "Price" },
+                { title: "Vendor" },
+                { title: "Status" },
+                { title: "Imported" },
+              ]}
+              promotedBulkActions={promotedBulkActions}
+            >
+              {products.map((product: Record<string, unknown>, index: number) => {
+                const id = product.id as string;
+                const status = STATUS_CONFIG[(product.fitment_status as string) ?? "unmapped"] ?? STATUS_CONFIG.unmapped;
+                const price = product.price ? `$${Number(product.price).toFixed(2)}` : "—";
+                const created = product.created_at
+                  ? new Date(product.created_at as string).toLocaleDateString()
+                  : "—";
+
+                return (
+                  <IndexTable.Row
+                    id={id}
+                    key={id}
+                    selected={selectedResources.includes(id)}
+                    position={index}
+                  >
+                    <IndexTable.Cell>
+                      <InlineStack gap="300" blockAlign="center">
+                        <Thumbnail
+                          source={(product.image_url as string) || ""}
+                          alt={(product.title as string) || ""}
+                          size="small"
+                        />
+                        <BlockStack gap="050">
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {((product.title as string) || "Untitled").slice(0, 60)}
+                          </Text>
+                          {typeof product.product_type === "string" && product.product_type && (
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {product.product_type}
+                            </Text>
+                          )}
+                        </BlockStack>
+                      </InlineStack>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm">
+                        {(product.sku as string) || (product.provider_sku as string) || "—"}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm">
+                        {price}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm">
+                        {(product.vendor as string) || "—"}
+                      </Text>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Badge tone={status.tone}>{status.label}</Badge>
+                    </IndexTable.Cell>
+                    <IndexTable.Cell>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {created}
+                      </Text>
+                    </IndexTable.Cell>
+                  </IndexTable.Row>
+                );
+              })}
+            </IndexTable>
+          </Card>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Box paddingBlock="400">
+            <InlineStack align="center" gap="400">
+              <Pagination
+                hasPrevious={currentPage > 1}
+                hasNext={currentPage < totalPages}
+                onPrevious={() => applyFilters({ page: String(currentPage - 1) })}
+                onNext={() => applyFilters({ page: String(currentPage + 1) })}
+              />
+              <Text as="span" variant="bodySm" tone="subdued">
+                {`Page ${currentPage} of ${totalPages} (${totalProducts.toLocaleString()} products)`}
+              </Text>
+            </InlineStack>
+          </Box>
+        )}
+      </BlockStack>
+
+      {/* Delete All Confirmation Modal */}
+      <Modal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        title="Delete all products from this provider?"
+        primaryAction={{
+          content: "Delete All",
+          onAction: handleDeleteAll,
+          destructive: true,
+          loading: fetcher.state !== "idle",
+        }}
+        secondaryActions={[
+          { content: "Cancel", onAction: () => setDeleteModalOpen(false) },
+        ]}
+      >
+        <Modal.Section>
+          <Text as="p" variant="bodyMd">
+            This will permanently delete all {totalProducts.toLocaleString()} products
+            imported from <strong>{provider.name}</strong>. This action cannot be undone.
+          </Text>
+        </Modal.Section>
+      </Modal>
+    </Page>
+  );
+}
