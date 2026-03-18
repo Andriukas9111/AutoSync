@@ -114,8 +114,9 @@ const VARIANT_REGEX = /\b(E[0-9]{2}|F[0-9]{2}|G[0-9]{2}|B[5-9]|C[5-8]|W[0-9]{3}|
 
 // Known engine code patterns -- specific to manufacturer naming conventions.
 const ENGINE_CODE_PATTERNS = [
-  /\b([NS][2-7]\d[A-Z]?)\b/g,
-  /\b(B[34578]\d[A-Z]?)\b/g,
+  /\b([NS][12345678]\d(?:[A-Z]\d{0,2})?)\b/g,
+  /\b(B[345678]\d(?:[A-Z]\d{0,2})?)\b/g,
+  /\b(S[2-7]\d(?:[A-Z]\d{0,2})?)\b/g,
   /\b(M[12]\d{2})\b/g,
   /\b(OM\d{3})\b/g,
   /\b(EA[0-9]{3}(?:\s*Gen\s*\d)?)\b/gi,
@@ -160,15 +161,36 @@ export const MODEL_PATTERNS: Record<string, string[]> = {
     "R8", "Allroad",
   ],
   "BMW": [
+    // M Performance models (most specific first)
     "M8 Competition", "M8", "M7", "M6", "M5 Competition", "M5",
     "M4 Competition", "M4 CSL", "M4 GTS", "M4 CS", "M4",
     "M3 Competition", "M3 CS", "M3", "M2 Competition", "M2 CS", "M2",
     "M240i", "M235i", "M140i", "M135i",
+    // Individual model codes — 1 Series
+    "118i", "120i", "125i", "128i", "130i", "135i", "140i",
+    // Individual model codes — 2 Series
+    "218i", "220i", "225i", "228i", "230i", "235i", "240i",
+    // Individual model codes — 3 Series
+    "318i", "320i", "325i", "328i", "330i", "335i", "340i",
+    // Individual model codes — 4 Series
+    "420i", "425i", "428i", "430i", "435i", "440i",
+    // Individual model codes — 5 Series
+    "520i", "525i", "528i", "530i", "535i", "540i", "545i", "550i",
+    // Individual model codes — 6 Series
+    "630i", "640i", "645i", "650i",
+    // Individual model codes — 7 Series
+    "730i", "740i", "745i", "750i", "760i",
+    // Individual model codes — 8 Series
+    "840i", "850i",
+    // X Series individual models
+    "X7", "X6 M", "X6", "X5 M", "X5", "X4 M", "X4", "X3 M", "X3", "X2", "X1",
+    // Z Series
+    "Z4", "Z3",
+    // i/Electric Series
+    "iX3", "iX1", "i8", "i7", "i5", "i4", "i3", "iX",
+    // Generic series names (last — fallback)
     "8 Series", "7 Series", "6 Series", "5 Series",
     "4 Series", "3 Series", "2 Series", "1 Series",
-    "X7", "X6 M", "X6", "X5 M", "X5", "X4 M", "X4", "X3 M", "X3", "X2", "X1",
-    "Z4", "Z3",
-    "i8", "i7", "i5", "i4", "i3", "iX3", "iX",
   ],
   "Volkswagen": [
     "Golf R", "Golf GTI", "Golf GTD", "Golf GTE", "Golf",
@@ -395,19 +417,25 @@ export function extractVehiclePatterns(
     }
   }
 
-  // Extract year range
+  // Extract year range — check "YYYY+" / "YYYY onwards" first, then ranges, then singles
   let yearFrom: number | null = null
   let yearTo: number | null = null
-  const yearRangeMatch = YEAR_RANGE_REGEX.exec(text)
-  if (yearRangeMatch) {
-    yearFrom = parseInt(yearRangeMatch[1], 10)
-    yearTo = parseInt(yearRangeMatch[2], 10)
+  const yearOnwardsMatch = text.match(/\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)\b/i)
+  if (yearOnwardsMatch) {
+    yearFrom = parseInt(yearOnwardsMatch[1], 10)
+    yearTo = null // open-ended
   } else {
-    const yearMatches = text.match(SINGLE_YEAR_REGEX)
-    if (yearMatches && yearMatches.length > 0) {
-      const years = yearMatches.map((y) => parseInt(y, 10)).sort()
-      yearFrom = years[0]
-      yearTo = years[years.length - 1]
+    const yearRangeMatch = YEAR_RANGE_REGEX.exec(text)
+    if (yearRangeMatch) {
+      yearFrom = parseInt(yearRangeMatch[1], 10)
+      yearTo = parseInt(yearRangeMatch[2], 10)
+    } else {
+      const yearMatches = text.match(SINGLE_YEAR_REGEX)
+      if (yearMatches && yearMatches.length > 0) {
+        const years = yearMatches.map((y) => parseInt(y, 10)).sort()
+        yearFrom = years[0]
+        yearTo = years[years.length - 1]
+      }
     }
   }
 
@@ -445,13 +473,43 @@ export function extractVehiclePatterns(
     }
   }
 
+  // Pre-process: split slash-separated model lists (e.g., "140i/240i/340i/440i")
+  // This expands "140i/240i/340i" into individual mentions so each can be matched.
+  const slashExpandedModels: string[] = []
+  const slashModelRegex = /(\d{3}[a-z]?i(?:\s*\/\s*\d{3}[a-z]?i)+)/gi
+  const slashMatches = text.match(slashModelRegex)
+  if (slashMatches) {
+    for (const slashGroup of slashMatches) {
+      const parts = slashGroup.split(/\s*\/\s*/)
+      slashExpandedModels.push(...parts)
+    }
+  }
+
   // Extract models per make -- check hardcoded patterns THEN YMME database models
   const makeModels: Record<string, string | null> = {}
+  const makeExtraModels: Record<string, string[]> = {} // Additional models from slash-separated lists
   for (const make of makes) {
     const hardcodedPatterns = MODEL_PATTERNS[make]
     let bestModel: string | null = null
 
-    if (hardcodedPatterns) {
+    // First check slash-expanded models against hardcoded patterns
+    if (slashExpandedModels.length > 0 && hardcodedPatterns) {
+      const extraModels: string[] = []
+      for (const sm of slashExpandedModels) {
+        for (const modelName of hardcodedPatterns) {
+          if (modelName.toLowerCase() === sm.toLowerCase()) {
+            if (!bestModel) bestModel = modelName
+            else extraModels.push(modelName)
+            break
+          }
+        }
+      }
+      if (extraModels.length > 0) {
+        makeExtraModels[make] = extraModels
+      }
+    }
+
+    if (!bestModel && hardcodedPatterns) {
       for (const modelName of hardcodedPatterns) {
         const escaped = modelName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
         const spaceless = modelName.replace(/\s+/g, "\\s*")
@@ -493,26 +551,45 @@ export function extractVehiclePatterns(
     }
   }
 
-  // Build fitments -- one per detected make, with model and engine info
-  const fitments = makes.length > 0
-    ? makes.map((make) => {
-        const model = makeModels[make] || null
-        const chassisCode = makeChassisCode[make]
-        const effectiveVariant = variant || chassisCode || null
+  // Build fitments -- one per detected make (plus extras for slash-separated models)
+  const fitments: VehicleFitmentEntry[] = []
+  if (makes.length > 0) {
+    for (const make of makes) {
+      const model = makeModels[make] || null
+      const chassisCode = makeChassisCode[make]
+      const effectiveVariant = variant || chassisCode || null
 
-        return {
-          make,
-          model,
-          variant: effectiveVariant,
-          year_from: yearFrom,
-          year_to: yearTo,
-          engine: engineName,
-          engine_code: engineCode,
-          fuel_type: fuelType,
-          confidence: calculateVehicleConfidence(make, yearFrom, effectiveVariant, model),
-        }
+      fitments.push({
+        make,
+        model,
+        variant: effectiveVariant,
+        year_from: yearFrom,
+        year_to: yearTo,
+        engine: engineName,
+        engine_code: engineCode,
+        fuel_type: fuelType,
+        confidence: calculateVehicleConfidence(make, yearFrom, effectiveVariant, model),
       })
-    : []
+
+      // Add extra fitments for slash-separated models (e.g., "140i/240i/340i")
+      const extras = makeExtraModels[make]
+      if (extras) {
+        for (const extraModel of extras) {
+          fitments.push({
+            make,
+            model: extraModel,
+            variant: effectiveVariant,
+            year_from: yearFrom,
+            year_to: yearTo,
+            engine: engineName,
+            engine_code: engineCode,
+            fuel_type: fuelType,
+            confidence: calculateVehicleConfidence(make, yearFrom, effectiveVariant, extraModel),
+          })
+        }
+      }
+    }
+  }
 
   const overallConfidence = fitments.length > 0
     ? fitments.reduce((sum, f) => sum + f.confidence, 0) / fitments.length

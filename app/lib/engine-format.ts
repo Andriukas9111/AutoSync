@@ -264,10 +264,10 @@ export const ENGINE_CODE_PATTERNS: Array<{
   makes: string[];
   regex: RegExp;
 }> = [
-  // BMW — N/S/B series engine codes
-  { name: "BMW N-series",  makes: ["BMW"],        regex: /\b(N[12345678]\d[A-Z]\d{0,2})\b/gi },
-  { name: "BMW S-series",  makes: ["BMW"],        regex: /\b(S[2-7]\d[A-Z]\d{0,2})\b/gi },
-  { name: "BMW B-series",  makes: ["BMW"],        regex: /\b(B[345678]\d[A-Z]\d{0,2})\b/gi },
+  // BMW — N/S/B series engine codes (short codes like "B58", "N54" AND full codes like "B58B30")
+  { name: "BMW N-series",  makes: ["BMW"],        regex: /\b(N[12345678]\d(?:[A-Z]\d{0,2})?)\b/gi },
+  { name: "BMW S-series",  makes: ["BMW"],        regex: /\b(S[2-7]\d(?:[A-Z]\d{0,2})?)\b/gi },
+  { name: "BMW B-series",  makes: ["BMW"],        regex: /\b(B[345678]\d(?:[A-Z]\d{0,2})?)\b/gi },
   { name: "BMW M-series",  makes: ["BMW"],        regex: /\b(M[12]\d{2}[A-Z]?\d?)\b/gi },
 
   // VW/Audi — EA family codes

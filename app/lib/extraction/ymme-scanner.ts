@@ -38,7 +38,7 @@ export interface ScanResult {
 
 // ── Year Extraction Helpers ──────────────────────────────────
 
-const YEAR_ONWARDS_REGEX = /\b((?:19|20)\d{2})\s*(?:onwards?|\+|present)\b/i
+const YEAR_ONWARDS_REGEX = /\b((?:19|20)\d{2})\s*(?:\+|onwards?|present|newer|later)\b/i
 
 function extractYearsNearby(text: string): { from: number | null; to: number | null } {
   // Try range first: (2013-2020), 2013-2020, 2013 - 2020
@@ -217,7 +217,7 @@ export function scanTextForVehicles(
         const yearFrom = years.from ?? model.yearFrom
         const yearTo = years.to ?? model.yearTo
 
-        const engine = findEngineInText(text, model.id, index)
+        const engine = findEngineInText(text, model.id, index, years?.from)
         const confidence = calculateConfidence(model, generation, engine, years)
 
         mentions.push({
@@ -261,6 +261,45 @@ export function scanTextForVehicles(
       }
     }
 
+    // Fallback: try to match individual model codes (e.g., "440i" -> "4 Series")
+    // BMW-style codes like \d{3}[a-z]?i can be resolved to their parent series
+    if (!modelFound) {
+      const modelCodeRegex = /\b(\d{3}[a-z]?i)\b/gi
+      let codeMatch: RegExpExecArray | null
+      modelCodeRegex.lastIndex = 0
+      while ((codeMatch = modelCodeRegex.exec(window)) !== null) {
+        const code = codeMatch[1] // e.g., "440i"
+        const seriesDigit = code.charAt(0) // e.g., "4" from "440i"
+        const seriesName = `${seriesDigit} Series` // e.g., "4 Series"
+
+        // Find this series in the YMME models for this make
+        const seriesModel = models.find(
+          (m) => m.name.toLowerCase() === seriesName.toLowerCase()
+        )
+        if (seriesModel) {
+          const key = `${make.id}|${seriesModel.id}`
+          if (seenKeys.has(key)) continue
+          seenKeys.add(key)
+
+          const yearText = text.slice(Math.max(0, position - 30), Math.min(text.length, position + 200))
+          const years = extractYearsNearby(yearText)
+          const engine = findEngineInText(text, seriesModel.id, index)
+
+          mentions.push({
+            make, model: seriesModel, engine,
+            generation: seriesModel.generation,
+            yearFrom: years.from ?? seriesModel.yearFrom,
+            yearTo: years.to ?? seriesModel.yearTo,
+            confidence: calculateConfidence(seriesModel, seriesModel.generation, engine, years) * 0.9,
+            matchedText: `${make.name} ${code} (${seriesModel.name})`,
+          })
+          diagnostics.push(`Model code "${code}" resolved to "${seriesModel.name}" for ${make.name}`)
+          modelFound = true
+          break
+        }
+      }
+    }
+
     if (!modelFound) {
       for (const model of models) {
         if (model.name.length < 3) continue
@@ -272,7 +311,7 @@ export function scanTextForVehicles(
           seenKeys.add(key)
 
           const years = extractYearsNearby(text)
-          const engine = findEngineInText(text, model.id, index)
+          const engine = findEngineInText(text, model.id, index, years?.from)
 
           mentions.push({
             make, model, engine,
@@ -364,11 +403,13 @@ function findModelByGeneration(
 function findEngineInText(
   text: string,
   modelId: string,
-  index: YmmeIndex
+  index: YmmeIndex,
+  yearHint?: number | null
 ): YmmeIndexEngine | null {
   const engines = index.enginesByModelId.get(modelId)
   if (!engines || engines.length === 0) return null
 
+  // First pass: try exact engine code match in text (longest codes first)
   const sorted = [...engines].sort((a, b) => b.code.length - a.code.length)
 
   for (const engine of sorted) {
@@ -377,6 +418,35 @@ function findEngineInText(
     const regex = new RegExp(`\\b${escapedCode}\\b`, "i")
     if (regex.test(text)) return engine
   }
+
+  // Second pass: try short engine code matching (e.g., "B58" matches "B58B30")
+  const shortCodeRegex = /\b([BNSM]\d{2})\b/gi
+  let shortMatch: RegExpExecArray | null
+  shortCodeRegex.lastIndex = 0
+  while ((shortMatch = shortCodeRegex.exec(text)) !== null) {
+    const shortCode = shortMatch[1].toUpperCase()
+    for (const engine of sorted) {
+      if (!engine.code) continue
+      if (engine.code.toUpperCase().startsWith(shortCode)) {
+        // If we have a year hint, prefer engines that match the year
+        if (yearHint && engine.yearFrom && engine.yearTo) {
+          if (yearHint >= engine.yearFrom && yearHint <= engine.yearTo) {
+            return engine
+          }
+        } else {
+          return engine
+        }
+      }
+    }
+    // Accept any prefix match if year didn't narrow it down
+    for (const engine of sorted) {
+      if (!engine.code) continue
+      if (engine.code.toUpperCase().startsWith(shortCode)) {
+        return engine
+      }
+    }
+  }
+
   return null
 }
 
