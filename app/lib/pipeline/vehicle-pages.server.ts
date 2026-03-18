@@ -1102,21 +1102,25 @@ export async function getVehiclePageStats(
  */
 export async function pushThemeTemplate(
   admin: any,
-  shopId: string,
+  _shopId: string,
 ): Promise<{ success: boolean; themeId?: string; error?: string }> {
   try {
-    // 1. Get the active/published theme
-    const themesResponse = await admin.rest.get({ path: "themes" });
-    const themes = themesResponse?.body?.themes ?? [];
-    const activeTheme = themes.find((t: any) => t.role === "main");
+    // 1. Get the active/published theme via GraphQL
+    const themesResp = await admin.graphql(`query {
+      themes(first: 10, roles: MAIN) {
+        nodes { id name role }
+      }
+    }`);
+    const themesJson = await themesResp.json();
+    const mainTheme = themesJson?.data?.themes?.nodes?.[0];
 
-    if (!activeTheme) {
+    if (!mainTheme) {
       return { success: false, error: "No active theme found" };
     }
 
-    const themeId = activeTheme.id;
+    const themeId = mainTheme.id; // GID format
 
-    // 2. Build the JSON template that references our section
+    // 2. Build the JSON template and section Liquid
     const templateJson = JSON.stringify({
       sections: {
         main: {
@@ -1127,36 +1131,43 @@ export async function pushThemeTemplate(
       order: ["main"],
     }, null, 2);
 
-    // 3. Push the JSON template to the theme
-    // The template key uses the app-prefixed metaobject type
-    const templateKey = "templates/metaobject/app--334692253697--vehicle_spec.json";
-
-    await admin.rest.put({
-      path: `themes/${themeId}/assets`,
-      data: {
-        asset: {
-          key: templateKey,
-          value: templateJson,
-        },
-      },
-    });
-
-    // 4. Push the section Liquid file
-    // Read the section template from our extension
     const sectionLiquid = getVehicleSpecSectionLiquid();
 
-    await admin.rest.put({
-      path: `themes/${themeId}/assets`,
-      data: {
-        asset: {
-          key: "sections/autosync-vehicle-spec-page.liquid",
-          value: sectionLiquid,
-        },
+    // 3. Push both files via themeFilesUpsert GraphQL mutation
+    const upsertResp = await admin.graphql(`mutation($themeId: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) {
+      themeFilesUpsert(themeId: $themeId, files: $files) {
+        upsertedThemeFiles { filename }
+        userErrors { field message }
+      }
+    }`, {
+      variables: {
+        themeId,
+        files: [
+          {
+            filename: "templates/metaobject/app--334692253697--vehicle_spec.json",
+            body: { type: "TEXT", value: templateJson },
+          },
+          {
+            filename: "sections/autosync-vehicle-spec-page.liquid",
+            body: { type: "TEXT", value: sectionLiquid },
+          },
+        ],
       },
     });
 
-    return { success: true, themeId: String(themeId) };
+    const upsertJson = await upsertResp.json();
+    const upsertErrors = upsertJson?.data?.themeFilesUpsert?.userErrors;
+    const upsertedFiles = upsertJson?.data?.themeFilesUpsert?.upsertedThemeFiles;
+
+    if (upsertErrors?.length) {
+      console.error("[vehicle-pages] Theme file upsert errors:", JSON.stringify(upsertErrors));
+      return { success: false, error: upsertErrors.map((e: any) => e.message).join(", ") };
+    }
+
+    console.error("[vehicle-pages] Theme files upserted:", upsertedFiles?.map((f: any) => f.filename).join(", "));
+    return { success: true, themeId: mainTheme.id };
   } catch (err) {
+    console.error("[vehicle-pages] pushThemeTemplate exception:", err instanceof Error ? err.message : err);
     return {
       success: false,
       error: err instanceof Error ? err.message : String(err),
