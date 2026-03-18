@@ -1,0 +1,501 @@
+=== Engine Specs Backfill ===
+Delay: 1500ms | Batch: 50 | Limit: none | Dry run: false
+
+Found 59488 engines with autodata_url but missing displacement_cc
+Will process 59488 engines
+
+Processed 10/59488 engines, 10 updated, 0 errors, 10 specs upserted | Elapsed: 18s | ETA: 30h 30m 32s
+Processed 20/59488 engines, 20 updated, 0 errors, 20 specs upserted | Elapsed: 36s | ETA: 29h 44m 20s
+Processed 30/59488 engines, 30 updated, 0 errors, 30 specs upserted | Elapsed: 53s | ETA: 29h 23m 17s
+Processed 40/59488 engines, 40 updated, 0 errors, 40 specs upserted | Elapsed: 1m 11s | ETA: 29h 28m 10s
+Processed 50/59488 engines, 50 updated, 0 errors, 50 specs upserted | Elapsed: 1m 29s | ETA: 29h 27m 55s
+Processed 60/59488 engines, 60 updated, 0 errors, 60 specs upserted | Elapsed: 1m 48s | ETA: 29h 48m 21s
+Processed 70/59488 engines, 70 updated, 0 errors, 70 specs upserted | Elapsed: 2m 5s | ETA: 29h 41m 19s
+Processed 80/59488 engines, 80 updated, 0 errors, 80 specs upserted | Elapsed: 2m 23s | ETA: 29h 33m 50s
+Processed 90/59488 engines, 90 updated, 0 errors, 90 specs upserted | Elapsed: 2m 41s | ETA: 29h 37m 24s
+Processed 100/59488 engines, 100 updated, 0 errors, 100 specs upserted | Elapsed: 2m 59s | ETA: 29h 33m 54s
+Processed 110/59488 engines, 110 updated, 0 errors, 110 specs upserted | Elapsed: 3m 19s | ETA: 29h 51m 26s
+Processed 120/59488 engines, 120 updated, 0 errors, 120 specs upserted | Elapsed: 3m 37s | ETA: 29h 52m 36s
+Processed 130/59488 engines, 130 updated, 0 errors, 130 specs upserted | Elapsed: 3m 54s | ETA: 29h 48m 19s
+Processed 140/59488 engines, 140 updated, 0 errors, 140 specs upserted | Elapsed: 4m 12s | ETA: 29h 47m 28s
+Processed 150/59488 engines, 150 updated, 0 errors, 150 specs upserted | Elapsed: 4m 30s | ETA: 29h 42m 30s
+Processed 160/59488 engines, 160 updated, 0 errors, 160 specs upserted | Elapsed: 4m 47s | ETA: 29h 39m 42s
+Processed 170/59488 engines, 170 updated, 0 errors, 170 specs upserted | Elapsed: 5m 5s | ETA: 29h 35m 43s
+Processed 180/59488 engines, 180 updated, 0 errors, 180 specs upserted | Elapsed: 5m 22s | ETA: 29h 33m 12s
+Processed 190/59488 engines, 190 updated, 0 errors, 190 specs upserted | Elapsed: 5m 40s | ETA: 29h 30m 57s
+Processed 200/59488 engines, 200 updated, 0 errors, 200 specs upserted | Elapsed: 5m 57s | ETA: 29h 28m 13s
+Processed 210/59488 engines, 210 updated, 0 errors, 210 specs upserted | Elapsed: 6m 15s | ETA: 29h 26m 45s
+Processed 220/59488 engines, 220 updated, 0 errors, 220 specs upserted | Elapsed: 6m 32s | ETA: 29h 24m 4s
+Processed 230/59488 engines, 230 updated, 0 errors, 230 specs upserted | Elapsed: 6m 50s | ETA: 29h 21m 59s
+Processed 240/59488 engines, 240 updated, 0 errors, 240 specs upserted | Elapsed: 7m 7s | ETA: 29h 19m 59s
+Processed 250/59488 engines, 250 updated, 0 errors, 250 specs upserted | Elapsed: 7m 25s | ETA: 29h 17m 57s
+Processed 260/59488 engines, 260 updated, 0 errors, 260 specs upserted | Elapsed: 7m 42s | ETA: 29h 16m 10s
+Processed 270/59488 engines, 270 updated, 0 errors, 270 specs upserted | Elapsed: 7m 59s | ETA: 29h 14m 23s
+Processed 280/59488 engines, 280 updated, 0 errors, 280 specs upserted | Elapsed: 8m 17s | ETA: 29h 12m 47s
+Processed 290/59488 engines, 290 updated, 0 errors, 290 specs upserted | Elapsed: 8m 35s | ETA: 29h 12m 35s
+Processed 300/59488 engines, 300 updated, 0 errors, 300 specs upserted | Elapsed: 8m 53s | ETA: 29h 13m 45s
+Processed 310/59488 engines, 310 updated, 0 errors, 310 specs upserted | Elapsed: 9m 11s | ETA: 29h 13m 10s
+Processed 320/59488 engines, 320 updated, 0 errors, 320 specs upserted | Elapsed: 9m 28s | ETA: 29h 11m 8s
+Processed 330/59488 engines, 330 updated, 0 errors, 330 specs upserted | Elapsed: 9m 45s | ETA: 29h 9m 29s
+Processed 340/59488 engines, 340 updated, 0 errors, 340 specs upserted | Elapsed: 10m 2s | ETA: 29h 8m 5s
+Processed 350/59488 engines, 350 updated, 0 errors, 350 specs upserted | Elapsed: 10m 20s | ETA: 29h 8m 44s
+Processed 360/59488 engines, 360 updated, 0 errors, 360 specs upserted | Elapsed: 10m 38s | ETA: 29h 7m 40s
+Processed 370/59488 engines, 370 updated, 0 errors, 370 specs upserted | Elapsed: 10m 55s | ETA: 29h 5m 59s
+Processed 380/59488 engines, 380 updated, 0 errors, 380 specs upserted | Elapsed: 11m 13s | ETA: 29h 5m 46s
+Processed 390/59488 engines, 390 updated, 0 errors, 390 specs upserted | Elapsed: 11m 30s | ETA: 29h 4m 28s
+Processed 400/59488 engines, 400 updated, 0 errors, 400 specs upserted | Elapsed: 11m 48s | ETA: 29h 3m 28s
+Processed 410/59488 engines, 410 updated, 0 errors, 410 specs upserted | Elapsed: 12m 5s | ETA: 29h 3m 5s
+Processed 420/59488 engines, 420 updated, 0 errors, 420 specs upserted | Elapsed: 12m 23s | ETA: 29h 2m 16s
+Processed 430/59488 engines, 430 updated, 0 errors, 430 specs upserted | Elapsed: 12m 40s | ETA: 29h 1m 5s
+Processed 440/59488 engines, 440 updated, 0 errors, 440 specs upserted | Elapsed: 12m 57s | ETA: 28h 59m 56s
+Processed 450/59488 engines, 450 updated, 0 errors, 450 specs upserted | Elapsed: 13m 15s | ETA: 28h 58m 55s
+Processed 460/59488 engines, 460 updated, 0 errors, 460 specs upserted | Elapsed: 13m 33s | ETA: 28h 59m 2s
+Processed 470/59488 engines, 470 updated, 0 errors, 470 specs upserted | Elapsed: 13m 50s | ETA: 28h 58m 39s
+Processed 480/59488 engines, 480 updated, 0 errors, 480 specs upserted | Elapsed: 14m 8s | ETA: 28h 57m 44s
+Processed 490/59488 engines, 490 updated, 0 errors, 490 specs upserted | Elapsed: 14m 25s | ETA: 28h 57m 44s
+Processed 500/59488 engines, 500 updated, 0 errors, 500 specs upserted | Elapsed: 14m 43s | ETA: 28h 56m 42s
+Processed 510/59488 engines, 510 updated, 0 errors, 510 specs upserted | Elapsed: 15m 0s | ETA: 28h 55m 56s
+Processed 520/59488 engines, 520 updated, 0 errors, 520 specs upserted | Elapsed: 15m 18s | ETA: 28h 55m 43s
+Processed 530/59488 engines, 530 updated, 0 errors, 530 specs upserted | Elapsed: 15m 35s | ETA: 28h 54m 52s
+Processed 540/59488 engines, 540 updated, 0 errors, 540 specs upserted | Elapsed: 15m 53s | ETA: 28h 54m 3s
+Processed 550/59488 engines, 550 updated, 0 errors, 550 specs upserted | Elapsed: 16m 10s | ETA: 28h 53m 11s
+Processed 560/59488 engines, 560 updated, 0 errors, 560 specs upserted | Elapsed: 16m 27s | ETA: 28h 52m 29s
+Processed 570/59488 engines, 570 updated, 0 errors, 570 specs upserted | Elapsed: 16m 45s | ETA: 28h 51m 48s
+Processed 580/59488 engines, 580 updated, 0 errors, 580 specs upserted | Elapsed: 17m 2s | ETA: 28h 50m 56s
+Processed 590/59488 engines, 590 updated, 0 errors, 590 specs upserted | Elapsed: 17m 20s | ETA: 28h 50m 24s
+Processed 600/59488 engines, 600 updated, 0 errors, 600 specs upserted | Elapsed: 17m 37s | ETA: 28h 49m 44s
+Processed 610/59488 engines, 610 updated, 0 errors, 610 specs upserted | Elapsed: 17m 54s | ETA: 28h 49m 13s
+Processed 620/59488 engines, 620 updated, 0 errors, 620 specs upserted | Elapsed: 18m 12s | ETA: 28h 48m 49s
+Processed 630/59488 engines, 630 updated, 0 errors, 630 specs upserted | Elapsed: 18m 30s | ETA: 28h 49m 43s
+Processed 640/59488 engines, 640 updated, 0 errors, 640 specs upserted | Elapsed: 18m 48s | ETA: 28h 49m 31s
+Processed 650/59488 engines, 650 updated, 0 errors, 650 specs upserted | Elapsed: 19m 7s | ETA: 28h 50m 31s
+Processed 660/59488 engines, 660 updated, 0 errors, 660 specs upserted | Elapsed: 19m 25s | ETA: 28h 51m 53s
+Processed 670/59488 engines, 670 updated, 0 errors, 670 specs upserted | Elapsed: 19m 43s | ETA: 28h 51m 26s
+Processed 680/59488 engines, 680 updated, 0 errors, 680 specs upserted | Elapsed: 20m 0s | ETA: 28h 50m 40s
+Processed 690/59488 engines, 690 updated, 0 errors, 690 specs upserted | Elapsed: 20m 18s | ETA: 28h 50m 6s
+Processed 700/59488 engines, 700 updated, 0 errors, 700 specs upserted | Elapsed: 20m 35s | ETA: 28h 49m 44s
+Processed 710/59488 engines, 710 updated, 0 errors, 710 specs upserted | Elapsed: 20m 53s | ETA: 28h 49m 12s
+Processed 720/59488 engines, 720 updated, 0 errors, 720 specs upserted | Elapsed: 21m 10s | ETA: 28h 48m 34s
+Processed 730/59488 engines, 730 updated, 0 errors, 730 specs upserted | Elapsed: 21m 28s | ETA: 28h 48m 0s
+Processed 740/59488 engines, 740 updated, 0 errors, 740 specs upserted | Elapsed: 21m 45s | ETA: 28h 47m 28s
+Processed 750/59488 engines, 750 updated, 0 errors, 750 specs upserted | Elapsed: 22m 3s | ETA: 28h 46m 54s
+Processed 760/59488 engines, 760 updated, 0 errors, 760 specs upserted | Elapsed: 22m 21s | ETA: 28h 47m 47s
+Processed 770/59488 engines, 770 updated, 0 errors, 770 specs upserted | Elapsed: 22m 38s | ETA: 28h 47m 8s
+Processed 780/59488 engines, 780 updated, 0 errors, 780 specs upserted | Elapsed: 22m 56s | ETA: 28h 46m 43s
+Processed 790/59488 engines, 790 updated, 0 errors, 790 specs upserted | Elapsed: 23m 13s | ETA: 28h 46m 14s
+Processed 800/59488 engines, 800 updated, 0 errors, 800 specs upserted | Elapsed: 23m 31s | ETA: 28h 45m 47s
+Processed 810/59488 engines, 810 updated, 0 errors, 810 specs upserted | Elapsed: 23m 49s | ETA: 28h 45m 52s
+Processed 820/59488 engines, 820 updated, 0 errors, 820 specs upserted | Elapsed: 24m 7s | ETA: 28h 46m 3s
+Processed 830/59488 engines, 830 updated, 0 errors, 830 specs upserted | Elapsed: 24m 25s | ETA: 28h 46m 3s
+Processed 840/59488 engines, 840 updated, 0 errors, 840 specs upserted | Elapsed: 24m 43s | ETA: 28h 45m 44s
+Processed 850/59488 engines, 850 updated, 0 errors, 850 specs upserted | Elapsed: 25m 0s | ETA: 28h 45m 8s
+Processed 860/59488 engines, 860 updated, 0 errors, 860 specs upserted | Elapsed: 25m 17s | ETA: 28h 44m 34s
+Processed 870/59488 engines, 870 updated, 0 errors, 870 specs upserted | Elapsed: 25m 35s | ETA: 28h 44m 1s
+Processed 880/59488 engines, 880 updated, 0 errors, 880 specs upserted | Elapsed: 25m 52s | ETA: 28h 43m 23s
+Processed 890/59488 engines, 890 updated, 0 errors, 890 specs upserted | Elapsed: 26m 10s | ETA: 28h 42m 52s
+Processed 900/59488 engines, 900 updated, 0 errors, 900 specs upserted | Elapsed: 26m 27s | ETA: 28h 42m 19s
+Processed 910/59488 engines, 910 updated, 0 errors, 910 specs upserted | Elapsed: 26m 44s | ETA: 28h 41m 46s
+Processed 920/59488 engines, 920 updated, 0 errors, 920 specs upserted | Elapsed: 27m 2s | ETA: 28h 41m 35s
+Processed 930/59488 engines, 930 updated, 0 errors, 930 specs upserted | Elapsed: 27m 20s | ETA: 28h 41m 9s
+Processed 940/59488 engines, 940 updated, 0 errors, 940 specs upserted | Elapsed: 27m 37s | ETA: 28h 40m 40s
+Processed 950/59488 engines, 950 updated, 0 errors, 950 specs upserted | Elapsed: 27m 54s | ETA: 28h 40m 5s
+Processed 960/59488 engines, 960 updated, 0 errors, 960 specs upserted | Elapsed: 28m 12s | ETA: 28h 39m 41s
+Processed 970/59488 engines, 970 updated, 0 errors, 970 specs upserted | Elapsed: 28m 29s | ETA: 28h 39m 5s
+Processed 980/59488 engines, 980 updated, 0 errors, 980 specs upserted | Elapsed: 28m 47s | ETA: 28h 38m 31s
+Processed 990/59488 engines, 990 updated, 0 errors, 990 specs upserted | Elapsed: 29m 5s | ETA: 28h 38m 52s
+Processed 1000/59488 engines, 1000 updated, 0 errors, 1000 specs upserted | Elapsed: 29m 23s | ETA: 28h 38m 39s
+Processed 1010/59488 engines, 1010 updated, 0 errors, 1010 specs upserted | Elapsed: 29m 40s | ETA: 28h 38m 16s
+Processed 1020/59488 engines, 1020 updated, 0 errors, 1020 specs upserted | Elapsed: 29m 58s | ETA: 28h 37m 47s
+Processed 1030/59488 engines, 1030 updated, 0 errors, 1030 specs upserted | Elapsed: 30m 15s | ETA: 28h 37m 36s
+Processed 1040/59488 engines, 1040 updated, 0 errors, 1040 specs upserted | Elapsed: 30m 33s | ETA: 28h 37m 5s
+Processed 1050/59488 engines, 1050 updated, 0 errors, 1050 specs upserted | Elapsed: 30m 50s | ETA: 28h 36m 38s
+Processed 1060/59488 engines, 1060 updated, 0 errors, 1060 specs upserted | Elapsed: 31m 8s | ETA: 28h 36m 30s
+Processed 1070/59488 engines, 1070 updated, 0 errors, 1070 specs upserted | Elapsed: 31m 25s | ETA: 28h 36m 0s
+Processed 1080/59488 engines, 1080 updated, 0 errors, 1080 specs upserted | Elapsed: 31m 43s | ETA: 28h 35m 32s
+Processed 1090/59488 engines, 1090 updated, 0 errors, 1090 specs upserted | Elapsed: 32m 0s | ETA: 28h 34m 59s
+Processed 1100/59488 engines, 1100 updated, 0 errors, 1100 specs upserted | Elapsed: 32m 18s | ETA: 28h 34m 31s
+Processed 1110/59488 engines, 1110 updated, 0 errors, 1110 specs upserted | Elapsed: 32m 35s | ETA: 28h 34m 16s
+Processed 1120/59488 engines, 1120 updated, 0 errors, 1120 specs upserted | Elapsed: 32m 53s | ETA: 28h 33m 50s
+Processed 1130/59488 engines, 1130 updated, 0 errors, 1130 specs upserted | Elapsed: 33m 10s | ETA: 28h 33m 25s
+Processed 1140/59488 engines, 1140 updated, 0 errors, 1140 specs upserted | Elapsed: 33m 29s | ETA: 28h 34m 14s
+Processed 1150/59488 engines, 1150 updated, 0 errors, 1150 specs upserted | Elapsed: 33m 48s | ETA: 28h 34m 46s
+Processed 1160/59488 engines, 1160 updated, 0 errors, 1160 specs upserted | Elapsed: 34m 6s | ETA: 28h 35m 27s
+Processed 1170/59488 engines, 1170 updated, 0 errors, 1170 specs upserted | Elapsed: 34m 24s | ETA: 28h 35m 27s
+Processed 1180/59488 engines, 1180 updated, 0 errors, 1180 specs upserted | Elapsed: 34m 43s | ETA: 28h 36m 14s
+Processed 1190/59488 engines, 1190 updated, 0 errors, 1190 specs upserted | Elapsed: 35m 2s | ETA: 28h 36m 33s
+Processed 1200/59488 engines, 1200 updated, 0 errors, 1200 specs upserted | Elapsed: 35m 20s | ETA: 28h 36m 24s
+Processed 1210/59488 engines, 1210 updated, 0 errors, 1210 specs upserted | Elapsed: 35m 37s | ETA: 28h 36m 13s
+Processed 1220/59488 engines, 1220 updated, 0 errors, 1220 specs upserted | Elapsed: 35m 56s | ETA: 28h 36m 43s
+Processed 1230/59488 engines, 1230 updated, 0 errors, 1230 specs upserted | Elapsed: 36m 14s | ETA: 28h 36m 53s
+Processed 1240/59488 engines, 1240 updated, 0 errors, 1240 specs upserted | Elapsed: 36m 33s | ETA: 28h 37m 3s
+Processed 1250/59488 engines, 1250 updated, 0 errors, 1250 specs upserted | Elapsed: 36m 51s | ETA: 28h 36m 55s
+Processed 1260/59488 engines, 1260 updated, 0 errors, 1260 specs upserted | Elapsed: 37m 8s | ETA: 28h 36m 48s
+Processed 1270/59488 engines, 1270 updated, 0 errors, 1270 specs upserted | Elapsed: 37m 27s | ETA: 28h 37m 17s
+Processed 1280/59488 engines, 1280 updated, 0 errors, 1280 specs upserted | Elapsed: 37m 45s | ETA: 28h 37m 10s
+Processed 1290/59488 engines, 1290 updated, 0 errors, 1290 specs upserted | Elapsed: 38m 3s | ETA: 28h 36m 41s
+Processed 1300/59488 engines, 1300 updated, 0 errors, 1300 specs upserted | Elapsed: 38m 20s | ETA: 28h 36m 11s
+Processed 1310/59488 engines, 1310 updated, 0 errors, 1310 specs upserted | Elapsed: 38m 39s | ETA: 28h 36m 56s
+Processed 1320/59488 engines, 1320 updated, 0 errors, 1320 specs upserted | Elapsed: 38m 57s | ETA: 28h 36m 40s
+Processed 1330/59488 engines, 1330 updated, 0 errors, 1330 specs upserted | Elapsed: 39m 17s | ETA: 28h 38m 10s
+Processed 1340/59488 engines, 1340 updated, 0 errors, 1340 specs upserted | Elapsed: 39m 36s | ETA: 28h 38m 32s
+Processed 1350/59488 engines, 1350 updated, 0 errors, 1350 specs upserted | Elapsed: 39m 53s | ETA: 28h 38m 5s
+Processed 1360/59488 engines, 1360 updated, 0 errors, 1360 specs upserted | Elapsed: 40m 12s | ETA: 28h 38m 12s
+Processed 1370/59488 engines, 1370 updated, 0 errors, 1370 specs upserted | Elapsed: 40m 29s | ETA: 28h 37m 47s
+Processed 1380/59488 engines, 1380 updated, 0 errors, 1380 specs upserted | Elapsed: 40m 47s | ETA: 28h 37m 41s
+Processed 1390/59488 engines, 1390 updated, 0 errors, 1390 specs upserted | Elapsed: 41m 5s | ETA: 28h 37m 13s
+Processed 1400/59488 engines, 1400 updated, 0 errors, 1400 specs upserted | Elapsed: 41m 22s | ETA: 28h 36m 52s
+Processed 1410/59488 engines, 1410 updated, 0 errors, 1410 specs upserted | Elapsed: 41m 40s | ETA: 28h 36m 28s
+Processed 1420/59488 engines, 1420 updated, 0 errors, 1420 specs upserted | Elapsed: 41m 57s | ETA: 28h 36m 2s
+Processed 1430/59488 engines, 1430 updated, 0 errors, 1430 specs upserted | Elapsed: 42m 15s | ETA: 28h 35m 37s
+Processed 1440/59488 engines, 1440 updated, 0 errors, 1440 specs upserted | Elapsed: 42m 33s | ETA: 28h 35m 15s
+Processed 1450/59488 engines, 1450 updated, 0 errors, 1450 specs upserted | Elapsed: 42m 50s | ETA: 28h 34m 51s
+Processed 1460/59488 engines, 1460 updated, 0 errors, 1460 specs upserted | Elapsed: 43m 8s | ETA: 28h 34m 32s
+Processed 1470/59488 engines, 1470 updated, 0 errors, 1470 specs upserted | Elapsed: 43m 25s | ETA: 28h 34m 8s
+Processed 1480/59488 engines, 1480 updated, 0 errors, 1480 specs upserted | Elapsed: 43m 43s | ETA: 28h 34m 1s
+Processed 1490/59488 engines, 1490 updated, 0 errors, 1490 specs upserted | Elapsed: 44m 1s | ETA: 28h 33m 29s
+Processed 1500/59488 engines, 1500 updated, 0 errors, 1500 specs upserted | Elapsed: 44m 18s | ETA: 28h 33m 0s
+Processed 1510/59488 engines, 1510 updated, 0 errors, 1510 specs upserted | Elapsed: 44m 36s | ETA: 28h 32m 49s
+Processed 1520/59488 engines, 1520 updated, 0 errors, 1520 specs upserted | Elapsed: 44m 54s | ETA: 28h 32m 29s
+Processed 1530/59488 engines, 1530 updated, 0 errors, 1530 specs upserted | Elapsed: 45m 11s | ETA: 28h 31m 59s
+Processed 1540/59488 engines, 1540 updated, 0 errors, 1540 specs upserted | Elapsed: 45m 29s | ETA: 28h 31m 30s
+Processed 1550/59488 engines, 1550 updated, 0 errors, 1550 specs upserted | Elapsed: 45m 46s | ETA: 28h 31m 15s
+Processed 1560/59488 engines, 1560 updated, 0 errors, 1560 specs upserted | Elapsed: 46m 4s | ETA: 28h 30m 53s
+Processed 1570/59488 engines, 1570 updated, 0 errors, 1570 specs upserted | Elapsed: 46m 22s | ETA: 28h 30m 29s
+Processed 1580/59488 engines, 1580 updated, 0 errors, 1580 specs upserted | Elapsed: 46m 39s | ETA: 28h 30m 0s
+Processed 1590/59488 engines, 1590 updated, 0 errors, 1590 specs upserted | Elapsed: 46m 56s | ETA: 28h 29m 29s
+Processed 1600/59488 engines, 1600 updated, 0 errors, 1600 specs upserted | Elapsed: 47m 14s | ETA: 28h 29m 6s
+Processed 1610/59488 engines, 1610 updated, 0 errors, 1610 specs upserted | Elapsed: 47m 32s | ETA: 28h 28m 56s
+Processed 1620/59488 engines, 1620 updated, 0 errors, 1620 specs upserted | Elapsed: 47m 50s | ETA: 28h 28m 41s
+Processed 1630/59488 engines, 1630 updated, 0 errors, 1630 specs upserted | Elapsed: 48m 7s | ETA: 28h 28m 17s
+Processed 1640/59488 engines, 1640 updated, 0 errors, 1640 specs upserted | Elapsed: 48m 25s | ETA: 28h 28m 1s
+Processed 1650/59488 engines, 1650 updated, 0 errors, 1650 specs upserted | Elapsed: 48m 43s | ETA: 28h 27m 59s
+Processed 1660/59488 engines, 1660 updated, 0 errors, 1660 specs upserted | Elapsed: 49m 1s | ETA: 28h 27m 39s
+Processed 1670/59488 engines, 1670 updated, 0 errors, 1670 specs upserted | Elapsed: 49m 18s | ETA: 28h 27m 21s
+Processed 1680/59488 engines, 1680 updated, 0 errors, 1680 specs upserted | Elapsed: 49m 36s | ETA: 28h 26m 56s
+Processed 1690/59488 engines, 1690 updated, 0 errors, 1690 specs upserted | Elapsed: 49m 53s | ETA: 28h 26m 29s
+Processed 1700/59488 engines, 1700 updated, 0 errors, 1700 specs upserted | Elapsed: 50m 11s | ETA: 28h 26m 2s
+Processed 1710/59488 engines, 1710 updated, 0 errors, 1710 specs upserted | Elapsed: 50m 28s | ETA: 28h 25m 35s
+Processed 1720/59488 engines, 1720 updated, 0 errors, 1720 specs upserted | Elapsed: 50m 46s | ETA: 28h 25m 11s
+Processed 1730/59488 engines, 1730 updated, 0 errors, 1730 specs upserted | Elapsed: 51m 3s | ETA: 28h 24m 45s
+Processed 1740/59488 engines, 1740 updated, 0 errors, 1740 specs upserted | Elapsed: 51m 21s | ETA: 28h 24m 21s
+Processed 1750/59488 engines, 1750 updated, 0 errors, 1750 specs upserted | Elapsed: 51m 38s | ETA: 28h 23m 51s
+Processed 1760/59488 engines, 1760 updated, 0 errors, 1760 specs upserted | Elapsed: 51m 56s | ETA: 28h 23m 29s
+Processed 1770/59488 engines, 1770 updated, 0 errors, 1770 specs upserted | Elapsed: 52m 13s | ETA: 28h 23m 3s
+Processed 1780/59488 engines, 1780 updated, 0 errors, 1780 specs upserted | Elapsed: 52m 31s | ETA: 28h 22m 39s
+Processed 1790/59488 engines, 1790 updated, 0 errors, 1790 specs upserted | Elapsed: 52m 48s | ETA: 28h 22m 11s
+Processed 1800/59488 engines, 1800 updated, 0 errors, 1800 specs upserted | Elapsed: 53m 6s | ETA: 28h 21m 50s
+Processed 1810/59488 engines, 1810 updated, 0 errors, 1810 specs upserted | Elapsed: 53m 24s | ETA: 28h 21m 46s
+Processed 1820/59488 engines, 1820 updated, 0 errors, 1820 specs upserted | Elapsed: 53m 42s | ETA: 28h 21m 47s
+Processed 1830/59488 engines, 1830 updated, 0 errors, 1830 specs upserted | Elapsed: 54m 0s | ETA: 28h 21m 41s
+Processed 1840/59488 engines, 1840 updated, 0 errors, 1840 specs upserted | Elapsed: 54m 19s | ETA: 28h 22m 7s
+Processed 1850/59488 engines, 1850 updated, 0 errors, 1850 specs upserted | Elapsed: 54m 37s | ETA: 28h 21m 44s
+Processed 1860/59488 engines, 1860 updated, 0 errors, 1860 specs upserted | Elapsed: 54m 54s | ETA: 28h 21m 23s
+Processed 1870/59488 engines, 1870 updated, 0 errors, 1870 specs upserted | Elapsed: 55m 12s | ETA: 28h 20m 59s
+Processed 1880/59488 engines, 1880 updated, 0 errors, 1880 specs upserted | Elapsed: 55m 29s | ETA: 28h 20m 34s
+Processed 1890/59488 engines, 1890 updated, 0 errors, 1890 specs upserted | Elapsed: 55m 47s | ETA: 28h 20m 7s
+Processed 1900/59488 engines, 1900 updated, 0 errors, 1900 specs upserted | Elapsed: 56m 4s | ETA: 28h 19m 46s
+Processed 1910/59488 engines, 1910 updated, 0 errors, 1910 specs upserted | Elapsed: 56m 23s | ETA: 28h 19m 45s
+Processed 1920/59488 engines, 1920 updated, 0 errors, 1920 specs upserted | Elapsed: 56m 40s | ETA: 28h 19m 19s
+Processed 1930/59488 engines, 1930 updated, 0 errors, 1930 specs upserted | Elapsed: 56m 58s | ETA: 28h 18m 58s
+Processed 1940/59488 engines, 1940 updated, 0 errors, 1940 specs upserted | Elapsed: 57m 15s | ETA: 28h 18m 32s
+Processed 1950/59488 engines, 1950 updated, 0 errors, 1950 specs upserted | Elapsed: 57m 33s | ETA: 28h 18m 6s
+Processed 1960/59488 engines, 1960 updated, 0 errors, 1960 specs upserted | Elapsed: 57m 50s | ETA: 28h 17m 49s
+Processed 1970/59488 engines, 1970 updated, 0 errors, 1970 specs upserted | Elapsed: 58m 8s | ETA: 28h 17m 29s
+Processed 1980/59488 engines, 1980 updated, 0 errors, 1980 specs upserted | Elapsed: 58m 26s | ETA: 28h 17m 13s
+Processed 1990/59488 engines, 1990 updated, 0 errors, 1990 specs upserted | Elapsed: 58m 44s | ETA: 28h 17m 17s
+Processed 2000/59488 engines, 2000 updated, 0 errors, 2000 specs upserted | Elapsed: 59m 2s | ETA: 28h 17m 2s
+Processed 2010/59488 engines, 2010 updated, 0 errors, 2010 specs upserted | Elapsed: 59m 20s | ETA: 28h 16m 56s
+Processed 2020/59488 engines, 2020 updated, 0 errors, 2020 specs upserted | Elapsed: 59m 38s | ETA: 28h 16m 47s
+Processed 2030/59488 engines, 2030 updated, 0 errors, 2030 specs upserted | Elapsed: 59m 56s | ETA: 28h 16m 31s
+Processed 2040/59488 engines, 2040 updated, 0 errors, 2040 specs upserted | Elapsed: 1h 0m 13s | ETA: 28h 16m 4s
+Processed 2050/59488 engines, 2050 updated, 0 errors, 2050 specs upserted | Elapsed: 1h 0m 31s | ETA: 28h 15m 40s
+Processed 2060/59488 engines, 2060 updated, 0 errors, 2060 specs upserted | Elapsed: 1h 0m 48s | ETA: 28h 15m 15s
+Processed 2070/59488 engines, 2070 updated, 0 errors, 2070 specs upserted | Elapsed: 1h 1m 6s | ETA: 28h 14m 48s
+Processed 2080/59488 engines, 2080 updated, 0 errors, 2080 specs upserted | Elapsed: 1h 1m 23s | ETA: 28h 14m 19s
+Processed 2090/59488 engines, 2090 updated, 0 errors, 2090 specs upserted | Elapsed: 1h 1m 40s | ETA: 28h 13m 57s
+Processed 2100/59488 engines, 2100 updated, 0 errors, 2100 specs upserted | Elapsed: 1h 1m 58s | ETA: 28h 13m 28s
+Processed 2110/59488 engines, 2110 updated, 0 errors, 2110 specs upserted | Elapsed: 1h 2m 15s | ETA: 28h 13m 9s
+Processed 2120/59488 engines, 2120 updated, 0 errors, 2120 specs upserted | Elapsed: 1h 2m 33s | ETA: 28h 12m 40s
+Processed 2130/59488 engines, 2130 updated, 0 errors, 2130 specs upserted | Elapsed: 1h 2m 50s | ETA: 28h 12m 12s
+Processed 2140/59488 engines, 2140 updated, 0 errors, 2140 specs upserted | Elapsed: 1h 3m 7s | ETA: 28h 11m 46s
+Processed 2150/59488 engines, 2150 updated, 0 errors, 2150 specs upserted | Elapsed: 1h 3m 26s | ETA: 28h 11m 49s
+Processed 2160/59488 engines, 2160 updated, 0 errors, 2160 specs upserted | Elapsed: 1h 3m 44s | ETA: 28h 11m 35s
+Processed 2170/59488 engines, 2170 updated, 0 errors, 2170 specs upserted | Elapsed: 1h 4m 2s | ETA: 28h 11m 26s
+Processed 2180/59488 engines, 2180 updated, 0 errors, 2180 specs upserted | Elapsed: 1h 4m 20s | ETA: 28h 11m 14s
+Processed 2190/59488 engines, 2190 updated, 0 errors, 2190 specs upserted | Elapsed: 1h 4m 37s | ETA: 28h 10m 56s
+Processed 2200/59488 engines, 2200 updated, 0 errors, 2200 specs upserted | Elapsed: 1h 4m 55s | ETA: 28h 10m 29s
+Processed 2210/59488 engines, 2210 updated, 0 errors, 2210 specs upserted | Elapsed: 1h 5m 12s | ETA: 28h 10m 5s
+Processed 2220/59488 engines, 2220 updated, 0 errors, 2220 specs upserted | Elapsed: 1h 5m 29s | ETA: 28h 9m 37s
+Processed 2230/59488 engines, 2230 updated, 0 errors, 2230 specs upserted | Elapsed: 1h 5m 47s | ETA: 28h 9m 13s
+Processed 2240/59488 engines, 2240 updated, 0 errors, 2240 specs upserted | Elapsed: 1h 6m 4s | ETA: 28h 8m 50s
+Processed 2250/59488 engines, 2250 updated, 0 errors, 2250 specs upserted | Elapsed: 1h 6m 22s | ETA: 28h 8m 27s
+Processed 2260/59488 engines, 2260 updated, 0 errors, 2260 specs upserted | Elapsed: 1h 6m 39s | ETA: 28h 8m 4s
+Processed 2270/59488 engines, 2270 updated, 0 errors, 2270 specs upserted | Elapsed: 1h 6m 57s | ETA: 28h 7m 38s
+Processed 2280/59488 engines, 2280 updated, 0 errors, 2280 specs upserted | Elapsed: 1h 7m 14s | ETA: 28h 7m 19s
+Processed 2290/59488 engines, 2290 updated, 0 errors, 2290 specs upserted | Elapsed: 1h 7m 32s | ETA: 28h 6m 52s
+Processed 2300/59488 engines, 2300 updated, 0 errors, 2300 specs upserted | Elapsed: 1h 7m 49s | ETA: 28h 6m 24s
+Processed 2310/59488 engines, 2310 updated, 0 errors, 2310 specs upserted | Elapsed: 1h 8m 6s | ETA: 28h 6m 1s
+Processed 2320/59488 engines, 2320 updated, 0 errors, 2320 specs upserted | Elapsed: 1h 8m 24s | ETA: 28h 5m 52s
+Processed 2330/59488 engines, 2330 updated, 0 errors, 2330 specs upserted | Elapsed: 1h 8m 43s | ETA: 28h 5m 57s
+Processed 2340/59488 engines, 2340 updated, 0 errors, 2340 specs upserted | Elapsed: 1h 9m 1s | ETA: 28h 5m 43s
+Processed 2350/59488 engines, 2350 updated, 0 errors, 2350 specs upserted | Elapsed: 1h 9m 19s | ETA: 28h 5m 28s
+Processed 2360/59488 engines, 2360 updated, 0 errors, 2360 specs upserted | Elapsed: 1h 9m 37s | ETA: 28h 5m 16s
+Processed 2370/59488 engines, 2370 updated, 0 errors, 2370 specs upserted | Elapsed: 1h 9m 54s | ETA: 28h 4m 50s
+Processed 2380/59488 engines, 2380 updated, 0 errors, 2380 specs upserted | Elapsed: 1h 10m 11s | ETA: 28h 4m 25s
+Processed 2390/59488 engines, 2390 updated, 0 errors, 2390 specs upserted | Elapsed: 1h 10m 29s | ETA: 28h 4m 1s
+Processed 2400/59488 engines, 2400 updated, 0 errors, 2400 specs upserted | Elapsed: 1h 10m 46s | ETA: 28h 3m 35s
+Processed 2410/59488 engines, 2410 updated, 0 errors, 2410 specs upserted | Elapsed: 1h 11m 4s | ETA: 28h 3m 10s
+Processed 2420/59488 engines, 2420 updated, 0 errors, 2420 specs upserted | Elapsed: 1h 11m 21s | ETA: 28h 2m 49s
+Processed 2430/59488 engines, 2430 updated, 0 errors, 2430 specs upserted | Elapsed: 1h 11m 38s | ETA: 28h 2m 22s
+Processed 2440/59488 engines, 2440 updated, 0 errors, 2440 specs upserted | Elapsed: 1h 11m 56s | ETA: 28h 1m 59s
+Processed 2450/59488 engines, 2450 updated, 0 errors, 2450 specs upserted | Elapsed: 1h 12m 13s | ETA: 28h 1m 36s
+Processed 2460/59488 engines, 2460 updated, 0 errors, 2460 specs upserted | Elapsed: 1h 12m 31s | ETA: 28h 1m 14s
+Processed 2470/59488 engines, 2470 updated, 0 errors, 2470 specs upserted | Elapsed: 1h 12m 48s | ETA: 28h 0m 50s
+Processed 2480/59488 engines, 2480 updated, 0 errors, 2480 specs upserted | Elapsed: 1h 13m 6s | ETA: 28h 0m 31s
+Processed 2490/59488 engines, 2490 updated, 0 errors, 2490 specs upserted | Elapsed: 1h 13m 24s | ETA: 28h 0m 30s
+Processed 2500/59488 engines, 2500 updated, 0 errors, 2500 specs upserted | Elapsed: 1h 13m 42s | ETA: 28h 0m 18s
+Processed 2510/59488 engines, 2510 updated, 0 errors, 2510 specs upserted | Elapsed: 1h 14m 0s | ETA: 28h 0m 4s
+Processed 2520/59488 engines, 2520 updated, 0 errors, 2520 specs upserted | Elapsed: 1h 14m 18s | ETA: 27h 59m 53s
+Processed 2530/59488 engines, 2530 updated, 0 errors, 2530 specs upserted | Elapsed: 1h 14m 35s | ETA: 27h 59m 27s
+Processed 2540/59488 engines, 2540 updated, 0 errors, 2540 specs upserted | Elapsed: 1h 14m 53s | ETA: 27h 59m 2s
+Processed 2550/59488 engines, 2550 updated, 0 errors, 2550 specs upserted | Elapsed: 1h 15m 10s | ETA: 27h 58m 38s
+Processed 2560/59488 engines, 2560 updated, 0 errors, 2560 specs upserted | Elapsed: 1h 15m 28s | ETA: 27h 58m 15s
+Processed 2570/59488 engines, 2570 updated, 0 errors, 2570 specs upserted | Elapsed: 1h 15m 45s | ETA: 27h 57m 48s
+Processed 2580/59488 engines, 2580 updated, 0 errors, 2580 specs upserted | Elapsed: 1h 16m 2s | ETA: 27h 57m 22s
+Processed 2590/59488 engines, 2590 updated, 0 errors, 2590 specs upserted | Elapsed: 1h 16m 20s | ETA: 27h 56m 59s
+Processed 2600/59488 engines, 2600 updated, 0 errors, 2600 specs upserted | Elapsed: 1h 16m 37s | ETA: 27h 56m 33s
+Processed 2610/59488 engines, 2610 updated, 0 errors, 2610 specs upserted | Elapsed: 1h 16m 54s | ETA: 27h 56m 10s
+Processed 2620/59488 engines, 2620 updated, 0 errors, 2620 specs upserted | Elapsed: 1h 17m 12s | ETA: 27h 55m 50s
+Processed 2630/59488 engines, 2630 updated, 0 errors, 2630 specs upserted | Elapsed: 1h 17m 29s | ETA: 27h 55m 22s
+Processed 2640/59488 engines, 2640 updated, 0 errors, 2640 specs upserted | Elapsed: 1h 17m 46s | ETA: 27h 54m 56s
+Processed 2650/59488 engines, 2650 updated, 0 errors, 2650 specs upserted | Elapsed: 1h 18m 4s | ETA: 27h 54m 30s
+Processed 2660/59488 engines, 2660 updated, 0 errors, 2660 specs upserted | Elapsed: 1h 18m 21s | ETA: 27h 54m 7s
+Processed 2670/59488 engines, 2670 updated, 0 errors, 2670 specs upserted | Elapsed: 1h 18m 39s | ETA: 27h 53m 53s
+Processed 2680/59488 engines, 2680 updated, 0 errors, 2680 specs upserted | Elapsed: 1h 18m 58s | ETA: 27h 54m 8s
+Processed 2690/59488 engines, 2690 updated, 0 errors, 2690 specs upserted | Elapsed: 1h 19m 16s | ETA: 27h 53m 56s
+Processed 2700/59488 engines, 2700 updated, 0 errors, 2700 specs upserted | Elapsed: 1h 19m 34s | ETA: 27h 53m 50s
+Processed 2710/59488 engines, 2710 updated, 0 errors, 2710 specs upserted | Elapsed: 1h 19m 52s | ETA: 27h 53m 29s
+Processed 2720/59488 engines, 2720 updated, 0 errors, 2720 specs upserted | Elapsed: 1h 20m 9s | ETA: 27h 53m 6s
+Processed 2730/59488 engines, 2730 updated, 0 errors, 2730 specs upserted | Elapsed: 1h 20m 27s | ETA: 27h 52m 43s
+Processed 2740/59488 engines, 2740 updated, 0 errors, 2740 specs upserted | Elapsed: 1h 20m 44s | ETA: 27h 52m 18s
+Processed 2750/59488 engines, 2750 updated, 0 errors, 2750 specs upserted | Elapsed: 1h 21m 1s | ETA: 27h 51m 52s
+Processed 2760/59488 engines, 2760 updated, 0 errors, 2760 specs upserted | Elapsed: 1h 21m 19s | ETA: 27h 51m 34s
+Processed 2770/59488 engines, 2770 updated, 0 errors, 2770 specs upserted | Elapsed: 1h 21m 37s | ETA: 27h 51m 12s
+Processed 2780/59488 engines, 2780 updated, 0 errors, 2780 specs upserted | Elapsed: 1h 21m 54s | ETA: 27h 50m 48s
+Processed 2790/59488 engines, 2790 updated, 0 errors, 2790 specs upserted | Elapsed: 1h 22m 11s | ETA: 27h 50m 26s
+Processed 2800/59488 engines, 2800 updated, 0 errors, 2800 specs upserted | Elapsed: 1h 22m 29s | ETA: 27h 50m 3s
+Processed 2810/59488 engines, 2810 updated, 0 errors, 2810 specs upserted | Elapsed: 1h 22m 46s | ETA: 27h 49m 42s
+Processed 2820/59488 engines, 2820 updated, 0 errors, 2820 specs upserted | Elapsed: 1h 23m 4s | ETA: 27h 49m 17s
+Processed 2830/59488 engines, 2830 updated, 0 errors, 2830 specs upserted | Elapsed: 1h 23m 21s | ETA: 27h 48m 54s
+Processed 2840/59488 engines, 2840 updated, 0 errors, 2840 specs upserted | Elapsed: 1h 23m 39s | ETA: 27h 48m 36s
+Processed 2850/59488 engines, 2850 updated, 0 errors, 2850 specs upserted | Elapsed: 1h 23m 56s | ETA: 27h 48m 15s
+Processed 2860/59488 engines, 2860 updated, 0 errors, 2860 specs upserted | Elapsed: 1h 24m 14s | ETA: 27h 47m 55s
+Processed 2870/59488 engines, 2870 updated, 0 errors, 2870 specs upserted | Elapsed: 1h 24m 32s | ETA: 27h 47m 40s
+Processed 2880/59488 engines, 2880 updated, 0 errors, 2880 specs upserted | Elapsed: 1h 24m 49s | ETA: 27h 47m 20s
+Processed 2890/59488 engines, 2890 updated, 0 errors, 2890 specs upserted | Elapsed: 1h 25m 7s | ETA: 27h 47m 0s
+Processed 2900/59488 engines, 2900 updated, 0 errors, 2900 specs upserted | Elapsed: 1h 25m 24s | ETA: 27h 46m 43s
+Processed 2910/59488 engines, 2910 updated, 0 errors, 2910 specs upserted | Elapsed: 1h 25m 42s | ETA: 27h 46m 21s
+Processed 2920/59488 engines, 2920 updated, 0 errors, 2920 specs upserted | Elapsed: 1h 25m 59s | ETA: 27h 45m 54s
+Processed 2930/59488 engines, 2930 updated, 0 errors, 2930 specs upserted | Elapsed: 1h 26m 16s | ETA: 27h 45m 28s
+Processed 2940/59488 engines, 2940 updated, 0 errors, 2940 specs upserted | Elapsed: 1h 26m 34s | ETA: 27h 45m 4s
+Processed 2950/59488 engines, 2950 updated, 0 errors, 2950 specs upserted | Elapsed: 1h 26m 51s | ETA: 27h 44m 41s
+Processed 2960/59488 engines, 2960 updated, 0 errors, 2960 specs upserted | Elapsed: 1h 27m 8s | ETA: 27h 44m 16s
+Processed 2970/59488 engines, 2970 updated, 0 errors, 2970 specs upserted | Elapsed: 1h 27m 26s | ETA: 27h 43m 50s
+Processed 2980/59488 engines, 2980 updated, 0 errors, 2980 specs upserted | Elapsed: 1h 27m 43s | ETA: 27h 43m 22s
+Processed 2990/59488 engines, 2990 updated, 0 errors, 2990 specs upserted | Elapsed: 1h 28m 0s | ETA: 27h 42m 55s
+Processed 3000/59488 engines, 3000 updated, 0 errors, 3000 specs upserted | Elapsed: 1h 28m 17s | ETA: 27h 42m 34s
+Processed 3010/59488 engines, 3010 updated, 0 errors, 3010 specs upserted | Elapsed: 1h 28m 36s | ETA: 27h 42m 33s
+Processed 3020/59488 engines, 3020 updated, 0 errors, 3020 specs upserted | Elapsed: 1h 28m 54s | ETA: 27h 42m 31s
+Processed 3030/59488 engines, 3030 updated, 0 errors, 3030 specs upserted | Elapsed: 1h 29m 13s | ETA: 27h 42m 34s
+Processed 3040/59488 engines, 3040 updated, 0 errors, 3040 specs upserted | Elapsed: 1h 29m 31s | ETA: 27h 42m 29s
+Processed 3050/59488 engines, 3050 updated, 0 errors, 3050 specs upserted | Elapsed: 1h 29m 49s | ETA: 27h 42m 8s
+Processed 3060/59488 engines, 3060 updated, 0 errors, 3060 specs upserted | Elapsed: 1h 30m 6s | ETA: 27h 41m 44s
+Processed 3070/59488 engines, 3070 updated, 0 errors, 3070 specs upserted | Elapsed: 1h 30m 24s | ETA: 27h 41m 19s
+Processed 3080/59488 engines, 3080 updated, 0 errors, 3080 specs upserted | Elapsed: 1h 30m 41s | ETA: 27h 40m 53s
+Processed 3090/59488 engines, 3090 updated, 0 errors, 3090 specs upserted | Elapsed: 1h 30m 58s | ETA: 27h 40m 27s
+Processed 3100/59488 engines, 3100 updated, 0 errors, 3100 specs upserted | Elapsed: 1h 31m 15s | ETA: 27h 40m 1s
+Processed 3110/59488 engines, 3110 updated, 0 errors, 3110 specs upserted | Elapsed: 1h 31m 33s | ETA: 27h 39m 41s
+Processed 3120/59488 engines, 3120 updated, 0 errors, 3120 specs upserted | Elapsed: 1h 31m 50s | ETA: 27h 39m 18s
+Processed 3130/59488 engines, 3130 updated, 0 errors, 3130 specs upserted | Elapsed: 1h 32m 7s | ETA: 27h 38m 54s
+Processed 3140/59488 engines, 3140 updated, 0 errors, 3140 specs upserted | Elapsed: 1h 32m 25s | ETA: 27h 38m 28s
+Processed 3150/59488 engines, 3150 updated, 0 errors, 3150 specs upserted | Elapsed: 1h 32m 42s | ETA: 27h 38m 2s
+Processed 3160/59488 engines, 3160 updated, 0 errors, 3160 specs upserted | Elapsed: 1h 32m 59s | ETA: 27h 37m 37s
+Processed 3170/59488 engines, 3170 updated, 0 errors, 3170 specs upserted | Elapsed: 1h 33m 16s | ETA: 27h 37m 11s
+Processed 3180/59488 engines, 3180 updated, 0 errors, 3180 specs upserted | Elapsed: 1h 33m 34s | ETA: 27h 36m 54s
+Processed 3190/59488 engines, 3190 updated, 0 errors, 3190 specs upserted | Elapsed: 1h 33m 52s | ETA: 27h 36m 48s
+Processed 3200/59488 engines, 3200 updated, 0 errors, 3200 specs upserted | Elapsed: 1h 34m 11s | ETA: 27h 36m 43s
+Processed 3210/59488 engines, 3210 updated, 0 errors, 3210 specs upserted | Elapsed: 1h 34m 29s | ETA: 27h 36m 30s
+Processed 3220/59488 engines, 3220 updated, 0 errors, 3220 specs upserted | Elapsed: 1h 34m 46s | ETA: 27h 36m 8s
+Processed 3230/59488 engines, 3230 updated, 0 errors, 3230 specs upserted | Elapsed: 1h 35m 3s | ETA: 27h 35m 43s
+Processed 3240/59488 engines, 3240 updated, 0 errors, 3240 specs upserted | Elapsed: 1h 35m 21s | ETA: 27h 35m 19s
+Processed 3250/59488 engines, 3250 updated, 0 errors, 3250 specs upserted | Elapsed: 1h 35m 38s | ETA: 27h 34m 57s
+Processed 3260/59488 engines, 3260 updated, 0 errors, 3260 specs upserted | Elapsed: 1h 35m 56s | ETA: 27h 34m 44s
+Processed 3270/59488 engines, 3270 updated, 0 errors, 3270 specs upserted | Elapsed: 1h 36m 13s | ETA: 27h 34m 20s
+Processed 3280/59488 engines, 3280 updated, 0 errors, 3280 specs upserted | Elapsed: 1h 36m 30s | ETA: 27h 33m 55s
+Processed 3290/59488 engines, 3290 updated, 0 errors, 3290 specs upserted | Elapsed: 1h 36m 48s | ETA: 27h 33m 31s
+Processed 3300/59488 engines, 3300 updated, 0 errors, 3300 specs upserted | Elapsed: 1h 37m 5s | ETA: 27h 33m 7s
+Processed 3310/59488 engines, 3310 updated, 0 errors, 3310 specs upserted | Elapsed: 1h 37m 22s | ETA: 27h 32m 45s
+Processed 3320/59488 engines, 3320 updated, 0 errors, 3320 specs upserted | Elapsed: 1h 37m 40s | ETA: 27h 32m 21s
+Processed 3330/59488 engines, 3330 updated, 0 errors, 3330 specs upserted | Elapsed: 1h 37m 57s | ETA: 27h 32m 0s
+Processed 3340/59488 engines, 3340 updated, 0 errors, 3340 specs upserted | Elapsed: 1h 38m 14s | ETA: 27h 31m 36s
+Processed 3350/59488 engines, 3350 updated, 0 errors, 3350 specs upserted | Elapsed: 1h 38m 32s | ETA: 27h 31m 23s
+Processed 3360/59488 engines, 3360 updated, 0 errors, 3360 specs upserted | Elapsed: 1h 38m 51s | ETA: 27h 31m 18s
+Processed 3370/59488 engines, 3370 updated, 0 errors, 3370 specs upserted | Elapsed: 1h 39m 8s | ETA: 27h 30m 55s
+Processed 3380/59488 engines, 3380 updated, 0 errors, 3380 specs upserted | Elapsed: 1h 39m 25s | ETA: 27h 30m 32s
+Processed 3390/59488 engines, 3390 updated, 0 errors, 3390 specs upserted | Elapsed: 1h 39m 43s | ETA: 27h 30m 12s
+Processed 3400/59488 engines, 3400 updated, 0 errors, 3400 specs upserted | Elapsed: 1h 40m 0s | ETA: 27h 29m 48s
+Processed 3410/59488 engines, 3410 updated, 0 errors, 3410 specs upserted | Elapsed: 1h 40m 17s | ETA: 27h 29m 25s
+Processed 3420/59488 engines, 3420 updated, 0 errors, 3420 specs upserted | Elapsed: 1h 40m 35s | ETA: 27h 29m 6s
+Processed 3430/59488 engines, 3430 updated, 0 errors, 3430 specs upserted | Elapsed: 1h 40m 52s | ETA: 27h 28m 42s
+Processed 3440/59488 engines, 3440 updated, 0 errors, 3440 specs upserted | Elapsed: 1h 41m 9s | ETA: 27h 28m 17s
+Processed 3450/59488 engines, 3450 updated, 0 errors, 3450 specs upserted | Elapsed: 1h 41m 27s | ETA: 27h 27m 53s
+Processed 3460/59488 engines, 3460 updated, 0 errors, 3460 specs upserted | Elapsed: 1h 41m 44s | ETA: 27h 27m 31s
+Processed 3470/59488 engines, 3470 updated, 0 errors, 3470 specs upserted | Elapsed: 1h 42m 1s | ETA: 27h 27m 8s
+Processed 3480/59488 engines, 3480 updated, 0 errors, 3480 specs upserted | Elapsed: 1h 42m 19s | ETA: 27h 26m 53s
+Processed 3490/59488 engines, 3490 updated, 0 errors, 3490 specs upserted | Elapsed: 1h 42m 37s | ETA: 27h 26m 31s
+Processed 3500/59488 engines, 3500 updated, 0 errors, 3500 specs upserted | Elapsed: 1h 42m 54s | ETA: 27h 26m 7s
+Processed 3510/59488 engines, 3510 updated, 0 errors, 3510 specs upserted | Elapsed: 1h 43m 11s | ETA: 27h 25m 44s
+Processed 3520/59488 engines, 3520 updated, 0 errors, 3520 specs upserted | Elapsed: 1h 43m 29s | ETA: 27h 25m 28s
+Processed 3530/59488 engines, 3530 updated, 0 errors, 3530 specs upserted | Elapsed: 1h 43m 47s | ETA: 27h 25m 14s
+Processed 3540/59488 engines, 3540 updated, 0 errors, 3540 specs upserted | Elapsed: 1h 44m 4s | ETA: 27h 24m 58s
+Processed 3550/59488 engines, 3550 updated, 0 errors, 3550 specs upserted | Elapsed: 1h 44m 34s | ETA: 27h 27m 48s
+Processed 3560/59488 engines, 3560 updated, 0 errors, 3560 specs upserted | Elapsed: 1h 44m 55s | ETA: 27h 28m 19s
+Processed 3570/59488 engines, 3570 updated, 0 errors, 3570 specs upserted | Elapsed: 1h 45m 20s | ETA: 27h 30m 3s
+Processed 3580/59488 engines, 3580 updated, 0 errors, 3580 specs upserted | Elapsed: 1h 45m 47s | ETA: 27h 32m 4s
+Processed 3590/59488 engines, 3590 updated, 0 errors, 3590 specs upserted | Elapsed: 1h 46m 9s | ETA: 27h 32m 51s
+Processed 3600/59488 engines, 3600 updated, 0 errors, 3600 specs upserted | Elapsed: 1h 46m 31s | ETA: 27h 33m 45s
+Processed 3610/59488 engines, 3610 updated, 0 errors, 3610 specs upserted | Elapsed: 1h 46m 51s | ETA: 27h 34m 2s
+Processed 3620/59488 engines, 3620 updated, 0 errors, 3620 specs upserted | Elapsed: 1h 47m 11s | ETA: 27h 34m 23s
+Processed 3630/59488 engines, 3630 updated, 0 errors, 3630 specs upserted | Elapsed: 1h 47m 33s | ETA: 27h 35m 10s
+Processed 3640/59488 engines, 3640 updated, 0 errors, 3640 specs upserted | Elapsed: 1h 47m 54s | ETA: 27h 35m 40s
+Processed 3650/59488 engines, 3650 updated, 0 errors, 3650 specs upserted | Elapsed: 1h 48m 19s | ETA: 27h 37m 8s
+Processed 3660/59488 engines, 3660 updated, 0 errors, 3660 specs upserted | Elapsed: 1h 48m 41s | ETA: 27h 37m 48s
+Processed 3670/59488 engines, 3670 updated, 0 errors, 3670 specs upserted | Elapsed: 1h 49m 1s | ETA: 27h 38m 14s
+Processed 3680/59488 engines, 3680 updated, 0 errors, 3680 specs upserted | Elapsed: 1h 49m 23s | ETA: 27h 39m 2s
+Processed 3690/59488 engines, 3690 updated, 0 errors, 3690 specs upserted | Elapsed: 1h 49m 45s | ETA: 27h 39m 36s
+Processed 3700/59488 engines, 3700 updated, 0 errors, 3700 specs upserted | Elapsed: 1h 50m 10s | ETA: 27h 41m 13s
+Processed 3710/59488 engines, 3710 updated, 0 errors, 3710 specs upserted | Elapsed: 1h 50m 33s | ETA: 27h 42m 12s
+Processed 3720/59488 engines, 3720 updated, 0 errors, 3720 specs upserted | Elapsed: 1h 50m 53s | ETA: 27h 42m 21s
+Processed 3730/59488 engines, 3730 updated, 0 errors, 3730 specs upserted | Elapsed: 1h 51m 13s | ETA: 27h 42m 36s
+Processed 3740/59488 engines, 3740 updated, 0 errors, 3740 specs upserted | Elapsed: 1h 51m 33s | ETA: 27h 42m 45s
+Processed 3750/59488 engines, 3750 updated, 0 errors, 3750 specs upserted | Elapsed: 1h 51m 55s | ETA: 27h 43m 32s
+Processed 3760/59488 engines, 3760 updated, 0 errors, 3760 specs upserted | Elapsed: 1h 52m 15s | ETA: 27h 43m 43s
+Processed 3770/59488 engines, 3770 updated, 0 errors, 3770 specs upserted | Elapsed: 1h 52m 35s | ETA: 27h 43m 58s
+Processed 3780/59488 engines, 3780 updated, 0 errors, 3780 specs upserted | Elapsed: 1h 52m 56s | ETA: 27h 44m 26s
+Processed 3790/59488 engines, 3790 updated, 0 errors, 3790 specs upserted | Elapsed: 1h 53m 17s | ETA: 27h 44m 51s
+Processed 3800/59488 engines, 3800 updated, 0 errors, 3800 specs upserted | Elapsed: 1h 53m 38s | ETA: 27h 45m 27s
+Processed 3810/59488 engines, 3810 updated, 0 errors, 3810 specs upserted | Elapsed: 1h 53m 59s | ETA: 27h 45m 55s
+Processed 3820/59488 engines, 3820 updated, 0 errors, 3820 specs upserted | Elapsed: 1h 54m 20s | ETA: 27h 46m 22s
+Processed 3830/59488 engines, 3830 updated, 0 errors, 3830 specs upserted | Elapsed: 1h 54m 42s | ETA: 27h 46m 54s
+Processed 3840/59488 engines, 3840 updated, 0 errors, 3840 specs upserted | Elapsed: 1h 54m 59s | ETA: 27h 46m 30s
+Processed 3850/59488 engines, 3850 updated, 0 errors, 3850 specs upserted | Elapsed: 1h 55m 17s | ETA: 27h 46m 8s
+Processed 3860/59488 engines, 3860 updated, 0 errors, 3860 specs upserted | Elapsed: 1h 55m 35s | ETA: 27h 45m 47s
+Processed 3870/59488 engines, 3870 updated, 0 errors, 3870 specs upserted | Elapsed: 1h 55m 52s | ETA: 27h 45m 22s
+Processed 3880/59488 engines, 3880 updated, 0 errors, 3880 specs upserted | Elapsed: 1h 56m 10s | ETA: 27h 45m 0s
+Processed 3890/59488 engines, 3890 updated, 0 errors, 3890 specs upserted | Elapsed: 1h 56m 28s | ETA: 27h 44m 39s
+Processed 3900/59488 engines, 3900 updated, 0 errors, 3900 specs upserted | Elapsed: 1h 56m 45s | ETA: 27h 44m 14s
+Processed 3910/59488 engines, 3910 updated, 0 errors, 3910 specs upserted | Elapsed: 1h 57m 3s | ETA: 27h 43m 51s
+Processed 3920/59488 engines, 3920 updated, 0 errors, 3920 specs upserted | Elapsed: 1h 57m 20s | ETA: 27h 43m 27s
+Processed 3930/59488 engines, 3930 updated, 0 errors, 3930 specs upserted | Elapsed: 1h 57m 38s | ETA: 27h 43m 3s
+Processed 3940/59488 engines, 3940 updated, 0 errors, 3940 specs upserted | Elapsed: 1h 57m 55s | ETA: 27h 42m 38s
+Processed 3950/59488 engines, 3950 updated, 0 errors, 3950 specs upserted | Elapsed: 1h 58m 13s | ETA: 27h 42m 12s
+Processed 3960/59488 engines, 3960 updated, 0 errors, 3960 specs upserted | Elapsed: 1h 58m 31s | ETA: 27h 41m 52s
+Processed 3970/59488 engines, 3970 updated, 0 errors, 3970 specs upserted | Elapsed: 1h 58m 49s | ETA: 27h 41m 34s
+Processed 3980/59488 engines, 3980 updated, 0 errors, 3980 specs upserted | Elapsed: 1h 59m 7s | ETA: 27h 41m 18s
+Processed 3990/59488 engines, 3990 updated, 0 errors, 3990 specs upserted | Elapsed: 1h 59m 25s | ETA: 27h 41m 2s
+Processed 4000/59488 engines, 4000 updated, 0 errors, 4000 specs upserted | Elapsed: 1h 59m 42s | ETA: 27h 40m 39s
+Processed 4010/59488 engines, 4010 updated, 0 errors, 4010 specs upserted | Elapsed: 2h 0m 0s | ETA: 27h 40m 16s
+Processed 4020/59488 engines, 4020 updated, 0 errors, 4020 specs upserted | Elapsed: 2h 0m 17s | ETA: 27h 39m 49s
+Processed 4030/59488 engines, 4030 updated, 0 errors, 4030 specs upserted | Elapsed: 2h 0m 34s | ETA: 27h 39m 21s
+Processed 4040/59488 engines, 4040 updated, 0 errors, 4040 specs upserted | Elapsed: 2h 0m 52s | ETA: 27h 38m 53s
+Processed 4050/59488 engines, 4050 updated, 0 errors, 4050 specs upserted | Elapsed: 2h 1m 9s | ETA: 27h 38m 28s
+Processed 4060/59488 engines, 4060 updated, 0 errors, 4060 specs upserted | Elapsed: 2h 1m 27s | ETA: 27h 38m 4s
+Processed 4070/59488 engines, 4070 updated, 0 errors, 4070 specs upserted | Elapsed: 2h 1m 44s | ETA: 27h 37m 37s
+Processed 4080/59488 engines, 4080 updated, 0 errors, 4080 specs upserted | Elapsed: 2h 2m 1s | ETA: 27h 37m 10s
+Processed 4090/59488 engines, 4090 updated, 0 errors, 4090 specs upserted | Elapsed: 2h 2m 18s | ETA: 27h 36m 43s
+Processed 4100/59488 engines, 4100 updated, 0 errors, 4100 specs upserted | Elapsed: 2h 2m 36s | ETA: 27h 36m 17s
+Processed 4110/59488 engines, 4110 updated, 0 errors, 4110 specs upserted | Elapsed: 2h 2m 53s | ETA: 27h 35m 53s
+Processed 4120/59488 engines, 4120 updated, 0 errors, 4120 specs upserted | Elapsed: 2h 3m 11s | ETA: 27h 35m 30s
+Processed 4130/59488 engines, 4130 updated, 0 errors, 4130 specs upserted | Elapsed: 2h 3m 28s | ETA: 27h 35m 3s
+Processed 4140/59488 engines, 4140 updated, 0 errors, 4140 specs upserted | Elapsed: 2h 3m 46s | ETA: 27h 34m 43s
+Processed 4150/59488 engines, 4150 updated, 0 errors, 4150 specs upserted | Elapsed: 2h 4m 4s | ETA: 27h 34m 29s
+Processed 4160/59488 engines, 4160 updated, 0 errors, 4160 specs upserted | Elapsed: 2h 4m 22s | ETA: 27h 34m 6s
+Processed 4170/59488 engines, 4170 updated, 0 errors, 4170 specs upserted | Elapsed: 2h 4m 39s | ETA: 27h 33m 44s
+Processed 4180/59488 engines, 4180 updated, 0 errors, 4180 specs upserted | Elapsed: 2h 4m 57s | ETA: 27h 33m 17s
+Processed 4190/59488 engines, 4190 updated, 0 errors, 4190 specs upserted | Elapsed: 2h 5m 14s | ETA: 27h 32m 51s
+Processed 4200/59488 engines, 4200 updated, 0 errors, 4200 specs upserted | Elapsed: 2h 5m 31s | ETA: 27h 32m 24s
+Processed 4210/59488 engines, 4210 updated, 0 errors, 4210 specs upserted | Elapsed: 2h 5m 48s | ETA: 27h 31m 59s
+Processed 4220/59488 engines, 4220 updated, 0 errors, 4220 specs upserted | Elapsed: 2h 6m 6s | ETA: 27h 31m 33s
+Processed 4230/59488 engines, 4230 updated, 0 errors, 4230 specs upserted | Elapsed: 2h 6m 23s | ETA: 27h 31m 10s
+Processed 4240/59488 engines, 4240 updated, 0 errors, 4240 specs upserted | Elapsed: 2h 6m 41s | ETA: 27h 30m 43s
+200/59489 engines, 4200 updated, 0 errors, 4200 specs upserted | Elapsed: 1h 41m 38s | ETA: 22h 18m 5s
+Processed 4210/59489 engines, 4210 updated, 0 errors, 4210 specs upserted | Elapsed: 1h 41m 53s | ETA: 22h 17m 58s
+Processed 4220/59489 engines, 4220 updated, 0 errors, 4220 specs upserted | Elapsed: 1h 42m 8s | ETA: 22h 17m 45s
+Processed 4230/59489 engines, 4230 updated, 0 errors, 4230 specs upserted | Elapsed: 1h 42m 23s | ETA: 22h 17m 34s
+Processed 4240/59489 engines, 4240 updated, 0 errors, 4240 specs upserted | Elapsed: 1h 42m 42s | ETA: 22h 18m 22s
+Processed 4250/59489 engines, 4250 updated, 0 errors, 4250 specs upserted | Elapsed: 1h 43m 1s | ETA: 22h 18m 58s
+Processed 4260/59489 engines, 4260 updated, 0 errors, 4260 specs upserted | Elapsed: 1h 43m 24s | ETA: 22h 20m 40s
+Processed 4270/59489 engines, 4270 updated, 0 errors, 4270 specs upserted | Elapsed: 1h 43m 46s | ETA: 22h 21m 54s
+Processed 4280/59489 engines, 4280 updated, 0 errors, 4280 specs upserted | Elapsed: 1h 44m 5s | ETA: 22h 22m 37s
+Processed 4290/59489 engines, 4290 updated, 0 errors, 4290 specs upserted | Elapsed: 1h 44m 22s | ETA: 22h 22m 54s
+Processed 4300/59489 engines, 4300 updated, 0 errors, 4300 specs upserted | Elapsed: 1h 44m 40s | ETA: 22h 23m 25s
+Processed 4310/59489 engines, 4310 updated, 0 errors, 4310 specs upserted | Elapsed: 1h 44m 58s | ETA: 22h 24m 1s
+Processed 4320/59489 engines, 4320 updated, 0 errors, 4320 specs upserted | Elapsed: 1h 45m 16s | ETA: 22h 24m 28s
+Processed 4330/59489 engines, 4330 updated, 0 errors, 4330 specs upserted | Elapsed: 1h 45m 35s | ETA: 22h 25m 12s
+Processed 4340/59489 engines, 4340 updated, 0 errors, 4340 specs upserted | Elapsed: 1h 45m 53s | ETA: 22h 25m 40s
+Processed 4350/59489 engines, 4350 updated, 0 errors, 4350 specs upserted | Elapsed: 1h 46m 11s | ETA: 22h 26m 5s
+Processed 4360/59489 engines, 4360 updated, 0 errors, 4360 specs upserted | Elapsed: 1h 46m 30s | ETA: 22h 26m 45s
+Processed 4370/59489 engines, 4370 updated, 0 errors, 4370 specs upserted | Elapsed: 1h 46m 49s | ETA: 22h 27m 19s
+Processed 4380/59489 engines, 4380 updated, 0 errors, 4380 specs upserted | Elapsed: 1h 47m 10s | ETA: 22h 28m 24s
+Processed 4390/59489 engines, 4390 updated, 0 errors, 4390 specs upserted | Elapsed: 1h 47m 28s | ETA: 22h 28m 51s
+Processed 4400/59489 engines, 4400 updated, 0 errors, 4400 specs upserted | Elapsed: 1h 47m 46s | ETA: 22h 29m 25s
+Processed 4410/59489 engines, 4410 updated, 0 errors, 4410 specs upserted | Elapsed: 1h 48m 8s | ETA: 22h 30m 33s
+Processed 4420/59489 engines, 4420 updated, 0 errors, 4420 specs upserted | Elapsed: 1h 48m 32s | ETA: 22h 32m 24s
+Processed 4430/59489 engines, 4430 updated, 0 errors, 4430 specs upserted | Elapsed: 1h 48m 49s | ETA: 22h 32m 38s
+Processed 4440/59489 engines, 4440 updated, 0 errors, 4440 specs upserted | Elapsed: 1h 49m 7s | ETA: 22h 33m 0s
+Processed 4450/59489 engines, 4450 updated, 0 errors, 4450 specs upserted | Elapsed: 1h 49m 24s | ETA: 22h 33m 11s
+Processed 4460/59489 engines, 4460 updated, 0 errors, 4460 specs upserted | Elapsed: 1h 49m 43s | ETA: 22h 33m 50s
+Processed 4470/59489 engines, 4470 updated, 0 errors, 4470 specs upserted | Elapsed: 1h 50m 0s | ETA: 22h 34m 0s
+Processed 4480/59489 engines, 4480 updated, 0 errors, 4480 specs upserted | Elapsed: 1h 50m 19s | ETA: 22h 34m 34s
+Processed 4490/59489 engines, 4490 updated, 0 errors, 4490 specs upserted | Elapsed: 1h 50m 36s | ETA: 22h 34m 56s
+Processed 4500/59489 engines, 4500 updated, 0 errors, 4500 specs upserted | Elapsed: 1h 50m 54s | ETA: 22h 35m 11s
+Processed 4510/59489 engines, 4510 updated, 0 errors, 4510 specs upserted | Elapsed: 1h 51m 13s | ETA: 22h 35m 49s
+Processed 4520/59489 engines, 4520 updated, 0 errors, 4520 specs upserted | Elapsed: 1h 51m 31s | ETA: 22h 36m 12s
+Processed 4530/59489 engines, 4530 updated, 0 errors, 4530 specs upserted | Elapsed: 1h 51m 48s | ETA: 22h 36m 28s
+Processed 4540/59489 engines, 4540 updated, 0 errors, 4540 specs upserted | Elapsed: 1h 52m 6s | ETA: 22h 36m 48s
+Processed 4550/59489 engines, 4550 updated, 0 errors, 4550 specs upserted | Elapsed: 1h 52m 23s | ETA: 22h 37m 0s
+Processed 4560/59489 engines, 4560 updated, 0 errors, 4560 specs upserted | Elapsed: 1h 52m 40s | ETA: 22h 37m 16s
+Processed 4570/59489 engines, 4570 updated, 0 errors, 4570 specs upserted | Elapsed: 1h 52m 58s | ETA: 22h 37m 44s
+Processed 4580/59489 engines, 4580 updated, 0 errors, 4580 specs upserted | Elapsed: 1h 53m 16s | ETA: 22h 37m 56s
+Processed 4590/59489 engines, 4590 updated, 0 errors, 4590 specs upserted | Elapsed: 1h 53m 30s | ETA: 22h 37m 40s
+Processed 4600/59489 engines, 4600 updated, 0 errors, 4600 specs upserted | Elapsed: 1h 53m 45s | ETA: 22h 37m 24s
+Processed 4610/59489 engines, 4610 updated, 0 errors, 4610 specs upserted | Elapsed: 1h 54m 0s | ETA: 22h 37m 9s
+Processed 4620/59489 engines, 4620 updated, 0 errors, 4620 specs upserted | Elapsed: 1h 54m 14s | ETA: 22h 36m 51s
+Processed 4630/59489 engines, 4630 updated, 0 errors, 4630 specs upserted | Elapsed: 1h 54m 29s | ETA: 22h 36m 30s
+Processed 4640/59489 engines, 4640 updated, 0 errors, 4640 specs upserted | Elapsed: 1h 54m 43s | ETA: 22h 36m 10s
+Processed 4650/59489 engines, 4650 updated, 0 errors, 4650 specs upserted | Elapsed: 1h 54m 58s | ETA: 22h 35m 51s
+Processed 4660/59489 engines, 4660 updated, 0 errors, 4660 specs upserted | Elapsed: 1h 55m 12s | ETA: 22h 35m 30s
+Processed 4670/59489 engines, 4670 updated, 0 errors, 4670 specs upserted | Elapsed: 1h 55m 26s | ETA: 22h 35m 10s
+Processed 4680/59489 engines, 4680 updated, 0 errors, 4680 specs upserted | Elapsed: 1h 55m 41s | ETA: 22h 34m 49s
+Processed 4690/59489 engines, 4690 updated, 0 errors, 4690 specs upserted | Elapsed: 1h 55m 55s | ETA: 22h 34m 31s
+Processed 4700/59489 engines, 4700 updated, 0 errors, 4700 specs upserted | Elapsed: 1h 56m 9s | ETA: 22h 34m 10s
+Processed 4710/59489 engines, 4710 updated, 0 errors, 4710 specs upserted | Elapsed: 1h 56m 24s | ETA: 22h 33m 51s
+Processed 4720/59489 engines, 4720 updated, 0 errors, 4720 specs upserted | Elapsed: 1h 56m 38s | ETA: 22h 33m 31s
+Processed 4730/59489 engines, 4730 updated, 0 errors, 4730 specs upserted | Elapsed: 1h 56m 53s | ETA: 22h 33m 19s
+Processed 4740/59489 engines, 4740 updated, 0 errors, 4740 specs upserted | Elapsed: 1h 57m 8s | ETA: 22h 33m 1s
+Processed 4750/59489 engines, 4750 updated, 0 errors, 4750 specs upserted | Elapsed: 1h 57m 24s | ETA: 22h 32m 59s
+Processed 4760/59489 engines, 4760 updated, 0 errors, 4760 specs upserted | Elapsed: 1h 57m 40s | ETA: 22h 32m 56s
+Processed 4770/59489 engines, 4770 updated, 0 errors, 4770 specs upserted | Elapsed: 1h 57m 55s | ETA: 22h 32m 42s
+Processed 4780/59489 engines, 4780 updated, 0 errors, 4780 specs upserted | Elapsed: 1h 58m 9s | ETA: 22h 32m 23s
+Processed 4790/59489 engines, 4790 updated, 0 errors, 4790 specs upserted | Elapsed: 1h 58m 23s | ETA: 22h 32m 3s
+Processed 4800/59489 engines, 4800 updated, 0 errors, 4800 specs upserted | Elapsed: 1h 58m 38s | ETA: 22h 31m 44s
+Processed 4810/59489 engines, 4810 updated, 0 errors, 4810 specs upserted | Elapsed: 1h 58m 53s | ETA: 22h 31m 26s
+Processed 4820/59489 engines, 4820 updated, 0 errors, 4820 specs upserted | Elapsed: 1h 59m 7s | ETA: 22h 31m 6s
+Processed 4830/59489 engines, 4830 updated, 0 errors, 4830 specs upserted | Elapsed: 1h 59m 21s | ETA: 22h 30m 46s
+Processed 4840/59489 engines, 4840 updated, 0 errors, 4840 specs upserted | Elapsed: 1h 59m 36s | ETA: 22h 30m 26s
+Processed 4850/59489 engines, 4850 updated, 0 errors, 4850 specs upserted | Elapsed: 1h 59m 50s | ETA: 22h 30m 6s
+Processed 4860/59489 engines, 4860 updated, 0 errors, 4860 specs upserted | Elapsed: 2h 0m 4s | ETA: 22h 29m 46s
+Processed 4870/59489 engines, 4870 updated, 0 errors, 4870 specs upserted | Elapsed: 2h 0m 19s | ETA: 22h 29m 26s
+Processed 4880/59489 engines, 4880 updated, 0 errors, 4880 specs upserted | Elapsed: 2h 0m 33s | ETA: 22h 29m 6s
+Processed 4890/59489 engines, 4890 updated, 0 errors, 4890 specs upserted | Elapsed: 2h 0m 48s | ETA: 22h 28m 47s
+Processed 4900/59489 engines, 4900 updated, 0 errors, 4900 specs upserted | Elapsed: 2h 1m 2s | ETA: 22h 28m 27s

@@ -582,6 +582,7 @@ export async function getVehiclesForPages(
     }
 
     const vehicleSpecs = specsMap.get(engine.id) ?? null;
+    console.log(`[vehicle-pages] Engine ${engine.id}: specs found = ${!!vehicleSpecs}, system_combined_hp = ${vehicleSpecs?.system_combined_hp}, raw Power = ${(vehicleSpecs?.raw_specs as any)?.Power?.substring?.(0, 30)}`);
 
     // Pull power/torque from specs if engine record is missing them
     let powerHp: number | null = engine.power_hp;
