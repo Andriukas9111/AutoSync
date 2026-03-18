@@ -541,6 +541,19 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     ? `<span class="avsp-hero__year"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${escapeHtml(yearRange)}</span>`
     : "";
 
+  // --- Fuel badge logic (detect Hybrid) ---
+  const electricSection = fullSpecs["Electric / Hybrid"];
+  const isHybrid = electricSection && Object.keys(electricSection).length > 0;
+  let fuelBadgeText = vehicle.fuelType ?? "Vehicle Specifications";
+  let fuelBadgeClass = "avsp-hero__badge";
+  if (isHybrid) {
+    // Check battery capacity to determine plug-in hybrid vs hybrid
+    const batteryCapStr = electricSection["Battery Capacity (Gross)"] ?? electricSection["Battery Capacity (Usable)"] ?? "";
+    const batteryCapKwh = parseFloat(batteryCapStr) || 0;
+    fuelBadgeText = batteryCapKwh > 5 ? "Plug-in Hybrid" : "Hybrid";
+    fuelBadgeClass = "avsp-hero__badge avsp-hero__badge--hybrid";
+  }
+
   // --- Spec sections ---
   const specSectionsHtml = Object.entries(fullSpecs)
     .map(([category, specEntries]) => {
@@ -574,7 +587,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     const productLinks = vehicle.linkedProductIds
       .map(
         (handle) =>
-          `<a href="/products/${escapeHtml(handle)}" class="avsp-product-pill"><span>${escapeHtml(formatHandle(handle))}</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></a>`,
+          `<a href="/products/${escapeHtml(handle)}" class="avsp-product-pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>${escapeHtml(formatHandle(handle))}</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></a>`,
       )
       .join("");
     productsHtml = `<div class="avsp-products">
@@ -610,15 +623,15 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   );
 
   // --- AutoSync brand triangle SVG ---
-  const autosyncLogo = `<svg width="24" height="24" viewBox="0 0 32 32" fill="none"><polygon points="16,2 30,28 2,28" fill="#0066ff"/><text x="16" y="23" text-anchor="middle" font-size="12" font-weight="700" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,sans-serif">A</text></svg>`;
+  const autosyncLogo = `<svg width="24" height="24" viewBox="0 0 100 100" fill="none"><path d="M50 5 L88 90 C88 92 86 94 84 94 L68 94 C66 94 64 92 63 90 L50 55 L50 5Z" fill="#0066ff"/><path d="M50 5 L12 90 C12 92 14 94 16 94 L32 94 C34 94 36 92 37 90 L50 55 C48 50 44 48 42 52 L35 70 C34 72 35 74 37 74 L50 74 L50 5Z" fill="#0066ff"/></svg>`;
 
   // --- Assemble full HTML ---
   return `<style>
   /* ---- Base ---- */
-  .avsp { --avsp-primary: #0f1729; --avsp-accent: #0066ff; --avsp-accent-light: #e8f0fe; --avsp-bg: #f8f9fb; --avsp-card: #ffffff; --avsp-border: #e2e5ea; --avsp-text: #1a1d26; --avsp-muted: #6c737f; --avsp-radius: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; color: var(--avsp-text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .avsp { --avsp-primary: #0f1729; --avsp-accent: #0066ff; --avsp-accent-light: #e8f0fe; --avsp-bg: #f8f9fb; --avsp-card: #ffffff; --avsp-border: #e2e5ea; --avsp-text: #1a1d26; --avsp-muted: #6c737f; --avsp-radius: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif; color: var(--avsp-text); line-height: 1.5; -webkit-font-smoothing: antialiased; max-width: 1200px; margin: 0 auto; overflow: hidden; }
 
   /* ---- Hero ---- */
-  .avsp-hero { position: relative; background: linear-gradient(145deg, var(--avsp-primary) 0%, #1a2744 50%, #0d2137 100%); color: #fff; padding: 3.5rem 2rem 3rem; overflow: hidden; }
+  .avsp-hero { position: relative; background: linear-gradient(145deg, var(--avsp-primary) 0%, #1a2744 50%, #0d2137 100%); color: #fff; padding: 3.5rem 2rem 3rem; overflow: hidden; border-radius: var(--avsp-radius); }
   .avsp-hero::before { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); pointer-events: none; }
   .avsp-hero::after { content: ''; position: absolute; top: -50%; right: -20%; width: 600px; height: 600px; background: radial-gradient(circle, rgba(0,102,255,0.12) 0%, transparent 70%); pointer-events: none; }
   .avsp-hero__inner { max-width: 1200px; margin: 0 auto; display: flex; gap: 2.5rem; align-items: center; flex-wrap: wrap; position: relative; z-index: 1; }
@@ -627,9 +640,10 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   .avsp-hero__silhouette { flex: 0 0 420px; max-width: 100%; display: flex; align-items: center; justify-content: center; padding: 1rem; }
   .avsp-hero__content { flex: 1; min-width: 280px; }
   .avsp-hero__badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, var(--avsp-accent) 0%, #0052cc 100%); color: #fff; padding: 5px 14px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,102,255,0.35); }
+  .avsp-hero__badge--hybrid { background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 2px 8px rgba(16,185,129,0.35); }
   .avsp-hero__badge::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #4dd495; border-radius: 50%; }
-  .avsp-hero__make { font-size: 0.9rem; opacity: 0.55; margin: 0 0 0.35rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
-  .avsp-hero__title { font-size: 2.25rem; font-weight: 800; margin: 0 0 0.5rem; line-height: 1.15; letter-spacing: -0.02em; }
+  .avsp-hero__make { font-size: 0.9rem; opacity: 0.75; margin: 0 0 0.35rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+  .avsp-hero__title { font-size: 2.25rem; font-weight: 800; margin: 0 0 0.5rem; line-height: 1.15; letter-spacing: -0.02em; text-shadow: 0 2px 20px rgba(0,0,0,0.5); }
   .avsp-hero__gen { font-size: 0.95rem; opacity: 0.5; margin: 0 0 1.25rem; font-weight: 400; }
   .avsp-hero__year { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); padding: 8px 18px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(255,255,255,0.1); }
 
@@ -648,8 +662,11 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   /* ---- Overview ---- */
   .avsp-overview { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); padding: 1.75rem 2rem; margin-bottom: 2rem; line-height: 1.75; color: var(--avsp-muted); font-size: 0.92rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
 
+  /* ---- Specs Grid ---- */
+  .avsp-specs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; }
+
   /* ---- Spec Sections ---- */
-  .avsp-section { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); margin-bottom: 1rem; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: box-shadow 0.2s; }
+  .avsp-section { background: var(--avsp-card); border: 1px solid var(--avsp-border); border-radius: var(--avsp-radius); margin-bottom: 0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); transition: box-shadow 0.2s; }
   .avsp-section:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
   .avsp-section__header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--avsp-card); border-bottom: 1px solid var(--avsp-border); border-left: 3px solid var(--avsp-accent); cursor: pointer; user-select: none; transition: background-color 0.15s; }
   .avsp-section__header:hover { background: var(--avsp-bg); }
@@ -673,8 +690,8 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   .avsp-products__header h2 { margin: 0; font-size: 1.05rem; font-weight: 700; flex: 1; }
   .avsp-products__count { display: inline-flex; align-items: center; justify-content: center; background: var(--avsp-accent); color: #fff; font-size: 0.72rem; font-weight: 700; min-width: 24px; height: 24px; padding: 0 8px; border-radius: 12px; }
   .avsp-products__grid { display: flex; flex-wrap: wrap; gap: 8px; }
-  .avsp-product-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; background: var(--avsp-bg); border: 1px solid var(--avsp-border); border-radius: 10px; text-decoration: none; color: var(--avsp-text); font-size: 0.84rem; font-weight: 600; transition: all 0.2s; }
-  .avsp-product-pill:hover { background: var(--avsp-accent-light); border-color: var(--avsp-accent); color: var(--avsp-accent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,102,255,0.12); }
+  .avsp-product-pill { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; background: var(--avsp-bg); border: 1px solid var(--avsp-border); border-radius: 99px; text-decoration: none; color: var(--avsp-text); font-size: 0.84rem; font-weight: 600; transition: all 0.2s; }
+  .avsp-product-pill:hover { background: var(--avsp-accent); color: #fff; border-color: var(--avsp-accent); }
   .avsp-product-pill svg { opacity: 0.4; transition: opacity 0.2s, transform 0.2s; }
   .avsp-product-pill:hover svg { opacity: 1; transform: translateX(2px); }
 
@@ -694,6 +711,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     .avsp-qs-card__label { font-size: 0.6rem; }
     .avsp-qs-card__value { font-size: 0.78rem; }
     .avsp-content { padding: 1.25rem 1rem; }
+    .avsp-specs-grid { grid-template-columns: 1fr; }
     .avsp-section__header { padding: 12px 14px; }
     .avsp-section__icon { width: 28px; height: 28px; }
     .avsp-spec-table td { padding: 9px 14px; font-size: 0.82rem; }
@@ -712,7 +730,7 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
     <div class="avsp-hero__inner">
       ${heroImageHtml}
       <div class="avsp-hero__content">
-        <span class="avsp-hero__badge">${escapeHtml(vehicle.fuelType ?? "Vehicle Specifications")}</span>
+        <span class="${fuelBadgeClass}">${escapeHtml(fuelBadgeText)}</span>
         <p class="avsp-hero__make">${escapeHtml(vehicle.make)}</p>
         <h1 class="avsp-hero__title">${escapeHtml(vehicle.model)} ${escapeHtml(vehicle.variant)}</h1>
         ${generationHtml}
@@ -730,7 +748,9 @@ export function buildVehiclePageHtml(vehicle: VehiclePageData): string {
   <div class="avsp-content">
     ${overview ? `<div class="avsp-overview">${escapeHtml(overview)}</div>` : ""}
 
+    <div class="avsp-specs-grid">
     ${specSectionsHtml}
+    </div>
 
     ${productsHtml}
   </div>
