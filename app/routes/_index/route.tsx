@@ -21,9 +21,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>AutoSync — Vehicle Fitment for Shopify</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Manage Year/Make/Model/Engine fitment data, smart collections, and storefront widgets — all from one app.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
