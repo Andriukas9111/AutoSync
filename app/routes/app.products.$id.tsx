@@ -46,6 +46,7 @@ import type { FitmentStatus } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
+import { IconBadge } from "../components/IconBadge";
 import type { SuggestedFitment } from "./app.api.suggest-fitments";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -140,19 +141,7 @@ function getConfidenceLevel(score: number | null): string {
   return "low";
 }
 
-// ── Icon Badge components ──────────────────────────────────────────────────────
-
-function IconBadge({ icon, color, bg }: { icon: any; color: string; bg: string }) {
-  return (
-    <div style={{
-      width: "28px", height: "28px", borderRadius: "var(--p-border-radius-200)",
-      background: bg, display: "flex", alignItems: "center", justifyContent: "center",
-      color, flexShrink: 0,
-    }}>
-      <Icon source={icon} />
-    </div>
-  );
-}
+// ── Icon Badge imported from shared component ─────────────────────────────────
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 

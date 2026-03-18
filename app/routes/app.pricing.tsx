@@ -43,6 +43,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
+import { IconBadge } from "../components/IconBadge";
 import {
   getAllPricingRules,
   getPricingStats,
@@ -241,40 +242,9 @@ export default function PricingPage() {
     { label: "Round to nearest £10", value: "10" },
   ];
 
-  const IconBadge = ({ icon, color, bg }: { icon: any; color: string; bg: string }) => (
-    <div
-      style={{
-        width: "28px",
-        height: "28px",
-        borderRadius: "var(--p-border-radius-200)",
-        background: bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: color,
-        flexShrink: 0,
-      }}
-    >
-      <Icon source={icon} />
-    </div>
-  );
-
+  // StatBadge is a 22px variant of IconBadge for stat rows
   const StatBadge = ({ icon, color, bg }: { icon: any; color: string; bg: string }) => (
-    <div
-      style={{
-        width: "22px",
-        height: "22px",
-        borderRadius: "var(--p-border-radius-200)",
-        background: bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: color,
-        flexShrink: 0,
-      }}
-    >
-      <Icon source={icon} />
-    </div>
+    <IconBadge icon={icon} color={color} bg={bg} size={22} />
   );
 
   return (
