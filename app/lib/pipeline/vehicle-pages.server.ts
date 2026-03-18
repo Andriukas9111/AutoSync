@@ -552,15 +552,21 @@ export async function getVehiclesForPages(
   }
 
   // Fetch vehicle specs for these engines
-  const { data: specs } = await db
+  const { data: specs, error: specsError } = await db
     .from("ymme_vehicle_specs")
     .select("*")
     .in("engine_id", engineIds);
+
+  if (specsError) {
+    console.error("[vehicle-pages] Specs query error:", specsError.message);
+  }
+  console.log(`[vehicle-pages] Specs query: ${engineIds.length} engine IDs, got ${specs?.length ?? 0} specs rows`);
 
   const specsMap = new Map<string, any>();
   for (const s of specs ?? []) {
     specsMap.set(s.engine_id, s);
   }
+  console.log(`[vehicle-pages] specsMap size: ${specsMap.size}, keys: ${[...specsMap.keys()].join(", ")}`);
 
   // Build result
   const result: VehiclePageData[] = [];
