@@ -261,6 +261,8 @@ export default function Vehicles() {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [engines, setEngines] = useState<EngineItem[]>([]);
   const [enginesLoading, setEnginesLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [enginesError, setEnginesError] = useState<string | null>(null);
 
   const showError = actionData && "error" in actionData;
 
@@ -276,6 +278,7 @@ export default function Vehicles() {
     setEngines([]);
     setModels([]);
     setModelsLoading(true);
+    setModelsError(null);
     setSearchValue("");
 
     try {
@@ -285,9 +288,11 @@ export default function Vehicles() {
       if (response.ok) {
         const result = await response.json();
         setModels(result.models ?? result.data ?? []);
+      } else {
+        setModelsError("Failed to load models. Please try again.");
       }
     } catch (err) {
-      console.error("Failed to fetch models:", err);
+      setModelsError("Network error loading models. Check your connection.");
     } finally {
       setModelsLoading(false);
     }
@@ -302,6 +307,7 @@ export default function Vehicles() {
     });
     setEngines([]);
     setEnginesLoading(true);
+    setEnginesError(null);
 
     try {
       const response = await fetch(
@@ -310,9 +316,11 @@ export default function Vehicles() {
       if (response.ok) {
         const result = await response.json();
         setEngines(result.engines ?? result.data ?? []);
+      } else {
+        setEnginesError("Failed to load engines. Please try again.");
       }
     } catch (err) {
-      console.error("Failed to fetch engines:", err);
+      setEnginesError("Network error loading engines. Check your connection.");
     } finally {
       setEnginesLoading(false);
     }
@@ -525,7 +533,7 @@ export default function Vehicles() {
                     )}
                     {make.productCount > 0 && (
                       <Badge tone="info">
-                        {make.productCount} fitment{make.productCount !== 1 ? "s" : ""}
+                        {`${make.productCount} fitment${make.productCount !== 1 ? "s" : ""}`}
                       </Badge>
                     )}
                   </InlineStack>
@@ -580,6 +588,10 @@ export default function Vehicles() {
             </InlineStack>
           </Box>
         </Card>
+      ) : modelsError ? (
+        <Banner tone="critical" onDismiss={() => setModelsError(null)}>
+          <p>{modelsError}</p>
+        </Banner>
       ) : models.length === 0 ? (
         <Card>
           <EmptyState
@@ -670,6 +682,10 @@ export default function Vehicles() {
             </InlineStack>
           </Box>
         </Card>
+      ) : enginesError ? (
+        <Banner tone="critical" onDismiss={() => setEnginesError(null)}>
+          <p>{enginesError}</p>
+        </Banner>
       ) : engines.length === 0 ? (
         <Card>
           <EmptyState

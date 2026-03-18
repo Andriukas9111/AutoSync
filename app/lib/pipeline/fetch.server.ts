@@ -183,7 +183,8 @@ export async function fetchProductsFromShopify({
         error: err instanceof Error ? err.message : "Unknown error",
         completed_at: new Date().toISOString(),
       })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("shop_id", shopId);
 
     throw err;
   }

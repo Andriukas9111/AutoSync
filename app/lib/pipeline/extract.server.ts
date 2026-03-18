@@ -194,7 +194,7 @@ export async function runAutoExtraction(
       .from("tenants")
       .select("fitment_count")
       .eq("shop_id", shopId)
-      .single();
+      .maybeSingle();
 
     const currentCount = tenant?.fitment_count ?? 0;
 

@@ -5,14 +5,11 @@ import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
 
 export async function action({ request }: ActionFunctionArgs) {
-  console.log("[fetch-products] Action started");
-
   let admin, session;
   try {
     const auth = await authenticate.admin(request);
     admin = auth.admin;
     session = auth.session;
-    console.log("[fetch-products] Authenticated:", session.shop);
   } catch (authErr: unknown) {
     const msg = authErr instanceof Error ? authErr.message : "Unknown auth error";
     console.error("[fetch-products] Auth failed:", msg);
@@ -38,8 +35,6 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: `Failed to create sync job: ${jobError?.message ?? "unknown"}` }, { status: 500 });
   }
 
-  console.log("[fetch-products] Job created:", job.id);
-
   // Run the fetch
   try {
     const result = await fetchProductsFromShopify({
@@ -47,8 +42,6 @@ export async function action({ request }: ActionFunctionArgs) {
       shopId,
       jobId: job.id,
     });
-
-    console.log("[fetch-products] Complete:", result.fetched, "products fetched");
 
     return data({
       success: true,

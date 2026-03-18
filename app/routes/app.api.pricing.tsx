@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
-import { assertFeature } from "../lib/billing.server";
+import { assertFeature, BillingGateError } from "../lib/billing.server";
 import {
   getAllPricingRules,
   createPricingRule,
@@ -19,7 +19,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  await assertFeature(shopId, "pricingEngine");
+  try {
+    await assertFeature(shopId, "pricingEngine");
+  } catch (err) {
+    if (err instanceof BillingGateError) {
+      return data(
+        {
+          error: err.message,
+          requiredPlan: err.requiredPlan,
+          currentPlan: err.currentPlan,
+        },
+        { status: 403 },
+      );
+    }
+    throw err;
+  }
 
   const url = new URL(request.url);
   const action = url.searchParams.get("action");
