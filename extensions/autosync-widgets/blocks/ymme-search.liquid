@@ -1,59 +1,147 @@
 {% comment %}
   AutoSync YMME Search Widget
   Cascading dropdowns: Make → Model → Year → Engine → Search
+  Features: Brand logos, My Garage, searchable make dropdown
 {% endcomment %}
 
+{% liquid
+  assign container_class = 'autosync-ymme-search'
+  assign layout_class = 'autosync-ymme--' | append: block.settings.layout
+  assign style_class = 'autosync-ymme--style-' | append: block.settings.style
+  assign width_class = 'autosync-ymme--width-' | append: block.settings.container_width
+  assign align_class = 'autosync-ymme--align-' | append: block.settings.alignment
+%}
+
 <div
-  class="autosync-ymme-search autosync-ymme--{{ block.settings.layout }}"
+  class="{{ container_class }} {{ layout_class }} {{ style_class }} {{ width_class }} {{ align_class }}"
   data-autosync-ymme
   data-proxy-url="{{ shop.url }}/apps/autosync"
+  data-show-engine="{{ block.settings.show_engine }}"
+  data-show-garage="{{ block.settings.show_garage }}"
+  data-show-logos="{{ block.settings.show_logos }}"
   id="autosync-ymme-{{ block.id }}"
   style="
     --autosync-primary: {{ block.settings.primary_color }};
     --autosync-bg: {{ block.settings.background_color }};
     --autosync-text: {{ block.settings.text_color }};
     --autosync-border-radius: {{ block.settings.border_radius }}px;
+    --autosync-border: {{ block.settings.border_color | default: '#e3e3e3' }};
+    --autosync-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --autosync-radius: {{ block.settings.border_radius }}px;
+    --autosync-container-padding: {{ block.settings.container_padding }}px;
   "
 >
   {% if block.settings.heading != blank %}
     <h2 class="autosync-ymme__heading">{{ block.settings.heading }}</h2>
   {% endif %}
 
+  {% if block.settings.subheading != blank %}
+    <p class="autosync-ymme__subheading">{{ block.settings.subheading }}</p>
+  {% endif %}
+
   <div class="autosync-ymme__fields">
-    <div class="autosync-ymme__field">
+    {%- comment -%} Make — custom dropdown with logos {%- endcomment -%}
+    <div class="autosync-ymme__field autosync-ymme__field--make">
       <label for="autosync-make-{{ block.id }}">Make</label>
-      <select id="autosync-make-{{ block.id }}" data-autosync-level="make" disabled>
+      <div class="autosync-ymme__custom-select" data-autosync-custom-select="make">
+        <button type="button" class="autosync-ymme__select-trigger" data-autosync-select-trigger disabled>
+          <span class="autosync-ymme__select-value" data-autosync-select-display>
+            <span class="autosync-ymme__spinner autosync-ymme__spinner--inline"></span>
+            <span>Loading...</span>
+          </span>
+          <svg class="autosync-ymme__select-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="autosync-ymme__select-dropdown" data-autosync-select-dropdown>
+          <div class="autosync-ymme__select-search-wrap">
+            <input type="text" class="autosync-ymme__select-search" placeholder="Search makes..." data-autosync-select-search autocomplete="off" />
+          </div>
+          <ul class="autosync-ymme__select-options" data-autosync-select-options role="listbox">
+          </ul>
+        </div>
+      </div>
+      {%- comment -%} Hidden native select for form submission fallback {%- endcomment -%}
+      <select id="autosync-make-{{ block.id }}" data-autosync-level="make" class="autosync-ymme__hidden-select" aria-hidden="true" tabindex="-1" disabled>
         <option value="">Select Make</option>
       </select>
     </div>
 
     <div class="autosync-ymme__field">
       <label for="autosync-model-{{ block.id }}">Model</label>
-      <select id="autosync-model-{{ block.id }}" data-autosync-level="model" disabled>
-        <option value="">Select Model</option>
-      </select>
+      <div class="autosync-ymme__select-wrap">
+        <select id="autosync-model-{{ block.id }}" data-autosync-level="model" disabled>
+          <option value="">Select Model</option>
+        </select>
+        <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="model"></div>
+      </div>
     </div>
 
     <div class="autosync-ymme__field">
       <label for="autosync-year-{{ block.id }}">Year</label>
-      <select id="autosync-year-{{ block.id }}" data-autosync-level="year" disabled>
-        <option value="">Select Year</option>
-      </select>
+      <div class="autosync-ymme__select-wrap">
+        <select id="autosync-year-{{ block.id }}" data-autosync-level="year" disabled>
+          <option value="">Select Year</option>
+        </select>
+        <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="year"></div>
+      </div>
     </div>
 
-    <div class="autosync-ymme__field">
-      <label for="autosync-engine-{{ block.id }}">Engine</label>
-      <select id="autosync-engine-{{ block.id }}" data-autosync-level="engine" disabled>
-        <option value="">Select Engine (optional)</option>
-      </select>
-    </div>
+    {% if block.settings.show_engine %}
+      <div class="autosync-ymme__field" data-autosync-engine-field>
+        <label for="autosync-engine-{{ block.id }}">Engine</label>
+        <div class="autosync-ymme__select-wrap">
+          <select id="autosync-engine-{{ block.id }}" data-autosync-level="engine" disabled>
+            <option value="">Select Engine (optional)</option>
+          </select>
+          <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="engine"></div>
+        </div>
+      </div>
+    {% endif %}
 
     <div class="autosync-ymme__field autosync-ymme__field--button">
-      <button type="button" data-autosync-search disabled>
+      <button type="button" class="autosync-ymme__search-btn" data-autosync-search disabled>
+        <svg class="autosync-ymme__btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
         {{ block.settings.button_text | default: "Find Parts" }}
       </button>
     </div>
   </div>
+
+  {%- comment -%} Save to Garage button — shown after search {%- endcomment -%}
+  {% if block.settings.show_garage %}
+    <div class="autosync-ymme__save-garage" data-autosync-save-garage style="display:none;">
+      <button type="button" class="autosync-ymme__save-garage-btn" data-autosync-save-garage-btn>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Save to My Garage
+      </button>
+    </div>
+
+    {%- comment -%} My Garage section {%- endcomment -%}
+    <div class="autosync-ymme__garage" data-autosync-garage>
+      <div class="autosync-ymme__garage-header">
+        <h3 class="autosync-ymme__garage-title">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 7l6-5 6 5v6a1 1 0 01-1 1H3a1 1 0 01-1-1V7z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 14V8h4v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          My Garage
+        </h3>
+        <button type="button" class="autosync-ymme__garage-clear" data-autosync-garage-clear title="Clear all vehicles">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M1.75 3.5h10.5M4.667 3.5V2.333a1.167 1.167 0 011.166-1.166h2.334a1.167 1.167 0 011.166 1.166V3.5m1.75 0v8.167a1.167 1.167 0 01-1.166 1.166H4.083a1.167 1.167 0 01-1.166-1.166V3.5h8.166z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <div class="autosync-ymme__garage-vehicles" data-autosync-garage-vehicles>
+        {%- comment -%} Garage vehicle chips rendered by JS {%- endcomment -%}
+      </div>
+      <p class="autosync-ymme__garage-empty" data-autosync-garage-empty>No saved vehicles. Search above and save to your garage.</p>
+    </div>
+  {% endif %}
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
@@ -72,6 +160,12 @@
     },
     {
       "type": "text",
+      "id": "subheading",
+      "label": "Subheading",
+      "default": ""
+    },
+    {
+      "type": "text",
       "id": "button_text",
       "label": "Button Text",
       "default": "Find Parts"
@@ -85,6 +179,67 @@
         { "value": "vertical", "label": "Vertical" }
       ],
       "default": "horizontal"
+    },
+    {
+      "type": "select",
+      "id": "style",
+      "label": "Visual Style",
+      "options": [
+        { "value": "default", "label": "Default" },
+        { "value": "minimal", "label": "Minimal" },
+        { "value": "card", "label": "Card" }
+      ],
+      "default": "default"
+    },
+    {
+      "type": "select",
+      "id": "container_width",
+      "label": "Container Width",
+      "options": [
+        { "value": "full", "label": "Full Width" },
+        { "value": "contained", "label": "Contained (1200px)" },
+        { "value": "narrow", "label": "Narrow (800px)" }
+      ],
+      "default": "contained"
+    },
+    {
+      "type": "range",
+      "id": "container_padding",
+      "label": "Container Padding",
+      "min": 0,
+      "max": 60,
+      "step": 4,
+      "default": 20,
+      "unit": "px"
+    },
+    {
+      "type": "select",
+      "id": "alignment",
+      "label": "Horizontal Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" },
+        { "value": "right", "label": "Right" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_engine",
+      "label": "Show Engine Dropdown",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_garage",
+      "label": "Show My Garage",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_logos",
+      "label": "Show Brand Logos",
+      "default": true
     },
     {
       "type": "color",
@@ -103,6 +258,12 @@
       "id": "text_color",
       "label": "Text Color",
       "default": "#1a1a1a"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border Color",
+      "default": "#e3e3e3"
     },
     {
       "type": "range",

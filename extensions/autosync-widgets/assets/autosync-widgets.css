@@ -8,17 +8,95 @@
 
 /* --------------- YMME Search --------------- */
 .autosync-ymme-search {
+  --autosync-border: var(--autosync-border-color, #e3e3e3);
+  --autosync-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --autosync-radius: var(--autosync-border-radius, 8px);
+
   background: var(--autosync-bg, #fff);
   color: var(--autosync-text, #1a1a1a);
-  padding: 1.5rem;
-  border-radius: var(--autosync-border-radius, 8px);
-  border: 1px solid #e3e3e3;
+  padding: var(--autosync-container-padding, 20px);
+  border-radius: var(--autosync-radius);
+  border: 1px solid var(--autosync-border);
+  position: relative;
+}
+
+/* Container width variants */
+.autosync-ymme--width-full {
+  width: 100%;
+  max-width: none;
+}
+
+.autosync-ymme--width-contained {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.autosync-ymme--width-narrow {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Alignment */
+.autosync-ymme--align-left {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.autosync-ymme--align-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.autosync-ymme--align-right {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* Style: default */
+.autosync-ymme--style-default {
+  border: 1px solid var(--autosync-border);
+  box-shadow: var(--autosync-shadow);
+}
+
+/* Style: minimal */
+.autosync-ymme--style-minimal {
+  border: none;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+  background: transparent;
+}
+
+/* Style: card */
+.autosync-ymme--style-card {
+  border: 1px solid var(--autosync-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: calc(var(--autosync-radius) * 1.5);
 }
 
 .autosync-ymme__heading {
-  margin: 0 0 1rem;
+  margin: 0 0 0.25rem;
   font-size: 1.25rem;
   font-weight: 600;
+  line-height: 1.3;
+}
+
+.autosync-ymme__subheading {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: inherit;
+  opacity: 0.65;
+  line-height: 1.4;
+}
+
+.autosync-ymme__heading + .autosync-ymme__fields {
+  margin-top: 1rem;
+}
+
+.autosync-ymme__subheading + .autosync-ymme__fields {
+  margin-top: 0;
 }
 
 .autosync-ymme__fields {
@@ -44,6 +122,12 @@
   font-weight: 500;
   margin-bottom: 0.25rem;
   color: inherit;
+  opacity: 0.8;
+}
+
+/* Select wrap for spinner overlay */
+.autosync-ymme__select-wrap {
+  position: relative;
 }
 
 .autosync-ymme__field select,
@@ -51,16 +135,17 @@
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  border: 1px solid #c9cccf;
-  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
-  background: #fff;
-  color: #1a1a1a;
+  border: 1px solid var(--autosync-border, #c9cccf);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
   appearance: auto;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .autosync-ymme__field select:disabled {
-  background: #f6f6f7;
-  color: #8c9196;
+  background: color-mix(in srgb, var(--autosync-bg, #fff) 95%, #000);
+  opacity: 0.6;
   cursor: not-allowed;
 }
 
@@ -71,10 +156,256 @@
   border-color: var(--autosync-primary, #2c6ecb);
 }
 
-.autosync-ymme__field--button button,
-.autosync-plate-lookup__btn,
-.autosync-plate-lookup__find-parts,
-.autosync-wheel-finder__field--button button {
+/* Hidden native select (fallback for custom dropdown) */
+.autosync-ymme__hidden-select {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: -1px !important;
+}
+
+/* --------------- Field Spinner --------------- */
+.autosync-ymme__field-spinner {
+  display: none;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.autosync-ymme__field-spinner--active {
+  display: block;
+}
+
+.autosync-ymme__field-spinner::after {
+  content: '';
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--autosync-border, #e3e3e3);
+  border-top-color: var(--autosync-primary, #2c6ecb);
+  border-radius: 50%;
+  animation: autosync-spin 0.6s linear infinite;
+}
+
+/* Inline spinner (used in custom select trigger) */
+.autosync-ymme__spinner--inline {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--autosync-border, #e3e3e3);
+  border-top-color: var(--autosync-primary, #2c6ecb);
+  border-radius: 50%;
+  animation: autosync-spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes autosync-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --------------- Custom Make Dropdown --------------- */
+.autosync-ymme__custom-select {
+  position: relative;
+}
+
+.autosync-ymme__select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--autosync-border, #c9cccf);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
+  cursor: pointer;
+  text-align: left;
+  gap: 0.5rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-height: 38px;
+}
+
+.autosync-ymme__select-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 50%, var(--autosync-border, #c9cccf));
+}
+
+.autosync-ymme__select-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.autosync-ymme__select-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autosync-ymme__select-arrow {
+  flex-shrink: 0;
+  opacity: 0.5;
+  transition: transform 0.2s ease;
+}
+
+.autosync-ymme__custom-select--open .autosync-ymme__select-arrow {
+  transform: rotate(180deg);
+}
+
+.autosync-ymme__select-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--autosync-bg, #fff);
+  border: 1px solid var(--autosync-border, #c9cccf);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  max-height: 320px;
+  overflow: hidden;
+  animation: autosync-dropdown-in 0.15s ease;
+}
+
+.autosync-ymme__custom-select--open .autosync-ymme__select-dropdown {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes autosync-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.autosync-ymme__select-search-wrap {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--autosync-border, #e3e3e3);
+  flex-shrink: 0;
+}
+
+.autosync-ymme__select-search {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--autosync-border, #e3e3e3);
+  border-radius: 4px;
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.autosync-ymme__select-search:focus {
+  border-color: var(--autosync-primary, #2c6ecb);
+}
+
+.autosync-ymme__select-search::placeholder {
+  color: inherit;
+  opacity: 0.4;
+}
+
+.autosync-ymme__select-options {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  overflow-y: auto;
+  flex: 1;
+  overscroll-behavior: contain;
+}
+
+.autosync-ymme__select-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  transition: background 0.1s ease;
+  min-height: 36px;
+}
+
+.autosync-ymme__select-option:hover {
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 8%, transparent);
+}
+
+.autosync-ymme__select-option--selected {
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 12%, transparent);
+  font-weight: 600;
+}
+
+.autosync-ymme__select-no-results {
+  padding: 1rem 0.75rem;
+  text-align: center;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 0.8125rem;
+}
+
+/* Brand logos */
+.autosync-ymme__make-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.autosync-ymme__make-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 15%, transparent);
+  color: var(--autosync-primary, #2c6ecb);
+  font-size: 0.625rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.autosync-ymme__option-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autosync-ymme__option-country {
+  font-size: 0.6875rem;
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+/* --------------- Search Button --------------- */
+.autosync-ymme__field--button {
+  display: flex;
+  align-items: flex-end;
+}
+
+.autosync-ymme__search-btn,
+.autosync-ymme__field--button button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   width: 100%;
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
@@ -82,24 +413,215 @@
   color: #fff;
   background: var(--autosync-primary, #2c6ecb);
   border: none;
-  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+  min-height: 38px;
+}
+
+.autosync-ymme__search-btn:hover:not(:disabled),
+.autosync-ymme__field--button button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 85%, #000);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.autosync-ymme__search-btn:active:not(:disabled),
+.autosync-ymme__field--button button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.autosync-ymme__search-btn:disabled,
+.autosync-ymme__field--button button:disabled {
+  background: color-mix(in srgb, var(--autosync-text, #1a1a1a) 20%, transparent);
+  cursor: not-allowed;
+  color: color-mix(in srgb, var(--autosync-text, #1a1a1a) 40%, transparent);
+}
+
+.autosync-ymme__btn-icon {
+  flex-shrink: 0;
+}
+
+/* --------------- Save to Garage --------------- */
+.autosync-ymme__save-garage {
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.autosync-ymme__save-garage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--autosync-primary, #2c6ecb);
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--autosync-primary, #2c6ecb) 25%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.autosync-ymme__save-garage-btn:hover {
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 15%, transparent);
+  border-color: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 40%, transparent);
+}
+
+/* --------------- My Garage --------------- */
+.autosync-ymme__garage {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--autosync-border, #e3e3e3);
+}
+
+.autosync-ymme__garage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.autosync-ymme__garage-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.autosync-ymme__garage-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.4;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.autosync-ymme__garage-clear:hover {
+  opacity: 0.7;
+  background: color-mix(in srgb, var(--autosync-text, #1a1a1a) 6%, transparent);
+}
+
+.autosync-ymme__garage-vehicles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.autosync-ymme__garage-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.65rem;
+  background: color-mix(in srgb, var(--autosync-bg, #fff) 96%, var(--autosync-text, #1a1a1a));
+  border: 1px solid var(--autosync-border, #e3e3e3);
+  border-radius: 6px;
+  gap: 0.5rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  animation: autosync-chip-in 0.2s ease;
+}
+
+@keyframes autosync-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.autosync-ymme__garage-chip:hover {
+  border-color: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 30%, var(--autosync-border, #e3e3e3));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.autosync-ymme__garage-chip-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.autosync-ymme__garage-chip-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autosync-ymme__garage-chip-engine {
+  font-size: 0.6875rem;
+  opacity: 0.55;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autosync-ymme__garage-chip-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.autosync-ymme__garage-select-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
   white-space: nowrap;
 }
 
-.autosync-ymme__field--button button:hover,
-.autosync-plate-lookup__btn:hover,
-.autosync-plate-lookup__find-parts:hover,
-.autosync-wheel-finder__field--button button:hover {
-  background: #1f5da0;
+.autosync-ymme__garage-select-btn:hover {
+  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 85%, #000);
 }
 
-.autosync-ymme__field--button button:disabled,
-.autosync-plate-lookup__btn:disabled,
-.autosync-wheel-finder__field--button button:disabled {
-  background: #c9cccf;
-  cursor: not-allowed;
+.autosync-ymme__garage-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.35;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.autosync-ymme__garage-remove-btn:hover {
+  opacity: 0.7;
+  background: color-mix(in srgb, var(--autosync-text, #1a1a1a) 8%, transparent);
+}
+
+.autosync-ymme__garage-empty {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.45;
+  text-align: center;
+  padding: 0.5rem 0;
 }
 
 /* --------------- Fitment Badge --------------- */
@@ -336,6 +858,31 @@
   letter-spacing: normal;
 }
 
+.autosync-plate-lookup__btn,
+.autosync-plate-lookup__find-parts {
+  width: auto;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.autosync-plate-lookup__btn:hover,
+.autosync-plate-lookup__find-parts:hover {
+  background: #1f5da0;
+}
+
+.autosync-plate-lookup__btn:disabled {
+  background: #c9cccf;
+  cursor: not-allowed;
+}
+
 .autosync-plate-lookup--hidden {
   display: none;
 }
@@ -432,6 +979,29 @@
 .autosync-wheel-finder__field input:focus {
   outline: 2px solid #2c6ecb;
   outline-offset: 1px;
+}
+
+.autosync-wheel-finder__field--button button {
+  width: 100%;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--autosync-primary, #2c6ecb);
+  border: none;
+  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.autosync-wheel-finder__field--button button:hover {
+  background: #1f5da0;
+}
+
+.autosync-wheel-finder__field--button button:disabled {
+  background: #c9cccf;
+  cursor: not-allowed;
 }
 
 .autosync-wheel-finder--hidden {
@@ -656,6 +1226,11 @@
     min-width: auto;
   }
 
+  .autosync-ymme--width-narrow,
+  .autosync-ymme--width-contained {
+    max-width: none;
+  }
+
   .autosync-plate-lookup__form {
     flex-direction: column;
   }
@@ -680,5 +1255,14 @@
 
   .autosync-wheel-finder__grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .autosync-ymme__garage-chip {
+    flex-wrap: wrap;
+  }
+
+  .autosync-ymme__garage-chip-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
