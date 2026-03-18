@@ -5,7 +5,7 @@ application_url = "https://autosync-v3.vercel.app"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,read_products,read_themes,write_themes,read_content,write_content"
+scopes = "write_products,read_products,read_themes,write_themes,read_content,write_content,read_metaobjects,write_metaobjects"
 
 [auth]
 redirect_urls = [

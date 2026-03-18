@@ -30,3 +30,7 @@ template = "blocks/wheel-finder.liquid"
 [[blocks]]
 name = "VIN Decode"
 template = "blocks/vin-decode.liquid"
+
+[[blocks]]
+name = "Vehicle Specs Page"
+template = "blocks/vehicle-specs-page.liquid"

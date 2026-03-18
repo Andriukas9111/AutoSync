@@ -634,6 +634,177 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
 }
 
 // ---------- Loader (GET requests) ----------
+// ---------- Vehicle Specs handler (Enterprise) ----------
+async function handleVehicleSpecs(params: URLSearchParams) {
+  const engineId = params.get("engine_id");
+  const shop = params.get("shop");
+  if (!engineId) return json({ error: "Missing engine_id" }, 400);
+
+  // Fetch engine with full joins
+  const { data: engine } = await db
+    .from("ymme_engines")
+    .select("*, ymme_models!inner(*, ymme_makes!inner(*))")
+    .eq("id", engineId)
+    .maybeSingle();
+
+  if (!engine) return json({ error: "Engine not found" }, 404);
+
+  // Fetch vehicle specs
+  const { data: specs } = await db
+    .from("ymme_vehicle_specs")
+    .select("*")
+    .eq("engine_id", engineId)
+    .maybeSingle();
+
+  // Fetch linked products if shop provided
+  let products: Array<{ title: string; handle: string; price: string | null; imageUrl: string | null }> = [];
+  if (shop) {
+    const { data: fitments } = await db
+      .from("vehicle_fitments")
+      .select("product_id")
+      .eq("shop_id", shop)
+      .eq("ymme_engine_id", engineId);
+
+    if (fitments && fitments.length > 0) {
+      const productIds = [...new Set(fitments.map((f: { product_id: string }) => f.product_id))];
+      const { data: prods } = await db
+        .from("products")
+        .select("title, handle, price, image_url")
+        .eq("shop_id", shop)
+        .in("id", productIds.slice(0, 20));
+
+      if (prods) {
+        products = prods.map((p: { title: string; handle: string; price: string | null; image_url: string | null }) => ({
+          title: p.title,
+          handle: p.handle,
+          price: p.price,
+          imageUrl: p.image_url,
+        }));
+      }
+    }
+  }
+
+  const make = engine.ymme_models?.ymme_makes;
+  const model = engine.ymme_models;
+  const displacementL = engine.displacement_cc ? (engine.displacement_cc / 1000).toFixed(1) + "L" : null;
+
+  // Organize specs into sections
+  const specSections: Record<string, Record<string, string>> = {};
+  if (specs) {
+    specSections.performance = filterNulls({
+      "Top Speed (km/h)": specs.top_speed_kmh,
+      "Top Speed (mph)": specs.top_speed_mph,
+      "0-100 km/h": specs.acceleration_0_100,
+      "0-62 mph": specs.acceleration_0_62,
+      "0-60 mph": specs.acceleration_0_60,
+    });
+    specSections.engine = filterNulls({
+      "Engine Code": engine.code,
+      "Displacement": displacementL,
+      "Cylinders": specs.cylinders?.toString(),
+      "Configuration": specs.cylinder_config,
+      "Aspiration": specs.aspiration,
+      "Compression Ratio": specs.compression_ratio,
+      "Bore x Stroke": specs.bore_stroke,
+      "Valves Per Cylinder": specs.valves_per_cylinder?.toString(),
+      "Power": engine.power_hp ? `${engine.power_hp} HP / ${engine.power_kw} kW` : null,
+      "Torque": engine.torque_nm ? `${engine.torque_nm} Nm` : null,
+    });
+    specSections.transmission = filterNulls({
+      "Transmission": specs.transmission_type,
+      "Gears": specs.gears?.toString(),
+      "Drive Type": specs.drive_type,
+      "Drivetrain": specs.drivetrain_description,
+    });
+    specSections.dimensions = filterNulls({
+      "Length": specs.length_mm ? `${specs.length_mm} mm` : null,
+      "Width": specs.width_mm ? `${specs.width_mm} mm` : null,
+      "Height": specs.height_mm ? `${specs.height_mm} mm` : null,
+      "Wheelbase": specs.wheelbase_mm ? `${specs.wheelbase_mm} mm` : null,
+      "Ground Clearance": specs.ground_clearance_mm ? `${specs.ground_clearance_mm} mm` : null,
+      "Turning Diameter": specs.turning_diameter_m ? `${specs.turning_diameter_m} m` : null,
+      "Drag Coefficient": specs.drag_coefficient,
+    });
+    specSections.fuel = filterNulls({
+      "Fuel Type": specs.fuel_type_detail || engine.fuel_type,
+      "Tank Capacity": specs.fuel_tank_capacity_l ? `${specs.fuel_tank_capacity_l} L` : null,
+      "CO2 Emissions": specs.co2_emissions_gkm ? `${specs.co2_emissions_gkm} g/km` : null,
+      "Euro Standard": specs.emission_standard,
+      "Combined Consumption": specs.fuel_consumption_combined,
+    });
+    specSections.capacity = filterNulls({
+      "Kerb Weight": specs.kerb_weight_kg ? `${specs.kerb_weight_kg} kg` : null,
+      "Max Weight": specs.max_weight_kg ? `${specs.max_weight_kg} kg` : null,
+      "Max Load": specs.max_load_kg ? `${specs.max_load_kg} kg` : null,
+      "Trunk Volume": specs.trunk_capacity_l ? `${specs.trunk_capacity_l} L` : null,
+      "Trunk (Seats Folded)": specs.trunk_capacity_folded_l ? `${specs.trunk_capacity_folded_l} L` : null,
+      "Doors": specs.doors?.toString(),
+      "Seats": specs.seats?.toString(),
+    });
+  }
+
+  const yearRange = [engine.year_from, engine.year_to].filter(Boolean).join("–") || "Unknown";
+
+  return json({
+    vehicle: {
+      engineId: engine.id,
+      make: make?.name,
+      model: model?.name,
+      generation: model?.generation,
+      variant: engine.name,
+      yearRange,
+      engineCode: engine.code,
+      displacement: displacementL,
+      powerHp: engine.power_hp,
+      powerKw: engine.power_kw,
+      torqueNm: engine.torque_nm,
+      fuelType: engine.fuel_type,
+      bodyType: specs?.body_type || model?.body_type,
+      driveType: specs?.drive_type || engine.drive_type,
+      transmission: specs?.transmission_type || engine.transmission_type,
+      topSpeed: specs?.top_speed_kmh ? `${specs.top_speed_kmh} km/h` : null,
+      acceleration: specs?.acceleration_0_100 ? `${specs.acceleration_0_100}s` : null,
+      heroImageUrl: specs?.hero_image_url,
+      overview: buildVehicleOverview(make?.name, model?.name, engine, specs, displacementL),
+      specs: specSections,
+    },
+    products,
+  });
+}
+
+function filterNulls(obj: Record<string, string | null | undefined>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v != null && v !== "") result[k] = v;
+  }
+  return result;
+}
+
+function buildVehicleOverview(
+  make: string | undefined,
+  model: string | undefined,
+  engine: { name: string; code: string | null; power_hp: number | null; torque_nm: number | null; fuel_type: string | null; displacement_cc: number | null },
+  specs: { transmission_type: string | null; drive_type: string | null; aspiration: string | null; body_type: string | null } | null,
+  displacementL: string | null,
+): string {
+  const parts: string[] = [];
+  parts.push(`The ${make || ""} ${model || ""} ${engine.name}`);
+  if (displacementL && engine.fuel_type) {
+    const aspiration = specs?.aspiration ? ` ${specs.aspiration.toLowerCase()}` : "";
+    parts.push(`is powered by a ${displacementL}${aspiration} ${engine.fuel_type.toLowerCase()} engine`);
+    if (engine.code) parts.push(`(${engine.code})`);
+  }
+  if (engine.power_hp && engine.torque_nm) {
+    parts.push(`producing ${engine.power_hp} HP and ${engine.torque_nm} Nm of torque.`);
+  } else {
+    parts.push(".");
+  }
+  if (specs?.transmission_type && specs?.drive_type) {
+    parts.push(`It features a ${specs.transmission_type} with ${specs.drive_type}.`);
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const params = url.searchParams;
@@ -679,9 +850,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleWheelSearch(params);
     case "vin-decode":
       return handleVinDecode(params, null);
+    case "vehicle-specs":
+      return handleVehicleSpecs(params);
     default:
       return json(
-        { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search. POST: plate-lookup, vin-decode, track` },
+        { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search, vehicle-specs. POST: plate-lookup, vin-decode, track` },
         400,
       );
   }

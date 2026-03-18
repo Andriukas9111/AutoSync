@@ -1,0 +1,574 @@
+{% comment %}
+  AutoSync Vehicle Specification Page
+  Renders rich vehicle spec data from metaobjects on the storefront.
+  Enterprise plan only.
+
+  This block is designed to be placed on a metaobject template page
+  or any page via the App Proxy. It reads vehicle data from the
+  proxy API and renders a full specification page with performance data,
+  engine specs, dimensions, and links to compatible products.
+{% endcomment %}
+
+{% liquid
+  assign proxy_url = shop.url | append: '/apps/autosync'
+%}
+
+<div
+  class="autosync-vehicle-page"
+  data-autosync-vehicle-page
+  data-proxy-url="{{ proxy_url }}"
+  data-engine-id="{{ block.settings.engine_id }}"
+  id="autosync-vehicle-page-{{ block.id }}"
+  style="
+    --avp-primary: {{ block.settings.primary_color | default: '#2563eb' }};
+    --avp-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --avp-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --avp-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --avp-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --avp-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --avp-section-bg: {{ block.settings.section_bg | default: '#f9fafb' }};
+  "
+>
+  <!-- Loading State -->
+  <div class="avp-loading" data-avp-loading>
+    <div class="avp-spinner"></div>
+    <p>Loading vehicle specifications...</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="avp-error" data-avp-error style="display:none;">
+    <p>Unable to load vehicle specifications. Please try again later.</p>
+  </div>
+
+  <!-- Vehicle Page Content (populated by JS using safe DOM methods) -->
+  <div class="avp-content" data-avp-content style="display:none;">
+    <!-- Hero Section -->
+    <div class="avp-hero" data-avp-hero>
+      <div class="avp-hero__image" data-avp-hero-image></div>
+      <div class="avp-hero__info">
+        <h1 class="avp-hero__title" data-avp-title></h1>
+        <p class="avp-hero__subtitle" data-avp-subtitle></p>
+        <div class="avp-hero__badges" data-avp-badges></div>
+      </div>
+    </div>
+
+    <!-- Quick Stats Grid -->
+    <div class="avp-quick-stats" data-avp-quick-stats></div>
+
+    <!-- Specification Sections (tabbed) -->
+    <div class="avp-specs" data-avp-specs>
+      <div class="avp-tabs" data-avp-tabs>
+        <button class="avp-tab avp-tab--active" data-avp-tab="performance">Performance</button>
+        <button class="avp-tab" data-avp-tab="engine">Engine</button>
+        <button class="avp-tab" data-avp-tab="transmission">Transmission</button>
+        <button class="avp-tab" data-avp-tab="dimensions">Dimensions</button>
+        <button class="avp-tab" data-avp-tab="fuel">Fuel & Emissions</button>
+        <button class="avp-tab" data-avp-tab="capacity">Weight & Capacity</button>
+      </div>
+      <div class="avp-tab-content" data-avp-tab-content></div>
+    </div>
+
+    <!-- Compatible Products -->
+    <div class="avp-products" data-avp-products>
+      <h2 class="avp-section-title">Compatible Products</h2>
+      <div class="avp-product-grid" data-avp-product-grid></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .autosync-vehicle-page {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--avp-text);
+    background: var(--avp-bg);
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  .avp-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    gap: 16px;
+    color: var(--avp-muted);
+  }
+  .avp-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--avp-border);
+    border-top-color: var(--avp-primary);
+    border-radius: 50%;
+    animation: avp-spin 0.8s linear infinite;
+  }
+  @keyframes avp-spin { to { transform: rotate(360deg); } }
+
+  .avp-error {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--avp-muted);
+  }
+
+  .avp-hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 32px;
+    padding: 24px;
+    background: var(--avp-section-bg);
+    border-radius: var(--avp-radius);
+    border: 1px solid var(--avp-border);
+  }
+  .avp-hero__image img {
+    width: 100%;
+    height: auto;
+    border-radius: calc(var(--avp-radius) - 4px);
+    object-fit: cover;
+  }
+  .avp-hero__title {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    line-height: 1.2;
+  }
+  .avp-hero__subtitle {
+    font-size: 16px;
+    color: var(--avp-muted);
+    margin: 0 0 16px;
+    line-height: 1.5;
+  }
+  .avp-hero__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .avp-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--avp-primary);
+    color: #fff;
+  }
+  .avp-badge--outline {
+    background: transparent;
+    color: var(--avp-primary);
+    border: 1px solid var(--avp-primary);
+  }
+
+  .avp-quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .avp-stat {
+    text-align: center;
+    padding: 16px 12px;
+    background: var(--avp-section-bg);
+    border-radius: var(--avp-radius);
+    border: 1px solid var(--avp-border);
+  }
+  .avp-stat__value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--avp-text);
+  }
+  .avp-stat__label {
+    font-size: 12px;
+    color: var(--avp-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+
+  .avp-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid var(--avp-border);
+    margin-bottom: 24px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .avp-tab {
+    padding: 10px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--avp-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .avp-tab:hover { color: var(--avp-text); }
+  .avp-tab--active {
+    color: var(--avp-primary);
+    border-bottom-color: var(--avp-primary);
+  }
+
+  .avp-spec-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+  .avp-spec-table tr {
+    border-bottom: 1px solid var(--avp-border);
+  }
+  .avp-spec-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-weight: 500;
+    color: var(--avp-muted);
+    font-size: 13px;
+    width: 40%;
+    background: var(--avp-section-bg);
+  }
+  .avp-spec-table td {
+    padding: 10px 16px;
+    font-size: 14px;
+    color: var(--avp-text);
+  }
+
+  .avp-section-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 32px 0 16px;
+  }
+  .avp-product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .avp-product-card {
+    border: 1px solid var(--avp-border);
+    border-radius: var(--avp-radius);
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+  }
+  .avp-product-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  .avp-product-card img {
+    width: 100%;
+    height: 160px;
+    object-fit: cover;
+  }
+  .avp-product-card__info {
+    padding: 12px;
+  }
+  .avp-product-card__title {
+    font-size: 14px;
+    font-weight: 500;
+    margin: 0 0 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .avp-product-card__price {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--avp-primary);
+  }
+  .avp-product-card a {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  @media (max-width: 768px) {
+    .avp-hero {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .avp-hero__title { font-size: 22px; }
+    .avp-tabs { gap: 0; }
+    .avp-tab { padding: 8px 12px; font-size: 13px; }
+    .avp-product-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>
+
+<script>
+  (function() {
+    var container = document.querySelector('[data-autosync-vehicle-page]');
+    if (!container) return;
+
+    var proxyUrl = container.dataset.proxyUrl;
+    var engineId = container.dataset.engineId;
+    var loadingEl = container.querySelector('[data-avp-loading]');
+    var errorEl = container.querySelector('[data-avp-error]');
+    var contentEl = container.querySelector('[data-avp-content]');
+
+    // Resolve engine ID from block settings, URL params, or metaobject context
+    var vehicleEngineId = engineId;
+    if (!vehicleEngineId) {
+      var params = new URLSearchParams(window.location.search);
+      vehicleEngineId = params.get('engine_id');
+    }
+    if (!vehicleEngineId) {
+      var metaEl = document.querySelector('[data-metaobject-engine-id]');
+      if (metaEl) vehicleEngineId = metaEl.dataset.metaobjectEngineId;
+    }
+
+    if (!vehicleEngineId) {
+      showError();
+      return;
+    }
+
+    fetchVehicleData(vehicleEngineId);
+
+    function showError() {
+      loadingEl.style.display = 'none';
+      errorEl.style.display = 'block';
+    }
+
+    // Escape HTML entities to prevent XSS
+    function esc(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.textContent = String(str);
+      return div.textContent;
+    }
+
+    function fetchVehicleData(eid) {
+      fetch(proxyUrl + '/vehicle-specs?engine_id=' + encodeURIComponent(eid))
+        .then(function(resp) {
+          if (!resp.ok) throw new Error('Failed');
+          return resp.json();
+        })
+        .then(function(data) {
+          if (!data || !data.vehicle) throw new Error('No data');
+          renderVehiclePage(data.vehicle, data.products || []);
+        })
+        .catch(function() { showError(); });
+    }
+
+    function renderVehiclePage(vehicle, products) {
+      loadingEl.style.display = 'none';
+      contentEl.style.display = 'block';
+
+      // Title + subtitle
+      container.querySelector('[data-avp-title]').textContent =
+        (vehicle.make || '') + ' ' + (vehicle.model || '') + ' ' + (vehicle.variant || '');
+      container.querySelector('[data-avp-subtitle]').textContent =
+        vehicle.overview || ((vehicle.generation || '') + ' (' + (vehicle.yearRange || '') + ')');
+
+      // Hero image (safe DOM creation)
+      var heroImage = container.querySelector('[data-avp-hero-image]');
+      heroImage.textContent = '';
+      if (vehicle.heroImageUrl) {
+        var img = document.createElement('img');
+        img.src = vehicle.heroImageUrl;
+        img.alt = esc(vehicle.make + ' ' + vehicle.model);
+        img.loading = 'lazy';
+        heroImage.appendChild(img);
+      } else {
+        var placeholder = document.createElement('div');
+        placeholder.style.cssText = 'height:250px;background:var(--avp-section-bg);display:flex;align-items:center;justify-content:center;border-radius:var(--avp-radius);color:var(--avp-muted);font-size:14px;';
+        placeholder.textContent = 'No image available';
+        heroImage.appendChild(placeholder);
+      }
+
+      // Badges (safe DOM creation)
+      var badgesEl = container.querySelector('[data-avp-badges]');
+      badgesEl.textContent = '';
+      var badgeValues = [vehicle.engineCode, vehicle.fuelType, vehicle.driveType, vehicle.bodyType].filter(Boolean);
+      badgeValues.forEach(function(b, i) {
+        var span = document.createElement('span');
+        span.className = 'avp-badge' + (i > 0 ? ' avp-badge--outline' : '');
+        span.textContent = b;
+        badgesEl.appendChild(span);
+      });
+
+      // Quick Stats (safe DOM creation)
+      var statsEl = container.querySelector('[data-avp-quick-stats]');
+      statsEl.textContent = '';
+      var stats = [];
+      if (vehicle.powerHp) stats.push({ value: vehicle.powerHp + ' HP', label: 'Power' });
+      if (vehicle.torqueNm) stats.push({ value: vehicle.torqueNm + ' Nm', label: 'Torque' });
+      if (vehicle.displacement) stats.push({ value: vehicle.displacement, label: 'Engine' });
+      if (vehicle.topSpeed) stats.push({ value: vehicle.topSpeed, label: 'Top Speed' });
+      if (vehicle.acceleration) stats.push({ value: vehicle.acceleration, label: '0-100 km/h' });
+      if (vehicle.transmission) stats.push({ value: vehicle.transmission, label: 'Transmission' });
+      stats.forEach(function(s) {
+        var div = document.createElement('div');
+        div.className = 'avp-stat';
+        var valDiv = document.createElement('div');
+        valDiv.className = 'avp-stat__value';
+        valDiv.textContent = s.value;
+        var lblDiv = document.createElement('div');
+        lblDiv.className = 'avp-stat__label';
+        lblDiv.textContent = s.label;
+        div.appendChild(valDiv);
+        div.appendChild(lblDiv);
+        statsEl.appendChild(div);
+      });
+
+      // Spec Tabs
+      renderSpecTabs(vehicle.specs || {});
+
+      // Products
+      renderProducts(products);
+    }
+
+    function renderSpecTabs(specs) {
+      var tabContent = container.querySelector('[data-avp-tab-content]');
+      var tabs = container.querySelectorAll('[data-avp-tab]');
+
+      function renderTable(sectionKey) {
+        tabContent.textContent = '';
+        var section = specs[sectionKey];
+        if (!section || Object.keys(section).length === 0) {
+          var p = document.createElement('p');
+          p.style.cssText = 'color:var(--avp-muted);padding:20px;';
+          p.textContent = 'No data available for this section.';
+          tabContent.appendChild(p);
+          return;
+        }
+        var table = document.createElement('table');
+        table.className = 'avp-spec-table';
+        var tbody = document.createElement('tbody');
+        Object.keys(section).forEach(function(key) {
+          var tr = document.createElement('tr');
+          var th = document.createElement('th');
+          th.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+          var td = document.createElement('td');
+          td.textContent = section[key] || '\u2014';
+          tr.appendChild(th);
+          tr.appendChild(td);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        tabContent.appendChild(table);
+      }
+
+      function showTab(name) {
+        tabs.forEach(function(t) {
+          t.classList.toggle('avp-tab--active', t.dataset.avpTab === name);
+        });
+        renderTable(name);
+      }
+
+      tabs.forEach(function(t) {
+        t.addEventListener('click', function() { showTab(t.dataset.avpTab); });
+      });
+
+      showTab('performance');
+    }
+
+    function renderProducts(products) {
+      var grid = container.querySelector('[data-avp-product-grid]');
+      var section = container.querySelector('[data-avp-products]');
+
+      if (!products || products.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      grid.textContent = '';
+      products.forEach(function(p) {
+        var card = document.createElement('div');
+        card.className = 'avp-product-card';
+
+        var link = document.createElement('a');
+        link.href = p.url || ('/products/' + esc(p.handle));
+
+        if (p.imageUrl) {
+          var img = document.createElement('img');
+          img.src = p.imageUrl;
+          img.alt = esc(p.title);
+          img.loading = 'lazy';
+          link.appendChild(img);
+        }
+
+        var info = document.createElement('div');
+        info.className = 'avp-product-card__info';
+
+        var title = document.createElement('p');
+        title.className = 'avp-product-card__title';
+        title.textContent = p.title;
+        info.appendChild(title);
+
+        if (p.price) {
+          var price = document.createElement('p');
+          price.className = 'avp-product-card__price';
+          price.textContent = p.price;
+          info.appendChild(price);
+        }
+
+        link.appendChild(info);
+        card.appendChild(link);
+        grid.appendChild(card);
+      });
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Vehicle Specs Page",
+  "target": "section",
+  "templates": ["page", "article", "index"],
+  "settings": [
+    {
+      "type": "text",
+      "id": "engine_id",
+      "label": "Engine ID",
+      "info": "Leave blank to auto-detect from URL or metaobject context"
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Color",
+      "default": "#2563eb"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1a1a2e"
+    },
+    {
+      "type": "color",
+      "id": "muted_color",
+      "label": "Muted Text Color",
+      "default": "#6b7280"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border Color",
+      "default": "#e5e7eb"
+    },
+    {
+      "type": "color",
+      "id": "section_bg",
+      "label": "Section Background",
+      "default": "#f9fafb"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border Radius",
+      "min": 0,
+      "max": 24,
+      "step": 2,
+      "default": 8,
+      "unit": "px"
+    }
+  ]
+}
+{% endschema %}
