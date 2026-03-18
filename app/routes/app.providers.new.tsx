@@ -32,10 +32,31 @@ import {
   ImportIcon,
   GlobeIcon,
   LockIcon,
-  EmailIcon,
-  NoteIcon,
   CheckCircleIcon,
 } from "@shopify/polaris-icons";
+
+/** Numbered step circle badge */
+function StepBadge({ number }: { number: number }) {
+  return (
+    <div
+      style={{
+        width: 28,
+        height: 28,
+        borderRadius: "50%",
+        background: "var(--p-color-bg-fill-info)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "var(--p-color-text-info-on-bg-fill)",
+        fontWeight: 600,
+        fontSize: "13px",
+        flexShrink: 0,
+      }}
+    >
+      {number}
+    </div>
+  );
+}
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
@@ -333,22 +354,7 @@ export default function ProvidersNew() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: "var(--p-color-bg-fill-info)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--p-color-text-info-on-bg-fill)",
-                        fontWeight: 600,
-                        fontSize: "13px",
-                      }}
-                    >
-                      1
-                    </div>
+                    <StepBadge number={1} />
                     <Text variant="headingMd" as="h2">
                       Choose data source type
                     </Text>
@@ -378,10 +384,7 @@ export default function ProvidersNew() {
                         }}
                       >
                         <BlockStack gap="200">
-                          <InlineStack
-                            align="space-between"
-                            blockAlign="center"
-                          >
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div
                               style={{
                                 width: 36,
@@ -393,6 +396,7 @@ export default function ProvidersNew() {
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center",
+                                flexShrink: 0,
                               }}
                             >
                               <Icon
@@ -401,12 +405,14 @@ export default function ProvidersNew() {
                               />
                             </div>
                             {selected && (
-                              <Icon
-                                source={CheckCircleIcon}
-                                tone="interactive"
-                              />
+                              <div style={{ flexShrink: 0, width: 20, height: 20 }}>
+                                <Icon
+                                  source={CheckCircleIcon}
+                                  tone="interactive"
+                                />
+                              </div>
                             )}
-                          </InlineStack>
+                          </div>
                           <Text
                             variant="headingSm"
                             as="h3"
@@ -438,22 +444,7 @@ export default function ProvidersNew() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: "50%",
-                      background: "var(--p-color-bg-fill-info)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--p-color-text-info-on-bg-fill)",
-                      fontWeight: 600,
-                      fontSize: "13px",
-                    }}
-                  >
-                    2
-                  </div>
+                  <StepBadge number={2} />
                   <Text variant="headingMd" as="h2">
                     Provider identity
                   </Text>
@@ -535,7 +526,6 @@ export default function ProvidersNew() {
                       onChange={setWebsiteUrl}
                       autoComplete="off"
                       placeholder="https://www.scorpion-exhausts.com"
-                      prefix={<Icon source={GlobeIcon} />}
                     />
                     <TextField
                       label="Contact email"
@@ -545,7 +535,6 @@ export default function ProvidersNew() {
                       autoComplete="off"
                       placeholder="trade@supplier.com"
                       type="email"
-                      prefix={<Icon source={EmailIcon} />}
                     />
                   </FormLayout.Group>
                   <TextField
@@ -565,22 +554,7 @@ export default function ProvidersNew() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: "50%",
-                      background: "var(--p-color-bg-fill-info)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--p-color-text-info-on-bg-fill)",
-                      fontWeight: 600,
-                      fontSize: "13px",
-                    }}
-                  >
-                    3
-                  </div>
+                  <StepBadge number={3} />
                   <Text variant="headingMd" as="h2">
                     Connection settings
                   </Text>
@@ -640,8 +614,7 @@ export default function ProvidersNew() {
                           placeholder="https://api.supplier.com/v1/products"
                           type="url"
                           helpText="The full URL that returns product data as JSON."
-                          prefix={<Icon source={GlobeIcon} />}
-                        />
+                            />
                         <FormLayout.Group>
                           <Select
                             label="Authentication method"
@@ -674,7 +647,6 @@ export default function ProvidersNew() {
                                   : "your-api-key-or-token"
                               }
                               type="password"
-                              prefix={<Icon source={LockIcon} />}
                             />
                           )}
                         </FormLayout.Group>
@@ -737,8 +709,7 @@ export default function ProvidersNew() {
                             onChange={setFtpHost}
                             autoComplete="off"
                             placeholder="scorpionexhausts.iweb-storage.com"
-                            prefix={<Icon source={GlobeIcon} />}
-                          />
+                                />
                           <TextField
                             label="Port"
                             name="ftp_port"
@@ -799,22 +770,7 @@ export default function ProvidersNew() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: "50%",
-                      background: "var(--p-color-bg-fill-info)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--p-color-text-info-on-bg-fill)",
-                      fontWeight: 600,
-                      fontSize: "13px",
-                    }}
-                  >
-                    4
-                  </div>
+                  <StepBadge number={4} />
                   <Text variant="headingMd" as="h2">
                     Import preferences
                   </Text>
@@ -845,43 +801,34 @@ export default function ProvidersNew() {
                 </FormLayout>
 
                 <Box
-                  padding="300"
+                  padding="400"
                   background="bg-surface-secondary"
                   borderRadius="200"
                 >
-                  <BlockStack gap="200">
+                  <BlockStack gap="300">
                     <Text variant="headingSm" as="h3">
                       What happens next?
                     </Text>
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={CheckCircleIcon} tone="success" />
-                        <Text variant="bodySm" as="p">
-                          Provider is created and ready to receive data
-                        </Text>
-                      </InlineStack>
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={CheckCircleIcon} tone="success" />
-                        <Text variant="bodySm" as="p">
-                          {providerType === "csv" || providerType === "xml"
-                            ? "Upload your file from the provider detail page"
-                            : providerType === "api"
-                              ? "Test the API connection and fetch products"
-                              : "Connect to FTP server and browse available files"}
-                        </Text>
-                      </InlineStack>
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={CheckCircleIcon} tone="success" />
-                        <Text variant="bodySm" as="p">
-                          Map columns to Shopify fields with our smart mapper
-                        </Text>
-                      </InlineStack>
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={CheckCircleIcon} tone="success" />
-                        <Text variant="bodySm" as="p">
-                          Preview products before importing — review and approve
-                        </Text>
-                      </InlineStack>
+                    <BlockStack gap="200">
+                      {[
+                        "Provider is created and ready to receive data",
+                        providerType === "csv" || providerType === "xml"
+                          ? "Upload your file from the provider detail page"
+                          : providerType === "api"
+                            ? "Test the API connection and fetch products"
+                            : "Connect to FTP server and browse available files",
+                        "Map columns to Shopify fields with our smart mapper",
+                        "Preview products before importing — review and approve",
+                      ].map((step, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                          <div style={{ flexShrink: 0, width: 20, height: 20, marginTop: 1 }}>
+                            <Icon source={CheckCircleIcon} tone="success" />
+                          </div>
+                          <Text variant="bodySm" as="p">
+                            {step}
+                          </Text>
+                        </div>
+                      ))}
                     </BlockStack>
                   </BlockStack>
                 </Box>
