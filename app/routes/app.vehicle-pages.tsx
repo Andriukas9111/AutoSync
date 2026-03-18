@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useFetcher } from "react-router";
+import { useLoaderData, useActionData, useFetcher, useNavigate } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -421,6 +421,7 @@ export default function VehiclePages() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const fetcher = useFetcher();
+  const navigate = useNavigate();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
@@ -550,11 +551,11 @@ export default function VehiclePages() {
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                 action={{
                   content: "Map Fitments",
-                  url: "/app/fitment/manual",
+                  onAction: () => navigate("/app/fitment/manual"),
                 }}
                 secondaryAction={{
                   content: "Learn more",
-                  url: "/app/help",
+                  onAction: () => navigate("/app/help"),
                 }}
               >
                 <p>
@@ -678,7 +679,7 @@ export default function VehiclePages() {
                       </Text>
                       <Button
                         variant="plain"
-                        url="/app/fitment/manual"
+                        onClick={() => navigate("/app/fitment/manual")}
                         icon={ArrowRightIcon}
                       >
                         Go to Fitment Mapping
