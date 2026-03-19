@@ -221,6 +221,65 @@ function buildVehicleProfile(text: string, knownMakes: string[]): VehicleProfile
     break; // Take the first valid engine family
   }
 
+  // ─── 5b. Engine family knowledge base ──────────────────────
+  // If we detected an engine family code, INFER missing profile fields
+  const ENGINE_FAMILY_KB: Record<string, { displacement?: number; technology?: string; fuelType?: string; makes?: string[] }> = {
+    // VW Group
+    EA888: { displacement: 2000, technology: "TSI", fuelType: "Petrol" },
+    EA211: { displacement: 1400, technology: "TSI", fuelType: "Petrol" },
+    EA111: { displacement: 1400, technology: "TSI", fuelType: "Petrol" },
+    EA839: { displacement: 2900, technology: "TFSI", fuelType: "Petrol" },
+    EA855: { displacement: 2500, technology: "TFSI", fuelType: "Petrol" },
+    // BMW
+    B58: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    B48: { displacement: 2000, technology: "Turbo", fuelType: "Petrol" },
+    B38: { displacement: 1500, technology: "Turbo", fuelType: "Petrol" },
+    N54: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    N55: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    N20: { displacement: 2000, technology: "Turbo", fuelType: "Petrol" },
+    N13: { displacement: 1600, technology: "Turbo", fuelType: "Petrol" },
+    S55: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    S58: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    B47: { displacement: 2000, technology: "Diesel", fuelType: "Diesel" },
+    B57: { displacement: 3000, technology: "Diesel", fuelType: "Diesel" },
+    // Mercedes
+    M139: { displacement: 2000, technology: "Turbo", fuelType: "Petrol" },
+    M256: { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+    M177: { displacement: 4000, technology: "Turbo", fuelType: "Petrol" },
+    // Ford
+    EB20: { displacement: 2000, technology: "EcoBoost", fuelType: "Petrol" },
+    EB23: { displacement: 2300, technology: "EcoBoost", fuelType: "Petrol" },
+    // Honda
+    K20: { displacement: 2000, fuelType: "Petrol" },
+    K24: { displacement: 2400, fuelType: "Petrol" },
+    // Subaru
+    FA20: { displacement: 2000, fuelType: "Petrol" },
+    EJ25: { displacement: 2500, fuelType: "Petrol" },
+    // Nissan
+    VR38: { displacement: 3800, technology: "Turbo", fuelType: "Petrol" },
+    SR20: { displacement: 2000, technology: "Turbo", fuelType: "Petrol" },
+    RB26: { displacement: 2600, technology: "Turbo", fuelType: "Petrol" },
+    // Toyota
+    "2JZ": { displacement: 3000, technology: "Turbo", fuelType: "Petrol" },
+  };
+
+  if (profile.engineFamily) {
+    const kb = ENGINE_FAMILY_KB[profile.engineFamily];
+    if (kb) {
+      // Fill in missing profile fields from engine family knowledge
+      if (!profile.displacement && kb.displacement) profile.displacement = kb.displacement;
+      if (!profile.technology && kb.technology) profile.technology = kb.technology;
+      if (!profile.fuelType && kb.fuelType) profile.fuelType = kb.fuelType;
+      if (kb.makes) {
+        for (const make of kb.makes) {
+          if (knownMakes.includes(make) && !profile.makeGroup.includes(make) && !profile.directMakes.includes(make)) {
+            profile.makeGroup.push(make);
+          }
+        }
+      }
+    }
+  }
+
   // ─── 6. Power extraction ────────────────────────────────────
   const powerRegex = /\b(\d{2,4})\s*(?:hp|bhp|ps|cv)\b/gi;
   const powerMatch = powerRegex.exec(text);
@@ -382,11 +441,16 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     }
   }
 
-  // ─── Fuel type match ────────────────────────────────────────
+  // ─── Fuel type match/penalty ────────────────────────────────
   if (profile.fuelType && engine.fuel_type) {
-    if (engine.fuel_type.toLowerCase().includes(profile.fuelType.toLowerCase())) {
-      score += 0.1;
+    const profileFuel = profile.fuelType.toLowerCase();
+    const engineFuel = engine.fuel_type.toLowerCase();
+    if (engineFuel.includes(profileFuel) || profileFuel.includes(engineFuel)) {
+      score += 0.15;
       matchedHints.push(profile.fuelType);
+    } else {
+      // WRONG fuel type — e.g., profile says Petrol but engine is Diesel
+      score -= 0.4;
     }
   }
 
