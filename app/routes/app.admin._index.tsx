@@ -931,26 +931,93 @@ export default function AdminPanel() {
                       />
                     )}
 
-                    {/* Stats row */}
-                    <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="300">
-                      {[
-                        { label: "Makes", value: ymmeCounts.makes, tone: "info" as const },
-                        { label: "Models", value: ymmeCounts.models, tone: "success" as const },
-                        { label: "Engines", value: ymmeCounts.engines, tone: "attention" as const },
-                        { label: "Vehicle Specs", value: ymmeCounts.specs, tone: "warning" as const },
-                        { label: "Aliases", value: ymmeCounts.aliases, tone: "info" as const },
-                        { label: "Fitments", value: totalFitments, tone: "critical" as const },
-                      ].map((s) => (
-                        <Box key={s.label} background="bg-surface-secondary" padding="400" borderRadius="200">
-                          <BlockStack gap="200" inlineAlign="center">
-                            <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
-                            <Text as="p" variant="headingXl" fontWeight="bold" alignment="center">
-                              {s.value.toLocaleString()}
-                            </Text>
+                    {/* ═══ Live Scrape Progress ═══ */}
+                    {(() => {
+                      const runningJob = scrapeJobs.find((j: any) => j.status === "running");
+                      if (!runningJob) return null;
+                      const r = (runningJob.result ?? {}) as Record<string, any>;
+                      const etaSec = r.etaSeconds ?? 0;
+                      const etaH = Math.floor(etaSec / 3600);
+                      const etaM = Math.floor((etaSec % 3600) / 60);
+                      const etaStr = etaH > 0 ? `${etaH}h ${etaM}m` : etaM > 0 ? `${etaM}m` : "calculating...";
+                      const elapsedMs = r.elapsedMs ?? 0;
+                      const elapsedH = Math.floor(elapsedMs / 3600000);
+                      const elapsedM = Math.floor((elapsedMs % 3600000) / 60000);
+                      const elapsedStr = elapsedH > 0 ? `${elapsedH}h ${elapsedM}m` : `${elapsedM}m`;
+
+                      return (
+                        <Card>
+                          <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Spinner size="small" />
+                                <Text as="h2" variant="headingMd">Deep Scrape Running</Text>
+                                <Badge tone="attention">{`${runningJob.progress}%`}</Badge>
+                              </InlineStack>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {`ETA: ${etaStr} · Elapsed: ${elapsedStr}`}
+                              </Text>
+                            </InlineStack>
+                            <ProgressBar progress={runningJob.progress ?? 0} size="medium" tone="primary" />
+                            <InlineStack gap="600" wrap>
+                              <BlockStack gap="050">
+                                <Text as="p" variant="headingSm">{`${(runningJob.processedItems ?? 0).toLocaleString()} / ${(runningJob.totalItems ?? 0).toLocaleString()}`}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">Engines processed</Text>
+                              </BlockStack>
+                              <BlockStack gap="050">
+                                <Text as="p" variant="headingSm">{`${(r.specsUpserted ?? 0).toLocaleString()}`}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">Specs filled</Text>
+                              </BlockStack>
+                              <BlockStack gap="050">
+                                <Text as="p" variant="headingSm">{`${(r.imagesFound ?? 0).toLocaleString()}`}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">Images scraped</Text>
+                              </BlockStack>
+                              <BlockStack gap="050">
+                                <Text as="p" variant="headingSm">{`${(r.errors ?? 0).toLocaleString()}`}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">Errors</Text>
+                              </BlockStack>
+                              {runningJob.currentItem && (
+                                <BlockStack gap="050">
+                                  <Text as="p" variant="headingSm" truncate>{runningJob.currentItem}</Text>
+                                  <Text as="p" variant="bodySm" tone="subdued">Current engine</Text>
+                                </BlockStack>
+                              )}
+                            </InlineStack>
                           </BlockStack>
-                        </Box>
-                      ))}
-                    </InlineGrid>
+                        </Card>
+                      );
+                    })()}
+
+                    {/* Stats row — single card grid */}
+                    <Card padding="0">
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        borderBottom: "1px solid var(--p-color-border-secondary)",
+                      }}>
+                        {[
+                          { label: "Makes", value: ymmeCounts.makes },
+                          { label: "Models", value: ymmeCounts.models },
+                          { label: "Engines", value: ymmeCounts.engines },
+                          { label: "Specs", value: ymmeCounts.specs },
+                          { label: "Aliases", value: ymmeCounts.aliases },
+                          { label: "Fitments", value: totalFitments },
+                        ].map((s, i) => (
+                          <div key={s.label} style={{
+                            padding: "var(--p-space-400)",
+                            borderRight: i < 5 ? "1px solid var(--p-color-border-secondary)" : "none",
+                            textAlign: "center",
+                          }}>
+                            <BlockStack gap="200" inlineAlign="center">
+                              <Text as="p" variant="headingLg" fontWeight="bold">
+                                {s.value.toLocaleString()}
+                              </Text>
+                              <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </BlockStack>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
 
                     {/* Coverage bar */}
                     <Box background="bg-surface-secondary" padding="400" borderRadius="200">
@@ -1132,20 +1199,26 @@ export default function AdminPanel() {
                         <Divider />
                         <Text as="h2" variant="headingMd">Scrape Job History</Text>
                         <DataTable
-                          columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "numeric", "text", "text"]}
-                          headings={["Type", "Status", "Brands", "Models", "Engines", "Specs", "Duration", "Started"]}
-                          rows={scrapeJobs.map((j) => {
-                            const r = j.result as Record<string, number> || {};
+                          columnContentTypes={["text", "text", "numeric", "numeric", "text", "text"]}
+                          headings={["Type", "Status", "Processed", "Specs/Images", "Duration", "Started"]}
+                          rows={scrapeJobs.map((j: any) => {
+                            const r = (j.result ?? {}) as Record<string, any>;
                             const dur = j.completedAt && j.startedAt
-                              ? `${Math.round((new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime()) / 1000)}s`
+                              ? (() => {
+                                  const s = Math.round((new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime()) / 1000);
+                                  const h = Math.floor(s / 3600);
+                                  const m = Math.floor((s % 3600) / 60);
+                                  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+                                })()
                               : j.status === "running" ? "Running..." : "—";
+                            const isDeep = j.type === "deep_specs_backfill";
                             return [
                               j.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
                               j.status.charAt(0).toUpperCase() + j.status.slice(1),
-                              String(r.brandsProcessed ?? j.processedItems ?? 0),
-                              String(r.modelsProcessed ?? 0),
-                              String(r.enginesProcessed ?? 0),
-                              String(r.specsProcessed ?? 0),
+                              String(isDeep ? (r.totalProcessed ?? r.updated ?? j.processedItems ?? 0) : (r.brandsProcessed ?? j.processedItems ?? 0)),
+                              isDeep
+                                ? `${r.specsUpserted ?? 0} / ${r.imagesFound ?? 0}`
+                                : `${r.specsProcessed ?? 0} / ${r.enginesProcessed ?? 0}`,
                               dur,
                               j.startedAt ? new Date(j.startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—",
                             ];
