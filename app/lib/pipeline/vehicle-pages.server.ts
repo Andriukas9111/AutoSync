@@ -1380,10 +1380,14 @@ export async function pushVehiclePages(
           const pageErrors = updateJson?.data?.pageUpdate?.userErrors;
           if (pageErrors?.length) {
             console.error(`[vehicle-pages] Page update errors for ${pageHandle}: ${pageErrors.map((e: any) => e.message).join(", ")}`);
+          }
+          // Always try to get the page GID
+          const updatedPage = updateJson?.data?.pageUpdate?.page;
+          if (updatedPage?.id) {
+            pageGid = updatedPage.id;
+            finalPageHandle = updatedPage.handle ?? pageHandle;
           } else {
-            const updatedPage = updateJson?.data?.pageUpdate?.page;
-            pageGid = updatedPage?.id ?? existingPageGid;
-            finalPageHandle = updatedPage?.handle ?? pageHandle;
+            pageGid = existingPageGid;
           }
         } catch (err) {
           console.error(`[vehicle-pages] Page update exception for ${pageHandle}:`, err instanceof Error ? err.message : err);
@@ -1400,13 +1404,13 @@ export async function pushVehiclePages(
                 isPublished: true,
                 metafields: [
                   {
-                    namespace: "$app:autosync",
+                    namespace: "autosync",
                     key: "vehicle_type",
                     value: "vehicle_spec",
                     type: "single_line_text_field",
                   },
                   {
-                    namespace: "$app:autosync",
+                    namespace: "autosync",
                     key: "engine_id",
                     value: vehicle.engineId,
                     type: "single_line_text_field",
