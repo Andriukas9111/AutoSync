@@ -687,12 +687,8 @@ export default function FitmentManual() {
                       {hints.length > 0 && (
                         <InlineStack gap="100" wrap>
                           {hints.map((hint: any, i: number) => (
-                            <Badge key={i} tone={
-                              hint.type === "engine_code" ? "info" :
-                              hint.type === "displacement" ? "warning" :
-                              hint.type === "power" ? "success" : "info"
-                            }>
-                              {`${hint.type.replace(/_/g, " ")}: ${hint.value}`}
+                            <Badge key={i} tone="info">
+                              {typeof hint === "string" ? hint : `${(hint.type ?? "").replace(/_/g, " ")}: ${hint.value ?? ""}`}
                             </Badge>
                           ))}
                         </InlineStack>
