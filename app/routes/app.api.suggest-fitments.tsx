@@ -407,36 +407,81 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitment[] {
-  // Pass 1: Remove duplicates by make+model+engine display name (not engine ID)
-  // Different generations of the same engine variant (e.g., 140i 340hp from 2015 and 2017)
-  // should be treated as one suggestion showing the combined year range
-  const seen = new Set<string>();
-  const deduped = suggestions.filter((s) => {
-    const engineKey = s.engine?.displayName || s.engine?.name || s.engine?.id || "";
-    const key = `${s.make.id}|${s.model?.id || ""}|${engineKey}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+/**
+ * Extract the base engine identity from a full engine name.
+ * "M140i (340 Hp) xDrive Steptronic" → "M140i (340 Hp)"
+ * "M240i (382 Hp) Steptronic Sport" → "M240i (382 Hp)"
+ * This groups all transmission/drivetrain variants together.
+ */
+function getEngineBaseKey(engineName: string | null): string {
+  if (!engineName) return "";
+  // Extract model code + power: "M140i (340 Hp)" from "M140i (340 Hp) xDrive Steptronic"
+  const match = engineName.match(/^(.+?\(\d+\s*[Hh]p\))/);
+  if (match) return match[1].trim();
+  // Fallback: take first 2 words
+  const parts = engineName.split(/\s+/);
+  return parts.slice(0, 2).join(" ");
+}
 
-  // Pass 2: Suppress model-level suggestions when engine-level exists for same make+model
+function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitment[] {
+  // Pass 1: Group by make + model + engine base (model code + power)
+  // "M140i (340 Hp) xDrive Steptronic" and "M140i (340 Hp) Steptronic" → same group
+  // Keep the variant with the most detail (longest name), merge year ranges
+  const groups = new Map<string, SuggestedFitment>();
+  for (const s of suggestions) {
+    const baseKey = getEngineBaseKey(s.engine?.name ?? null);
+    const groupKey = `${s.make.id}|${s.model?.id || ""}|${baseKey}`;
+
+    const existing = groups.get(groupKey);
+    if (!existing) {
+      groups.set(groupKey, { ...s });
+    } else {
+      // Merge: keep highest confidence, widest year range, most detailed name
+      if (s.confidence > existing.confidence) {
+        existing.confidence = s.confidence;
+      }
+      // Widen year range
+      if (s.yearFrom && (!existing.yearFrom || s.yearFrom < existing.yearFrom)) {
+        existing.yearFrom = s.yearFrom;
+      }
+      if (s.yearTo && (!existing.yearTo || s.yearTo > existing.yearTo)) {
+        existing.yearTo = s.yearTo;
+      }
+      // Keep the name with more aspiration/spec info (usually longer)
+      if (s.engine && existing.engine) {
+        const sName = s.engine.name || "";
+        const eName = existing.engine.name || "";
+        if (sName.length > eName.length) {
+          existing.engine = { ...s.engine };
+        }
+        // Merge spec badges: keep non-null values from either
+        if (!existing.engine.fuelType && s.engine.fuelType) existing.engine.fuelType = s.engine.fuelType;
+        if (!existing.engine.aspiration && s.engine.aspiration) existing.engine.aspiration = s.engine.aspiration;
+        if (!existing.engine.displacementCc && s.engine.displacementCc) existing.engine.displacementCc = s.engine.displacementCc;
+        if (!existing.engine.powerHp && s.engine.powerHp) existing.engine.powerHp = s.engine.powerHp;
+      }
+    }
+  }
+
+  const merged = [...groups.values()];
+
+  // Pass 2: Suppress model-level when engine-level exists
   const pairsWithEngines = new Set<string>();
-  for (const s of deduped) {
+  for (const s of merged) {
     if (s.engine?.id && s.model?.id) {
       pairsWithEngines.add(`${s.make.id}|${s.model.id}`);
     }
   }
-  const suppressed = deduped.filter((s) => {
+  const suppressed = merged.filter((s) => {
     if (!s.engine && s.model?.id && pairsWithEngines.has(`${s.make.id}|${s.model.id}`)) {
       return false;
     }
     return true;
   });
 
-  // Pass 3: Limit to top 3 engines per make+model (by confidence)
-  const engineCountByPair = new Map<string, number>();
+  // Pass 3: Sort by confidence desc, limit to top 3 per make+model
   suppressed.sort((a, b) => b.confidence - a.confidence);
+  const engineCountByPair = new Map<string, number>();
   return suppressed.filter((s) => {
     if (s.engine?.id && s.model?.id) {
       const pairKey = `${s.make.id}|${s.model.id}`;
