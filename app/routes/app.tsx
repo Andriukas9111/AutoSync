@@ -111,9 +111,11 @@ export default function App() {
               100% { transform: scaleX(0); transform-origin: right; }
             }
           `}</style>
-          <div style={{ maxWidth: 1700, margin: "0 auto", padding: "0 16px 40px" }}>
+          <div style={{ maxWidth: 1700, margin: "0 auto" }}>
             <Outlet />
-            <PageFooter />
+            <div style={{ padding: "0 var(--p-space-600)" }}>
+              <PageFooter />
+            </div>
           </div>
         </Frame>
       </PolarisAppProvider>
