@@ -205,14 +205,14 @@ function scoreEngine(
   const matchedTokens: string[] = [];
   const engName = (engine.name || "").toLowerCase();
 
-  // +0.15 base score for make match
-  score += 0.15;
+  // +0.2 base score for make match
+  score += 0.2;
   matchedTokens.push(makeName);
 
-  // +0.3 if engine name contains a model code from the text
+  // +0.5 if engine name contains a model code from the text (strongest signal)
   for (const code of tokens.modelCodes) {
     if (engName.includes(code.toLowerCase())) {
-      score += 0.3;
+      score += 0.5;
       matchedTokens.push(code);
       break; // Only count once
     }
@@ -379,7 +379,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           generation: model.generation,
         };
 
-        const displayName = formatEngineDisplay(engineData, engineFormatTemplate);
+        // Use engine.name as primary display (it contains the variant like "M140i (340 Hp) xDrive")
+        // Fall back to format template only when name is missing or generic
+        const displayName = engineRow.name || formatEngineDisplay(engineData, engineFormatTemplate);
 
         suggestions.push({
           make: { id: model.make.id, name: model.make.name },
@@ -435,10 +437,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ── Helpers ────────────────────────────────────────────────────
 
 function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitment[] {
-  // Pass 1: Remove exact duplicates (same make+model+engine)
+  // Pass 1: Remove duplicates by make+model+engine display name (not engine ID)
+  // Different generations of the same engine variant (e.g., 140i 340hp from 2015 and 2017)
+  // should be treated as one suggestion showing the combined year range
   const seen = new Set<string>();
   const deduped = suggestions.filter((s) => {
-    const key = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
+    const engineKey = s.engine?.displayName || s.engine?.name || s.engine?.id || "";
+    const key = `${s.make.id}|${s.model?.id || ""}|${engineKey}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
