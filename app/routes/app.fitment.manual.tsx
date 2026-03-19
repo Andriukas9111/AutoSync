@@ -246,9 +246,10 @@ export default function FitmentManual() {
     setLocalUnmapped(unmappedCount);
   }, [mappedCount, unmappedCount]);
 
-  // Auto-fetch suggestions when a product loads
+  // Auto-fetch suggestions when product changes (single effect to avoid race condition)
   useEffect(() => {
-    if (nextProduct?.title && !suggestionsLoaded) {
+    setShowAllSuggestions(false);
+    if (nextProduct?.title) {
       const cleanDesc = (nextProduct.description || "")
         .replace(/<[^>]*>/g, " ")
         .replace(/\s+/g, " ")
@@ -257,15 +258,8 @@ export default function FitmentManual() {
         JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: "", vendor: nextProduct.vendor || "", productType: nextProduct.product_type || "", tags: typeof nextProduct.tags === "string" ? nextProduct.tags : "" }),
         { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
       );
-      setSuggestionsLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nextProduct?.id]);
-
-  // Reset suggestions when product changes
-  useEffect(() => {
-    setSuggestionsLoaded(false);
-    setShowAllSuggestions(false);
   }, [nextProduct?.id]);
 
   const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
