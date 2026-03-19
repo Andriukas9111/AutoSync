@@ -26,7 +26,6 @@ import {
   Icon,
   DropZone,
   Thumbnail,
-  Checkbox,
 } from "@shopify/polaris";
 import {
   ImportIcon,

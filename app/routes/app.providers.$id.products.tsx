@@ -18,14 +18,12 @@ import {
   InlineStack,
   BlockStack,
   TextField,
-  Select,
   Pagination,
   EmptyState,
   Banner,
   Thumbnail,
   Box,
   Button,
-  Divider,
   Modal,
   useIndexResourceState,
 } from "@shopify/polaris";
@@ -33,7 +31,6 @@ import {
   SearchIcon,
   DeleteIcon,
   ImportIcon,
-  ExportIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";

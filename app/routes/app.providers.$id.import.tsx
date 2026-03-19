@@ -10,7 +10,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate } from "react-router";
-import { data } from "react-router";
 import {
   Page,
   Card,
@@ -27,16 +26,12 @@ import {
   ProgressBar,
   Spinner,
   Box,
-  Divider,
-  Thumbnail,
   Icon,
 } from "@shopify/polaris";
 import {
   ImportIcon,
   FileIcon,
-  ChevronLeftIcon,
   CheckCircleIcon,
-  AlertTriangleIcon,
   DeleteIcon,
   RefreshIcon,
 } from "@shopify/polaris-icons";
@@ -701,7 +696,7 @@ export default function ProviderImportWizard() {
             <InlineStack gap="300">
               <Button
                 variant="primary"
-                onClick={() => navigate(`/app/providers/${provider.id}?tab=products`)}
+                onClick={() => navigate(`/app/providers/${provider.id}/products`)}
               >
                 View Products
               </Button>
