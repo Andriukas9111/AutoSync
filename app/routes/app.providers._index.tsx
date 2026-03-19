@@ -19,8 +19,9 @@ import {
 import {
   ImportIcon,
   ViewIcon,
-  DataTableIcon,
-  PackageIcon,
+  DatabaseIcon,
+  ProductIcon,
+  CategoriesIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -282,7 +283,7 @@ export default function ProvidersIndex() {
               <InlineStack align="space-between" blockAlign="center">
                 <Text variant="bodySm" as="p" tone="subdued">Total Providers</Text>
                 <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-info)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={DataTableIcon} tone="info" />
+                  <Icon source={DatabaseIcon} tone="info" />
                 </div>
               </InlineStack>
               <Text variant="headingLg" as="p">{`${providerCount}`}</Text>
@@ -294,7 +295,7 @@ export default function ProvidersIndex() {
               <InlineStack align="space-between" blockAlign="center">
                 <Text variant="bodySm" as="p" tone="subdued">Total Products</Text>
                 <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-success)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={PackageIcon} tone="info" />
+                  <Icon source={ProductIcon} tone="info" />
                 </div>
               </InlineStack>
               <Text variant="headingLg" as="p">{`${providers.reduce((sum, p) => sum + (p.product_count || 0), 0)}`}</Text>
@@ -318,7 +319,7 @@ export default function ProvidersIndex() {
               <InlineStack align="space-between" blockAlign="center">
                 <Text variant="bodySm" as="p" tone="subdued">Source Types</Text>
                 <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={DataTableIcon} tone="subdued" />
+                  <Icon source={CategoriesIcon} tone="subdued" />
                 </div>
               </InlineStack>
               <InlineStack gap="100" wrap>
@@ -336,7 +337,7 @@ export default function ProvidersIndex() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={DataTableIcon} tone="base" />
+                  <Icon source={DatabaseIcon} tone="base" />
                   <Text variant="bodySm" as="span">
                     Using{" "}
                     <Text variant="bodySm" as="span" fontWeight="semibold">
@@ -469,7 +470,7 @@ function ProviderCard({
         {/* Stats row */}
         <InlineStack gap="300" wrap={true}>
           <InlineStack gap="100" blockAlign="center">
-            <Icon source={PackageIcon} tone="subdued" />
+            <Icon source={ProductIcon} tone="subdued" />
             <Text variant="bodySm" as="span" tone="subdued">
               {provider.product_count.toLocaleString()}{" "}
               {provider.product_count === 1 ? "product" : "products"}
