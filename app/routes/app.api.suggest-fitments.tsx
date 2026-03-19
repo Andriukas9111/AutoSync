@@ -942,6 +942,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Step 6: Deduplicate and limit
     const uniqueSuggestions = deduplicateSuggestions(suggestions);
+
+    // Step 7: Normalize confidence scores relative to max possible
+    // This makes "all available signals matched" show as ~100% instead of 75%
+    for (const s of uniqueSuggestions) {
+      const hasModelNameMatch = s.matchedHints.some(
+        (h) => profile.modelNames.map((m) => m.toLowerCase()).includes(h.toLowerCase())
+      );
+      const maxPossible = calculateMaxPossible(profile, hasModelNameMatch);
+      s.confidence = normalizeConfidence(s.confidence, maxPossible);
+    }
+
     uniqueSuggestions.sort((a, b) => {
       if (b.confidence !== a.confidence) return b.confidence - a.confidence;
       const makeCompare = a.make.name.localeCompare(b.make.name);
@@ -977,6 +988,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 };
+
+// ── Confidence Normalization ─────────────────────────────────
+
+/**
+ * Calculate the maximum possible score for a given profile and context.
+ * This lets us normalize raw additive scores so that a "perfect match
+ * given available signals" shows as ~100% instead of a misleading 75%.
+ *
+ * E.g., "Kia Stinger 2.0 T-GDI" has no model code / engine family / power —
+ * raw max = 0.75 with all signals matching. Normalizing: 0.75/0.75 = 100%.
+ */
+function calculateMaxPossible(profile: VehicleProfile, hasModelNameMatch: boolean): number {
+  let max = 0.15; // make base (always present)
+
+  if (profile.modelCodes.length > 0) max += 0.35;
+  if (profile.displacement) max += 0.15;
+  if (profile.technology) {
+    max += profile.technology === "Turbo" ? 0.05 : 0.10;
+  }
+  if (profile.fuelType) max += 0.10;
+  if (profile.engineFamily) max += 0.10;
+  if (profile.powerHp) max += 0.05;
+  if (hasModelNameMatch) max += 0.25;
+
+  return Math.min(1.0, max);
+}
+
+/**
+ * Normalize a raw score against the maximum possible for the profile.
+ * Ensures that "all available signals matched" → ~100%.
+ */
+function normalizeConfidence(rawScore: number, maxPossible: number): number {
+  if (maxPossible <= 0) return rawScore;
+  return Math.min(1.0, rawScore / maxPossible);
+}
 
 // ── Helpers ────────────────────────────────────────────────────
 

@@ -54,9 +54,23 @@ export function SuggestionCard({
   isSubmitting = false,
 }: SuggestionCardProps) {
   const yearRange = formatYearRange(s.yearFrom, s.yearTo);
-  const confidencePct = Math.round(s.confidence * 100);
-  const confidenceTone: "success" | "info" | "warning" =
-    s.confidence >= 0.8 ? "success" : s.confidence >= 0.5 ? "info" : "warning";
+
+  // Tier label + tone based on normalized confidence
+  let confidenceLabel: string;
+  let confidenceTone: "success" | "info" | "warning";
+  if (s.confidence >= 0.9) {
+    confidenceLabel = "Exact Match";
+    confidenceTone = "success";
+  } else if (s.confidence >= 0.7) {
+    confidenceLabel = "Strong Match";
+    confidenceTone = "success";
+  } else if (s.confidence >= 0.5) {
+    confidenceLabel = "Good Match";
+    confidenceTone = "info";
+  } else {
+    confidenceLabel = "Possible";
+    confidenceTone = "warning";
+  }
 
   const hasEngine = s.engine !== null;
 
@@ -123,7 +137,7 @@ export function SuggestionCard({
             {vehicleName}
           </Text>
           <InlineStack gap="100" blockAlign="center">
-            <Badge tone={confidenceTone}>{`${confidencePct}%`}</Badge>
+            <Badge tone={confidenceTone}>{`${confidenceLabel}`}</Badge>
             {alreadyAdded ? (
               <Badge tone="success">{`Added`}</Badge>
             ) : (
