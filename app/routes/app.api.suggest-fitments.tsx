@@ -395,6 +395,7 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     if (hasDispInName || hasDispInDb) {
       score += 0.3;
       matchedHints.push(`${dispL}L`);
+      console.log('[SCORE] disp boost +0.3, score=', score);
     } else {
       // Check if engine has a DIFFERENT displacement in its name
       const engDispMatch = engName.match(/(\d\.\d)/);
@@ -420,6 +421,7 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     if (engName.includes(code.toLowerCase())) {
       score += 0.3;
       matchedHints.push(code);
+      console.log('[SCORE] model code +0.3:', code, 'score=', score);
       break;
     }
   }
@@ -448,9 +450,11 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     if (engineFuel.includes(profileFuel) || profileFuel.includes(engineFuel)) {
       score += 0.15;
       matchedHints.push(profile.fuelType);
+      console.log('[SCORE] fuel match +0.15, score=', score);
     } else {
       // WRONG fuel type — e.g., profile says Petrol but engine is Diesel
       score -= 0.4;
+      console.log('[SCORE] WRONG fuel -0.4, profile=', profileFuel, 'engine=', engineFuel, 'score=', score);
     }
   }
 
