@@ -405,9 +405,9 @@ export default function ProductDetails() {
   const [showDescription, setShowDescription] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
 
-  // Auto-fetch suggestions on page load
+  // Auto-fetch suggestions when product changes
   useEffect(() => {
-    if (!suggestionsLoaded && product.title) {
+    if (product.title) {
       suggestionFetcher.submit(
         JSON.stringify({
           title: product.title,
@@ -422,7 +422,7 @@ export default function ProductDetails() {
       setSuggestionsLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.title]);
+  }, [product.id]);
 
   const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
   const hints = (suggestionFetcher.data as any)?.hints ?? [];
