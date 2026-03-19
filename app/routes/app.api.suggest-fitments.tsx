@@ -80,25 +80,32 @@ function extractSearchTokens(text: string, knownMakes: string[]): ExtractedToken
   }
 
   // 2. Model codes: 140i, 240i, 340i, 440i, M40i, 320d, A4, RS3, GTI, etc.
-  //    Must have a letter prefix OR a letter suffix to be a model code (not just a number)
-  const modelCodeRegex = /\b([A-Z]\d{2,3}[a-z]?[deishx]?|[A-Z]{2,3}\d{1,2}|\d{3}[a-z]?[deishx])\b/gi;
+  //    Patterns: Letter+digits (M40i), digits+letter suffix (140i, 320d),
+  //    2-3 letter prefix + digits (RS3, GT86), or 3-digit numbers near a make/slash context
+  const modelCodePatterns = [
+    /\b([A-Z]\d{2,3}[a-z]?[deishx]?)\b/gi,       // M40i, A4, X3, Z4
+    /\b(\d{3}[a-z]?[deishx])\b/gi,                 // 140i, 320d, 440i
+    /\b([A-Z]{2,3}\d{1,3})\b/gi,                   // RS3, GT86, TT, RS6
+    /(?:\/|\s)(\d{3})\b/g,                          // /240 (slash-separated bare numbers)
+  ];
   let m: RegExpExecArray | null;
   const seenModelCodes = new Set<string>();
-  while ((m = modelCodeRegex.exec(text)) !== null) {
-    const code = m[1];
-    // Skip pure numbers (dimensions, weights, etc.)
-    if (/^\d+$/.test(code)) continue;
-    // Skip very short codes (2 chars) that are likely noise
-    if (code.length < 3) continue;
-    // Skip if looks like a year
-    const numPart = parseInt(code.replace(/[^0-9]/g, ""), 10);
-    if (numPart >= 1900 && numPart <= 2099) continue;
-    // Skip common non-model abbreviations
-    if (/^(MST|SKU|MK[0-9]|BW|VW|HP|KW|NM|CC|MM|KG|LB|UK|US|EU|OEM|DIY|LED|VAG|EVO)$/i.test(code)) continue;
-    const key = code.toUpperCase();
-    if (!seenModelCodes.has(key)) {
-      seenModelCodes.add(key);
-      tokens.modelCodes.push(code);
+  for (const regex of modelCodePatterns) {
+    regex.lastIndex = 0;
+    while ((m = regex.exec(text)) !== null) {
+      const code = m[1];
+      // Skip if looks like a year (1900-2099)
+      const numPart = parseInt(code.replace(/[^0-9]/g, ""), 10);
+      if (numPart >= 1900 && numPart <= 2099) continue;
+      // Skip common noise abbreviations
+      if (/^(MST|SKU|BW|HP|KW|NM|CC|MM|KG|LB|UK|US|EU|OEM|DIY|LED|EVO|MAX|MIN)$/i.test(code)) continue;
+      // Skip pure small numbers (< 100) unless they have a letter
+      if (/^\d+$/.test(code) && numPart < 100) continue;
+      const key = code.toUpperCase();
+      if (!seenModelCodes.has(key)) {
+        seenModelCodes.add(key);
+        tokens.modelCodes.push(code);
+      }
     }
   }
 
@@ -351,8 +358,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const engineRow = rawRow as unknown as EngineRow;
         const { score, matchedTokens } = scoreEngine(engineRow, tokens, makeName);
 
-        // Only include engines with meaningful matches (need model code OR engine code match)
-        if (score < 0.35) continue;
+        // Only include engines with meaningful match (need model code or engine code beyond just make)
+        if (score < 0.25) continue;
 
         const model = engineRow.model;
         const engineData: EngineDisplayData = {
