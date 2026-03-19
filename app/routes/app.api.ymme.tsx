@@ -163,7 +163,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
         (e) => !isGarbageEngineName(e.name),
       );
 
-      return data({ engines: cleanEngines });
+      // Deduplicate engines by name (keep the one with most data)
+      const seenNames = new Map<string, typeof cleanEngines[0]>();
+      for (const e of cleanEngines) {
+        const key = e.name ?? "";
+        const existing = seenNames.get(key);
+        if (!existing) {
+          seenNames.set(key, e);
+        } else {
+          // Keep the engine with more filled fields
+          const existingScore = [existing.code, existing.displacement_cc, existing.power_hp].filter(Boolean).length;
+          const newScore = [e.code, e.displacement_cc, e.power_hp].filter(Boolean).length;
+          if (newScore > existingScore) {
+            seenNames.set(key, e);
+          }
+        }
+      }
+      const dedupedEngines = [...seenNames.values()];
+
+      return data({ engines: dedupedEngines });
     }
 
     default:

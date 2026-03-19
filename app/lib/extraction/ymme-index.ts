@@ -307,8 +307,7 @@ async function buildYmmeIndex(
     "id, model_id, code, name, year_from, year_to, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, cylinders, cylinder_config, aspiration, drive_type, transmission_type, modification, display_name",
     {
       eq: { active: true },
-      notNull: "code",
-      order: "code",
+      order: "name",
     }
   )
 
@@ -392,11 +391,10 @@ async function buildYmmeIndex(
 
   // ── Build engine structures ──
   const engines: YmmeIndexEngine[] = dbEngines
-    .filter((e) => e.code) // extra safety
     .map((e) => ({
       id: e.id,
       modelId: e.model_id,
-      code: e.code!,
+      code: e.code ?? "",
       name: e.name,
       yearFrom: e.year_from,
       yearTo: e.year_to,
