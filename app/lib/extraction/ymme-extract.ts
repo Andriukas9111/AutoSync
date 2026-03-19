@@ -21,6 +21,8 @@ export interface ExtractV2Input {
   description?: string | null
   descriptionHtml?: string | null
   sku?: string | null
+  vendor?: string | null
+  tags?: string | null
   productType?: "vehicle_part" | "wheel" | "tyre" | null
 }
 
@@ -91,6 +93,8 @@ export async function extractFitmentDataV2(
       description: input.description,
       descriptionHtml: input.descriptionHtml,
       sku: input.sku,
+      vendor: input.vendor,
+      tags: input.tags,
     },
     index
   )

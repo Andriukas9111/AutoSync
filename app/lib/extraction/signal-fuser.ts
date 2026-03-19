@@ -42,6 +42,7 @@ const SOURCE_WEIGHT: Record<SignalSource, number> = {
   description_natural: 0.80,
   title: 0.75,
   sku: 0.40,
+  vendor_tags: 0.35,           // Supplementary — vendor/tags hints
 }
 
 // ── Main Fuser ───────────────────────────────────────────────

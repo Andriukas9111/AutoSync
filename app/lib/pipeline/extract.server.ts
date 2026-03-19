@@ -71,7 +71,7 @@ export async function runAutoExtraction(
   while (offset < totalItems) {
     const { data: products, error: fetchErr } = await db
       .from("products")
-      .select("id, title, description, handle, tags, product_type")
+      .select("id, title, description, handle, tags, product_type, vendor, sku")
       .eq("shop_id", shopId)
       .eq("fitment_status", "unmapped")
       .order("id")
@@ -85,6 +85,9 @@ export async function runAutoExtraction(
           title: product.title ?? "",
           description: product.description ?? null,
           descriptionHtml: product.description ?? null,
+          sku: product.sku ?? null,
+          vendor: product.vendor ?? null,
+          tags: Array.isArray(product.tags) ? product.tags.join(" ") : (product.tags ?? null),
           productType: normaliseProductType(product.product_type),
         };
 

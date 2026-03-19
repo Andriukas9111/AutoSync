@@ -21,6 +21,7 @@ export type SignalSource =
   | "description_natural"
   | "title"
   | "sku"
+  | "vendor_tags"
 
 export interface ExtractionSignal {
   source: SignalSource
@@ -92,6 +93,8 @@ export function extractAllSignals(
     description?: string | null
     descriptionHtml?: string | null
     sku?: string | null
+    vendor?: string | null
+    tags?: string | null
   },
   index: YmmeIndex
 ): MultiSignalResult {
@@ -107,6 +110,8 @@ export function extractAllSignals(
       product.title,
       product.description || "",
       product.sku || "",
+      product.vendor || "",
+      product.tags || "",
     ].join(" ");
 
     const engineCodeMentions = extractEngineCodeMentions(allText, index);
@@ -194,6 +199,22 @@ export function extractAllSignals(
         mentions: skuMentions,
         diagnostics: [`SKU "${product.sku}" yielded ${skuMentions.length} hints`],
       })
+    }
+  }
+
+  // ── Signal 5: Vendor + Tags (Priority 5 — supplementary) ──
+  // Vendor and tags may contain vehicle make/model info not in title or description
+  const vendorTagsText = [product.vendor || "", product.tags || ""].join(" ").trim()
+  if (vendorTagsText.length > 3) {
+    const vtScan = scanTextForVehicles(vendorTagsText, index)
+    if (vtScan.mentions.length > 0) {
+      signals.push({
+        source: "vendor_tags",
+        priority: 5,
+        mentions: vtScan.mentions,
+        diagnostics: vtScan.diagnostics,
+      })
+      diagnostics.push(...vtScan.diagnostics.map((d) => `[vendor-tags] ${d}`))
     }
   }
 

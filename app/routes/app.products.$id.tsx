@@ -815,7 +815,7 @@ export default function ProductDetails() {
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                       {suggestions.length > 0
                         ? "All suggestions have been accepted!"
-                        : `No matches. ${diagnostics.slice(-5).join(" | ")}`}
+                        : "No vehicle fitment matches found for this product. Try adding vehicle details to the title or description, or use manual mapping below."}
                     </Text>
                   </Box>
                 ) : (
