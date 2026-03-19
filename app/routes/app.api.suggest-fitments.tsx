@@ -315,9 +315,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       const modelNameMatches: string[] = [];
       const textLower = allText.toLowerCase();
+      // Common short words that are also model names — blocklist
+      const modelNameBlocklist = new Set(["is", "it", "go", "up", "on", "do", "be", "am", "an", "or", "no", "so", "us", "by", "he", "me", "we", "of", "to", "in", "at", "as", "if", "my", "any", "all", "can", "may", "one", "two", "new", "old", "big", "top", "its", "has", "had", "set", "get", "use", "run", "see", "let", "put", "try", "add", "end", "own", "way", "day", "ist", "will", "van", "bee", "ion"]);
+
       for (const model of makeModels || []) {
-        // Only match model names that are 3+ chars to avoid false positives
-        if (model.name.length >= 3 && textLower.includes(model.name.toLowerCase())) {
+        const mName = model.name.toLowerCase();
+        // Skip very short names (3 chars or less) and blocklisted words
+        if (model.name.length <= 3) continue;
+        if (modelNameBlocklist.has(mName)) continue;
+        // Must be a word boundary match (not substring of a longer word)
+        const wordBoundaryRegex = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
+        if (wordBoundaryRegex.test(text)) {
           modelNameMatches.push(model.id);
         }
       }
