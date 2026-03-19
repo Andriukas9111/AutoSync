@@ -77,6 +77,49 @@ function extractSearchTokens(text: string, knownMakes: string[]): ExtractedToken
     }
   }
 
+  // 1b. Platform/group codes → expand to multiple makes
+  const platformToMakes: Record<string, string[]> = {
+    VAG: ["Volkswagen", "Audi", "Seat", "Skoda", "Cupra", "Lamborghini", "Porsche", "Bentley"],
+    VW: ["Volkswagen"],
+    PSA: ["Peugeot", "Citroën", "Citroen", "DS", "Opel", "Vauxhall"],
+    JLR: ["Jaguar", "Land Rover"],
+    FCA: ["Fiat", "Alfa Romeo", "Chrysler", "Dodge", "Jeep", "Maserati"],
+    GM: ["Chevrolet", "Cadillac", "GMC", "Buick", "Holden", "Vauxhall", "Opel"],
+  };
+  for (const [platform, makes] of Object.entries(platformToMakes)) {
+    if (new RegExp(`\\b${platform}\\b`, "i").test(text)) {
+      for (const make of makes) {
+        if (!tokens.makes.includes(make) && knownMakes.includes(make)) {
+          tokens.makes.push(make);
+        }
+      }
+    }
+  }
+
+  // 1c. Engine family codes → search patterns (EA888, EA211, N54, B58, etc.)
+  const engineFamilyRegex = /\b(EA\d{3}|EP\d|EB\d|DW\d{2}|[BNSM]\d{2}[A-Z]?\d{0,2})\b/gi;
+  let efm: RegExpExecArray | null;
+  while ((efm = engineFamilyRegex.exec(text)) !== null) {
+    const code = efm[1].toUpperCase();
+    if (!tokens.engineCodes.includes(code) && !/^(MST|MK\d)$/i.test(code)) {
+      tokens.engineCodes.push(code);
+    }
+  }
+
+  // 1d. Engine technology keywords → add to model codes for engine name search
+  // These appear in engine names: "2.0 TSI (190 Hp)", "1.4 TFSI (150 Hp)"
+  const techKeywords = ["TSI", "TFSI", "TDI", "FSI", "CDI", "HDI", "THP", "PureTech", "EcoBoost", "VTEC", "Skyactiv", "BlueHDi", "dCi", "TCe", "GDI", "T-GDI", "MPI"];
+  for (const kw of techKeywords) {
+    if (new RegExp(`\\b${kw}\\b`, "i").test(text)) {
+      // Combine with displacement if found: "2.0 TSI" is better than just "TSI"
+      if (tokens.displacements.length > 0) {
+        const dispL = (tokens.displacements[0] / 1000).toFixed(1);
+        tokens.modelCodes.push(`${dispL} ${kw}`); // "2.0 TSI"
+      }
+      tokens.modelCodes.push(kw);
+    }
+  }
+
   // 2. Model codes: 140i, 240i, 340i, 440i, M40i, 320d, A4, RS3, GTI, etc.
   //    Patterns: Letter+digits (M40i), digits+letter suffix (140i, 320d),
   //    2-3 letter prefix + digits (RS3, GT86), or 3-digit numbers near a make/slash context
