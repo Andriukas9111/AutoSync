@@ -51,8 +51,6 @@ import {
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier } from "../lib/types";
-import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineFormatPreset, EngineDisplayData } from "../lib/engine-format";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -245,7 +243,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // 5. Fetch app_settings
     db
       .from("app_settings")
-      .select("vehicle_pages_enabled, engine_display_format")
+      .select("vehicle_pages_enabled")
       .eq("shop_id", shopId)
       .maybeSingle(),
   ]);
@@ -327,10 +325,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     0,
   );
 
-  const engineFormatPreset: EngineFormatPreset =
-    (settingsResult.data?.engine_display_format as EngineFormatPreset) || "full";
-  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT;
-
   return {
     gated: false as const,
     plan,
@@ -342,7 +336,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncedEngineIds,
     vehiclePagesEnabled: settingsResult.data?.vehicle_pages_enabled ?? false,
     totalLinkedProducts,
-    engineFormatTemplate,
   };
 };
 
@@ -498,7 +491,6 @@ export default function VehiclePages() {
     vehicles,
     syncedEngineIds,
     totalLinkedProducts,
-    engineFormatTemplate,
   } = loaderData;
 
   const syncedSet = useMemo(
@@ -951,23 +943,7 @@ export default function VehiclePages() {
                     .filter(Boolean)
                     .join(" ");
 
-                  const engineDisplayData: EngineDisplayData = {
-                    name: vehicle.engineName,
-                    code: vehicle.engineCode,
-                    displacement_cc: vehicle.displacementCc,
-                    fuel_type: vehicle.fuelType,
-                    power_hp: vehicle.powerHp,
-                    power_kw: vehicle.powerKw,
-                    torque_nm: vehicle.torqueNm,
-                    cylinders: vehicle.cylinders,
-                    cylinder_config: vehicle.cylinderConfig,
-                    aspiration: vehicle.aspiration,
-                    modification: vehicle.modification,
-                    generation: vehicle.generation,
-                    year_from: vehicle.yearFrom,
-                    year_to: vehicle.yearTo,
-                  };
-                  const engineLabel = formatEngineDisplay(engineDisplayData, engineFormatTemplate);
+                  const engineLabel = vehicle.engineName || "Unknown Engine";
 
                   const displacement = formatDisplacement(
                     vehicle.displacementCc,

@@ -20,13 +20,11 @@ import {
   Badge,
   ProgressBar,
   List,
-  Box,
   Icon,
 } from "@shopify/polaris";
 import {
   ExportIcon,
   CollectionIcon,
-  SettingsIcon,
   PersonIcon,
   DatabaseIcon,
   AlertDiamondIcon,
@@ -112,8 +110,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       (formData.get("collection_strategy") as string) || "make";
     const autoCreateCollections =
       formData.get("auto_create_collections") === "true";
-    const engineDisplayFormat =
-      (formData.get("engine_display_format") as string) || "code";
     const notificationEmail =
       (formData.get("notification_email") as string) || "";
 
@@ -130,7 +126,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       push_tags: autoPushTags,
       push_metafields: autoPushMetafields,
       push_collections: autoCreateCollections,
-      engine_display_format: engineDisplayFormat,
       notification_email: notificationEmail || null,
       updated_at: new Date().toISOString(),
     };
@@ -334,33 +329,6 @@ const STRATEGY_OPTIONS = [
   { label: "By Make, Model & Year", value: "make_model_year" },
 ];
 
-const ENGINE_FORMAT_OPTIONS = [
-  { label: "Full — 2.0L I4 Turbo Diesel (B47D20A) 190hp", value: "full" },
-  { label: "Full + Context — ...190hp, Diesel (G20, 2022+)", value: "full_with_context" },
-  { label: "Compact — 2.0L Turbo Diesel 190hp", value: "compact" },
-  { label: "Code First — B47D20A — 2.0L 190hp", value: "code_first" },
-  { label: "Traditional — 2.0 B47D20A 190hp (G20)", value: "traditional" },
-  { label: "Power First — 190hp 2.0L I4 Turbo", value: "power_first" },
-  { label: "Modification — M340i (B48A20E) 382hp AWD", value: "modification" },
-  { label: "Raw — Original database name", value: "raw" },
-];
-
-// Sample engine data for format preview
-const SAMPLE_ENGINE_PREVIEWS: Record<string, string> = {
-  full: "2.0L I4 Turbo Diesel (B47D20A) 190hp",
-  full_with_context: "2.0L I4 Turbo Diesel (B47D20A) 190hp, Diesel (G20, 2022+)",
-  compact: "2.0L Turbo Diesel 190hp",
-  code_first: "B47D20A — 2.0L 190hp",
-  traditional: "2.0 B47D20A 190hp (G20)",
-  power_first: "190hp 2.0L I4 Turbo",
-  modification: "320d (B47D20A) 190hp RWD",
-  raw: "320d (190 Hp) Steptronic",
-};
-
-function getEngineFormatPreview(format: string): string {
-  return SAMPLE_ENGINE_PREVIEWS[format] || SAMPLE_ENGINE_PREVIEWS.full;
-}
-
 /** A single danger zone row with a useFetcher submit */
 function DangerAction({
   title,
@@ -466,11 +434,6 @@ export default function Settings() {
     appSettings?.push_collections ?? false,
   );
 
-  // Form state — Display Settings
-  const [engineDisplayFormat, setEngineDisplayFormat] = useState(
-    appSettings?.engine_display_format ?? "code",
-  );
-
   // Form state — Notifications
   const [notificationEmail, setNotificationEmail] = useState(
     appSettings?.notification_email ?? "",
@@ -516,7 +479,6 @@ export default function Settings() {
               name="auto_create_collections"
               value={String(autoCreateCollections)}
             />
-            <input type="hidden" name="engine_display_format" value={engineDisplayFormat} />
             <input type="hidden" name="notification_email" value={notificationEmail} />
 
             <BlockStack gap="500">
@@ -598,49 +560,6 @@ export default function Settings() {
                       checked={autoCreateCollections}
                       onChange={setAutoCreateCollections}
                     />
-                  </FormLayout>
-                </BlockStack>
-              </Card>
-
-              {/* Display Settings */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={SettingsIcon} />
-                    </div>
-                    <Text as="h2" variant="headingMd">
-                      Display Settings
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Configure how engine information is displayed across your store widgets and compatibility tables.
-                  </Text>
-                  <FormLayout>
-                    <Select
-                      label="Engine display format"
-                      options={ENGINE_FORMAT_OPTIONS}
-                      value={engineDisplayFormat}
-                      onChange={setEngineDisplayFormat}
-                      helpText="Uses a token system: {displacement} {config} {aspiration} {fuel} ({code}) {power}"
-                    />
-                    <Box background="bg-surface-secondary" padding="300" borderRadius="200">
-                      <BlockStack gap="200">
-                        <Text as="p" variant="bodySm" fontWeight="semibold">Preview</Text>
-                        <Text as="p" variant="bodyMd" fontWeight="bold">
-                          {getEngineFormatPreview(engineDisplayFormat)}
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Sample: BMW 3 Series (G20) — 2.0L I4 Turbo Diesel, B47D20A, 190hp
-                        </Text>
-                      </BlockStack>
-                    </Box>
                   </FormLayout>
                 </BlockStack>
               </Card>

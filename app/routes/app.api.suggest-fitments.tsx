@@ -14,8 +14,6 @@ import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineDisplayData, EngineFormatPreset } from "../lib/engine-format";
 
 export interface SuggestedFitment {
   make: { id: string; name: string };
@@ -275,15 +273,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ suggestions: [], hints: [], diagnostics: ["No title provided"] });
   }
 
-  // Load tenant's engine display format preference
-  const { data: appSettings } = await db
-    .from("app_settings")
-    .select("engine_display_format")
-    .eq("shop_id", shopId)
-    .maybeSingle();
-  const engineFormat = (appSettings?.engine_display_format as EngineFormatPreset) || "full";
-  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormat] || DEFAULT_ENGINE_FORMAT;
-
   try {
     const diagnostics: string[] = [];
     const allText = [title, description || "", sku || ""].join(" ");
@@ -362,26 +351,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (score < 0.25) continue;
 
         const model = engineRow.model;
-        const engineData: EngineDisplayData = {
-          code: engineRow.code,
-          name: engineRow.name,
-          displacement_cc: engineRow.displacement_cc,
-          fuel_type: engineRow.fuel_type,
-          power_hp: engineRow.power_hp,
-          power_kw: engineRow.power_kw,
-          torque_nm: engineRow.torque_nm,
-          cylinders: engineRow.cylinders,
-          cylinder_config: engineRow.cylinder_config,
-          aspiration: engineRow.aspiration,
-          drive_type: engineRow.drive_type,
-          transmission_type: engineRow.transmission_type,
-          modification: engineRow.modification,
-          generation: model.generation,
-        };
-
         // Use engine.name as primary display (it contains the variant like "M140i (340 Hp) xDrive")
-        // Fall back to format template only when name is missing or generic
-        const displayName = engineRow.name || formatEngineDisplay(engineData, engineFormatTemplate);
+        const displayName = engineRow.name || "Unknown Engine";
 
         suggestions.push({
           make: { id: model.make.id, name: model.make.name },

@@ -33,8 +33,6 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits, getTenant, PLAN_LIMITS } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
-import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineFormatPreset, EngineDisplayData } from "../lib/engine-format";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -45,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run all queries in parallel
-  const [tenantResult, makesResult, activeResult, fitmentResult, modelCountResult, engineCountResult, settingsResult] = await Promise.all([
+  const [tenantResult, makesResult, activeResult, fitmentResult, modelCountResult, engineCountResult] = await Promise.all([
     getTenant(shopId),
     db.from("ymme_makes")
       .select("id, name, slug, country, logo_url, nhtsa_make_id")
@@ -64,10 +62,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_engines")
       .select("id", { count: "exact", head: true })
       .eq("active", true),
-    db.from("app_settings")
-      .select("engine_display_format")
-      .eq("shop_id", shopId)
-      .maybeSingle(),
   ]);
 
   const tenant = tenantResult;
@@ -96,10 +90,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productCount: productCountByMake[make.name] || 0,
   }));
 
-  const engineFormatPreset: EngineFormatPreset =
-    (settingsResult.data?.engine_display_format as EngineFormatPreset) || "full";
-  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT;
-
   return {
     plan,
     limits,
@@ -107,7 +97,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     activeMakeCount: activeMakeIds.size,
     totalModels: modelCountResult.count ?? 0,
     totalEngines: engineCountResult.count ?? 0,
-    engineFormatTemplate,
   };
 };
 
@@ -251,7 +240,7 @@ function makeInitials(name: string): string {
 // ---------------------------------------------------------------------------
 
 export default function Vehicles() {
-  const { plan, limits, makes, activeMakeCount, totalModels, totalEngines, engineFormatTemplate } =
+  const { plan, limits, makes, activeMakeCount, totalModels, totalEngines } =
     useLoaderData<typeof loader>();
 
   const actionData = useActionData<typeof action>();
@@ -726,20 +715,7 @@ export default function Vehicles() {
           <InlineGrid columns={{ xs: 1, sm: 1, md: 2 }} gap="400">
             {engines.map((engine) => {
               const yearRange = formatYearRange(engine.year_from, engine.year_to);
-              const engineData: EngineDisplayData = {
-                name: engine.name,
-                code: engine.code,
-                displacement_cc: engine.displacement_cc,
-                fuel_type: engine.fuel_type,
-                power_hp: engine.power_hp,
-                power_kw: engine.power_kw,
-                torque_nm: engine.torque_nm,
-                cylinders: engine.cylinders,
-                cylinder_config: engine.cylinder_config,
-                aspiration: engine.aspiration,
-                modification: engine.modification,
-              };
-              const engineTitle = formatEngineDisplay(engineData, engineFormatTemplate);
+              const engineTitle = engine.name || "Unknown Engine";
 
               return (
                 <Card key={engine.id}>

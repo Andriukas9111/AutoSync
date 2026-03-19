@@ -48,8 +48,6 @@ import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
 import { IconBadge } from "../components/IconBadge";
 import type { SuggestedFitment } from "./app.api.suggest-fitments";
-import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineFormatPreset, EngineDisplayData } from "../lib/engine-format";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,25 +99,8 @@ interface Fitment {
   aspiration?: string | null;
 }
 
-function formatFitmentEngine(fitment: Fitment, formatTemplate: string): string | null {
-  const engineData: EngineDisplayData = {
-    name: fitment.engine,
-    code: fitment.engine_code,
-    displacement_cc: fitment.displacement_cc ?? null,
-    fuel_type: fitment.fuel_type,
-    power_hp: fitment.power_hp ?? null,
-    power_kw: fitment.power_kw ?? null,
-    torque_nm: fitment.torque_nm ?? null,
-    cylinders: fitment.cylinders ?? null,
-    cylinder_config: fitment.cylinder_config ?? null,
-    aspiration: fitment.aspiration ?? null,
-  };
-  // If there is no meaningful data at all, return null
-  if (!engineData.name && !engineData.code && !engineData.displacement_cc && !engineData.power_hp) {
-    return null;
-  }
-  const result = formatEngineDisplay(engineData, formatTemplate);
-  return result === "Unknown Engine" ? null : result;
+function formatFitmentEngine(fitment: Fitment): string | null {
+  return fitment.engine || null;
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -159,23 +140,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product ID is required", { status: 400 });
   }
 
-  const [productResult, fitmentsResult, settingsResult] = await Promise.all([
+  const [productResult, fitmentsResult] = await Promise.all([
     db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).single(),
     db.from("vehicle_fitments").select("*, ymme_engine_id")
       .eq("product_id", productId)
       .order("make", { ascending: true })
       .order("model", { ascending: true })
       .order("year_from", { ascending: true }),
-    db.from("app_settings").select("engine_display_format").eq("shop_id", shopId).maybeSingle(),
   ]);
 
   if (productResult.error || !productResult.data) {
     throw new Response("Product not found", { status: 404 });
   }
-
-  const engineFormatPreset: EngineFormatPreset =
-    (settingsResult.data?.engine_display_format as EngineFormatPreset) || "full";
-  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT;
 
   // Enrich fitments with engine specs
   let fitments = (fitmentsResult.data ?? []) as Fitment[];
@@ -209,7 +185,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     product: productResult.data as Product,
     fitments,
     shopDomain: shopId,
-    engineFormatTemplate,
   };
 };
 
@@ -350,7 +325,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain, engineFormatTemplate } = useLoaderData<typeof loader>();
+  const { product, fitments, shopDomain } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -783,7 +758,7 @@ export default function ProductDetails() {
                               <InlineStack gap="300" wrap>
                                 <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>
                                 {(() => {
-                                  const engineText = formatFitmentEngine(fitment, engineFormatTemplate);
+                                  const engineText = formatFitmentEngine(fitment);
                                   return engineText ? (
                                     <Text as="span" variant="bodySm" tone="subdued">{engineText}</Text>
                                   ) : null;
@@ -840,7 +815,7 @@ export default function ProductDetails() {
                 {showManualForm && (
                   <>
                     <Divider />
-                    <VehicleSelector onChange={handleVehicleChange} engineFormatTemplate={engineFormatTemplate} />
+                    <VehicleSelector onChange={handleVehicleChange} />
 
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">

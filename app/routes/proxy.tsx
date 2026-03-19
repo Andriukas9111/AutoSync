@@ -5,8 +5,6 @@ import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
 import { getTenant } from "../lib/billing.server";
-import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineFormatPreset, EngineDisplayData } from "../lib/engine-format";
 
 // ---------- CORS helpers ----------
 const corsHeaders = {
@@ -690,37 +688,7 @@ async function handleVehicleSpecs(params: URLSearchParams) {
   const model = engine.ymme_models;
   const displacementL = engine.displacement_cc ? (engine.displacement_cc / 1000).toFixed(1) + "L" : null;
 
-  // Load tenant's engine display format for the formatted variant name
-  let engineFormatTemplate: string = DEFAULT_ENGINE_FORMAT;
-  if (shop) {
-    const { data: appSettings } = await db
-      .from("app_settings")
-      .select("engine_display_format")
-      .eq("shop_id", shop)
-      .maybeSingle();
-    const engineFormatPreset = (appSettings?.engine_display_format as EngineFormatPreset) || "full";
-    engineFormatTemplate = (ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT) as string;
-  }
-
-  const engineDisplayData: EngineDisplayData = {
-    name: engine.name,
-    code: engine.code,
-    displacement_cc: engine.displacement_cc,
-    fuel_type: engine.fuel_type,
-    power_hp: engine.power_hp,
-    power_kw: engine.power_kw,
-    torque_nm: engine.torque_nm,
-    cylinders: specs?.cylinders ?? null,
-    cylinder_config: specs?.cylinder_config ?? null,
-    aspiration: specs?.aspiration ?? null,
-    drive_type: specs?.drive_type ?? null,
-    transmission_type: specs?.transmission_type ?? null,
-    modification: engine.modification ?? null,
-    generation: model?.generation ?? null,
-    year_from: engine.year_from,
-    year_to: engine.year_to,
-  };
-  const formattedVariant = formatEngineDisplay(engineDisplayData, engineFormatTemplate);
+  const formattedVariant = engine.name || "Unknown Engine";
 
   // Organize specs into sections
   const specSections: Record<string, Record<string, string>> = {};
