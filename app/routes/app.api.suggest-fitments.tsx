@@ -393,11 +393,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       diagnostics.push(`Found ${String(engines.length)} engines for ${makeName}`);
 
       // Step 4: Score each matched engine
+      // Track which engines came from model name match (they get a boost)
+      const modelNameEngineIds = new Set<string>();
+      if (modelNameMatches.length > 0) {
+        for (const e of engines) {
+          const eModel = (e as any).model;
+          if (eModel && modelNameMatches.includes(eModel.id)) {
+            modelNameEngineIds.add((e as any).id);
+          }
+        }
+      }
+
       for (const rawRow of engines) {
         const engineRow = rawRow as unknown as EngineRow;
-        const { score, matchedTokens } = scoreEngine(engineRow, tokens, makeName);
+        let { score, matchedTokens } = scoreEngine(engineRow, tokens, makeName);
 
-        // Only include engines with meaningful match (need model code or engine code beyond just make)
+        // Boost engines that came from model name match (Supra, Z4, Golf, etc.)
+        if (modelNameEngineIds.has(engineRow.id)) {
+          score += 0.3; // Model name in text = strong signal
+          score = Math.min(1.0, score);
+        }
+
+        // Only include engines with meaningful match
         if (score < 0.25) continue;
 
         const model = engineRow.model;
