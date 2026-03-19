@@ -337,7 +337,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (tokens.makes.length === 0) {
       diagnostics.push("No known makes found in text");
-      return data({ suggestions: [], hints: tokens.modelCodes, diagnostics });
+      return data({ suggestions: [], hints: [...tokens.modelCodes, ...tokens.engineCodes], diagnostics });
     }
 
     // Step 3: For each make found, search engines by model code in name
@@ -518,7 +518,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return data({
       suggestions: uniqueSuggestions.slice(0, 20),
-      hints: [...new Set([...tokens.modelCodes, ...tokens.engineCodes])],
+      hints: [...new Set([
+        ...tokens.makes.map((m) => `make: ${m}`),
+        ...tokens.engineCodes.map((c) => `engine: ${c}`),
+        ...tokens.modelCodes,
+        ...tokens.displacements.map((d) => `${(d / 1000).toFixed(1)}L`),
+        ...tokens.powerValues.map((p) => `${String(p)}hp`),
+        ...tokens.fuelHints,
+      ])],
       diagnostics: diagnostics.slice(-10),
     });
   } catch (err) {
