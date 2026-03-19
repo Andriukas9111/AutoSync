@@ -462,12 +462,8 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     }
   }
 
-  // Debug: include score breakdown in hints for first engine
-  if ((globalThis as any).__scoreDebugCount === undefined) (globalThis as any).__scoreDebugCount = 0;
-  if ((globalThis as any).__scoreDebugCount < 1) {
-    matchedHints.push(`[score=${score.toFixed(2)}]`);
-    (globalThis as any).__scoreDebugCount++;
-  }
+  // Debug: always include raw score
+  matchedHints.push(`[s=${score.toFixed(2)}]`);
 
   return { score: Math.min(1.0, Math.max(0, score)), matchedHints };
 }
