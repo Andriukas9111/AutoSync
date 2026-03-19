@@ -249,42 +249,59 @@ function scoreEngine(
   const matchedTokens: string[] = [];
   const engName = (engine.name || "").toLowerCase();
 
-  // +0.2 base score for make match
-  score += 0.2;
+  // +0.15 base score for make match
+  score += 0.15;
   matchedTokens.push(makeName);
 
-  // +0.5 if engine name contains a model code from the text (strongest signal)
+  // +0.4 if engine name contains a model code from the text (strongest signal)
+  let hasModelCodeMatch = false;
   for (const code of tokens.modelCodes) {
     if (engName.includes(code.toLowerCase())) {
-      score += 0.5;
+      score += 0.4;
       matchedTokens.push(code);
+      hasModelCodeMatch = true;
       break; // Only count once
     }
   }
 
-  // +0.2 if power_hp matches extracted power value (within 10hp)
+  // DISPLACEMENT CHECK: if product specifies displacement, PENALIZE wrong ones
+  if (tokens.displacements.length > 0 && engine.displacement_cc) {
+    const targetCc = tokens.displacements[0];
+    const diff = Math.abs(engine.displacement_cc - targetCc);
+    if (diff <= 100) {
+      // Correct displacement — big boost
+      score += 0.3;
+      matchedTokens.push(`${(targetCc / 1000).toFixed(1)}L`);
+    } else if (diff > 500) {
+      // Way off (e.g., 2.0L vs 6.0L) — heavy penalty
+      score -= 0.4;
+    } else {
+      // Somewhat off — small penalty
+      score -= 0.1;
+    }
+  } else if (tokens.displacements.length > 0 && !engine.displacement_cc) {
+    // Product specifies displacement but engine has no data — check engine name
+    const targetL = (tokens.displacements[0] / 1000).toFixed(1);
+    if (engName.includes(targetL)) {
+      score += 0.25;
+      matchedTokens.push(`${targetL}L`);
+    }
+  }
+
+  // +0.15 if power_hp matches extracted power value (within 15hp)
   for (const power of tokens.powerValues) {
-    if (engine.power_hp && Math.abs(engine.power_hp - power) <= 10) {
-      score += 0.2;
+    if (engine.power_hp && Math.abs(engine.power_hp - power) <= 15) {
+      score += 0.15;
       matchedTokens.push(`${String(power)}hp`);
       break;
     }
   }
 
-  // +0.15 if fuel_type matches extracted fuel hint
+  // +0.1 if fuel_type matches extracted fuel hint
   for (const fuel of tokens.fuelHints) {
     if (engine.fuel_type && engine.fuel_type.toLowerCase().includes(fuel.toLowerCase())) {
-      score += 0.15;
-      matchedTokens.push(fuel);
-      break;
-    }
-  }
-
-  // +0.1 if displacement matches extracted displacement (within 100cc)
-  for (const disp of tokens.displacements) {
-    if (engine.displacement_cc && Math.abs(engine.displacement_cc - disp) <= 100) {
       score += 0.1;
-      matchedTokens.push(`${(disp / 1000).toFixed(1)}L`);
+      matchedTokens.push(fuel);
       break;
     }
   }
