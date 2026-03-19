@@ -254,7 +254,7 @@ export default function FitmentManual() {
         .replace(/\s+/g, " ")
         .trim();
       suggestionFetcher.submit(
-        JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: "" }),
+        JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: nextProduct.sku || "", vendor: nextProduct.vendor || "", productType: nextProduct.product_type || "", tags: typeof nextProduct.tags === "string" ? nextProduct.tags : Array.isArray(nextProduct.tags) ? nextProduct.tags.join(" ") : "" }),
         { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
       );
       setSuggestionsLoaded(true);
@@ -663,7 +663,7 @@ export default function FitmentManual() {
                             const cleanDesc = (nextProduct.description || "")
                               .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
                             suggestionFetcher.submit(
-                              JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: "" }),
+                              JSON.stringify({ title: nextProduct.title, description: cleanDesc, sku: nextProduct.sku || "", vendor: nextProduct.vendor || "", productType: nextProduct.product_type || "", tags: typeof nextProduct.tags === "string" ? nextProduct.tags : Array.isArray(nextProduct.tags) ? nextProduct.tags.join(" ") : "" }),
                               { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
                             );
                           }}

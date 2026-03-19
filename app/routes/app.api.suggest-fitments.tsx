@@ -263,10 +263,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopId = session.shop;
 
   const body = await request.json();
-  const { title, description, sku } = body as {
+  const { title, description, sku, vendor, productType, tags } = body as {
     title: string;
     description?: string;
     sku?: string;
+    vendor?: string;
+    productType?: string;
+    tags?: string;
   };
 
   if (!title) {
@@ -275,7 +278,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     const diagnostics: string[] = [];
-    const allText = [title, description || "", sku || ""].join(" ");
+    // Combine ALL product data for maximum detection coverage
+    const allText = [title, description || "", sku || "", vendor || "", productType || "", tags || ""].join(" ");
 
     // Step 1: Load known makes from DB
     const { data: makeRows } = await db

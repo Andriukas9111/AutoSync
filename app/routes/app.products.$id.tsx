@@ -354,6 +354,9 @@ export default function ProductDetails() {
           title: product.title,
           description: product.description?.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() || "",
           sku: product.sku || "",
+          vendor: product.vendor || "",
+          productType: product.product_type || "",
+          tags: Array.isArray(product.tags) ? product.tags.join(" ") : typeof product.tags === "string" ? product.tags : "",
         }),
         { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
       );
@@ -635,6 +638,9 @@ export default function ProductDetails() {
                           title: product.title,
                           description: cleanDescription || "",
                           sku: product.sku || "",
+                          vendor: product.vendor || "",
+                          productType: product.product_type || "",
+                          tags: Array.isArray(product.tags) ? product.tags.join(" ") : typeof product.tags === "string" ? product.tags : "",
                         }),
                         { method: "POST", action: "/app/api/suggest-fitments", encType: "application/json" },
                       );
