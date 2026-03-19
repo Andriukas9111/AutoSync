@@ -15,6 +15,7 @@ import {
   Banner,
   Divider,
   Icon,
+  Box,
 } from "@shopify/polaris";
 import {
   ProductIcon,
@@ -34,6 +35,7 @@ import {
   AlertCircleIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
+  ClockIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -108,7 +110,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("id, type, status, total_items, processed_items, completed_at, created_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
-      .limit(8),
+      .limit(10),
     // YMME stats (global, not tenant-specific)
     db.from("ymme_makes").select("id", { count: "exact", head: true }),
     db.from("ymme_models").select("id", { count: "exact", head: true }),
@@ -207,20 +209,6 @@ function formatJobType(type: string): string {
   return labels[type] ?? type;
 }
 
-const JOB_STATUS_TONE: Record<string, "success" | "info" | "warning" | "critical" | undefined> = {
-  completed: "success",
-  running: "info",
-  pending: undefined,
-  failed: "critical",
-};
-
-const JOB_STATUS_ICON: Record<string, string> = {
-  completed: "\u2713",
-  running: "\u25CF",
-  pending: "\u25CB",
-  failed: "\u2717",
-};
-
 // ---------------------------------------------------------------------------
 // Quick Action Card sub-component
 // ---------------------------------------------------------------------------
@@ -308,6 +296,51 @@ function QuickActionCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Compact status item for fitment coverage
+// ---------------------------------------------------------------------------
+
+function StatusChip({
+  icon,
+  label,
+  count,
+  bg,
+  color,
+  onClick,
+}: {
+  icon: any;
+  label: string;
+  count: number;
+  bg: string;
+  color: string;
+  onClick?: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter") onClick(); } : undefined}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        padding: "8px 12px",
+        borderRadius: "var(--p-border-radius-200)",
+        background: "var(--p-color-bg-surface-secondary)",
+        cursor: onClick ? "pointer" : "default",
+        flex: "1 1 0",
+        minWidth: "140px",
+      }}
+    >
+      <IconBadge icon={icon} size={20} bg={bg} color={color} />
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <Text as="span" variant="headingSm">{count.toLocaleString()}</Text>
+        <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -350,6 +383,8 @@ export default function Dashboard() {
   const fitmentUsagePercent =
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
 
+  const planPrice = plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299";
+
   return (
     <Page title="Dashboard" fullWidth>
       <Layout>
@@ -369,7 +404,7 @@ export default function Dashboard() {
               </Banner>
             )}
 
-            {/* ─── Quick Actions (TOP — most important) ─── */}
+            {/* ─── Quick Actions ─── */}
             <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
@@ -378,7 +413,7 @@ export default function Dashboard() {
                   </Text>
                   {unmapped > 0 && (
                     <Badge tone="warning">
-                      {`${unmapped} unmapped`}
+                      {`${unmapped.toLocaleString()} unmapped`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -395,7 +430,7 @@ export default function Dashboard() {
                     label="Auto Extract"
                     description="Automatically detect vehicle fitments"
                     onClick={() => navigate("/app/fitment")}
-                    badge={unmapped > 0 ? { content: `${unmapped} pending`, tone: "warning" } : undefined}
+                    badge={unmapped > 0 ? { content: `${unmapped.toLocaleString()} pending`, tone: "warning" } : undefined}
                   />
                   <QuickActionCard
                     icon={TargetIcon}
@@ -454,7 +489,6 @@ export default function Dashboard() {
 
             {/* ─── KPI Metrics Row ─── */}
             {(() => {
-              const planPrice = plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299";
               const statItems = [
                 { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Products", link: "/app/products", linkLabel: "View all" },
                 { icon: ConnectIcon, count: fitmentCount.toLocaleString(), label: "Fitments", link: "/app/fitment", linkLabel: "View fitments" },
@@ -499,341 +533,121 @@ export default function Dashboard() {
               );
             })()}
 
-            {/* ─── Product Status + Recent Activity ─── */}
-            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              {/* Product Status Breakdown */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Product Status
-                      </Text>
-                    </InlineStack>
-                    <Button
-                      onClick={() => navigate("/app/products")}
-                      variant="plain"
-                    >
-                      View all
-                    </Button>
-                  </InlineStack>
-                  <Divider />
-
-                  {totalProducts === 0 ? (
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      No products yet. Fetch products from Shopify to get
-                      started.
-                    </Text>
-                  ) : (
-                    <BlockStack gap="300">
-                      {/* Unmapped */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <InlineStack gap="200" blockAlign="center">
-                          <IconBadge icon={AlertCircleIcon} size={22} bg="var(--p-color-bg-fill-caution-secondary)" color="var(--p-color-icon-caution)" />
-                          <Text as="span" variant="bodyMd">
-                            Unmapped
-                          </Text>
-                        </InlineStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text
-                            as="span"
-                            variant="bodyMd"
-                            fontWeight="semibold"
-                          >
-                            {unmapped}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {totalProducts > 0
-                              ? `${Math.round((unmapped / totalProducts) * 100)}%`
-                              : "0%"}
-                          </Text>
-                        </InlineStack>
-                      </InlineStack>
-
-                      {/* Auto Mapped */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <InlineStack gap="200" blockAlign="center">
-                          <IconBadge icon={CheckCircleIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
-                          <Text as="span" variant="bodyMd">
-                            Auto Mapped
-                          </Text>
-                        </InlineStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text
-                            as="span"
-                            variant="bodyMd"
-                            fontWeight="semibold"
-                          >
-                            {autoMapped}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {totalProducts > 0
-                              ? `${Math.round((autoMapped / totalProducts) * 100)}%`
-                              : "0%"}
-                          </Text>
-                        </InlineStack>
-                      </InlineStack>
-
-                      {/* Smart Mapped */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <InlineStack gap="200" blockAlign="center">
-                          <IconBadge icon={WandIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
-                          <Text as="span" variant="bodyMd">
-                            Smart Mapped
-                          </Text>
-                        </InlineStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text
-                            as="span"
-                            variant="bodyMd"
-                            fontWeight="semibold"
-                          >
-                            {smartMapped}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {totalProducts > 0
-                              ? `${Math.round((smartMapped / totalProducts) * 100)}%`
-                              : "0%"}
-                          </Text>
-                        </InlineStack>
-                      </InlineStack>
-
-                      {/* Manual Mapped */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <InlineStack gap="200" blockAlign="center">
-                          <IconBadge icon={TargetIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
-                          <Text as="span" variant="bodyMd">
-                            Manual Mapped
-                          </Text>
-                        </InlineStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text
-                            as="span"
-                            variant="bodyMd"
-                            fontWeight="semibold"
-                          >
-                            {manualMapped}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {totalProducts > 0
-                              ? `${Math.round((manualMapped / totalProducts) * 100)}%`
-                              : "0%"}
-                          </Text>
-                        </InlineStack>
-                      </InlineStack>
-
-                      {/* Flagged */}
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <InlineStack gap="200" blockAlign="center">
-                          <IconBadge icon={AlertTriangleIcon} size={22} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
-                          <Text as="span" variant="bodyMd">
-                            Flagged for Review
-                          </Text>
-                        </InlineStack>
-                        <InlineStack gap="200" blockAlign="center">
-                          <Text
-                            as="span"
-                            variant="bodyMd"
-                            fontWeight="semibold"
-                          >
-                            {flagged}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {totalProducts > 0
-                              ? `${Math.round((flagged / totalProducts) * 100)}%`
-                              : "0%"}
-                          </Text>
-                        </InlineStack>
-                      </InlineStack>
-
-                      <Divider />
-                      <InlineStack
-                        align="space-between"
-                        blockAlign="center"
-                      >
-                        <Text
-                          as="span"
-                          variant="bodyMd"
-                          fontWeight="semibold"
-                        >
-                          Total Mapped
-                        </Text>
-                        <Badge tone={coverage >= 80 ? "success" : "info"}>
-                          {`${mapped} / ${totalProducts} (${coverage}%)`}
-                        </Badge>
-                      </InlineStack>
-
-                      {unmapped > 0 && (
-                        <InlineStack gap="200">
-                          <Button
-                            onClick={() => navigate("/app/fitment")}
-                            size="slim"
-                          >
-                            Auto Extract
-                          </Button>
-                          <Button
-                            onClick={() => navigate("/app/fitment/manual")}
-                            size="slim"
-                            variant="plain"
-                          >
-                            Manual Map
-                          </Button>
-                        </InlineStack>
-                      )}
-                    </BlockStack>
-                  )}
-                </BlockStack>
-              </Card>
-
-              {/* Recent Activity */}
-              <Card>
-                <BlockStack gap="400">
+            {/* ─── Fitment Coverage — Hero Card ─── */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Recent Activity
+                    <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                  </InlineStack>
+                  <InlineStack gap="300" blockAlign="center">
+                    <Text as="span" variant="heading2xl" fontWeight="bold">
+                      {`${coverage}%`}
+                    </Text>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      {`${mapped.toLocaleString()} of ${totalProducts.toLocaleString()} products mapped`}
                     </Text>
                   </InlineStack>
-                  <Divider />
+                </InlineStack>
 
-                  {recentJobs.length === 0 ? (
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      No activity yet. Run your first pipeline to see results
-                      here.
-                    </Text>
-                  ) : (
-                    <BlockStack gap="300">
-                      {recentJobs.map((job: any) => (
-                        <InlineStack
-                          key={job.id}
-                          align="space-between"
-                          blockAlign="center"
-                          wrap={false}
-                        >
-                          <InlineStack gap="300" blockAlign="center" wrap={false}>
-                            <div
-                              style={{
-                                width: "24px",
-                                height: "24px",
-                                borderRadius: "50%",
-                                background:
-                                  job.status === "completed"
-                                    ? "var(--p-color-bg-fill-success)"
-                                    : job.status === "failed"
-                                      ? "var(--p-color-bg-fill-critical)"
-                                      : job.status === "running"
-                                        ? "var(--p-color-bg-fill-info)"
-                                        : "var(--p-color-bg-fill-secondary)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                color: "var(--p-color-text-inverse)",
-                                fontSize: "12px",
-                                fontWeight: 700,
-                                flexShrink: 0,
-                              }}
-                            >
-                              {JOB_STATUS_ICON[job.status] ?? "\u25CB"}
-                            </div>
-                            <BlockStack gap="100">
-                              <Text
-                                as="span"
-                                variant="bodyMd"
-                                fontWeight="medium"
-                              >
-                                {formatJobType(job.type)}
-                              </Text>
-                              <Text
-                                as="span"
-                                variant="bodySm"
-                                tone="subdued"
-                              >
-                                {formatDate(job.completed_at ?? job.created_at)}
-                                {job.total_items
-                                  ? ` \u00B7 ${job.processed_items ?? 0}/${job.total_items} items`
-                                  : ""}
-                              </Text>
-                            </BlockStack>
-                          </InlineStack>
-                          <Badge tone={JOB_STATUS_TONE[job.status]}>
-                            {job.status === "completed"
-                              ? "Done"
-                              : job.status.charAt(0).toUpperCase() +
-                                job.status.slice(1)}
-                          </Badge>
-                        </InlineStack>
-                      ))}
-                    </BlockStack>
-                  )}
-                </BlockStack>
-              </Card>
-            </InlineGrid>
+                <ProgressBar
+                  progress={coverage}
+                  size="small"
+                  tone={coverage >= 80 ? "success" : coverage >= 40 ? "primary" : "highlight"}
+                />
 
-            {/* ─── Top Makes + YMME Database + Providers ─── */}
+                {/* Compact status chips */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  <StatusChip
+                    icon={AlertCircleIcon}
+                    label="Unmapped"
+                    count={unmapped}
+                    bg="var(--p-color-bg-fill-caution-secondary)"
+                    color="var(--p-color-icon-caution)"
+                    onClick={() => navigate("/app/products?status=unmapped")}
+                  />
+                  <StatusChip
+                    icon={CheckCircleIcon}
+                    label="Auto Mapped"
+                    count={autoMapped}
+                    bg="var(--p-color-bg-fill-success-secondary)"
+                    color="var(--p-color-icon-success)"
+                    onClick={() => navigate("/app/products?status=auto_mapped")}
+                  />
+                  <StatusChip
+                    icon={WandIcon}
+                    label="Smart Mapped"
+                    count={smartMapped}
+                    bg="var(--p-color-bg-fill-success-secondary)"
+                    color="var(--p-color-icon-success)"
+                    onClick={() => navigate("/app/products?status=smart_mapped")}
+                  />
+                  <StatusChip
+                    icon={TargetIcon}
+                    label="Manual Mapped"
+                    count={manualMapped}
+                    bg="var(--p-color-bg-fill-info-secondary)"
+                    color="var(--p-color-icon-info)"
+                    onClick={() => navigate("/app/products?status=manual_mapped")}
+                  />
+                  <StatusChip
+                    icon={AlertTriangleIcon}
+                    label="Flagged"
+                    count={flagged}
+                    bg="var(--p-color-bg-fill-warning-secondary)"
+                    color="var(--p-color-icon-warning)"
+                    onClick={() => navigate("/app/products?status=flagged")}
+                  />
+                </div>
+
+                {unmapped > 0 && (
+                  <>
+                    <Divider />
+                    <InlineStack gap="200">
+                      <Button onClick={() => navigate("/app/fitment")} size="slim">
+                        Auto Extract
+                      </Button>
+                      <Button onClick={() => navigate("/app/fitment/manual")} size="slim" variant="plain">
+                        Manual Map
+                      </Button>
+                    </InlineStack>
+                  </>
+                )}
+              </BlockStack>
+            </Card>
+
+            {/* ─── Info Cards: Top Makes + YMME + Providers ─── */}
             <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
               {/* Top Makes */}
               <Card>
-                <BlockStack gap="400">
+                <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
                       <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Top Makes
-                      </Text>
+                      <Text as="h2" variant="headingMd">Top Makes</Text>
                     </InlineStack>
-                    <Button
-                      onClick={() => navigate("/app/vehicles")}
-                      variant="plain"
-                    >
+                    <Button onClick={() => navigate("/app/vehicles")} variant="plain" size="slim">
                       Browse all
                     </Button>
                   </InlineStack>
                   <Divider />
 
                   {topMakes.length === 0 ? (
-                    <Text as="p" variant="bodyMd" tone="subdued">
-                      No fitment data yet. Extract fitments to see make
-                      distribution.
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      No fitment data yet. Extract fitments to see make distribution.
                     </Text>
                   ) : (
                     <BlockStack gap="200">
                       {topMakes.map((make, index) => (
-                        <InlineStack
-                          key={make.name}
-                          align="space-between"
-                          blockAlign="center"
-                        >
+                        <InlineStack key={make.name} align="space-between" blockAlign="center">
                           <InlineStack gap="200" blockAlign="center">
-                            <Text
-                              as="span"
-                              variant="bodySm"
-                              tone="subdued"
-                            >
-                              {index + 1}.
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {`${index + 1}.`}
                             </Text>
-                            <Text as="span" variant="bodyMd">
-                              {make.name}
-                            </Text>
+                            <Text as="span" variant="bodyMd">{make.name}</Text>
                           </InlineStack>
-                          <Badge tone="info">
-                            {make.count.toLocaleString()}
-                          </Badge>
+                          <Badge tone="info">{make.count.toLocaleString()}</Badge>
                         </InlineStack>
                       ))}
                     </BlockStack>
@@ -843,97 +657,61 @@ export default function Dashboard() {
 
               {/* YMME Database */}
               <Card>
-                <BlockStack gap="400">
+                <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
                       <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        YMME Database
-                      </Text>
+                      <Text as="h2" variant="headingMd">YMME Database</Text>
                     </InlineStack>
-                    <Button
-                      onClick={() => navigate("/app/vehicles")}
-                      variant="plain"
-                    >
+                    <Button onClick={() => navigate("/app/vehicles")} variant="plain" size="slim">
                       Browse
                     </Button>
                   </InlineStack>
                   <Divider />
 
-                  <BlockStack gap="300">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd">
-                        Makes
-                      </Text>
-                      <Text
-                        as="span"
-                        variant="bodyMd"
-                        fontWeight="semibold"
-                      >
-                        {ymmeMakes.toLocaleString()}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd">
-                        Models
-                      </Text>
-                      <Text
-                        as="span"
-                        variant="bodyMd"
-                        fontWeight="semibold"
-                      >
-                        {ymmeModels.toLocaleString()}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd">
-                        Engines
-                      </Text>
-                      <Text
-                        as="span"
-                        variant="bodyMd"
-                        fontWeight="semibold"
-                      >
-                        {ymmeEngines.toLocaleString()}
-                      </Text>
-                    </InlineStack>
-                    <InlineStack align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd">
-                        Vehicle Specs
-                      </Text>
-                      <Text
-                        as="span"
-                        variant="bodyMd"
-                        fontWeight="semibold"
-                      >
-                        {ymmeSpecs.toLocaleString()}
-                      </Text>
-                    </InlineStack>
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "12px",
+                  }}>
+                    {[
+                      { label: "Makes", value: ymmeMakes },
+                      { label: "Models", value: ymmeModels },
+                      { label: "Engines", value: ymmeEngines },
+                      { label: "Vehicle Specs", value: ymmeSpecs },
+                    ].map((stat) => (
+                      <div key={stat.label} style={{
+                        padding: "8px 12px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                      }}>
+                        <BlockStack gap="050">
+                          <Text as="p" variant="headingMd" fontWeight="bold">
+                            {stat.value.toLocaleString()}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {stat.label}
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </div>
 
-                    <Divider />
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Comprehensive global vehicle database with full specs
-                      including performance, dimensions, engine details, and
-                      EV data. Continuously updated.
-                    </Text>
-                  </BlockStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Global vehicle database with full specs. Continuously updated.
+                  </Text>
                 </BlockStack>
               </Card>
 
               {/* Providers */}
               <Card>
-                <BlockStack gap="400">
+                <BlockStack gap="300">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
                       <IconBadge icon={PackageIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Providers
-                      </Text>
+                      <Text as="h2" variant="headingMd">Providers</Text>
                     </InlineStack>
-                    <Button
-                      onClick={() => navigate("/app/providers")}
-                      variant="plain"
-                    >
+                    <Button onClick={() => navigate("/app/providers")} variant="plain" size="slim">
                       Manage
                     </Button>
                   </InlineStack>
@@ -941,62 +719,139 @@ export default function Dashboard() {
 
                   {providers.length === 0 ? (
                     <BlockStack gap="300">
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        No providers configured. Add a CSV, API, or FTP
-                        provider to import product data from suppliers.
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No providers configured. Add a CSV, API, or FTP provider to import product data from suppliers.
                       </Text>
-                      <Button
-                        onClick={() => navigate("/app/providers/new")}
-                        size="slim"
-                      >
+                      <Button onClick={() => navigate("/app/providers/new")} size="slim">
                         Add Provider
                       </Button>
                     </BlockStack>
                   ) : (
                     <BlockStack gap="200">
                       {providers.map((p: any) => (
-                        <InlineStack
+                        <div
                           key={p.id}
-                          align="space-between"
-                          blockAlign="center"
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-surface-secondary)",
+                          }}
                         >
                           <BlockStack gap="050">
-                            <Text
-                              as="span"
-                              variant="bodyMd"
-                              fontWeight="medium"
-                            >
+                            <Text as="span" variant="bodyMd" fontWeight="medium">
                               {p.name}
                             </Text>
                             <Text as="span" variant="bodySm" tone="subdued">
-                              {p.type.toUpperCase()} \u00B7{" "}
-                              {p.product_count ?? 0} products
+                              {`${p.type.toUpperCase()} \u00B7 ${p.product_count ?? 0} products`}
                             </Text>
                           </BlockStack>
-                          <Badge
-                            tone={
-                              p.status === "active" ? "success" : undefined
-                            }
-                          >
+                          <Badge tone={p.status === "active" ? "success" : undefined}>
                             {p.status ?? "pending"}
                           </Badge>
-                        </InlineStack>
+                        </div>
                       ))}
+                      {providers.length >= 3 && (
+                        <Button onClick={() => navigate("/app/providers")} size="slim" variant="plain">
+                          {`View all ${providerCount} providers`}
+                        </Button>
+                      )}
                     </BlockStack>
                   )}
                 </BlockStack>
               </Card>
             </InlineGrid>
 
+            {/* ─── Recent Activity — Full Width Timeline ─── */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Recent Activity</Text>
+                  </InlineStack>
+                  <Button onClick={() => navigate("/app/analytics")} variant="plain" size="slim">
+                    View analytics
+                  </Button>
+                </InlineStack>
+                <Divider />
+
+                {recentJobs.length === 0 ? (
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    No activity yet. Run your first pipeline to see results here.
+                  </Text>
+                ) : (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                    gap: "8px",
+                  }}>
+                    {recentJobs.map((job: any) => (
+                      <div
+                        key={job.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "12px",
+                          padding: "10px 12px",
+                          borderRadius: "var(--p-border-radius-200)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                        }}
+                      >
+                        <InlineStack gap="300" blockAlign="center" wrap={false}>
+                          <div
+                            style={{
+                              width: "8px",
+                              height: "8px",
+                              borderRadius: "50%",
+                              flexShrink: 0,
+                              background:
+                                job.status === "completed"
+                                  ? "var(--p-color-bg-fill-success)"
+                                  : job.status === "failed"
+                                    ? "var(--p-color-bg-fill-critical)"
+                                    : job.status === "running"
+                                      ? "var(--p-color-bg-fill-info)"
+                                      : "var(--p-color-bg-fill-secondary)",
+                            }}
+                          />
+                          <BlockStack gap="050">
+                            <Text as="span" variant="bodySm" fontWeight="medium">
+                              {formatJobType(job.type)}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {formatDate(job.completed_at ?? job.created_at)}
+                              {job.total_items
+                                ? ` \u00B7 ${job.processed_items ?? 0}/${job.total_items}`
+                                : ""}
+                            </Text>
+                          </BlockStack>
+                        </InlineStack>
+                        <Badge tone={
+                          job.status === "completed" ? "success" :
+                          job.status === "failed" ? "critical" :
+                          job.status === "running" ? "info" : undefined
+                        }>
+                          {job.status === "completed" ? "Done" :
+                           job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </BlockStack>
+            </Card>
+
             {/* ─── Plan Usage ─── */}
             <Card>
-              <BlockStack gap="400">
+              <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Plan Usage
-                    </Text>
+                    <Text as="h2" variant="headingMd">Plan Usage</Text>
                   </InlineStack>
                   <Badge tone={plan === "free" ? "warning" : "success"}>
                     {planLabel}
@@ -1008,23 +863,16 @@ export default function Dashboard() {
                   {/* Product usage */}
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        Products
-                      </Text>
+                      <Text as="span" variant="bodyMd">Products</Text>
                       <Text as="span" variant="bodyMd" tone="subdued">
-                        {totalProducts.toLocaleString()} /{" "}
-                        {limits.products === Infinity
-                          ? "\u221E"
-                          : limits.products.toLocaleString()}
+                        {`${totalProducts.toLocaleString()} / ${limits.products === Infinity ? "\u221E" : limits.products.toLocaleString()}`}
                       </Text>
                     </InlineStack>
                     {limits.products !== Infinity && (
                       <ProgressBar
                         progress={productUsagePercent}
                         size="small"
-                        tone={
-                          productUsagePercent >= 90 ? "critical" : "primary"
-                        }
+                        tone={productUsagePercent >= 90 ? "critical" : "primary"}
                       />
                     )}
                   </BlockStack>
@@ -1032,23 +880,16 @@ export default function Dashboard() {
                   {/* Fitment usage */}
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd">
-                        Fitments
-                      </Text>
+                      <Text as="span" variant="bodyMd">Fitments</Text>
                       <Text as="span" variant="bodyMd" tone="subdued">
-                        {fitmentCount.toLocaleString()} /{" "}
-                        {limits.fitments === Infinity
-                          ? "\u221E"
-                          : limits.fitments.toLocaleString()}
+                        {`${fitmentCount.toLocaleString()} / ${limits.fitments === Infinity ? "\u221E" : limits.fitments.toLocaleString()}`}
                       </Text>
                     </InlineStack>
                     {limits.fitments !== Infinity && (
                       <ProgressBar
                         progress={fitmentUsagePercent}
                         size="small"
-                        tone={
-                          fitmentUsagePercent >= 90 ? "critical" : "primary"
-                        }
+                        tone={fitmentUsagePercent >= 90 ? "critical" : "primary"}
                       />
                     )}
                   </BlockStack>
