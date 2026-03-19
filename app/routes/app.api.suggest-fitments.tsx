@@ -379,95 +379,67 @@ function buildVehicleProfile(text: string, knownMakes: string[]): VehicleProfile
 // ── Profile-based engine scoring ──────────────────────────────
 
 function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: number; matchedHints: string[] } {
-  let score = 0.15; // Base score for make match
+  let score = 0;
   const matchedHints: string[] = [];
   const engName = (engine.name || "").toLowerCase();
-  const makeName = engine.model.make.name;
 
-  matchedHints.push(makeName);
+  // +0.15 base for make match
+  score += 0.15;
+  matchedHints.push(engine.model.make.name);
 
-  // ─── Displacement match (from engine NAME since displacement_cc is often null) ───
-  if (profile.displacement) {
-    const dispL = (profile.displacement / 1000).toFixed(1);
-    const hasDispInName = engName.includes(dispL);
-    const hasDispInDb = engine.displacement_cc !== null && Math.abs(engine.displacement_cc - profile.displacement) <= 100;
-
-    if (hasDispInName || hasDispInDb) {
-      score += 0.3;
-      matchedHints.push(`${dispL}L`);
-      console.log('[SCORE] disp boost +0.3, score=', score);
-    } else {
-      // Check if engine has a DIFFERENT displacement in its name
-      const engDispMatch = engName.match(/(\d\.\d)/);
-      if (engDispMatch && engDispMatch[1] !== dispL) {
-        score -= 0.5; // WRONG displacement — heavy penalty
-      } else if (engine.displacement_cc !== null && Math.abs(engine.displacement_cc - profile.displacement) > 500) {
-        score -= 0.5; // WRONG displacement from DB — heavy penalty
-      }
-    }
-  }
-
-  // ─── Technology match ───────────────────────────────────────
-  if (profile.technology) {
-    const techLower = profile.technology.toLowerCase();
-    if (engName.includes(techLower)) {
-      score += 0.2;
-      matchedHints.push(profile.technology);
-    }
-  }
-
-  // ─── Model code in engine name ──────────────────────────────
+  // +0.35 if engine name contains a model code from the profile
   for (const code of profile.modelCodes) {
-    if (engName.includes(code.toLowerCase())) {
-      score += 0.3;
+    if (code.length >= 3 && engName.includes(code.toLowerCase())) {
+      score += 0.35;
       matchedHints.push(code);
-      console.log('[SCORE] model code +0.3:', code, 'score=', score);
       break;
     }
   }
 
-  // ─── Engine family match ────────────────────────────────────
-  if (profile.engineFamily) {
-    const familyLower = profile.engineFamily.toLowerCase();
-    if (engName.includes(familyLower) || (engine.code && engine.code.toLowerCase().includes(familyLower))) {
+  // +0.15 if engine name contains displacement (e.g., "2.0" in "2.0 TSI")
+  if (profile.displacement) {
+    const dispL = (profile.displacement / 1000).toFixed(1);
+    if (engName.includes(dispL)) {
       score += 0.15;
+      matchedHints.push(dispL + "L");
+    }
+  }
+
+  // +0.10 if engine name contains technology keyword
+  if (profile.technology && engName.includes(profile.technology.toLowerCase())) {
+    score += 0.10;
+    matchedHints.push(profile.technology);
+  }
+
+  // +0.10 if fuel type matches
+  if (profile.fuelType && engine.fuel_type) {
+    const pf = profile.fuelType.toLowerCase();
+    const ef = engine.fuel_type.toLowerCase();
+    if (ef.includes(pf) || pf.includes(ef)) {
+      score += 0.10;
+      matchedHints.push(profile.fuelType);
+    } else {
+      // Penalize wrong fuel (e.g., Diesel when product says Petrol)
+      score -= 0.30;
+    }
+  }
+
+  // +0.10 if engine family code matches
+  if (profile.engineFamily) {
+    const fam = profile.engineFamily.toLowerCase();
+    if (engName.includes(fam) || (engine.code && engine.code.toLowerCase().includes(fam))) {
+      score += 0.10;
       matchedHints.push(profile.engineFamily);
     }
   }
 
-  // ─── Power match ────────────────────────────────────────────
-  if (profile.powerHp && engine.power_hp) {
-    if (Math.abs(engine.power_hp - profile.powerHp) <= 15) {
-      score += 0.15;
-      matchedHints.push(`${String(profile.powerHp)}hp`);
-    }
+  // +0.05 if power matches (within 20hp)
+  if (profile.powerHp && engine.power_hp && Math.abs(engine.power_hp - profile.powerHp) <= 20) {
+    score += 0.05;
   }
 
-  // ─── Fuel type match/penalty ────────────────────────────────
-  if (profile.fuelType && engine.fuel_type) {
-    const profileFuel = profile.fuelType.toLowerCase();
-    const engineFuel = engine.fuel_type.toLowerCase();
-    if (engineFuel.includes(profileFuel) || profileFuel.includes(engineFuel)) {
-      score += 0.15;
-      matchedHints.push(profile.fuelType);
-      console.log('[SCORE] fuel match +0.15, score=', score);
-    } else {
-      // WRONG fuel type — e.g., profile says Petrol but engine is Diesel
-      score -= 0.4;
-      console.log('[SCORE] WRONG fuel -0.4, profile=', profileFuel, 'engine=', engineFuel, 'score=', score);
-    }
-  }
-
-  // ─── Year range match ──────────────────────────────────────
-  if (profile.yearHint && engine.year_from) {
-    if (engine.year_from <= profile.yearHint && (!engine.year_to || engine.year_to >= profile.yearHint)) {
-      score += 0.1;
-      matchedHints.push(`Year ${String(profile.yearHint)}`);
-    }
-  }
-
-  // Debug: always include raw score
-  matchedHints.push(`[s=${score.toFixed(2)}]`);
+  // Debug
+  matchedHints.push("[s=" + score.toFixed(2) + "]");
 
   return { score: Math.min(1.0, Math.max(0, score)), matchedHints };
 }
@@ -717,7 +689,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         // Only include engines with meaningful match
-        if (score < 0.01) continue;
+        if (score < 0.20) continue;
 
         const displayName = engineRow.name || "Unknown Engine";
         suggestions.push({
