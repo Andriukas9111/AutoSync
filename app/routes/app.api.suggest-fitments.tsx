@@ -408,30 +408,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
 
-      // Path B: Search by engine name patterns (e.g., "%140i%", "%B58%")
+      // Path B: Search by engine name patterns (e.g., "%140i%", "%B58%", "%TSI%")
+      // IMPORTANT: We use .in("model_id", makeModelIds) instead of filtering on
+      // joined table name, because Supabase PostgREST's .eq() on joined tables
+      // combined with .or() on the main table produces incorrect results.
       if (engineNamePatterns.length > 0) {
-        const orFilter = engineNamePatterns.map((p) => `name.ilike.${p}`).join(",");
-        const { data: patternEngines, error: patternError } = await db
-          .from("ymme_engines")
-          .select(`
-            id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
-            torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
-            drive_type, transmission_type, body_type, display_name, modification,
-            model:ymme_models!inner(id, name, generation, year_from, year_to,
-              make:ymme_makes!inner(id, name)
-            )
-          `)
-          .eq("active", true)
-          .eq("ymme_models.ymme_makes.name", makeName)
-          .or(orFilter)
-          .limit(50);
-        if (patternEngines) {
-          engines.push(...patternEngines);
-          diagnostics.push(`Path B: ${String(patternEngines.length)} engines for ${makeName} (patterns: ${engineNamePatterns.join(", ")})`);
-        }
-        if (patternError) {
-          queryError = patternError.message;
-          diagnostics.push(`Path B error for ${makeName}: ${patternError.message}`);
+        const makeId = (makeRows || []).find((r: any) => r.name === makeName)?.id;
+        if (makeId) {
+          const { data: makeModelRows } = await db
+            .from("ymme_models")
+            .select("id")
+            .eq("make_id", makeId)
+            .eq("active", true);
+          const makeModelIds = (makeModelRows || []).map((m: any) => m.id);
+
+          if (makeModelIds.length > 0) {
+            const orFilter = engineNamePatterns.map((p) => `name.ilike.${p}`).join(",");
+            const { data: patternEngines, error: patternError } = await db
+              .from("ymme_engines")
+              .select(`
+                id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
+                torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
+                drive_type, transmission_type, body_type, display_name, modification,
+                model:ymme_models!inner(id, name, generation, year_from, year_to,
+                  make:ymme_makes!inner(id, name)
+                )
+              `)
+              .eq("active", true)
+              .in("model_id", makeModelIds)
+              .or(orFilter)
+              .limit(50);
+            if (patternEngines) {
+              engines.push(...patternEngines);
+              diagnostics.push(`Path B: ${String(patternEngines.length)} engines for ${makeName}`);
+            }
+            if (patternError) {
+              queryError = patternError.message;
+              diagnostics.push(`Path B error for ${makeName}: ${patternError.message}`);
+            }
+          }
         }
       }
 
