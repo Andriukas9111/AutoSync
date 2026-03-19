@@ -301,14 +301,15 @@ const sectionIconStyle = {
 } as const;
 
 const statIconStyle = {
-  width: "24px",
-  height: "24px",
+  width: "28px",
+  height: "28px",
   borderRadius: "var(--p-border-radius-200)",
   background: "var(--p-color-bg-surface-secondary)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   color: "var(--p-color-icon-emphasis)",
+  margin: "0 auto",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -397,71 +398,39 @@ export default function Push() {
           </Layout.Section>
         )}
 
-        {/* Summary card */}
+        {/* Summary stat bar */}
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={sectionIconStyle}>
-                  <Icon source={ExportIcon} />
+          <Card padding="0">
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              borderBottom: "1px solid var(--p-color-border-secondary)",
+            }}>
+              {[
+                { icon: ProductIcon, count: `${productsWithFitments}`, label: "Products ready to push" },
+                { icon: CheckIcon, count: `${pushedCount}`, label: "Products already pushed" },
+                { icon: CollectionIcon, count: `${collectionCount}`, label: "Collections created" },
+                { icon: ClockIcon, count: formatDate(lastPushTime), label: "Last push" },
+              ].map((item, i) => (
+                <div key={item.label} style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
+                }}>
+                  <BlockStack gap="200" inlineAlign="center">
+                    <div style={statIconStyle}>
+                      <Icon source={item.icon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {item.count}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                  </BlockStack>
                 </div>
-                <Text as="h2" variant="headingMd">Summary</Text>
-              </InlineStack>
-              <InlineStack gap="800" wrap>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={statIconStyle}>
-                      <Icon source={ProductIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {productsWithFitments}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Products ready to push
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={statIconStyle}>
-                      <Icon source={CheckIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {pushedCount}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Products already pushed
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={statIconStyle}>
-                      <Icon source={CollectionIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {collectionCount}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Collections created
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={statIconStyle}>
-                      <Icon source={ClockIcon} />
-                    </div>
-                    <Text as="p" variant="bodyMd">
-                      {formatDate(lastPushTime)}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Last push
-                  </Text>
-                </BlockStack>
-              </InlineStack>
-            </BlockStack>
+              ))}
+            </div>
           </Card>
         </Layout.Section>
 

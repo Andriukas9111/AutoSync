@@ -277,59 +277,53 @@ export default function ProvidersIndex() {
     >
       <BlockStack gap="400">
         {/* Stats Dashboard */}
-        <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-          <Card>
-            <BlockStack gap="100">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text variant="bodySm" as="p" tone="subdued">Total Providers</Text>
-                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-info)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={DatabaseIcon} tone="info" />
-                </div>
-              </InlineStack>
-              <Text variant="headingLg" as="p">{`${providerCount}`}</Text>
-              <Text variant="bodySm" as="p" tone="subdued">{`of ${limitLabel} allowed`}</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text variant="bodySm" as="p" tone="subdued">Total Products</Text>
-                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-success)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={ProductIcon} tone="info" />
-                </div>
-              </InlineStack>
-              <Text variant="headingLg" as="p">{`${providers.reduce((sum, p) => sum + (p.product_count || 0), 0)}`}</Text>
-              <Text variant="bodySm" as="p" tone="subdued">across all providers</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text variant="bodySm" as="p" tone="subdued">Total Imports</Text>
-                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-caution)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={ImportIcon} tone="info" />
-                </div>
-              </InlineStack>
-              <Text variant="headingLg" as="p">{`${providers.reduce((sum, p) => sum + (p.import_count || 0), 0)}`}</Text>
-              <Text variant="bodySm" as="p" tone="subdued">files imported</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text variant="bodySm" as="p" tone="subdued">Source Types</Text>
-                <div style={{ width: 28, height: 28, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-fill-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon source={CategoriesIcon} tone="subdued" />
-                </div>
-              </InlineStack>
-              <InlineStack gap="100" wrap>
-                {Object.entries(providers.reduce((acc: Record<string, number>, p) => { acc[p.type] = (acc[p.type] || 0) + 1; return acc; }, {})).map(([type, count]) => (
-                  <Badge key={type} tone={getTypeBadgeTone(type as any)}>{`${count} ${type.toUpperCase()}`}</Badge>
+        {(() => {
+          const totalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
+          const totalImports = providers.reduce((sum, p) => sum + (p.import_count || 0), 0);
+          const sourceTypeCount = new Set(providers.map(p => p.type)).size;
+          const statItems = [
+            { icon: DatabaseIcon, count: `${providerCount}`, label: "Total Providers" },
+            { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products" },
+            { icon: ImportIcon, count: `${totalImports}`, label: "Total Imports" },
+            { icon: CategoriesIcon, count: `${sourceTypeCount}`, label: "Source Types" },
+          ];
+          return (
+            <Card padding="0">
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                borderBottom: "1px solid var(--p-color-border-secondary)",
+              }}>
+                {statItems.map((item, i) => (
+                  <div key={item.label} style={{
+                    padding: "var(--p-space-400)",
+                    borderRight: i < statItems.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                    textAlign: "center",
+                  }}>
+                    <BlockStack gap="200" inlineAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                        margin: "0 auto",
+                      }}>
+                        <Icon source={item.icon} />
+                      </div>
+                      <Text as="p" variant="headingLg" fontWeight="bold">
+                        {item.count}
+                      </Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {item.label}
+                      </Text>
+                    </BlockStack>
+                  </div>
                 ))}
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Plan usage banner */}
         {(nearLimit || atLimit) && (

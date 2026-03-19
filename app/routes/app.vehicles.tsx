@@ -818,81 +818,50 @@ export default function Vehicles() {
             )}
 
             {/* Stats Cards */}
-            <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="400">
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={DatabaseIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">Total Makes</Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {makes.length}
-                  </Text>
-                </BlockStack>
-              </Card>
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={CategoriesIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">Total Models</Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {totalModels.toLocaleString()}
-                  </Text>
-                </BlockStack>
-              </Card>
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={GaugeIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">Total Engines</Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {totalEngines.toLocaleString()}
-                  </Text>
-                </BlockStack>
-              </Card>
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack align="space-between">
-                    <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {activeMakeCount} / {limits.activeMakes === 999_999 ? "\u221E" : limits.activeMakes}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl" fontWeight="bold">
-                    {activeMakeCount}
-                  </Text>
-                  {limits.activeMakes !== 999_999 && (
-                    <ProgressBar progress={activePct} size="small" tone="primary" />
-                  )}
-                </BlockStack>
-              </Card>
-            </InlineGrid>
+            {(() => {
+              const statItems = [
+                { icon: DatabaseIcon, count: `${makes.length}`, label: "Total Makes" },
+                { icon: CategoriesIcon, count: totalModels.toLocaleString(), label: "Total Models" },
+                { icon: GaugeIcon, count: totalEngines.toLocaleString(), label: "Total Engines" },
+                { icon: DatabaseIcon, count: `${activeMakeCount}`, label: "Active Makes" },
+              ];
+              return (
+                <Card padding="0">
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                    borderBottom: "1px solid var(--p-color-border-secondary)",
+                  }}>
+                    {statItems.map((item, i) => (
+                      <div key={item.label} style={{
+                        padding: "var(--p-space-400)",
+                        borderRight: i < statItems.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                        textAlign: "center",
+                      }}>
+                        <BlockStack gap="200" inlineAlign="center">
+                          <div style={{
+                            width: "28px", height: "28px",
+                            borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-surface-secondary)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "var(--p-color-icon-emphasis)",
+                            margin: "0 auto",
+                          }}>
+                            <Icon source={item.icon} />
+                          </div>
+                          <Text as="p" variant="headingLg" fontWeight="bold">
+                            {item.count}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {item.label}
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
 
             {/* Breadcrumb navigation */}
             {renderBreadcrumb()}

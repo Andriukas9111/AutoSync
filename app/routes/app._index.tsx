@@ -307,68 +307,6 @@ function QuickActionCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// KPI Card sub-component
-// ---------------------------------------------------------------------------
-
-function KpiCard({
-  icon,
-  label,
-  value,
-  link,
-  linkLabel,
-  onNavigate,
-  extra,
-}: {
-  icon: any;
-  label: string;
-  value: string;
-  link: string;
-  linkLabel: string;
-  onNavigate: (path: string) => void;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <div style={{ display: "flex", flexDirection: "column", minHeight: "140px" }}>
-        <BlockStack gap="300">
-          <InlineStack gap="200" blockAlign="center">
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: "var(--p-color-bg-surface-secondary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "var(--p-color-icon-emphasis)",
-              }}
-            >
-              <Icon source={icon} />
-            </div>
-            <Text as="p" variant="bodySm" tone="subdued">
-              {label}
-            </Text>
-          </InlineStack>
-          <Text as="p" variant="heading2xl">
-            {value}
-          </Text>
-          {extra}
-        </BlockStack>
-        <div style={{ marginTop: "auto" }}>
-          <Button
-            onClick={() => onNavigate(link)}
-            variant="plain"
-            textAlign="start"
-          >
-            {linkLabel}
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -514,89 +452,63 @@ export default function Dashboard() {
             )}
 
             {/* ─── KPI Metrics Row ─── */}
-            <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="400">
-              <KpiCard
-                icon={ProductIcon}
-                label="Products"
-                value={totalProducts.toLocaleString()}
-                link="/app/products"
-                linkLabel="View all"
-                onNavigate={navigate}
-              />
-              <KpiCard
-                icon={ConnectIcon}
-                label="Fitments"
-                value={fitmentCount.toLocaleString()}
-                link="/app/fitment"
-                linkLabel="View fitments"
-                onNavigate={navigate}
-              />
-              <KpiCard
-                icon={GaugeIcon}
-                label="Coverage"
-                value={`${coverage}%`}
-                link="/app/products"
-                linkLabel="View products"
-                onNavigate={navigate}
-                extra={
-                  <BlockStack gap="100">
-                    <ProgressBar
-                      progress={coverage}
-                      size="small"
-                      tone={coverage >= 80 ? "success" : "primary"}
-                    />
-                    <Badge
-                      tone={
-                        coverage >= 80
-                          ? "success"
-                          : coverage >= 50
-                            ? "warning"
-                            : "critical"
-                      }
-                    >
-                      {coverage >= 80 ? "Good" : coverage >= 50 ? "Fair" : "Low"}
-                    </Badge>
-                  </BlockStack>
-                }
-              />
-              <KpiCard
-                icon={CollectionIcon}
-                label="Collections"
-                value={collectionCount.toLocaleString()}
-                link="/app/collections"
-                linkLabel="Manage"
-                onNavigate={navigate}
-              />
-              <KpiCard
-                icon={PackageIcon}
-                label="Providers"
-                value={String(providerCount)}
-                link="/app/providers"
-                linkLabel="Manage"
-                onNavigate={navigate}
-              />
-              <KpiCard
-                icon={StarFilledIcon}
-                label="Plan"
-                value={plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299"}
-                link="/app/plans"
-                linkLabel={plan === "enterprise" ? "View plan" : "Upgrade"}
-                onNavigate={navigate}
-                extra={
-                  <Badge
-                    tone={
-                      plan === "free"
-                        ? "warning"
-                        : plan === "enterprise"
-                          ? "info"
-                          : "success"
-                    }
-                  >
-                    {planLabel}
-                  </Badge>
-                }
-              />
-            </InlineGrid>
+            {(() => {
+              const planPrice = plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299";
+              const statItems = [
+                { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Products", link: "/app/products", linkLabel: "View all" },
+                { icon: ConnectIcon, count: fitmentCount.toLocaleString(), label: "Fitments", link: "/app/fitment", linkLabel: "View fitments" },
+                { icon: GaugeIcon, count: `${coverage}%`, label: "Coverage", link: "/app/products", linkLabel: "View products" },
+                { icon: CollectionIcon, count: collectionCount.toLocaleString(), label: "Collections", link: "/app/collections", linkLabel: "Manage" },
+                { icon: PackageIcon, count: String(providerCount), label: "Providers", link: "/app/providers", linkLabel: "Manage" },
+                { icon: StarFilledIcon, count: planPrice, label: "Plan", link: "/app/plans", linkLabel: plan === "enterprise" ? "View plan" : "Upgrade" },
+              ];
+              const lastIndex = statItems.length - 1;
+              return (
+                <Card padding="0">
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  }}>
+                    {statItems.map((item, i) => (
+                      <div key={item.label} style={{
+                        padding: "var(--p-space-400)",
+                        borderRight: i < lastIndex ? "1px solid var(--p-color-border-secondary)" : "none",
+                        textAlign: "center",
+                      }}>
+                        <BlockStack gap="200" inlineAlign="center">
+                          <div style={{
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-surface-secondary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--p-color-icon-emphasis)",
+                            margin: "0 auto",
+                          }}>
+                            <Icon source={item.icon} />
+                          </div>
+                          <Text as="p" variant="headingLg" fontWeight="bold">
+                            {item.count}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {item.label}
+                          </Text>
+                          <Button
+                            onClick={() => navigate(item.link)}
+                            variant="plain"
+                            size="slim"
+                          >
+                            {item.linkLabel}
+                          </Button>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
 
             {/* ─── Product Status + Recent Activity ─── */}
             <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">

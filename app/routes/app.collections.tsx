@@ -298,104 +298,65 @@ export default function Collections() {
           </PlanGate>
         </Layout.Section>
 
-        {/* Collection Preview */}
+        {/* Collection Preview stat bar */}
         <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
+          <Card padding="0">
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              borderBottom: "1px solid var(--p-color-border-secondary)",
+            }}>
+              {[
+                { icon: HashtagIcon, count: `${uniqueMakes.length}`, label: "Unique makes in fitments" },
+                { icon: LinkIcon, count: `${uniqueMakeModelCount}`, label: "Unique make + model combos" },
+                { icon: TargetIcon, count: `~${previewCount}`, label: `Collections to create (${STRATEGY_LABELS[strategy]})` },
+              ].map((item, i) => (
+                <div key={item.label} style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < 2 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
                 }}>
-                  <Icon source={ChartVerticalIcon} />
+                  <BlockStack gap="200" inlineAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                      margin: "0 auto",
+                    }}>
+                      <Icon source={item.icon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {item.count}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                  </BlockStack>
                 </div>
-                <Text as="h2" variant="headingMd">Preview</Text>
-              </InlineStack>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Based on your current fitment data and selected strategy, AutoSync
-                would create the following collections.
-              </Text>
-
-              <InlineStack gap="600" wrap>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "22px", height: "22px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={HashtagIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {uniqueMakes.length}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Unique makes in fitments
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "22px", height: "22px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={LinkIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {uniqueMakeModelCount}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Unique make + model combos
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "22px", height: "22px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={TargetIcon} />
-                    </div>
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      ~{previewCount}
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Collections to create ({STRATEGY_LABELS[strategy]})
-                  </Text>
-                </BlockStack>
-              </InlineStack>
-
-              {strategy === "make" && uniqueMakes.length > 0 && (
-                <Box paddingBlockStart="200">
-                  <InlineStack gap="200" wrap>
-                    {uniqueMakes.slice(0, 20).map((make) => (
-                      <Badge key={make as string} tone="info">
-                        {make as string}
-                      </Badge>
-                    ))}
-                    {uniqueMakes.length > 20 && (
-                      <Badge>{`+${uniqueMakes.length - 20} more`}</Badge>
-                    )}
-                  </InlineStack>
-                </Box>
-              )}
-            </BlockStack>
+              ))}
+            </div>
           </Card>
         </Layout.Section>
+
+        {/* Make badges preview */}
+        {strategy === "make" && uniqueMakes.length > 0 && (
+          <Layout.Section>
+            <Card>
+              <InlineStack gap="200" wrap>
+                {uniqueMakes.slice(0, 20).map((make) => (
+                  <Badge key={make as string} tone="info">
+                    {make as string}
+                  </Badge>
+                ))}
+                {uniqueMakes.length > 20 && (
+                  <Badge>{`+${uniqueMakes.length - 20} more`}</Badge>
+                )}
+              </InlineStack>
+            </Card>
+          </Layout.Section>
+        )}
 
         {/* Save Button */}
         <Layout.Section>

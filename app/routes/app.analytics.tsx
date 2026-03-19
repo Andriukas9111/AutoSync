@@ -585,106 +585,50 @@ export default function AnalyticsPage() {
           </Layout.Section>
 
           <Layout.Section>
-            <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={ProductIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Total Products
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl">
-                    {fitmentCoverage.total.toLocaleString()}
-                  </Text>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={GaugeIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      With Fitments
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl">
-                    {fitmentCoverage.withFitments.toLocaleString()}
-                  </Text>
-                  <Badge tone="success">
-                    {`${fitmentCoverage.coveragePercent}% coverage`}
-                  </Badge>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={AlertTriangleIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Without Fitments
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="headingXl">
-                    {fitmentCoverage.withoutFitments.toLocaleString()}
-                  </Text>
-                  {fitmentCoverage.withoutFitments > 0 && (
-                    <Badge tone="warning">Needs mapping</Badge>
-                  )}
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="200">
-                  <InlineStack gap="100" blockAlign="center">
-                    <div style={{
-                      width: "20px", height: "20px",
-                      borderRadius: "var(--p-border-radius-100)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={ChartVerticalIcon} />
-                    </div>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Coverage Progress
-                    </Text>
-                  </InlineStack>
-                  <ProgressBar
-                    progress={fitmentCoverage.coveragePercent}
-                    tone="primary"
-                    size="small"
-                  />
-                  <Text as="p" variant="bodySm">
-                    {fitmentCoverage.coveragePercent}% of products have vehicle fitments
-                  </Text>
-                </BlockStack>
-              </Card>
-            </InlineGrid>
+            {(() => {
+              const statItems = [
+                { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Total Products" },
+                { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
+                { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
+                { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
+              ];
+              return (
+                <Card padding="0">
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                    borderBottom: "1px solid var(--p-color-border-secondary)",
+                  }}>
+                    {statItems.map((item, i) => (
+                      <div key={item.label} style={{
+                        padding: "var(--p-space-400)",
+                        borderRight: i < statItems.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                        textAlign: "center",
+                      }}>
+                        <BlockStack gap="200" inlineAlign="center">
+                          <div style={{
+                            width: "28px", height: "28px",
+                            borderRadius: "var(--p-border-radius-200)",
+                            background: "var(--p-color-bg-surface-secondary)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "var(--p-color-icon-emphasis)",
+                            margin: "0 auto",
+                          }}>
+                            <Icon source={item.icon} />
+                          </div>
+                          <Text as="p" variant="headingLg" fontWeight="bold">
+                            {item.count}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {item.label}
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
           </Layout.Section>
 
           {/* ── Product Status Breakdown ───────────────────── */}
