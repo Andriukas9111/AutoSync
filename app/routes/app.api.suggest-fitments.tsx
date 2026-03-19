@@ -669,6 +669,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "is", "gs", "ls", "lc", "nx", "rx", "ux", "rc", "es", "lx",
       // Mazda/Other
       "mx", "cx", "hr", "cr", "br",
+      // Porsche
+      "718", "911", "914", "924", "928", "944", "959", "968", "912", "918", "356", "901",
       // Misc
       "sl", "gt", "ct",
     ]);
@@ -794,6 +796,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Path A: Query engines for matched model names
       if (modelNameMatchIds.length > 0) {
         for (const modelId of modelNameMatchIds.slice(0, 5)) {
+          let foundForThisModel = 0;
+
           // If we have search patterns, use them to narrow within the model
           if (searchPatterns.length > 0) {
             const orFilter = searchPatterns.map((p) => `name.ilike.${p}`).join(",");
@@ -811,11 +815,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               .eq("model_id", modelId)
               .or(orFilter)
               .limit(20);
-            if (modelEngines) engines.push(...(modelEngines as unknown as EngineRow[]));
+            if (modelEngines) {
+              engines.push(...(modelEngines as unknown as EngineRow[]));
+              foundForThisModel = modelEngines.length;
+            }
           }
 
-          // Also fetch ALL engines for this model (for profile scoring) if no patterns matched
-          if (engines.length === 0) {
+          // Fetch ALL engines for this model if no pattern matches found for THIS model
+          if (foundForThisModel === 0) {
             const { data: allModelEngines } = await db
               .from("ymme_engines")
               .select(`
