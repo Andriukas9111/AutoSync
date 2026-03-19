@@ -325,7 +325,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (modelNameBlocklist.has(mName)) continue;
         // Must be a word boundary match (not substring of a longer word)
         const wordBoundaryRegex = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
-        if (wordBoundaryRegex.test(text)) {
+        if (wordBoundaryRegex.test(allText)) {
           modelNameMatches.push(model.id);
         }
       }
