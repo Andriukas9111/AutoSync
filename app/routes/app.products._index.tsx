@@ -151,7 +151,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const breakdown: Record<string, number> = {};
   for (const p of statusCounts ?? []) {
-    const s = (p as { fitment_status: string }).fitment_status;
+    const s = (p as { fitment_status: string | null }).fitment_status || "unmapped";
     breakdown[s] = (breakdown[s] ?? 0) + 1;
   }
 
@@ -545,16 +545,16 @@ export default function Products() {
           </Banner>
         )}
 
-        {/* ── Status Summary — Individual Stat Cards ── */}
+        {/* ── Status Summary — Individual Stat Cards (matches Fitment Overview) ── */}
         <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 7 }} gap="400">
           {([
-            { key: "unmapped", icon: AlertCircleIcon, label: "Unmapped" },
-            { key: "auto_mapped", icon: WandIcon, label: "Auto Mapped" },
-            { key: "smart_mapped", icon: WandIcon, label: "Smart Mapped" },
-            { key: "manual_mapped", icon: TargetIcon, label: "Manual Mapped" },
-            { key: "partial", icon: AlertTriangleIcon, label: "Partial" },
-            { key: "flagged", icon: FlagIcon, label: "Flagged" },
-          ] as const).map(({ key, icon, label }) => {
+            { key: "unmapped", icon: AlertCircleIcon, label: "Unmapped", critical: true as boolean },
+            { key: "auto_mapped", icon: WandIcon, label: "Auto Mapped", critical: false },
+            { key: "smart_mapped", icon: WandIcon, label: "Smart Mapped", critical: false },
+            { key: "manual_mapped", icon: TargetIcon, label: "Manual Mapped", critical: false },
+            { key: "partial", icon: AlertTriangleIcon, label: "Partial", critical: false },
+            { key: "flagged", icon: FlagIcon, label: "Flagged", critical: false },
+          ]).map(({ key, icon, label, critical }) => {
             const count = statusBreakdown[key] ?? 0;
             const isActive = filters.status === key;
             const cfg = STATUS_CONFIG[key];
@@ -571,7 +571,7 @@ export default function Products() {
                   <BlockStack gap="200">
                     <InlineStack gap="200" blockAlign="center">
                       <div style={{
-                        width: "28px", height: "28px",
+                        width: "32px", height: "32px",
                         borderRadius: "var(--p-border-radius-200)",
                         background: isActive ? "var(--p-color-bg-surface-selected)" : "var(--p-color-bg-surface-secondary)",
                         display: "flex", alignItems: "center", justifyContent: "center",
@@ -582,7 +582,7 @@ export default function Products() {
                       <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
                     </InlineStack>
                     <InlineStack gap="200" blockAlign="baseline">
-                      <Text as="p" variant="headingLg" fontWeight="bold">
+                      <Text as="p" variant="headingLg" fontWeight="bold" tone={critical && count > 0 ? "critical" : undefined}>
                         {count.toLocaleString()}
                       </Text>
                       {cfg?.tone && count > 0 && (
@@ -598,7 +598,7 @@ export default function Products() {
             <BlockStack gap="200">
               <InlineStack gap="200" blockAlign="center">
                 <div style={{
-                  width: "28px", height: "28px",
+                  width: "32px", height: "32px",
                   borderRadius: "var(--p-border-radius-200)",
                   background: "var(--p-color-bg-surface-secondary)",
                   display: "flex", alignItems: "center", justifyContent: "center",

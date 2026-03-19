@@ -80,8 +80,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // ── Data integrity repair: fix products with fitments still marked "unmapped"
-  // Runs BEFORE status counts so the numbers are always correct on this page
+  // ── Data integrity repair ──
+  // 1. Fix products with NULL fitment_status → set to "unmapped"
+  await db.from("products")
+    .update({ fitment_status: "unmapped" })
+    .eq("shop_id", shopId)
+    .is("fitment_status", null);
+
+  // 2. Fix products with fitments still marked "unmapped"
   {
     const { data: fitmentProductIds } = await db
       .from("vehicle_fitments")
