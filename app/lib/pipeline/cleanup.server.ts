@@ -108,14 +108,20 @@ export async function removeAllTags(
   let removed = 0;
   let processed = 0;
 
-  // Get all products that might have our tags
+  // Only process products that have actually been pushed (have fitments)
+  // This avoids looping 1000+ products when nothing was pushed
   const { data: products, error } = await db
     .from("products")
     .select("shopify_product_id")
-    .eq("shop_id", shopId);
+    .eq("shop_id", shopId)
+    .neq("fitment_status", "unmapped");
 
-  if (error || !products) {
-    return { removed: 0, processed: 0, errors: [error?.message ?? "No products found"] };
+  if (error) {
+    return { removed: 0, processed: 0, errors: [error.message] };
+  }
+
+  if (!products || products.length === 0) {
+    return { removed: 0, processed: 0, errors: [] };
   }
 
   for (const product of products) {
@@ -171,13 +177,19 @@ export async function removeAllMetafields(
   let removed = 0;
   let processed = 0;
 
+  // Only process products that have actually been pushed (have fitments)
   const { data: products, error } = await db
     .from("products")
     .select("shopify_product_id")
-    .eq("shop_id", shopId);
+    .eq("shop_id", shopId)
+    .neq("fitment_status", "unmapped");
 
-  if (error || !products) {
-    return { removed: 0, processed: 0, errors: [error?.message ?? "No products found"] };
+  if (error) {
+    return { removed: 0, processed: 0, errors: [error.message] };
+  }
+
+  if (!products || products.length === 0) {
+    return { removed: 0, processed: 0, errors: [] };
   }
 
   for (const product of products) {

@@ -198,6 +198,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (_action === "remove_shopify_tags") {
     try {
       const result = await removeAllTags(shopId, admin);
+      if (result.processed === 0 && result.removed === 0) {
+        return data({
+          success: true,
+          message: "No products with AutoSync tags found. Nothing to remove.",
+        });
+      }
       return data({
         success: true,
         message: `Removed ${result.removed} AutoSync tags from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
@@ -214,6 +220,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (_action === "remove_shopify_metafields") {
     try {
       const result = await removeAllMetafields(shopId, admin);
+      if (result.processed === 0 && result.removed === 0) {
+        return data({
+          success: true,
+          message: "No products with AutoSync metafields found. Nothing to remove.",
+        });
+      }
       return data({
         success: true,
         message: `Removed ${result.removed} AutoSync metafields from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,

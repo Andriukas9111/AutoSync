@@ -189,48 +189,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("sync_status")
       .eq("shop_id", shopId),
 
-    // 2. Count unique engines linked to this tenant's products
+    // 2. Count ALL fitments (not just ones with engine IDs)
     db
       .from("vehicle_fitments")
-      .select("ymme_engine_id")
-      .eq("shop_id", shopId)
-      .not("ymme_engine_id", "is", null),
+      .select("id, ymme_engine_id, make, model, engine")
+      .eq("shop_id", shopId),
 
-    // 3. Fetch 50 vehicles with full YMME data via joins
+    // 3. Fetch vehicles — both with and without ymme_engine_id
     db
       .from("vehicle_fitments")
       .select(
         `
+        id,
         ymme_engine_id,
-        product_id,
-        engine:ymme_engines!ymme_engine_id (
-          id,
-          name,
-          code,
-          displacement_cc,
-          power_hp,
-          power_kw,
-          torque_nm,
-          fuel_type,
-          year_from,
-          year_to,
-          body_type,
-          aspiration,
-          cylinders,
-          cylinder_config,
-          modification,
-          model:ymme_models!model_id (
-            name,
-            generation,
-            make:ymme_makes!make_id (
-              name
-            )
-          )
-        )
+        make,
+        model,
+        engine,
+        engine_code,
+        fuel_type,
+        year_from,
+        year_to,
+        variant,
+        product_id
       `,
       )
       .eq("shop_id", shopId)
-      .not("ymme_engine_id", "is", null)
       .limit(500),
 
     // 4. Fetch synced engine IDs
@@ -258,50 +241,92 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Count unique engines
-  const uniqueEngineIds = availableResult.data
-    ? new Set(availableResult.data.map((r: any) => r.ymme_engine_id))
-    : new Set<string>();
+  // Count unique vehicles — use engine_id if available, else make+model+engine combo
+  const allFitments = availableResult.data ?? [];
+  const uniqueVehicleKeys = new Set<string>();
+  for (const f of allFitments as any[]) {
+    if (f.ymme_engine_id) {
+      uniqueVehicleKeys.add(`engine:${f.ymme_engine_id}`);
+    } else if (f.make && f.model) {
+      uniqueVehicleKeys.add(`text:${f.make}|${f.model}|${f.engine ?? ""}`);
+    }
+  }
 
-  // Build vehicle rows grouped by engine_id
-  const engineMap = new Map<string, VehicleRow>();
-  if (vehiclesResult.data) {
-    for (const row of vehiclesResult.data as any[]) {
-      const engine = row.engine;
-      if (!engine?.id) continue;
-      const eid = engine.id as string;
+  // Look up YMME engine data for fitments that have ymme_engine_id
+  const engineIdsFromFitments = (vehiclesResult.data ?? [])
+    .map((r: any) => r.ymme_engine_id)
+    .filter(Boolean) as string[];
+  const uniqueEngineIds = [...new Set(engineIdsFromFitments)];
 
-      if (engineMap.has(eid)) {
-        // Just increment product count
-        const existing = engineMap.get(eid)!;
-        existing.productCount++;
-      } else {
-        const model = engine.model;
-        const make = model?.make;
-        engineMap.set(eid, {
-          engineId: eid,
-          makeName: make?.name ?? "Unknown",
-          modelName: model?.name ?? "Unknown",
-          generation: model?.generation ?? null,
-          engineName: engine.name ?? null,
-          engineCode: engine.code ?? null,
-          displacementCc: engine.displacement_cc ?? null,
-          powerHp: engine.power_hp ?? null,
-          powerKw: engine.power_kw ?? null,
-          torqueNm: engine.torque_nm ?? null,
-          fuelType: engine.fuel_type ?? null,
-          yearFrom: engine.year_from ?? null,
-          yearTo: engine.year_to ?? null,
-          bodyType: engine.body_type ?? null,
-          aspiration: engine.aspiration ?? null,
-          cylinders: engine.cylinders ?? null,
-          cylinderConfig: engine.cylinder_config ?? null,
-          modification: engine.modification ?? null,
-          productCount: 1,
-        });
+  let ymmeEngineData: Record<string, any> = {};
+  if (uniqueEngineIds.length > 0) {
+    const { data: engines } = await db
+      .from("ymme_engines")
+      .select(`
+        id, name, code, displacement_cc, power_hp, power_kw, torque_nm,
+        fuel_type, year_from, year_to, body_type, aspiration,
+        cylinders, cylinder_config, modification,
+        model:ymme_models!model_id (
+          name, generation,
+          make:ymme_makes!make_id ( name )
+        )
+      `)
+      .in("id", uniqueEngineIds);
+    if (engines) {
+      for (const e of engines) {
+        ymmeEngineData[e.id] = e;
       }
     }
   }
+
+  // Build vehicle rows — group by engine_id or make+model+engine combo
+  const vehicleMap = new Map<string, VehicleRow>();
+  if (vehiclesResult.data) {
+    for (const row of vehiclesResult.data as any[]) {
+      // Determine unique key
+      let key: string;
+      if (row.ymme_engine_id) {
+        key = `engine:${row.ymme_engine_id}`;
+      } else if (row.make && row.model) {
+        key = `text:${row.make}|${row.model}|${row.engine ?? ""}`;
+      } else {
+        continue;
+      }
+
+      if (vehicleMap.has(key)) {
+        vehicleMap.get(key)!.productCount++;
+        continue;
+      }
+
+      // Try YMME enrichment first
+      const ymme = row.ymme_engine_id ? ymmeEngineData[row.ymme_engine_id] : null;
+      const ymmeModel = ymme?.model as any;
+      const ymmeMake = ymmeModel?.make as any;
+
+      vehicleMap.set(key, {
+        engineId: row.ymme_engine_id || key,
+        makeName: ymmeMake?.name ?? row.make ?? "Unknown",
+        modelName: ymmeModel?.name ?? row.model ?? "Unknown",
+        generation: ymmeModel?.generation ?? row.variant ?? null,
+        engineName: ymme?.name ?? row.engine ?? null,
+        engineCode: ymme?.code ?? row.engine_code ?? null,
+        displacementCc: ymme?.displacement_cc ?? null,
+        powerHp: ymme?.power_hp ?? null,
+        powerKw: ymme?.power_kw ?? null,
+        torqueNm: ymme?.torque_nm ?? null,
+        fuelType: ymme?.fuel_type ?? row.fuel_type ?? null,
+        yearFrom: ymme?.year_from ?? row.year_from ?? null,
+        yearTo: ymme?.year_to ?? row.year_to ?? null,
+        bodyType: ymme?.body_type ?? null,
+        aspiration: ymme?.aspiration ?? null,
+        cylinders: ymme?.cylinders ?? null,
+        cylinderConfig: ymme?.cylinder_config ?? null,
+        modification: ymme?.modification ?? null,
+        productCount: 1,
+      });
+    }
+  }
+  const engineMap = vehicleMap;
 
   // Sort by make, then model, then engine name — take first 50
   const vehicles = Array.from(engineMap.values())
@@ -331,7 +356,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     limits,
     allLimits: PLAN_LIMITS,
     syncStats,
-    availableVehicles: uniqueEngineIds.size,
+    availableVehicles: uniqueVehicleKeys.size,
     vehicles,
     syncedEngineIds,
     vehiclePagesEnabled: settingsResult.data?.vehicle_pages_enabled ?? false,
