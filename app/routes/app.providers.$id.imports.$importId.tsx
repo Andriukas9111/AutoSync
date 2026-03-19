@@ -259,7 +259,7 @@ export default function ImportDetail() {
   const duplicateRows = (imp.duplicate_rows as number) ?? 0;
   const errorRows = (imp.error_rows as number) ?? 0;
 
-  const columnMapping = imp.column_mapping as Record<string, string> | null;
+  const columnMapping = imp.column_mapping as Array<{ sourceColumn: string; targetField: string | null }> | null;
   const errors = (imp.errors as Array<Record<string, unknown>>) ?? [];
 
   const handleDeleteProducts = useCallback(() => {
@@ -345,7 +345,7 @@ export default function ImportDetail() {
                     </Badge>
                   }
                 />
-                <DetailRow label="File Size" value={formatFileSize(imp.file_size as number | null)} />
+                <DetailRow label="File Size" value={formatFileSize(imp.file_size_bytes as number | null)} />
                 <DetailRow
                   label="Duration"
                   value={formatDuration(
@@ -385,7 +385,7 @@ export default function ImportDetail() {
         </Card>
 
         {/* Column Mapping Snapshot */}
-        {columnMapping && Object.keys(columnMapping).length > 0 && (
+        {columnMapping && Array.isArray(columnMapping) && columnMapping.length > 0 && (
           <Card>
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">Column Mapping Snapshot</Text>
@@ -393,10 +393,12 @@ export default function ImportDetail() {
               <DataTable
                 columnContentTypes={["text", "text"]}
                 headings={["Source Column", "Target Field"]}
-                rows={Object.entries(columnMapping).map(([source, target]) => [
-                  source,
-                  target,
-                ])}
+                rows={columnMapping
+                  .filter((m) => m.targetField)
+                  .map((m) => [
+                    m.sourceColumn,
+                    m.targetField ?? "(skipped)",
+                  ])}
               />
             </BlockStack>
           </Card>

@@ -88,7 +88,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     provider,
     plan,
     targetFields,
-    shopId,
   };
 };
 
@@ -192,10 +191,27 @@ export default function ProviderImportWizard() {
         body: formData,
       });
 
+      if (!response.ok) {
+        // Try to parse error response, but handle HTML/redirect responses gracefully
+        let errorMessage = `Server error (${response.status})`;
+        try {
+          const result = await response.json();
+          errorMessage = result.error || errorMessage;
+        } catch {
+          // Response wasn't JSON (likely auth redirect)
+          if (response.status === 401 || response.status === 403) {
+            errorMessage = "Session expired — please reload the page";
+          }
+        }
+        setError(errorMessage);
+        setLoading(false);
+        return;
+      }
+
       const result = await response.json();
 
-      if (!response.ok || result.error) {
-        setError(result.error || "Failed to parse file");
+      if (result.error) {
+        setError(result.error);
         setLoading(false);
         return;
       }
@@ -221,7 +237,8 @@ export default function ProviderImportWizard() {
 
       setStep("preview");
     } catch (err) {
-      setError("Network error — please try again");
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(`Failed to parse file: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -270,10 +287,25 @@ export default function ProviderImportWizard() {
 
       setImportProgress(80);
 
+      if (!response.ok) {
+        let errorMessage = `Import failed (${response.status})`;
+        try {
+          const errResult = await response.json();
+          errorMessage = errResult.error || errorMessage;
+        } catch {
+          if (response.status === 401 || response.status === 403) {
+            errorMessage = "Session expired — please reload the page";
+          }
+        }
+        setError(errorMessage);
+        setStep("validate");
+        return;
+      }
+
       const result = await response.json();
 
-      if (!response.ok || result.error) {
-        setError(result.error || "Import failed");
+      if (result.error) {
+        setError(result.error);
         setStep("validate");
         return;
       }
@@ -282,7 +314,8 @@ export default function ProviderImportWizard() {
       setImportProgress(100);
       setStep("complete");
     } catch (err) {
-      setError("Network error during import");
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(`Import failed: ${message}`);
       setStep("validate");
     }
   }, [file, preview, provider.id, mappings, duplicateStrategy]);

@@ -244,16 +244,25 @@ export async function runProviderImport(
     .eq("id", importId);
 
   // 8. Update provider stats
-  const { data: totalProducts } = await db
+  const { count: totalProductCount } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
     .eq("provider_id", providerId);
 
+  // Fetch current import_count for incrementing
+  const { data: provData } = await db
+    .from("providers")
+    .select("import_count")
+    .eq("id", providerId)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
   await db
     .from("providers")
     .update({
-      product_count: (totalProducts as unknown as { count: number })?.count ?? insertedCount,
+      product_count: totalProductCount ?? insertedCount,
+      import_count: (provData?.import_count ?? 0) + 1,
       last_fetch_at: new Date().toISOString(),
       last_import_id: importId,
       status: "active",
@@ -261,20 +270,6 @@ export async function runProviderImport(
     })
     .eq("id", providerId)
     .eq("shop_id", shopId);
-
-  // Increment import_count manually
-  const { data: provData } = await db
-    .from("providers")
-    .select("import_count")
-    .eq("id", providerId)
-    .maybeSingle();
-
-  if (provData) {
-    await db
-      .from("providers")
-      .update({ import_count: (provData.import_count ?? 0) + 1 })
-      .eq("id", providerId);
-  }
 
   return {
     importId,

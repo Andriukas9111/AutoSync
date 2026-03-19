@@ -109,7 +109,7 @@ export async function parseFile(
   options: ParseOptions = {},
 ): Promise<ParsedFile> {
   const format = options.format ?? detectFormat(fileName, content);
-  const maxRows = options.maxPreviewRows ?? 100;
+  const maxRows = options.maxPreviewRows === undefined ? Infinity : options.maxPreviewRows;
   const warnings: string[] = [];
 
   switch (format) {

@@ -63,11 +63,16 @@ export function parseJson(
     items = detected.items;
   }
 
-  if (maxRows) {
+  const totalCount = items.length;
+
+  if (maxRows && maxRows < items.length) {
     items = items.slice(0, maxRows);
   }
 
-  return itemsToResult(items);
+  const result = itemsToResult(items);
+  // Preserve the real total count (not the sliced preview count)
+  result.rowCount = totalCount;
+  return result;
 }
 
 /**
