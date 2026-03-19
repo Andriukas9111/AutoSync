@@ -668,13 +668,25 @@ export default function FitmentManual() {
 
                       {/* Detected hints */}
                       {hints.length > 0 && (
-                        <InlineStack gap="100" wrap>
-                          {hints.map((hint: any, i: number) => (
-                            <Badge key={i} tone="info">
-                              {typeof hint === "string" ? hint : `${(hint.type ?? "").replace(/_/g, " ")}: ${hint.value ?? ""}`}
-                            </Badge>
-                          ))}
-                        </InlineStack>
+                        <BlockStack gap="200">
+                          <Text as="span" variant="bodySm" tone="subdued">Detected in title & description:</Text>
+                          <InlineStack gap="100" wrap>
+                            {hints.map((hint: any, i: number) => {
+                              const label = typeof hint === "string" ? hint : `${(hint.type ?? "").replace(/_/g, " ")}: ${hint.value ?? ""}`;
+                              const tone: "info" | "success" | "warning" | "attention" | undefined =
+                                label.startsWith("make:") ? "success" :
+                                label.startsWith("engine:") ? "info" :
+                                label.endsWith("hp") ? "warning" :
+                                label.endsWith("L") ? "attention" :
+                                undefined;
+                              return (
+                                <Badge key={i} tone={tone}>
+                                  {label}
+                                </Badge>
+                              );
+                            })}
+                          </InlineStack>
+                        </BlockStack>
                       )}
 
                       <Divider />
