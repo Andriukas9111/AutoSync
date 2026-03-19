@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useFetcher, useSearchParams, Link } from "react-router";
 import {
   Page,
   Layout,
@@ -39,6 +39,7 @@ import {
   ChevronUpIcon,
   AutomationIcon,
   TargetIcon,
+  ChevronRightIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -140,13 +141,34 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product ID is required", { status: 400 });
   }
 
-  const [productResult, fitmentsResult] = await Promise.all([
-    db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).single(),
-    db.from("vehicle_fitments").select("*, ymme_engine_id")
-      .eq("product_id", productId)
-      .order("make", { ascending: true })
-      .order("model", { ascending: true })
-      .order("year_from", { ascending: true }),
+  const url = new URL(request.url);
+  const isQueueMode = url.searchParams.get("from") === "fitment";
+
+  // Base queries
+  const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).single();
+  const fitmentsQuery = db.from("vehicle_fitments").select("*, ymme_engine_id")
+    .eq("product_id", productId)
+    .order("make", { ascending: true })
+    .order("model", { ascending: true })
+    .order("year_from", { ascending: true });
+
+  // Queue mode: also fetch progress stats and next product
+  const totalQuery = isQueueMode
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId)
+    : null;
+  const unmappedQuery = isQueueMode
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped")
+    : null;
+  const nextQuery = isQueueMode
+    ? db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").neq("id", productId).order("created_at", { ascending: true }).limit(1).maybeSingle()
+    : null;
+
+  const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
+    productQuery,
+    fitmentsQuery,
+    totalQuery ?? Promise.resolve({ count: 0 }),
+    unmappedQuery ?? Promise.resolve({ count: 0 }),
+    nextQuery ?? Promise.resolve({ data: null }),
   ]);
 
   if (productResult.error || !productResult.data) {
@@ -181,10 +203,21 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }
   }
 
+  // Queue mode data
+  let queueData: { totalProducts: number; unmappedCount: number; nextProductId: string | null } | null = null;
+  if (isQueueMode) {
+    queueData = {
+      totalProducts: (totalResult as any).count ?? 0,
+      unmappedCount: (unmappedResult as any).count ?? 0,
+      nextProductId: (nextResult as any).data?.id ?? null,
+    };
+  }
+
   return {
     product: productResult.data as Product,
     fitments,
     shopDomain: shopId,
+    queueData,
   };
 };
 
@@ -239,7 +272,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    return { success: true, message: "Fitment added" };
+    // Find next unmapped product for queue mode
+    const { data: nextAfterAdd } = await db.from("products")
+      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
+      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+
+    return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
   }
 
   if (intent === "add_suggestion") {
@@ -282,7 +320,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    return { success: true, message: "Suggestion accepted" };
+    // Find next unmapped product for queue mode
+    const { data: nextAfterSuggest } = await db.from("products")
+      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
+      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+
+    return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
   }
 
   if (intent === "delete_fitment") {
@@ -308,6 +351,19 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, message: "Fitment deleted" };
   }
 
+  if (intent === "skip") {
+    // Mark product as flagged and find the next unmapped product
+    await db.from("products")
+      .update({ fitment_status: "flagged", updated_at: new Date().toISOString() })
+      .eq("id", productId).eq("shop_id", shopId);
+
+    const { data: nextProduct } = await db.from("products")
+      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
+      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+
+    return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
+  }
+
   if (intent === "update_status") {
     const newStatus = formData.get("fitment_status") as string;
     const { error: updateError } = await db
@@ -325,12 +381,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain } = useLoaderData<typeof loader>();
+  const { product, fitments, shopDomain, queueData } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isSubmitting = navigation.state === "submitting";
+
+  const isQueueMode = searchParams.get("from") === "fitment";
 
   // Suggestion system
   const suggestionFetcher = useFetcher();
@@ -440,6 +499,24 @@ export default function ProductDetails() {
     [submit],
   );
 
+  // Queue mode: skip handler
+  const handleSkip = useCallback(() => {
+    const formData = new FormData();
+    formData.set("_action", "skip");
+    submit(formData, { method: "POST" });
+  }, [submit]);
+
+  // Queue mode: navigate to next product after skip action
+  useEffect(() => {
+    if (!isQueueMode || !actionData) return;
+    const data = actionData as any;
+    if (data.skipped && data.nextProductId) {
+      navigate(`/app/products/${data.nextProductId}?from=fitment`);
+    } else if (data.skipped && !data.nextProductId) {
+      navigate("/app/fitment/manual");
+    }
+  }, [actionData, isQueueMode, navigate]);
+
   const fmtPrice = (price: string | null) => {
     if (!price) return null;
     const num = parseFloat(price);
@@ -462,14 +539,52 @@ export default function ProductDetails() {
 
   const displayedSuggestions = showAllSuggestions ? availableSuggestions : availableSuggestions.slice(0, 5);
 
+  // Queue mode computed values
+  const queueMapped = queueData ? queueData.totalProducts - queueData.unmappedCount : 0;
+  const queuePercentage = queueData && queueData.totalProducts > 0
+    ? Math.round((queueMapped / queueData.totalProducts) * 100)
+    : 0;
+  const nextProductId = queueData?.nextProductId ?? (actionData as any)?.nextProductId ?? null;
+
   return (
     <Page
       fullWidth
       title={product.title}
-      backAction={{ onAction: () => navigate("/app/products") }}
+      backAction={{ onAction: () => navigate(isQueueMode ? "/app/fitment" : "/app/products") }}
       titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      secondaryActions={isQueueMode ? [
+        {
+          content: "Skip",
+          onAction: handleSkip,
+          destructive: true,
+          disabled: isSubmitting,
+        },
+        ...(nextProductId ? [{
+          content: "Next Product",
+          icon: ChevronRightIcon,
+          onAction: () => navigate(`/app/products/${nextProductId}?from=fitment`),
+        }] : []),
+      ] : undefined}
     >
       <Layout>
+        {/* Queue mode: progress bar */}
+        {isQueueMode && queueData && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="headingSm">{`${queueMapped} of ${queueData.totalProducts} mapped`}</Text>
+                  <InlineStack gap="200">
+                    <Badge tone={queuePercentage === 100 ? "success" : "info"}>{`${queuePercentage}%`}</Badge>
+                    <Badge tone="warning">{`${queueData.unmappedCount} remaining`}</Badge>
+                  </InlineStack>
+                </InlineStack>
+                <ProgressBar progress={queuePercentage} size="small" />
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        )}
+
         {/* Action result banners */}
         {actionData && "error" in actionData && (
           <Layout.Section>
@@ -478,10 +593,20 @@ export default function ProductDetails() {
             </Banner>
           </Layout.Section>
         )}
-        {actionData && "success" in actionData && actionData.message && (
+        {actionData && "success" in actionData && actionData.message && !((actionData as any).skipped) && (
           <Layout.Section>
             <Banner tone="success">
-              <p>{(actionData as any).message}</p>
+              <p>
+                {(actionData as any).message}
+                {isQueueMode && (actionData as any).nextProductId && (
+                  <>
+                    {" "}
+                    <Link to={`/app/products/${(actionData as any).nextProductId}?from=fitment`}>
+                      Map next product
+                    </Link>
+                  </>
+                )}
+              </p>
             </Banner>
           </Layout.Section>
         )}
