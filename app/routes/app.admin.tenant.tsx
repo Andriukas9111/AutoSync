@@ -55,6 +55,7 @@ function capitalisePlan(plan: string): string {
 const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
   unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
+  smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual" },
   partial: { tone: "warning", label: "Partial" },
   flagged: { tone: "critical", label: "Flagged" },
@@ -89,6 +90,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Status breakdown counts
     unmappedRes,
     autoMappedRes,
+    smartMappedRes,
     manualMappedRes,
     partialRes,
     flaggedRes,
@@ -119,6 +121,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Fitment status breakdown
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
+    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "partial"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
@@ -146,13 +149,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const statusBreakdown = {
     unmapped: unmappedRes.count ?? 0,
     auto_mapped: autoMappedRes.count ?? 0,
+    smart_mapped: smartMappedRes.count ?? 0,
     manual_mapped: manualMappedRes.count ?? 0,
     partial: partialRes.count ?? 0,
     flagged: flaggedRes.count ?? 0,
   };
 
   const totalProductCount = Object.values(statusBreakdown).reduce((a, b) => a + b, 0);
-  const mappedCount = statusBreakdown.auto_mapped + statusBreakdown.manual_mapped;
+  const mappedCount = statusBreakdown.auto_mapped + statusBreakdown.smart_mapped + statusBreakdown.manual_mapped;
   const coveragePercent = totalProductCount > 0 ? Math.round((mappedCount / totalProductCount) * 100) : 0;
 
   // Count top makes from fitments

@@ -58,6 +58,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalProductsResult,
     unmappedResult,
     autoMappedResult,
+    smartMappedResult,
     manualMappedResult,
     flaggedResult,
     // Fitment stats
@@ -86,6 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
     // Fitment count
@@ -122,9 +124,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const totalProducts = totalProductsResult.count ?? 0;
   const unmapped = unmappedResult.count ?? 0;
   const autoMapped = autoMappedResult.count ?? 0;
+  const smartMapped = smartMappedResult.count ?? 0;
   const manualMapped = manualMappedResult.count ?? 0;
   const flagged = flaggedResult.count ?? 0;
-  const mapped = autoMapped + manualMapped;
+  const mapped = autoMapped + smartMapped + manualMapped;
 
   // Top makes from fitment data
   const makeCounts = new Map<string, number>();
@@ -150,6 +153,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     totalProducts,
     unmapped,
     autoMapped,
+    smartMapped,
     manualMapped,
     flagged,
     mapped,
@@ -379,6 +383,7 @@ export default function Dashboard() {
     totalProducts,
     unmapped,
     autoMapped,
+    smartMapped,
     manualMapped,
     flagged,
     mapped,
@@ -711,6 +716,47 @@ export default function Dashboard() {
                           <Text as="span" variant="bodySm" tone="subdued">
                             {totalProducts > 0
                               ? `${Math.round((autoMapped / totalProducts) * 100)}%`
+                              : "0%"}
+                          </Text>
+                        </InlineStack>
+                      </InlineStack>
+
+                      {/* Smart Mapped */}
+                      <InlineStack
+                        align="space-between"
+                        blockAlign="center"
+                      >
+                        <InlineStack gap="200" blockAlign="center">
+                          <div
+                            style={{
+                              width: "22px",
+                              height: "22px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              background: "var(--p-color-bg-fill-success-secondary)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              color: "var(--p-color-icon-success)",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Icon source={WandIcon} />
+                          </div>
+                          <Text as="span" variant="bodyMd">
+                            Smart Mapped
+                          </Text>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text
+                            as="span"
+                            variant="bodyMd"
+                            fontWeight="semibold"
+                          >
+                            {smartMapped}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {totalProducts > 0
+                              ? `${Math.round((smartMapped / totalProducts) * 100)}%`
                               : "0%"}
                           </Text>
                         </InlineStack>

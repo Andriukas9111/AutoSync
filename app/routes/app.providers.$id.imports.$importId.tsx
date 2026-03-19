@@ -56,6 +56,7 @@ const FITMENT_STATUS_CONFIG: Record<
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
+  smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   review: { tone: "warning", label: "Review" },
   error: { tone: "critical", label: "Error" },

@@ -209,7 +209,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Statuses
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Products move through statuses: unmapped, auto_mapped, manual_mapped, partial,
+              Products move through statuses: unmapped, auto_mapped, smart_mapped, manual_mapped, partial,
               and flagged. You can filter the queue by status to focus on what needs attention.
             </Text>
           </BlockStack>

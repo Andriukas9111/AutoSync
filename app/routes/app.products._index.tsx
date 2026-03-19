@@ -30,6 +30,7 @@ import {
   Divider,
   IndexFilters,
   Icon,
+  InlineGrid,
   useSetIndexFiltersMode,
   useIndexResourceState,
   type IndexFiltersProps,
@@ -41,6 +42,11 @@ import {
   ListBulletedIcon,
   ChartVerticalFilledIcon,
   ImportIcon,
+  WandIcon,
+  TargetIcon,
+  AlertTriangleIcon,
+  AlertCircleIcon,
+  FlagIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -57,6 +63,7 @@ const STATUS_CONFIG: Record<
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
+  smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
   flagged: { tone: "critical", label: "Flagged" },
@@ -66,6 +73,7 @@ const STATUS_OPTIONS = [
   { label: "All Statuses", value: "" },
   { label: "Unmapped", value: "unmapped" },
   { label: "Auto Mapped", value: "auto_mapped" },
+  { label: "Smart Mapped", value: "smart_mapped" },
   { label: "Manual Mapped", value: "manual_mapped" },
   { label: "Partial", value: "partial" },
   { label: "Flagged", value: "flagged" },
@@ -537,59 +545,75 @@ export default function Products() {
           </Banner>
         )}
 
-        {/* ── Status Summary ── */}
-        <Card>
-          <BlockStack gap="400">
-          <InlineStack gap="200" blockAlign="center">
-            <div style={{
-              width: "28px", height: "28px",
-              borderRadius: "var(--p-border-radius-200)",
-              background: "var(--p-color-bg-surface-secondary)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "var(--p-color-icon-emphasis)",
-            }}>
-              <Icon source={ChartVerticalFilledIcon} />
-            </div>
-            <Text as="h2" variant="headingMd">Status Overview</Text>
-          </InlineStack>
-          <InlineStack gap="400" align="start" wrap>
-            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => {
-              const count = statusBreakdown[key] ?? 0;
-              const isActive = filters.status === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => updateFilters("status", isActive ? "" : key)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    backgroundColor: isActive ? "var(--p-color-bg-surface-hover)" : "transparent",
-                    transition: "background-color 0.15s",
-                  }}
-                >
-                  <BlockStack gap="100" inlineAlign="center">
-                    <Text as="p" variant="headingLg" fontWeight="bold" alignment="center">
-                      {count}
-                    </Text>
-                    <Badge tone={cfg.tone}>{cfg.label}</Badge>
+        {/* ── Status Summary — Individual Stat Cards ── */}
+        <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 7 }} gap="400">
+          {([
+            { key: "unmapped", icon: AlertCircleIcon, label: "Unmapped" },
+            { key: "auto_mapped", icon: WandIcon, label: "Auto Mapped" },
+            { key: "smart_mapped", icon: WandIcon, label: "Smart Mapped" },
+            { key: "manual_mapped", icon: TargetIcon, label: "Manual Mapped" },
+            { key: "partial", icon: AlertTriangleIcon, label: "Partial" },
+            { key: "flagged", icon: FlagIcon, label: "Flagged" },
+          ] as const).map(({ key, icon, label }) => {
+            const count = statusBreakdown[key] ?? 0;
+            const isActive = filters.status === key;
+            const cfg = STATUS_CONFIG[key];
+            return (
+              <div
+                key={key}
+                role="button"
+                tabIndex={0}
+                onClick={() => updateFilters("status", isActive ? "" : key)}
+                onKeyDown={(e) => { if (e.key === "Enter") updateFilters("status", isActive ? "" : key); }}
+                style={{ cursor: "pointer" }}
+              >
+                <Card>
+                  <BlockStack gap="200">
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{
+                        width: "28px", height: "28px",
+                        borderRadius: "var(--p-border-radius-200)",
+                        background: isActive ? "var(--p-color-bg-surface-selected)" : "var(--p-color-bg-surface-secondary)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "var(--p-color-icon-emphasis)",
+                      }}>
+                        <Icon source={icon} />
+                      </div>
+                      <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+                    </InlineStack>
+                    <InlineStack gap="200" blockAlign="baseline">
+                      <Text as="p" variant="headingLg" fontWeight="bold">
+                        {count.toLocaleString()}
+                      </Text>
+                      {cfg?.tone && count > 0 && (
+                        <Badge tone={cfg.tone}>{`${totalCount > 0 ? Math.round((count / totalCount) * 100) : 0}%`}</Badge>
+                      )}
+                    </InlineStack>
                   </BlockStack>
-                </button>
-              );
-            })}
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center" }}>
-              <BlockStack gap="100" inlineAlign="center">
-                <Text as="p" variant="headingLg" fontWeight="bold" alignment="center">
-                  {totalCount}
-                </Text>
+                </Card>
+              </div>
+            );
+          })}
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div style={{
+                  width: "28px", height: "28px",
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "var(--p-color-icon-emphasis)",
+                }}>
+                  <Icon source={ProductIcon} />
+                </div>
                 <Text as="p" variant="bodySm" tone="subdued">Total</Text>
-              </BlockStack>
-            </div>
-          </InlineStack>
-          </BlockStack>
-        </Card>
+              </InlineStack>
+              <Text as="p" variant="headingLg" fontWeight="bold">
+                {totalCount.toLocaleString()}
+              </Text>
+            </BlockStack>
+          </Card>
+        </InlineGrid>
 
         {/* ── Filters Row ── */}
         <Card padding="400">

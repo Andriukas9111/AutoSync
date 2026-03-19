@@ -109,6 +109,7 @@ function formatFitmentEngine(fitment: Fitment): string | null {
 const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
   unmapped: { tone: undefined, label: "Unmapped" },
   auto_mapped: { tone: "info", label: "Auto Mapped" },
+  smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
   flagged: { tone: "critical", label: "Flagged" },
@@ -286,6 +287,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const engineName = (formData.get("engine_name") as string) || null;
     const engineCode = (formData.get("engine_code") as string) || null;
     const fuelType = (formData.get("fuel_type") as string) || null;
+    const ymmeEngineId = (formData.get("ymme_engine_id") as string) || null;
     const yearFrom = formData.get("year_from") ? parseInt(formData.get("year_from") as string, 10) : null;
     const yearTo = formData.get("year_to") ? parseInt(formData.get("year_to") as string, 10) : null;
     const confidence = formData.get("confidence") ? parseFloat(formData.get("confidence") as string) : 0.5;
@@ -301,7 +303,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       make, model, variant,
       year_from: yearFrom, year_to: yearTo,
       engine: engineName, engine_code: engineCode, fuel_type: fuelType,
-      extraction_method: "suggestion",
+      ymme_engine_id: ymmeEngineId,
+      extraction_method: "smart",
       confidence_score: confidence,
     });
 
@@ -316,7 +319,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     if (currentProduct?.fitment_status === "unmapped") {
       await db.from("products")
-        .update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
+        .update({ fitment_status: "smart_mapped", updated_at: new Date().toISOString() })
         .eq("id", productId).eq("shop_id", shopId);
     }
 
@@ -464,6 +467,7 @@ export default function ProductDetails() {
       formData.set("model", suggestion.model?.name || "");
       if (suggestion.engine) {
         formData.set("engine_name", suggestion.engine.displayName || suggestion.engine.name || "");
+        if (suggestion.engine.id) formData.set("ymme_engine_id", suggestion.engine.id);
         if (suggestion.engine.code) formData.set("engine_code", suggestion.engine.code);
         if (suggestion.engine.fuelType) formData.set("fuel_type", suggestion.engine.fuelType);
       }
@@ -908,9 +912,13 @@ export default function ProductDetails() {
                                 {fitment.extraction_method && (
                                   <Badge tone={
                                     fitment.extraction_method === "manual" ? "success" :
-                                    fitment.extraction_method === "suggestion" ? "info" : "warning"
+                                    fitment.extraction_method === "smart" ? "success" :
+                                    fitment.extraction_method === "auto" ? "info" : "warning"
                                   }>
-                                    {fitment.extraction_method}
+                                    {fitment.extraction_method === "smart" ? "Smart" :
+                                     fitment.extraction_method === "manual" ? "Manual" :
+                                     fitment.extraction_method === "auto" ? "Auto" :
+                                     fitment.extraction_method}
                                   </Badge>
                                 )}
                               </InlineStack>
@@ -1030,6 +1038,7 @@ export default function ProductDetails() {
                   options={[
                     { label: "Unmapped", value: "unmapped" },
                     { label: "Auto Mapped", value: "auto_mapped" },
+                    { label: "Smart Mapped", value: "smart_mapped" },
                     { label: "Manual Mapped", value: "manual_mapped" },
                     { label: "Partial", value: "partial" },
                     { label: "Flagged", value: "flagged" },

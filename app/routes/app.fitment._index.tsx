@@ -80,7 +80,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "manual_mapped", "partial", "flagged"];
+  // ── Data integrity repair: fix products with fitments still marked "unmapped"
+  // Runs BEFORE status counts so the numbers are always correct on this page
+  {
+    const { data: fitmentProductIds } = await db
+      .from("vehicle_fitments")
+      .select("product_id, extraction_method")
+      .eq("shop_id", shopId);
+    if (fitmentProductIds && fitmentProductIds.length > 0) {
+      const pidSet = [...new Set(fitmentProductIds.map((f: { product_id: string }) => f.product_id))];
+      const { data: stillUnmapped } = await db
+        .from("products")
+        .select("id")
+        .eq("shop_id", shopId)
+        .eq("fitment_status", "unmapped")
+        .in("id", pidSet);
+      if (stillUnmapped && stillUnmapped.length > 0) {
+        for (const prod of stillUnmapped) {
+          const methods = fitmentProductIds
+            .filter((f: { product_id: string }) => f.product_id === prod.id)
+            .map((f: { extraction_method: string | null }) => f.extraction_method);
+          const newStatus = methods.includes("smart") ? "smart_mapped"
+            : methods.includes("manual") ? "manual_mapped"
+            : "auto_mapped";
+          await db.from("products")
+            .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
+            .eq("id", prod.id).eq("shop_id", shopId);
+        }
+      }
+    }
+  }
+
+  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged"];
 
   const [
     totalCountResult,
@@ -222,6 +253,7 @@ function formatYearRange(from: number | null, to: number | null): string {
 const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | undefined> = {
   unmapped: undefined,
   auto_mapped: "info",
+  smart_mapped: "success",
   manual_mapped: "success",
   partial: "warning",
   flagged: "critical",
@@ -230,6 +262,7 @@ const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | 
 const STATUS_LABEL: Record<string, string> = {
   unmapped: "Unmapped",
   auto_mapped: "Auto Mapped",
+  smart_mapped: "Smart Mapped",
   manual_mapped: "Manual",
   partial: "Partial",
   flagged: "Flagged",
@@ -297,11 +330,12 @@ export default function Fitment() {
   }, [extractFetcher]);
 
   const autoMapped = getCount(statusCounts, "auto_mapped");
+  const smartMapped = getCount(statusCounts, "smart_mapped");
   const manualMapped = getCount(statusCounts, "manual_mapped");
   const flagged = getCount(statusCounts, "flagged");
   const partial = getCount(statusCounts, "partial");
   const unmapped = getCount(statusCounts, "unmapped");
-  const totalMapped = autoMapped + manualMapped;
+  const totalMapped = autoMapped + smartMapped + manualMapped;
   const coveragePercent = totalProducts > 0 ? Math.round((totalMapped / totalProducts) * 100) : 0;
 
   return (
@@ -322,7 +356,7 @@ export default function Fitment() {
     >
       <BlockStack gap="600">
         {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 2, sm: 3, md: 3, lg: 6 }} gap="400">
+        <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 7 }} gap="400">
           <Card>
             <BlockStack gap="200">
               <InlineStack gap="200" blockAlign="center">
@@ -362,6 +396,22 @@ export default function Fitment() {
                   {autoMapped.toLocaleString()}
                 </Text>
                 <Badge tone="info">{formatPercent(autoMapped, totalProducts)}</Badge>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack gap="200" blockAlign="center">
+                <div style={statIconBadgeStyle}>
+                  <Icon source={WandIcon} />
+                </div>
+                <Text as="p" variant="bodySm" tone="subdued">Smart Mapped</Text>
+              </InlineStack>
+              <InlineStack gap="200" blockAlign="baseline">
+                <Text as="p" variant="headingLg" fontWeight="bold">
+                  {smartMapped.toLocaleString()}
+                </Text>
+                <Badge tone="success">{formatPercent(smartMapped, totalProducts)}</Badge>
               </InlineStack>
             </BlockStack>
           </Card>
@@ -641,6 +691,9 @@ export default function Fitment() {
                                 formatYearRange(f.year_from, f.year_to),
                                 f.engine || f.engine_code || "-",
                                 f.fuel_type || "-",
+                                f.extraction_method === "smart" ? "Smart" :
+                                f.extraction_method === "manual" ? "Manual" :
+                                f.extraction_method === "auto" ? "Auto" :
                                 f.extraction_method || "-",
                               ])}
                             />

@@ -1,6 +1,6 @@
 export type PlanTier = "free" | "starter" | "growth" | "professional" | "business" | "enterprise";
 
-export type FitmentStatus = "unmapped" | "auto_mapped" | "manual_mapped" | "partial" | "flagged";
+export type FitmentStatus = "unmapped" | "auto_mapped" | "smart_mapped" | "manual_mapped" | "partial" | "flagged";
 
 export type SyncJobType = "fetch" | "extract" | "push" | "provider_import" | "scrape";
 export type SyncJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
