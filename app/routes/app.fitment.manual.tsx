@@ -1,6 +1,6 @@
+import { useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate } from "react-router";
-import { redirect } from "react-router";
 import {
   Page,
   Layout,
@@ -11,6 +11,8 @@ import {
   Badge,
   ProgressBar,
   BlockStack,
+  Spinner,
+  Box,
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
@@ -25,42 +27,71 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const specificProductId = url.searchParams.get("product_id");
 
-  // If a specific product was requested, redirect straight to it
-  if (specificProductId) {
-    return redirect(`/app/products/${specificProductId}?from=fitment`);
-  }
-
   // Find the next unmapped product + stats in parallel
   const [totalResult, unmappedResult, nextResult] = await Promise.all([
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    specificProductId
+      ? db.from("products").select("id").eq("shop_id", shopId).eq("id", specificProductId).maybeSingle()
+      : db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
-  const nextProduct = nextResult.data;
-
-  // If there's an unmapped product, redirect to it in queue mode
-  if (nextProduct) {
-    return redirect(`/app/products/${nextProduct.id}?from=fitment`);
-  }
-
-  // All mapped — show completion state
   const total = totalResult.count ?? 0;
   const unmapped = unmappedResult.count ?? 0;
+  const nextProduct = nextResult.data;
+
   return {
     totalProducts: total,
     mappedCount: total - unmapped,
+    nextProductId: nextProduct?.id ?? null,
   };
 };
 
-// ── Component (only renders when all products are mapped) ────────────────────
+// ── Component ────────────────────────────────────────────────────────────────
 
 export default function FitmentManualRedirector() {
-  const { totalProducts, mappedCount } = useLoaderData<typeof loader>();
+  const { totalProducts, mappedCount, nextProductId } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const percentage = totalProducts > 0 ? Math.round((mappedCount / totalProducts) * 100) : 100;
 
+  // Client-side navigation to product page (preserves Shopify session)
+  useEffect(() => {
+    if (nextProductId) {
+      navigate(`/app/products/${nextProductId}?from=fitment`, { replace: true });
+    }
+  }, [nextProductId, navigate]);
+
+  // If navigating to a product, show loading state
+  if (nextProductId) {
+    return (
+      <Page title="Manual Fitment Mapping">
+        <Layout>
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="p" variant="headingSm">{`${mappedCount} of ${totalProducts} mapped`}</Text>
+                  <Badge tone="info">{`${percentage}%`}</Badge>
+                </InlineStack>
+                <ProgressBar progress={percentage} size="small" />
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+          <Layout.Section>
+            <Box padding="800">
+              <BlockStack gap="200" inlineAlign="center">
+                <Spinner size="large" />
+                <Text as="p" tone="subdued">Loading next product...</Text>
+              </BlockStack>
+            </Box>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  // All mapped — show completion state
   return (
     <Page
       title="Manual Fitment Mapping"
@@ -72,9 +103,7 @@ export default function FitmentManualRedirector() {
             <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="p" variant="headingSm">{`${mappedCount} of ${totalProducts} mapped`}</Text>
-                <InlineStack gap="200">
-                  <Badge tone="success">{`${percentage}%`}</Badge>
-                </InlineStack>
+                <Badge tone="success">{`${percentage}%`}</Badge>
               </InlineStack>
               <ProgressBar progress={percentage} size="small" tone="success" />
             </BlockStack>
@@ -87,9 +116,7 @@ export default function FitmentManualRedirector() {
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               action={{ content: "Back to Fitment Overview", onAction: () => navigate("/app/fitment") }}
             >
-              <p>
-                Every product in your catalog now has vehicle fitment data. Great work!
-              </p>
+              <p>Every product in your catalog now has vehicle fitment data.</p>
             </EmptyState>
           </Card>
         </Layout.Section>
