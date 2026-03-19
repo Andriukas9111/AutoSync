@@ -297,48 +297,98 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const suggestions: SuggestedFitment[] = [];
 
     for (const makeName of tokens.makes) {
-      // Build ILIKE patterns from model codes
-      const searchPatterns = tokens.modelCodes.map((code) => `%${code}%`);
+      // Build ILIKE patterns from model codes (search in engine names)
+      const engineNamePatterns = tokens.modelCodes.map((code) => `%${code}%`);
 
-      // Also search by engine codes if no model codes found
-      if (searchPatterns.length === 0 && tokens.engineCodes.length > 0) {
-        for (const code of tokens.engineCodes) {
-          searchPatterns.push(`%${code}%`);
+      // Also search by engine codes
+      for (const code of tokens.engineCodes) {
+        engineNamePatterns.push(`%${code}%`);
+      }
+
+      // ALSO extract model NAMES from text (Supra, Z4, Golf, Civic, etc.)
+      // Query the DB for model names belonging to this make
+      const { data: makeModels } = await db
+        .from("ymme_models")
+        .select("id, name")
+        .eq("make_id", (makeRows || []).find((r: any) => r.name === makeName)?.id || "")
+        .eq("active", true);
+
+      const modelNameMatches: string[] = [];
+      const textLower = allText.toLowerCase();
+      for (const model of makeModels || []) {
+        // Only match model names that are 3+ chars to avoid false positives
+        if (model.name.length >= 3 && textLower.includes(model.name.toLowerCase())) {
+          modelNameMatches.push(model.id);
         }
       }
 
-      if (searchPatterns.length === 0) {
-        diagnostics.push(`Make "${makeName}" found but no model/engine codes to search`);
-        continue;
+      // If we have model name matches, query engines by model_id directly
+      // If we have engine name patterns, query by name ILIKE
+      // Combine both approaches
+      let engines: any[] = [];
+      let queryError: string | null = null;
+
+      // Path A: Search by model name (e.g., "Supra", "Z4", "Golf")
+      if (modelNameMatches.length > 0) {
+        for (const modelId of modelNameMatches.slice(0, 5)) {
+          const { data: modelEngines, error: modelError } = await db
+            .from("ymme_engines")
+            .select(`
+              id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
+              torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
+              drive_type, transmission_type, body_type, display_name, modification,
+              model:ymme_models!inner(id, name, generation, year_from, year_to,
+                make:ymme_makes!inner(id, name)
+              )
+            `)
+            .eq("active", true)
+            .eq("model_id", modelId)
+            .limit(20);
+          if (modelEngines) engines.push(...modelEngines);
+          if (modelError) queryError = modelError.message;
+        }
       }
 
-      // Build the OR filter for name ILIKE patterns
-      const orFilter = searchPatterns.map((p) => `name.ilike.${p}`).join(",");
+      // Path B: Search by engine name patterns (e.g., "%140i%", "%B58%")
+      if (engineNamePatterns.length > 0) {
+        const orFilter = engineNamePatterns.map((p) => `name.ilike.${p}`).join(",");
+        const { data: patternEngines, error: patternError } = await db
+          .from("ymme_engines")
+          .select(`
+            id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
+            torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
+            drive_type, transmission_type, body_type, display_name, modification,
+            model:ymme_models!inner(id, name, generation, year_from, year_to,
+              make:ymme_makes!inner(id, name)
+            )
+          `)
+          .eq("active", true)
+          .eq("ymme_models.ymme_makes.name", makeName)
+          .or(orFilter)
+          .limit(50);
+        if (patternEngines) engines.push(...patternEngines);
+        if (patternError) queryError = patternError.message;
+      }
 
-      const { data: engines, error } = await db
-        .from("ymme_engines")
-        .select(`
-          id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
-          torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
-          drive_type, transmission_type, body_type, display_name, modification,
-          model:ymme_models!inner(id, name, generation, year_from, year_to,
-            make:ymme_makes!inner(id, name)
-          )
-        `)
-        .eq("active", true)
-        .eq("ymme_models.ymme_makes.name", makeName)
-        .or(orFilter)
-        .limit(50);
+      const error = queryError;
 
       if (error) {
-        diagnostics.push(`DB error for ${makeName}: ${error.message}`);
+        diagnostics.push(`DB error for ${makeName}: ${error}`);
         continue;
       }
 
-      if (!engines || engines.length === 0) {
-        diagnostics.push(`No engines found for ${makeName} with patterns: ${searchPatterns.join(", ")}`);
+      if (engines.length === 0) {
+        diagnostics.push(`No engines found for ${makeName} (models: ${modelNameMatches.length}, patterns: ${engineNamePatterns.length})`);
         continue;
       }
+
+      // Deduplicate engines by ID (model name search + pattern search may overlap)
+      const seenEngineIds = new Set<string>();
+      engines = engines.filter((e: any) => {
+        if (seenEngineIds.has(e.id)) return false;
+        seenEngineIds.add(e.id);
+        return true;
+      });
 
       diagnostics.push(`Found ${String(engines.length)} engines for ${makeName}`);
 
