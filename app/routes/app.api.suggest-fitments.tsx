@@ -315,14 +315,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       const modelNameMatches: string[] = [];
       const textLower = allText.toLowerCase();
-      // Common short words that are also model names — blocklist
-      const modelNameBlocklist = new Set(["is", "it", "go", "up", "on", "do", "be", "am", "an", "or", "no", "so", "us", "by", "he", "me", "we", "of", "to", "in", "at", "as", "if", "my", "any", "all", "can", "may", "one", "two", "new", "old", "big", "top", "its", "has", "had", "set", "get", "use", "run", "see", "let", "put", "try", "add", "end", "own", "way", "day", "ist", "will", "van", "bee", "ion"]);
+      // Common English words that happen to be model names — blocklist
+      const modelNameBlocklist = new Set(["is", "it", "go", "up", "on", "do", "be", "am", "an", "or", "no", "so", "us", "by", "he", "me", "we", "of", "to", "in", "at", "as", "if", "my", "any", "all", "can", "may", "one", "two", "new", "old", "big", "top", "its", "has", "had", "set", "get", "use", "run", "see", "let", "put", "try", "add", "end", "own", "way", "day", "ist", "will", "van", "bee", "ion", "pro", "max", "fit", "can"]);
+
+      // Short model names that ARE valid car models (allow these even though they're <=3 chars)
+      const validShortModels = new Set(["z3", "z4", "z8", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "xm", "i3", "i4", "i5", "i7", "i8", "ix", "m2", "m3", "m4", "m5", "m6", "m8", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "q2", "q3", "q4", "q5", "q7", "q8", "s1", "s3", "s4", "s5", "s6", "s7", "s8", "r8", "tt", "rs", "sl", "gt", "ct", "is", "gs", "ls", "lc", "nx", "rx", "ux", "rc", "es", "lx", "mx", "cx", "hr", "cr", "br"]);
 
       for (const model of makeModels || []) {
         const mName = model.name.toLowerCase();
-        // Skip very short names (3 chars or less) and blocklisted words
-        if (model.name.length <= 3) continue;
+        // Skip blocklisted common words
         if (modelNameBlocklist.has(mName)) continue;
+        // For short names (<=3 chars), only allow known valid car models
+        if (model.name.length <= 3 && !validShortModels.has(mName)) continue;
         // Must be a word boundary match (not substring of a longer word)
         const wordBoundaryRegex = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, "i");
         if (wordBoundaryRegex.test(allText)) {
