@@ -23,7 +23,15 @@ import {
   EmptyState,
   Thumbnail,
   Link,
+  Icon,
 } from "@shopify/polaris";
+import {
+  ProductIcon,
+  LinkIcon,
+  ChartVerticalFilledIcon,
+  ConnectIcon,
+  RefreshIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -379,39 +387,46 @@ export default function TenantDetail() {
         )}
 
         {/* ── KPI Cards ── */}
-        <InlineGrid columns={{ xs: 2, sm: 2, md: 5 }} gap="400">
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">Products</Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">{totalProductCount.toLocaleString()}</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">Fitments</Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">{totalFitments.toLocaleString()}</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">Coverage</Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">{coveragePercent}%</Text>
-              <ProgressBar progress={coveragePercent} size="small" tone="primary" />
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">Providers</Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">{providers.length}</Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">Sync Jobs</Text>
-              <Text as="p" variant="headingLg" fontWeight="bold">{syncJobs.length}</Text>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+        <Card padding="0">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            borderBottom: "1px solid var(--p-color-border-secondary)",
+          }}>
+            {[
+              { icon: ProductIcon, count: totalProductCount.toLocaleString(), label: "Products" },
+              { icon: LinkIcon, count: totalFitments.toLocaleString(), label: "Fitments" },
+              { icon: ChartVerticalFilledIcon, count: `${coveragePercent}%`, label: "Coverage" },
+              { icon: ConnectIcon, count: String(providers.length), label: "Providers" },
+              { icon: RefreshIcon, count: String(syncJobs.length), label: "Sync Jobs" },
+            ].map((item, i) => (
+              <div key={item.label} style={{
+                padding: "var(--p-space-400)",
+                borderRight: i < 4 ? "1px solid var(--p-color-border-secondary)" : "none",
+                textAlign: "center",
+              }}>
+                <BlockStack gap="200" inlineAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                    margin: "0 auto",
+                  }}>
+                    <Icon source={item.icon} />
+                  </div>
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {item.count}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {item.label}
+                  </Text>
+                </BlockStack>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         {/* ── Tabbed Content ── */}
         <Card padding="0">

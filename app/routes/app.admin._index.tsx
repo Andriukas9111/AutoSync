@@ -28,6 +28,12 @@ import {
   ActionList,
   Modal,
 } from "@shopify/polaris";
+import {
+  PersonIcon,
+  ProductIcon,
+  LinkIcon,
+  DatabaseIcon,
+} from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -639,78 +645,50 @@ export default function AdminPanel() {
 
         {/* ═══════════════════ KPI ROW ═══════════════════ */}
         <Layout.Section>
-          <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
-            {/* Tenants */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="p" variant="bodyMd" tone="subdued">Total Tenants</Text>
-                  <Badge tone="info">{`${totalTenants} installed`}</Badge>
-                </InlineStack>
-                <Text as="p" variant="heading2xl" fontWeight="bold">{totalTenants}</Text>
-                <Divider />
-                <InlineStack gap="100" wrap>
-                  {Object.entries(planBreakdown).map(([p, c]) => (
-                    <Badge key={p} tone={PLAN_BADGE_TONE[p as PlanTier]}>
-                      {`${cap(p)}: ${c}`}
-                    </Badge>
-                  ))}
-                </InlineStack>
-              </BlockStack>
-            </Card>
-
-            {/* Products */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="p" variant="bodyMd" tone="subdued">Total Products</Text>
-                  <Badge>all tenants</Badge>
-                </InlineStack>
-                <Text as="p" variant="heading2xl" fontWeight="bold">{totalProducts.toLocaleString()}</Text>
-                <Divider />
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Synced from Shopify across all merchants
-                </Text>
-              </BlockStack>
-            </Card>
-
-            {/* Fitments */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="p" variant="bodyMd" tone="subdued">Total Fitments</Text>
-                  <Badge tone={totalFitments > 0 ? "success" : "warning"}>
-                    {totalFitments > 0 ? "active" : "empty"}
-                  </Badge>
-                </InlineStack>
-                <Text as="p" variant="heading2xl" fontWeight="bold">{totalFitments.toLocaleString()}</Text>
-                <Divider />
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Vehicle-to-product mappings
-                </Text>
-              </BlockStack>
-            </Card>
-
-            {/* YMME Database */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="p" variant="bodyMd" tone="subdued">YMME Database</Text>
-                  <Badge tone={ymmeTotal > 100 ? "success" : "warning"}>
-                    {`${ymmePct}% filled`}
-                  </Badge>
-                </InlineStack>
-                <Text as="p" variant="heading2xl" fontWeight="bold">{ymmeTotal.toLocaleString()}</Text>
-                <Divider />
-                <BlockStack gap="100">
-                  <ProgressBar progress={ymmePct} size="small" tone="primary" />
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    {ymmeCounts.makes} makes · {ymmeCounts.models} models · {ymmeCounts.engines} engines
-                  </Text>
-                </BlockStack>
-              </BlockStack>
-            </Card>
-          </InlineGrid>
+          <Card padding="0">
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              borderBottom: "1px solid var(--p-color-border-secondary)",
+            }}>
+              {[
+                { icon: PersonIcon, count: totalTenants.toLocaleString(), label: "Total Tenants", extra: Object.entries(planBreakdown).map(([p, c]) => `${cap(p)}: ${c}`).join(", ") },
+                { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products", extra: "All tenants" },
+                { icon: LinkIcon, count: totalFitments.toLocaleString(), label: "Total Fitments", extra: totalFitments > 0 ? "Active" : "Empty" },
+                { icon: DatabaseIcon, count: ymmeTotal.toLocaleString(), label: "YMME Database", extra: `${ymmeCounts.makes} makes · ${ymmeCounts.models} models · ${ymmeCounts.engines} engines` },
+              ].map((item, i) => (
+                <div key={item.label} style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
+                }}>
+                  <BlockStack gap="200" inlineAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                      margin: "0 auto",
+                    }}>
+                      <Icon source={item.icon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {item.count}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                    {item.extra && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        {item.extra}
+                      </Text>
+                    )}
+                  </BlockStack>
+                </div>
+              ))}
+            </div>
+          </Card>
         </Layout.Section>
 
         {/* ═══════════════════ TABS ═══════════════════ */}

@@ -242,11 +242,6 @@ export default function PricingPage() {
     { label: "Round to nearest £10", value: "10" },
   ];
 
-  // StatBadge is a 22px variant of IconBadge for stat rows
-  const StatBadge = ({ icon, color, bg }: { icon: any; color: string; bg: string }) => (
-    <IconBadge icon={icon} color={color} bg={bg} size={22} />
-  );
-
   return (
     <Page
       title="Pricing Engine"
@@ -286,53 +281,45 @@ export default function PricingPage() {
       <Layout>
         {/* Stats row */}
         <Layout.Section>
-          <InlineStack gap="400" wrap={true}>
-            <Box minWidth="180px" padding="400" background="bg-surface" borderRadius="300" borderWidth="025" borderColor="border">
-              <BlockStack gap="200">
-                <InlineStack gap="200" align="start" blockAlign="center">
-                  <StatBadge icon={TargetIcon} color="var(--p-color-icon-info)" bg="var(--p-color-bg-fill-info-secondary)" />
-                  <Text as="span" variant="bodySm" tone="subdued">Active Rules</Text>
-                </InlineStack>
-                <Text as="p" variant="headingLg" fontWeight="bold">{stats?.active_rules ?? 0}</Text>
-              </BlockStack>
-            </Box>
-
-            <Box minWidth="180px" padding="400" background="bg-surface" borderRadius="300" borderWidth="025" borderColor="border">
-              <BlockStack gap="200">
-                <InlineStack gap="200" align="start" blockAlign="center">
-                  <StatBadge icon={HashtagIcon} color="var(--p-color-icon-success)" bg="var(--p-color-bg-fill-success-secondary)" />
-                  <Text as="span" variant="bodySm" tone="subdued">Products Covered</Text>
-                </InlineStack>
-                <Text as="p" variant="headingLg" fontWeight="bold">
-                  {stats?.products_with_rules ?? 0} / {stats?.total_products ?? 0}
-                </Text>
-              </BlockStack>
-            </Box>
-
-            <Box minWidth="180px" padding="400" background="bg-surface" borderRadius="300" borderWidth="025" borderColor="border">
-              <BlockStack gap="200">
-                <InlineStack gap="200" align="start" blockAlign="center">
-                  <StatBadge icon={ChartVerticalIcon} color="var(--p-color-icon-magic)" bg="var(--p-color-bg-fill-magic-secondary)" />
-                  <Text as="span" variant="bodySm" tone="subdued">Changes (7 days)</Text>
-                </InlineStack>
-                <Text as="p" variant="headingLg" fontWeight="bold">{stats?.recent_changes ?? 0}</Text>
-              </BlockStack>
-            </Box>
-
-            <Box minWidth="180px" padding="400" background="bg-surface" borderRadius="300" borderWidth="025" borderColor="border">
-              <BlockStack gap="200">
-                <InlineStack gap="200" align="start" blockAlign="center">
-                  <StatBadge
-                    icon={AlertTriangleIcon}
-                    color={(stats?.unresolved_alerts ?? 0) > 0 ? "var(--p-color-icon-caution)" : "var(--p-color-icon-success)"}
-                    bg={(stats?.unresolved_alerts ?? 0) > 0 ? "var(--p-color-bg-fill-caution-secondary)" : "var(--p-color-bg-fill-success-secondary)"}
-                  />
-                  <Text as="span" variant="bodySm" tone="subdued">Alerts</Text>
-                </InlineStack>
-                <Text as="p" variant="headingLg" fontWeight="bold">{stats?.unresolved_alerts ?? 0}</Text>
-              </BlockStack>
-            </Box>
-          </InlineStack>
+          <Card padding="0">
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              borderBottom: "1px solid var(--p-color-border-secondary)",
+            }}>
+              {[
+                { icon: TargetIcon, count: `${stats?.active_rules ?? 0}`, label: "Active Rules" },
+                { icon: HashtagIcon, count: `${stats?.products_with_rules ?? 0} / ${stats?.total_products ?? 0}`, label: "Products Covered" },
+                { icon: ChartVerticalIcon, count: `${stats?.recent_changes ?? 0}`, label: "Changes (7 days)" },
+                { icon: AlertTriangleIcon, count: `${stats?.unresolved_alerts ?? 0}`, label: "Alerts" },
+              ].map((item, i, arr) => (
+                <div key={item.label} style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < arr.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
+                }}>
+                  <BlockStack gap="200" inlineAlign="center">
+                    <div style={{
+                      width: "28px", height: "28px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--p-color-icon-emphasis)",
+                      margin: "0 auto",
+                    }}>
+                      <Icon source={item.icon} />
+                    </div>
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {item.count}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                  </BlockStack>
+                </div>
+              ))}
+            </div>
+          </Card>
         </Layout.Section>
 
         {/* Pricing Rules */}

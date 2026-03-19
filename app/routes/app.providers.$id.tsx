@@ -12,7 +12,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data, redirect } from "react-router";
 import {
-  Page, Tabs, Card, InlineGrid, InlineStack, BlockStack, Text,
+  Page, Tabs, Card, InlineStack, BlockStack, Text,
   TextField, Select, Button, Badge, Banner, Divider, Modal,
   FormLayout, Box, Icon,
 } from "@shopify/polaris";
@@ -300,12 +300,50 @@ export default function ProviderDetail() {
             {/* ── Overview Tab ── */}
             {currentTab === "overview" && (
               <BlockStack gap="400">
-                <InlineGrid columns={{ xs: 1, sm: 2, lg: 4 }} gap="400">
-                  <StatCard label="Total Products" value={totalProducts.toLocaleString()} icon={ProductIcon} />
-                  <StatCard label="Total Imports" value={(provider.import_count ?? 0).toLocaleString()} icon={ImportIcon} />
-                  <StatCard label="Last Import" value={relativeTime(provider.last_fetch_at)} icon={ClockIcon} />
-                  <StatCard label="Fitment Coverage" value={`${fitmentCoverage}%`} icon={ChartVerticalFilledIcon} />
-                </InlineGrid>
+                {(() => {
+                  const statItems = [
+                    { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products" },
+                    { icon: ImportIcon, count: (provider.import_count ?? 0).toLocaleString(), label: "Total Imports" },
+                    { icon: ClockIcon, count: relativeTime(provider.last_fetch_at), label: "Last Import" },
+                    { icon: ChartVerticalFilledIcon, count: `${fitmentCoverage}%`, label: "Fitment Coverage" },
+                  ];
+                  return (
+                    <Card padding="0">
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        borderBottom: "1px solid var(--p-color-border-secondary)",
+                      }}>
+                        {statItems.map((item, i) => (
+                          <div key={item.label} style={{
+                            padding: "var(--p-space-400)",
+                            borderRight: i < statItems.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                            textAlign: "center",
+                          }}>
+                            <BlockStack gap="200" inlineAlign="center">
+                              <div style={{
+                                width: "28px", height: "28px",
+                                borderRadius: "var(--p-border-radius-200)",
+                                background: "var(--p-color-bg-surface-secondary)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                color: "var(--p-color-icon-emphasis)",
+                                margin: "0 auto",
+                              }}>
+                                <Icon source={item.icon} />
+                              </div>
+                              <Text as="p" variant="headingLg" fontWeight="bold">
+                                {item.count}
+                              </Text>
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {item.label}
+                              </Text>
+                            </BlockStack>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  );
+                })()}
 
                 <Card>
                   <BlockStack gap="300">
@@ -471,20 +509,3 @@ export default function ProviderDetail() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Stat Card (small reusable component)
-// ---------------------------------------------------------------------------
-
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.FunctionComponent }) {
-  return (
-    <Card>
-      <BlockStack gap="200">
-        <InlineStack align="space-between" blockAlign="center">
-          <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
-          <Icon source={icon} tone="base" />
-        </InlineStack>
-        <Text as="p" variant="headingLg" fontWeight="bold">{value}</Text>
-      </BlockStack>
-    </Card>
-  );
-}

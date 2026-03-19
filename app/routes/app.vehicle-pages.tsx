@@ -786,114 +786,45 @@ export default function VehiclePages() {
         </Card>
 
         {/* ── Section 2: Stats Dashboard ── */}
-        <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
-          {/* Total Vehicles Available */}
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div
-                  style={iconBadgeStyle(
-                    "var(--p-color-bg-fill-info-secondary)",
-                    "var(--p-color-icon-info)",
-                  )}
-                >
-                  <Icon source={ProductIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Total Available
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {`${availableVehicles}`}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Unique vehicles from fitments
-              </Text>
-            </BlockStack>
-          </Card>
-
-          {/* Published Pages */}
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div
-                  style={iconBadgeStyle(
-                    "var(--p-color-bg-fill-success-secondary)",
-                    "var(--p-color-icon-success)",
-                  )}
-                >
-                  <Icon source={CheckCircleIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Published Pages
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {`${syncStats.synced}`}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Live on storefront
-              </Text>
-            </BlockStack>
-          </Card>
-
-          {/* Products Linked */}
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div
-                  style={iconBadgeStyle(
-                    "var(--p-color-bg-surface-secondary)",
-                    "var(--p-color-icon-emphasis)",
-                  )}
-                >
-                  <Icon source={LinkIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Products Linked
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {`${totalLinkedProducts}`}
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Across all vehicle pages
-              </Text>
-            </BlockStack>
-          </Card>
-
-          {/* Sync Coverage */}
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div
-                  style={iconBadgeStyle(
-                    "var(--p-color-bg-surface-secondary)",
-                    "var(--p-color-icon-emphasis)",
-                  )}
-                >
-                  <Icon source={ChartVerticalFilledIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Sync Coverage
-                </Text>
-              </InlineStack>
-              <Text as="p" variant="headingXl" fontWeight="bold">
-                {`${syncStats.synced} / ${availableVehicles}`}
-              </Text>
-              <Box paddingBlockStart="100">
-                <ProgressBar
-                  progress={coveragePercent}
-                  size="small"
-                  tone="primary"
-                />
-              </Box>
-              <Text as="p" variant="bodySm" tone="subdued">
-                {`${coveragePercent}% coverage`}
-              </Text>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+        <Card padding="0">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            borderBottom: "1px solid var(--p-color-border-secondary)",
+          }}>
+            {[
+              { icon: ProductIcon, count: `${availableVehicles}`, label: "Total Available" },
+              { icon: CheckCircleIcon, count: `${syncStats.synced}`, label: "Published Pages" },
+              { icon: LinkIcon, count: `${totalLinkedProducts}`, label: "Products Linked" },
+              { icon: ChartVerticalFilledIcon, count: `${syncStats.synced} / ${availableVehicles}`, label: "Sync Coverage" },
+            ].map((item, i, arr) => (
+              <div key={item.label} style={{
+                padding: "var(--p-space-400)",
+                borderRight: i < arr.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
+                textAlign: "center",
+              }}>
+                <BlockStack gap="200" inlineAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                    margin: "0 auto",
+                  }}>
+                    <Icon source={item.icon} />
+                  </div>
+                  <Text as="p" variant="headingLg" fontWeight="bold">
+                    {item.count}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {item.label}
+                  </Text>
+                </BlockStack>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         {/* ── Section 3: Vehicle Browser ── */}
         <Card>
