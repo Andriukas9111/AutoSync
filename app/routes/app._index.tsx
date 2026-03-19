@@ -324,20 +324,60 @@ function StatusChip({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "8px",
-        padding: "8px 12px",
-        borderRadius: "var(--p-border-radius-200)",
+        gap: "10px",
+        padding: "12px 16px",
+        borderRadius: "var(--p-border-radius-300)",
         background: "var(--p-color-bg-surface-secondary)",
+        border: "1px solid var(--p-color-border-secondary)",
         cursor: onClick ? "pointer" : "default",
         flex: "1 1 0",
         minWidth: "140px",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
       }}
+      onMouseEnter={onClick ? (e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-200)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border)";
+      } : undefined}
+      onMouseLeave={onClick ? (e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-secondary)";
+      } : undefined}
     >
-      <IconBadge icon={icon} size={20} bg={bg} color={color} />
+      <IconBadge icon={icon} size={22} bg={bg} color={color} />
       <div style={{ display: "flex", flexDirection: "column" }}>
         <Text as="span" variant="headingSm">{count.toLocaleString()}</Text>
         <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Coverage Progress Bar — custom thick bar with gradient
+// ---------------------------------------------------------------------------
+
+function CoverageBar({ percent }: { percent: number }) {
+  const barColor = percent >= 80
+    ? "var(--p-color-bg-fill-success)"
+    : percent >= 40
+      ? "var(--p-color-bg-fill-info)"
+      : "var(--p-color-bg-fill-caution)";
+
+  return (
+    <div style={{
+      width: "100%",
+      height: "10px",
+      borderRadius: "5px",
+      background: "var(--p-color-bg-surface-secondary)",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        width: `${Math.max(percent, 1)}%`,
+        height: "100%",
+        borderRadius: "5px",
+        background: barColor,
+        transition: "width 600ms ease",
+      }} />
     </div>
   );
 }
@@ -551,11 +591,7 @@ export default function Dashboard() {
                   </InlineStack>
                 </InlineStack>
 
-                <ProgressBar
-                  progress={coverage}
-                  size="small"
-                  tone={coverage >= 80 ? "success" : coverage >= 40 ? "primary" : "highlight"}
-                />
+                <CoverageBar percent={coverage} />
 
                 {/* Compact status chips */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -785,8 +821,8 @@ export default function Dashboard() {
                 ) : (
                   <div style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                    gap: "8px",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                    gap: "6px",
                   }}>
                     {recentJobs.map((job: any) => (
                       <div
@@ -796,9 +832,10 @@ export default function Dashboard() {
                           alignItems: "center",
                           justifyContent: "space-between",
                           gap: "12px",
-                          padding: "10px 12px",
+                          padding: "8px 12px",
                           borderRadius: "var(--p-border-radius-200)",
                           background: "var(--p-color-bg-surface-secondary)",
+                          border: "1px solid var(--p-color-border-secondary)",
                         }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
