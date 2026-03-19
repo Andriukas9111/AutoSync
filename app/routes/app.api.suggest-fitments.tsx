@@ -675,6 +675,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (patternError) {
           diagnostics.push(`Path B error for ${makeName}: ${patternError.message}`);
         }
+        if (!patternEngines && !patternError) {
+          diagnostics.push(`Path B: null data for ${makeName} (no error)`);
+        }
       }
 
       // Deduplicate engines by ID
@@ -685,7 +688,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return true;
       });
 
-      diagnostics.push(`Found ${String(engines.length)} candidate engines for ${makeName}`);
+      diagnostics.push(`Found ${String(engines.length)} candidate engines for ${makeName} (patterns: ${String(searchPatterns.length)}, modelIds: ${String(makeModelIds.length)})`);
 
       // Step 5: Score each engine against the FULL profile
       for (const engineRow of engines) {
