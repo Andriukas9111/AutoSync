@@ -108,15 +108,18 @@ function extractSearchTokens(text: string, knownMakes: string[]): ExtractedToken
 
   // 1d. Engine technology keywords → add to model codes for engine name search
   // These appear in engine names: "2.0 TSI (190 Hp)", "1.4 TFSI (150 Hp)"
+  // Note: "2.0TSI" (no space) is common — use looser matching
   const techKeywords = ["TSI", "TFSI", "TDI", "FSI", "CDI", "HDI", "THP", "PureTech", "EcoBoost", "VTEC", "Skyactiv", "BlueHDi", "dCi", "TCe", "GDI", "T-GDI", "MPI"];
   for (const kw of techKeywords) {
-    if (new RegExp(`\\b${kw}\\b`, "i").test(text)) {
-      // Combine with displacement if found: "2.0 TSI" is better than just "TSI"
+    // Match TSI in "2.0TSI" (no word boundary before, allows digit prefix)
+    if (new RegExp(`${kw}(?:\\b|\\s|$)`, "i").test(text)) {
+      // Combine with displacement: "2.0 TSI" matches engine names like "2.0 TSI (190 Hp)"
       if (tokens.displacements.length > 0) {
         const dispL = (tokens.displacements[0] / 1000).toFixed(1);
-        tokens.modelCodes.push(`${dispL} ${kw}`); // "2.0 TSI"
+        const combined = `${dispL} ${kw}`;
+        if (!tokens.modelCodes.includes(combined)) tokens.modelCodes.push(combined);
       }
-      tokens.modelCodes.push(kw);
+      if (!tokens.modelCodes.includes(kw)) tokens.modelCodes.push(kw);
     }
   }
 
