@@ -686,8 +686,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           scoreDebugCount++;
         }
 
-        // Only include engines with meaningful match
-        if (score < 0.20) continue;
+        // Engines found by the search query matched at least one pattern
+        // Give a minimum boost since the DB query already filtered relevant engines
+        if (score < 0.20) {
+          // Check if any search pattern appears in the engine name
+          const lowerName = (engineRow.name || "").toLowerCase();
+          for (const pat of searchPatterns) {
+            const clean = pat.replace(/%/g, "").toLowerCase();
+            if (clean.length >= 3 && lowerName.includes(clean)) {
+              score = Math.max(score, 0.50); // Minimum 50% for pattern-matched engines
+              matchedHints.push("pattern:" + clean);
+              break;
+            }
+          }
+        }
+        if (score < 0.15) continue;
 
         const displayName = engineRow.name || "Unknown Engine";
         suggestions.push({
