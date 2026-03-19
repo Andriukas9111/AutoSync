@@ -815,7 +815,7 @@ export default function ProductDetails() {
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                       {suggestions.length > 0
                         ? "All suggestions have been accepted!"
-                        : `No vehicle matches found. ${diagnostics.length > 0 ? "Debug: " + diagnostics.join(" | ") : ""}`}
+                        : `No matches. ${diagnostics.slice(-5).join(" | ")}`}
                     </Text>
                   </Box>
                 ) : (

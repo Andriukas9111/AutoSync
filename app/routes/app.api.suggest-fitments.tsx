@@ -691,6 +691,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       diagnostics.push(`Found ${String(engines.length)} candidate engines for ${makeName} (patterns: ${String(searchPatterns.length)}, modelIds: ${String(makeModelIds.length)})`);
 
       // Step 5: Score each engine against the FULL profile
+      let scoreDebugCount = 0;
       for (const engineRow of engines) {
         let { score, matchedHints } = scoreByProfile(engineRow, profile);
 
@@ -700,6 +701,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (!matchedHints.includes(engineRow.model.name)) {
             matchedHints.push(engineRow.model.name);
           }
+        }
+
+        // Debug: log first 3 engine scores
+        if (scoreDebugCount < 3) {
+          diagnostics.push(`Score ${engineRow.name?.substring(0, 30)}: ${score.toFixed(2)} [${matchedHints.join(",")}]`);
+          scoreDebugCount++;
         }
 
         // Only include engines with meaningful match
