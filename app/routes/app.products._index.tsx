@@ -110,6 +110,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
+  // Fix products with NULL fitment_status → "unmapped"
+  await db.from("products")
+    .update({ fitment_status: "unmapped" })
+    .eq("shop_id", shopId)
+    .is("fitment_status", null);
+
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status") || "";
@@ -558,7 +564,7 @@ export default function Products() {
               { key: "smart_mapped", icon: WandIcon, label: "Smart", count: statusBreakdown["smart_mapped"] ?? 0, critical: false },
               { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: statusBreakdown["manual_mapped"] ?? 0, critical: false },
               { key: "flagged", icon: FlagIcon, label: "Flagged", count: (statusBreakdown["flagged"] ?? 0) + (statusBreakdown["partial"] ?? 0), critical: false },
-            ]).map((item, i) => {
+            ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
               const isFilter = item.key !== "total";
               const isActive = isFilter && filters.status === item.key;
               return (

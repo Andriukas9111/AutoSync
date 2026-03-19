@@ -357,13 +357,13 @@ export default function Fitment() {
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { icon: ProductIcon, label: "Products", count: totalProducts },
+              { icon: ProductIcon, label: "Total", count: totalProducts },
               { icon: ConnectIcon, label: "Fitments", count: totalFitments },
+              { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, critical: true as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },
               { icon: WandIcon, label: "Smart", count: smartMapped },
               { icon: TargetIcon, label: "Manual", count: manualMapped },
               { icon: AlertTriangleIcon, label: "Flagged", count: flagged + partial },
-              { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, critical: true as boolean },
             ]).map((item, i) => (
               <div
                 key={item.label}
