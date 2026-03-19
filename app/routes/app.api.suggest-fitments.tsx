@@ -430,7 +430,9 @@ function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitme
   const groups = new Map<string, SuggestedFitment>();
   for (const s of suggestions) {
     const baseKey = getEngineBaseKey(s.engine?.name ?? null);
-    const groupKey = `${s.make.id}|${s.model?.id || ""}|${baseKey}`;
+    // Group by make + model NAME (not ID) + engine base — so "1 Series (F20)" and "1 Series (F21)" merge
+    const modelName = s.model?.name || "";
+    const groupKey = `${s.make.id}|${modelName}|${baseKey}`;
 
     const existing = groups.get(groupKey);
     if (!existing) {
@@ -479,14 +481,14 @@ function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitme
     return true;
   });
 
-  // Pass 3: Sort by confidence desc, limit to top 3 per make+model
+  // Pass 3: Sort by confidence desc, limit to top 2 per make+model name
   suppressed.sort((a, b) => b.confidence - a.confidence);
   const engineCountByPair = new Map<string, number>();
   return suppressed.filter((s) => {
-    if (s.engine?.id && s.model?.id) {
-      const pairKey = `${s.make.id}|${s.model.id}`;
+    if (s.engine?.id && s.model?.name) {
+      const pairKey = `${s.make.id}|${s.model.name}`;
       const count = engineCountByPair.get(pairKey) || 0;
-      if (count >= 3) return false;
+      if (count >= 2) return false;
       engineCountByPair.set(pairKey, count + 1);
     }
     return true;
