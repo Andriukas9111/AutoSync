@@ -1523,26 +1523,41 @@ export async function deleteVehiclePages(
   // ── 1. Delete Shopify Pages tracked in vehicle_page_sync ──────────
   const { data: syncRows } = await db
     .from("vehicle_page_sync")
-    .select("page_gid")
-    .eq("shop_id", shopId)
-    .not("page_gid", "is", null);
+    .select("page_gid, page_handle")
+    .eq("shop_id", shopId);
 
   for (const row of syncRows ?? []) {
-    if (!row.page_gid) continue;
+    let gidToDelete = row.page_gid;
+
+    // If no page_gid stored, try to find page by handle
+    if (!gidToDelete && row.page_handle) {
+      try {
+        const lookupResp = await admin.graphql(PAGE_BY_HANDLE, {
+          variables: { handle: row.page_handle },
+        });
+        const lookupJson = await lookupResp.json();
+        gidToDelete = lookupJson?.data?.pageByHandle?.id ?? null;
+      } catch {
+        // Ignore lookup errors
+      }
+    }
+
+    if (!gidToDelete) continue;
+
     try {
       const deleteResp = await admin.graphql(PAGE_DELETE, {
-        variables: { id: row.page_gid },
+        variables: { id: gidToDelete },
       });
       const deleteJson = await deleteResp.json();
       const userErrors = deleteJson?.data?.pageDelete?.userErrors;
       if (!userErrors || userErrors.length === 0) {
         deleted++;
       } else {
-        console.error(`[vehicle-pages] Page delete errors for ${row.page_gid}: ${userErrors.map((e: any) => e.message).join(", ")}`);
+        console.error(`[vehicle-pages] Page delete errors for ${gidToDelete}: ${userErrors.map((e: any) => e.message).join(", ")}`);
       }
     } catch (err) {
       console.error(
-        `[vehicle-pages] Failed to delete page ${row.page_gid}:`,
+        `[vehicle-pages] Failed to delete page ${gidToDelete}:`,
         err instanceof Error ? err.message : err,
       );
     }
