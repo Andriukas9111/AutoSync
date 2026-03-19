@@ -1,13 +1,12 @@
 /**
  * Shared suggestion card component — renders a vehicle fitment suggestion
- * with full engine info display. Used by both app.products.$id.tsx and
- * app.fitment.manual.tsx.
+ * with a clear Make > Model > Engine > Years hierarchy.
+ * Used by both app.products.$id.tsx and app.fitment.manual.tsx.
  */
 
 import {
   Badge,
   BlockStack,
-  Box,
   Button,
   InlineStack,
   Text,
@@ -27,14 +26,17 @@ export interface SuggestionCardProps {
  * - null yearFrom => "" (no year info)
  * - yearTo is null or equals current year => "2016+"
  * - yearFrom === yearTo => "2016"
- * - different range => "2016–2022"
+ * - different range => "2016 - 2022"
  */
-function formatYearRange(yearFrom: number | null, yearTo: number | null): string {
+function formatYearRange(
+  yearFrom: number | null,
+  yearTo: number | null,
+): string {
   if (!yearFrom) return "";
   const currentYear = new Date().getFullYear();
   if (yearTo == null || yearTo >= currentYear) return `${yearFrom}+`;
   if (yearFrom === yearTo) return `${yearFrom}`;
-  return `${yearFrom}\u2013${yearTo}`;
+  return `${yearFrom} \u2013 ${yearTo}`;
 }
 
 /**
@@ -56,13 +58,26 @@ export function SuggestionCard({
   const confidenceTone: "success" | "info" | "warning" =
     s.confidence >= 0.8 ? "success" : s.confidence >= 0.5 ? "info" : "warning";
 
-  // Engine spec fragments
-  const displacementStr = s.engine ? formatDisplacement(s.engine.displacementCc) : null;
-  const powerStr = s.engine?.powerHp ? `${s.engine.powerHp} HP` : null;
-  const aspirationStr = s.engine?.aspiration || null;
-  const fuelStr = s.engine?.fuelType || null;
+  const hasEngine = s.engine !== null;
 
-  // Vehicle display name: Make + Model + Generation
+  // Engine spec fragments (only when engine exists)
+  const displacementStr = s.engine
+    ? formatDisplacement(s.engine.displacementCc)
+    : null;
+  const fuelStr = s.engine?.fuelType || null;
+  const aspirationStr = s.engine?.aspiration || null;
+
+  // Combined fuel + aspiration label
+  const fuelAspirationLabel =
+    fuelStr && aspirationStr
+      ? `${fuelStr} ${aspirationStr}`
+      : fuelStr || aspirationStr || null;
+
+  // Engine variant display name (e.g. "440i (326 Hp) Steptronic")
+  const engineVariantName =
+    s.engine?.displayName || s.engine?.name || null;
+
+  // Vehicle display name: Make + Model (Generation)
   const vehicleName = [
     s.make.name,
     s.model?.name || "",
@@ -71,32 +86,38 @@ export function SuggestionCard({
     .filter(Boolean)
     .join(" ");
 
-  // Engine variant display name (e.g., "M140i xDrive Steptronic")
-  const engineVariantName =
-    s.engine?.displayName || s.engine?.name || null;
+  // Has any engine spec badges to show?
+  const hasSpecBadges =
+    hasEngine &&
+    (s.engine?.code || displacementStr || fuelAspirationLabel);
+
+  // Border and background logic
+  let borderColor: string;
+  let bgColor: string;
+
+  if (alreadyAdded) {
+    borderColor = "var(--p-color-border-success)";
+    bgColor = "var(--p-color-bg-surface-success)";
+  } else if (hasEngine) {
+    borderColor = "var(--p-color-border-interactive)";
+    bgColor = "var(--p-color-bg-surface)";
+  } else {
+    borderColor = "var(--p-color-border-secondary)";
+    bgColor = "var(--p-color-bg-surface)";
+  }
 
   return (
     <div
       style={{
         padding: "12px",
         borderRadius: "var(--p-border-radius-200)",
-        border: `1px solid ${
-          alreadyAdded
-            ? "var(--p-color-border-success)"
-            : s.confidence >= 0.8
-              ? "var(--p-color-border-interactive)"
-              : "var(--p-color-border-secondary)"
-        }`,
-        background: alreadyAdded
-          ? "var(--p-color-bg-surface-success)"
-          : s.confidence >= 0.8
-            ? "var(--p-color-bg-fill-success-secondary)"
-            : "var(--p-color-bg-surface)",
+        border: `1px solid ${borderColor}`,
+        background: bgColor,
         opacity: alreadyAdded ? 0.6 : 1,
       }}
     >
       <BlockStack gap="200">
-        {/* Row 1: Vehicle name + Confidence + Accept button */}
+        {/* Row 1: Vehicle name + Confidence + Accept/Added */}
         <InlineStack align="space-between" blockAlign="center" wrap={false}>
           <Text as="span" variant="headingSm">
             {vehicleName}
@@ -119,62 +140,35 @@ export function SuggestionCard({
           </InlineStack>
         </InlineStack>
 
-        {/* Row 2: Engine variant name */}
-        {engineVariantName && (
-          <Text as="p" variant="bodySm" tone="subdued">
+        {/* Row 2: Engine variant name (key differentiator) */}
+        {engineVariantName ? (
+          <Text as="p" variant="bodyMd" fontWeight="semibold">
             {engineVariantName}
+          </Text>
+        ) : (
+          <Text as="p" variant="bodySm" tone="subdued">
+            <i>All engine variants</i>
           </Text>
         )}
 
-        {/* Row 3: Engine spec badges */}
-        {s.engine && (
+        {/* Row 3: Engine spec badges (only non-null values) */}
+        {hasSpecBadges && (
           <InlineStack gap="200" blockAlign="center" wrap>
-            {s.engine.code && (
+            {s.engine?.code && (
               <Badge tone="info">{`${s.engine.code}`}</Badge>
             )}
-            {displacementStr && (
-              <Badge>{`${displacementStr}`}</Badge>
+            {displacementStr && <Badge>{`${displacementStr}`}</Badge>}
+            {fuelAspirationLabel && (
+              <Badge>{`${fuelAspirationLabel}`}</Badge>
             )}
-            {powerStr && (
-              <Badge>{`${powerStr}`}</Badge>
-            )}
-            {fuelStr && aspirationStr ? (
-              <Badge>{`${fuelStr} ${aspirationStr}`}</Badge>
-            ) : fuelStr ? (
-              <Badge>{`${fuelStr}`}</Badge>
-            ) : aspirationStr ? (
-              <Badge>{`${aspirationStr}`}</Badge>
-            ) : null}
           </InlineStack>
         )}
 
         {/* Row 4: Year range */}
         {yearRange && (
           <Text as="p" variant="bodySm" tone="subdued">
-            {`Years: ${yearRange}`}
+            {yearRange}
           </Text>
-        )}
-
-        {/* Row 5: Tags preview */}
-        <InlineStack gap="100" blockAlign="center" wrap>
-          <Text as="span" variant="bodySm" tone="subdued">
-            {`Tags:`}
-          </Text>
-          <Badge size="small">{`_autosync_${s.make.name}`}</Badge>
-          {s.model?.name && (
-            <Badge size="small">{`_autosync_${s.model.name}`}</Badge>
-          )}
-        </InlineStack>
-
-        {/* Row 6: Matched hints */}
-        {s.matchedHints && s.matchedHints.length > 0 && (
-          <InlineStack gap="100" wrap>
-            {s.matchedHints.map((hint: string, hi: number) => (
-              <Badge key={hi} tone="attention">
-                {`${hint}`}
-              </Badge>
-            ))}
-          </InlineStack>
         )}
       </BlockStack>
     </div>

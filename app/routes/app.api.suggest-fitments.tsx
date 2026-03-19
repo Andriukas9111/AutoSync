@@ -210,9 +210,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    // Deduplicate and sort by confidence
+    // Deduplicate, suppress model-level when engine-level exists, limit per model, and sort
     const uniqueSuggestions = deduplicateSuggestions(suggestions);
-    uniqueSuggestions.sort((a, b) => b.confidence - a.confidence);
+    uniqueSuggestions.sort((a, b) => {
+      // Primary: confidence descending
+      if (b.confidence !== a.confidence) return b.confidence - a.confidence;
+      // Secondary: make name ascending
+      const makeCompare = a.make.name.localeCompare(b.make.name);
+      if (makeCompare !== 0) return makeCompare;
+      // Tertiary: model name ascending
+      return (a.model?.name || "").localeCompare(b.model?.name || "");
+    });
 
     return data({
       suggestions: uniqueSuggestions.slice(0, 20), // Top 20
@@ -265,11 +273,40 @@ function findEngineById(
 }
 
 function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitment[] {
+  // Pass 1: Remove exact duplicates (same make+model+engine)
   const seen = new Set<string>();
-  return suggestions.filter((s) => {
+  const deduped = suggestions.filter((s) => {
     const key = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
     if (seen.has(key)) return false;
     seen.add(key);
+    return true;
+  });
+
+  // Pass 2: Suppress model-level suggestions when engine-level exists for same make+model
+  const pairsWithEngines = new Set<string>();
+  for (const s of deduped) {
+    if (s.engine?.id && s.model?.id) {
+      pairsWithEngines.add(`${s.make.id}|${s.model.id}`);
+    }
+  }
+  const suppressed = deduped.filter((s) => {
+    if (!s.engine && s.model?.id && pairsWithEngines.has(`${s.make.id}|${s.model.id}`)) {
+      return false; // Remove model-level when engine-level exists
+    }
+    return true;
+  });
+
+  // Pass 3: Limit to top 3 engines per make+model (by confidence)
+  const engineCountByPair = new Map<string, number>();
+  // Sort by confidence desc first so we keep the best ones
+  suppressed.sort((a, b) => b.confidence - a.confidence);
+  return suppressed.filter((s) => {
+    if (s.engine?.id && s.model?.id) {
+      const pairKey = `${s.make.id}|${s.model.id}`;
+      const count = engineCountByPair.get(pairKey) || 0;
+      if (count >= 3) return false;
+      engineCountByPair.set(pairKey, count + 1);
+    }
     return true;
   });
 }

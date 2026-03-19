@@ -183,6 +183,23 @@ const MODEL_NAME_BLOCKLIST = new Set([
   "200", "300", "400", "500",                          // Rover/Chrysler/Fiat numbers -- "ST-200", "500mm"
   "323", "626",                                        // Mazda numeric models -- common in part numbers
   "1500", "2500", "3500",                              // RAM truck models -- collide with displacement values
+  // Additional common English words that are also car model names
+  "air",                                                // Tesla Model name / generic word
+  "bolt",                                               // Chevrolet Bolt -- common word
+  "leaf",                                               // Nissan Leaf -- common word
+  "ion",                                                // Saturn Ion -- common word
+  "mach",                                               // Ford Mustang Mach -- common word
+  "ace",                                                // Honda Ace -- common word
+  "dart",                                               // Dodge Dart -- common word
+  "flex",                                               // Ford Flex -- common word
+  "fury",                                               // Plymouth Fury -- common word
+  "neon",                                               // Dodge Neon -- common word
+  "echo",                                               // Toyota Echo -- common word
+  "vibe",                                               // Pontiac Vibe -- common word
+  "venture",                                            // Chevrolet Venture -- common word
+  "van",                                                // generic vehicle type
+  "bus",                                                // generic vehicle type
+  "thing",                                              // VW Thing -- common word
 ])
 
 // ── Singleton Cache ──────────────────────────────────────────

@@ -233,7 +233,8 @@ export function scanTextForVehicles(
           ` conf=${confidence.toFixed(2)}`
         )
         modelFound = true
-        break
+        // Don't break — continue to find other models for this make (up to 8)
+        if (mentions.filter(m => m.make.id === make.id).length >= 8) break
       }
     }
 
@@ -295,7 +296,7 @@ export function scanTextForVehicles(
           })
           diagnostics.push(`Model code "${code}" resolved to "${seriesModel.name}" for ${make.name}`)
           modelFound = true
-          break
+          // Don't break — continue resolving other model codes (e.g., 140i, 240i, 340i, 440i)
         }
       }
     }
