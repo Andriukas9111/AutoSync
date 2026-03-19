@@ -9,7 +9,6 @@ import {
   InlineStack,
   Text,
   Badge,
-  Icon,
   Button,
   Divider,
   Banner,
@@ -18,6 +17,7 @@ import {
 } from "@shopify/polaris";
 import { StarFilledIcon } from "@shopify/polaris-icons";
 
+import { IconBadge } from "../components/IconBadge";
 import { authenticate } from "../shopify.server";
 import { getTenant, createBillingSubscription, confirmBillingSubscription } from "../lib/billing.server";
 import db from "../lib/db.server";
@@ -570,15 +570,7 @@ export default function Plans() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={StarFilledIcon} />
-                </div>
+                <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingLg">
                   Feature Comparison
                 </Text>

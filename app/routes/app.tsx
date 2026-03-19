@@ -10,6 +10,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits } from "../lib/billing.server";
 import { isAdminShop } from "../lib/admin.server";
+import { PageFooter } from "../components/PageFooter";
 import type { PlanTier } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -110,8 +111,9 @@ export default function App() {
               100% { transform: scaleX(0); transform-origin: right; }
             }
           `}</style>
-          <div style={{ maxWidth: 1700, margin: "0 auto", paddingBottom: "40px" }}>
+          <div style={{ maxWidth: 1700, margin: "0 auto", padding: "0 16px 40px" }}>
             <Outlet />
+            <PageFooter />
           </div>
         </Frame>
       </PolarisAppProvider>

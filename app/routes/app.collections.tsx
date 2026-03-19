@@ -18,7 +18,6 @@ import {
   Divider,
   IndexTable,
   EmptyState,
-  Icon,
 } from "@shopify/polaris";
 import {
   CollectionIcon,
@@ -33,6 +32,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits, getTenant, PLAN_LIMITS } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
+import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -242,15 +242,7 @@ export default function Collections() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                  }}>
-                    <Icon source={CollectionIcon} />
-                  </div>
+                  <IconBadge icon={CollectionIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">Collection Strategy</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
@@ -317,16 +309,7 @@ export default function Collections() {
                   textAlign: "center",
                 }}>
                   <BlockStack gap="200" inlineAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                      margin: "0 auto",
-                    }}>
-                      <Icon source={item.icon} />
-                    </div>
+                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                     <Text as="p" variant="headingLg" fontWeight="bold">
                       {item.count}
                     </Text>
@@ -386,15 +369,7 @@ export default function Collections() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={CollectionFilledIcon} />
-                </div>
+                <IconBadge icon={CollectionFilledIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Existing Collections</Text>
               </InlineStack>
 

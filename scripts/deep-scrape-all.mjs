@@ -10,9 +10,11 @@
  *   node scripts/deep-scrape-all.mjs --delay=1500 --batch=50 --limit=500
  *   node scripts/deep-scrape-all.mjs --dry-run
  *   node scripts/deep-scrape-all.mjs --force  (re-scrape ALL, even with existing specs)
+ *   node scripts/deep-scrape-all.mjs --reset  (WIPE all specs + re-scrape from 0)
  *
  * Resumable: skips engines that already have complete specs (torque_nm filled).
  * Use --force to re-scrape everything and refresh all data.
+ * Use --reset to DELETE all ymme_vehicle_specs and engine display fields, then re-scrape.
  */
 
 import "dotenv/config";
@@ -41,7 +43,8 @@ const DELAY_MS = parseInt(args.delay ?? "1500", 10);
 const BATCH_SIZE = parseInt(args.batch ?? "50", 10);
 const MAX_ENGINES = parseInt(args.limit ?? "0", 10); // 0 = no limit
 const DRY_RUN = args["dry-run"] === "true";
-const FORCE_ALL = args.force === "true";
+const FORCE_ALL = args.force === "true" || args.reset === "true";
+const RESET_ALL = args.reset === "true";
 const BASE_URL = "https://www.auto-data.net";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -63,7 +66,9 @@ const LABEL_MAP = {
   // General
   "body type": "bodyType",
   "number of doors": "doors",
+  "doors": "doors",
   "number of seats": "seats",
+  "seats": "seats",
   "powertrain architecture": "powertrainType",
   "start of production": "startOfProduction",
   "end of production": "endOfProduction",
@@ -71,6 +76,7 @@ const LABEL_MAP = {
   // Performance
   "top speed": "topSpeedKmh",
   "maximum speed": "topSpeedKmh",
+  "speed": "topSpeedKmh",
   "acceleration 0 - 100 km/h": "acceleration0100",
   "acceleration 0-100 km/h": "acceleration0100",
   "acceleration 0 - 62 mph": "acceleration062mph",
@@ -114,10 +120,12 @@ const LABEL_MAP = {
   // Max power - special: parsed to extract kW and Hp
   "max power": "maxPower",
   "maximum power": "maxPower",
+  "power": "maxPower",
 
   // Max torque - special: parsed to extract Nm
   "max torque": "maxTorque",
   "maximum torque": "maxTorque",
+  "torque": "maxTorque",
 
   // Electric / Hybrid
   "battery capacity": "batteryCapacityKwh",
@@ -161,6 +169,7 @@ const LABEL_MAP = {
   "fuel": "fuelTypeDetail",
   "fuel system": "fuelSystem",
   "fuel tank capacity": "fuelTankLiters",
+  "fuel tank": "fuelTankLiters",
   "co2 emissions": "co2EmissionsGkm",
   "co2 emissions (wltp)": "co2EmissionsGkm",
   "co2 emissions (nedc)": "co2EmissionsNedcGkm",
@@ -168,12 +177,16 @@ const LABEL_MAP = {
   "emission standards": "emissionStandard",
   "fuel consumption (urban)": "urbanConsumptionL100",
   "urban fuel consumption": "urbanConsumptionL100",
+  "fuel consumption (economy) - urban": "urbanConsumptionL100",
   "fuel consumption (extra urban)": "extraUrbanConsumptionL100",
   "extra urban fuel consumption": "extraUrbanConsumptionL100",
+  "fuel consumption (economy) - extra urban": "extraUrbanConsumptionL100",
   "fuel consumption (combined)": "combinedConsumptionL100",
   "combined fuel consumption": "combinedConsumptionL100",
+  "fuel consumption (economy) - combined": "combinedConsumptionL100",
   "fuel consumption combined (wltp)": "combinedConsumptionWltpL100",
   "combined fuel consumption (wltp)": "combinedConsumptionWltpL100",
+  "fuel consumption (economy) - wltp": "combinedConsumptionWltpL100",
 
   // Transmission
   "number of gears and type of gearbox": "transmissionType",
@@ -208,6 +221,7 @@ const LABEL_MAP = {
   "kerb weight": "kerbWeightKg",
   "curb weight": "kerbWeightKg",
   "max. weight": "maxWeightKg",
+  "max weight": "maxWeightKg",
   "maximum weight": "maxWeightKg",
   "max load": "maxLoadKg",
   "maximum load": "maxLoadKg",
@@ -225,8 +239,11 @@ const LABEL_MAP = {
 
   // Capacity
   "trunk space": "trunkLiters",
+  "trunk (boot) space - minimum": "trunkLiters",
+  "trunk (boot) space": "trunkLiters",
   "boot space": "trunkLiters",
   "boot space (maximum)": "trunkMaxLiters",
+  "trunk (boot) space - maximum": "trunkMaxLiters",
 
   // Suspension & Brakes
   "front suspension": "frontSuspension",
@@ -585,7 +602,23 @@ function parseSpecPage(html) {
     if (rawValue.includes("Log in to see")) continue; // premium content
 
     const normalizedLabel = rawLabel.toLowerCase().replace(/[^\w\s()/-]/g, "").trim();
-    const key = LABEL_MAP[normalizedLabel];
+    let key = LABEL_MAP[normalizedLabel];
+
+    // Fuzzy match: auto-data.net uses question-format labels like
+    // "How many cylinders, 2011 Ford 3.2 TDCi (200 Hp) 4x4?"
+    // Try to match by finding a LABEL_MAP key that appears as a substring
+    // Sort by longest match first for specificity
+    if (!key) {
+      let bestMatch = null;
+      let bestLen = 0;
+      for (const [label, fieldName] of Object.entries(LABEL_MAP)) {
+        if (normalizedLabel.includes(label) && label.length >= 4 && label.length > bestLen) {
+          bestMatch = fieldName;
+          bestLen = label.length;
+        }
+      }
+      if (bestMatch) key = bestMatch;
+    }
 
     if (key) {
       // Special handling for fields that map to multiple DB columns
@@ -677,7 +710,14 @@ async function updateEngine(engineId, specs) {
   }
   if (specs.powerKw) update.power_kw = specs.powerKw;
   if (specs.powerHp) update.power_hp = specs.powerHp;
-  if (specs.torqueNm) update.torque_nm = specs.torqueNm;
+  // Always write torque_nm (even as 0) so engine is marked as scraped
+  if (specs.torqueNm !== undefined && specs.torqueNm !== null) {
+    update.torque_nm = specs.torqueNm;
+  } else {
+    // Mark as scraped with -1 sentinel if torque not found on page
+    // This prevents infinite re-scraping
+    update.torque_nm = -1;
+  }
 
   // Display fields added by migration 014
   if (specs.cylinders) update.cylinders = specs.cylinders;
@@ -843,13 +883,20 @@ async function getEngineCount() {
     return count ?? 0;
   }
 
-  // Default: target engines missing torque (= missing full spec scrape)
-  // torque_nm is ONLY available from spec pages, never from name parsing
-  const { count, error } = await db
+  // Default: target engines that DON'T have a vehicle_specs row yet
+  // This is reliable because specs are always upserted on successful scrape
+  const { data: scrapedIds } = await db
+    .from("ymme_vehicle_specs")
+    .select("engine_id");
+  const scrapedSet = new Set((scrapedIds ?? []).map(r => r.engine_id));
+
+  const { count: totalEngines, error: totalErr } = await db
     .from("ymme_engines")
     .select("id", { count: "exact", head: true })
-    .not("autodata_url", "is", null)
-    .is("torque_nm", null);
+    .not("autodata_url", "is", null);
+
+  const count = (totalEngines ?? 0) - scrapedSet.size;
+  const error = totalErr;
 
   if (error) { console.error("Failed to count engines:", error.message); return 0; }
   return count ?? 0;
@@ -857,27 +904,56 @@ async function getEngineCount() {
 
 // Track last processed ID for offset-based pagination (avoids re-querying same rows)
 let lastProcessedId = null;
+let alreadyScrapedIds = new Set();
+
+async function loadScrapedIds() {
+  if (FORCE_ALL) return;
+  const { data } = await db
+    .from("ymme_vehicle_specs")
+    .select("engine_id");
+  alreadyScrapedIds = new Set((data ?? []).map(r => r.engine_id));
+  console.log(`Resume: ${alreadyScrapedIds.size} engines already have specs — skipping them.\n`);
+}
 
 async function fetchBatch(limit) {
-  let query = db
-    .from("ymme_engines")
-    .select("id, name, autodata_url")
-    .not("autodata_url", "is", null)
-    .order("id", { ascending: true })
-    .range(0, limit - 1);
+  const results = [];
 
-  if (!FORCE_ALL) {
-    // Only engines missing torque (= never had full spec scrape)
-    query = query.is("torque_nm", null);
+  // Keep fetching until we have enough un-scraped engines
+  let cursor = lastProcessedId;
+  let attempts = 0;
+  const maxAttempts = 20; // safety limit
+
+  while (results.length < limit && attempts < maxAttempts) {
+    attempts++;
+    const fetchSize = Math.max(limit * 2, 500);
+    let query = db
+      .from("ymme_engines")
+      .select("id, name, autodata_url")
+      .not("autodata_url", "is", null)
+      .order("id", { ascending: true })
+      .range(0, fetchSize - 1);
+
+    if (cursor) {
+      query = query.gt("id", cursor);
+    }
+
+    const { data, error } = await query;
+    if (error) { console.error("Failed to fetch batch:", error.message); return results; }
+    if (!data || data.length === 0) break; // no more engines
+
+    // Move cursor forward
+    cursor = data[data.length - 1].id;
+
+    // Filter out already-scraped engines
+    for (const engine of data) {
+      if (FORCE_ALL || !alreadyScrapedIds.has(engine.id)) {
+        results.push(engine);
+        if (results.length >= limit) break;
+      }
+    }
   }
 
-  if (lastProcessedId) {
-    query = query.gt("id", lastProcessedId);
-  }
-
-  const { data, error } = await query;
-  if (error) { console.error("Failed to fetch batch:", error.message); return []; }
-  return data ?? [];
+  return results;
 }
 
 async function processEngine(engine) {
@@ -1044,11 +1120,51 @@ async function main() {
   console.log(
     "Config: delay=" + DELAY_MS + "ms, batch=" + BATCH_SIZE +
     ", limit=" + (MAX_ENGINES || "unlimited") + ", dry=" + DRY_RUN +
-    ", force=" + FORCE_ALL
+    ", force=" + FORCE_ALL + ", reset=" + RESET_ALL
   );
 
+  // ── Full reset: wipe all scraped data and start fresh ──
+  if (RESET_ALL && !DRY_RUN) {
+    console.log("\n⚠ RESET MODE — Wiping ALL scraped data for a clean start...");
+
+    // 1. Delete all ymme_vehicle_specs rows
+    const { count: specsDeleted, error: specsErr } = await db
+      .from("ymme_vehicle_specs")
+      .delete()
+      .neq("engine_id", "00000000-0000-0000-0000-000000000000") // match all rows
+      .select("engine_id", { count: "exact", head: true });
+    if (specsErr) {
+      console.error("  Failed to delete vehicle specs:", specsErr.message);
+    } else {
+      console.log("  ✓ Deleted " + (specsDeleted ?? "all") + " vehicle_specs rows");
+    }
+
+    // 2. Reset scraped display fields on ymme_engines
+    //    (torque_nm sentinel values, cylinders, etc. that came from scraper)
+    const { error: resetErr } = await db
+      .from("ymme_engines")
+      .update({
+        torque_nm: null,
+        cylinders: null,
+        cylinder_config: null,
+        aspiration: null,
+        drive_type: null,
+        transmission_type: null,
+        body_type: null,
+      })
+      .not("autodata_url", "is", null);
+    if (resetErr) {
+      console.error("  Failed to reset engine fields:", resetErr.message);
+    } else {
+      console.log("  ✓ Reset display fields on all ymme_engines");
+    }
+
+    console.log("  ✓ Database wiped. Starting fresh scrape...\n");
+  }
+
+  await loadScrapedIds();
   const totalCount = await getEngineCount();
-  console.log("Mode: " + (FORCE_ALL ? "FORCE ALL (re-scrape everything)" : "MISSING SPECS (engines without torque_nm)"));
+  console.log("Mode: " + (FORCE_ALL ? "FORCE ALL (re-scrape everything)" : "MISSING SPECS (engines without vehicle_specs)"));
   console.log("Target: " + totalCount.toLocaleString() + " engines to process\n");
 
   if (totalCount === 0) {

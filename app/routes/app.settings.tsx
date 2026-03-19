@@ -20,7 +20,6 @@ import {
   Badge,
   ProgressBar,
   List,
-  Icon,
 } from "@shopify/polaris";
 import {
   ExportIcon,
@@ -33,6 +32,7 @@ import {
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant } from "../lib/billing.server";
+import { IconBadge } from "../components/IconBadge";
 import {
   removeAllTags,
   removeAllMetafields,
@@ -498,15 +498,7 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={ExportIcon} />
-                    </div>
+                    <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Push Settings
                     </Text>
@@ -542,15 +534,7 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={CollectionIcon} />
-                    </div>
+                    <IconBadge icon={CollectionIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Collection Settings
                     </Text>
@@ -580,15 +564,7 @@ export default function Settings() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={PersonIcon} />
-                    </div>
+                    <IconBadge icon={PersonIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Notifications
                     </Text>
@@ -621,15 +597,7 @@ export default function Settings() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={DatabaseIcon} />
-                </div>
+                <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">
                   Data Management
                 </Text>
@@ -733,15 +701,7 @@ export default function Settings() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-fill-critical-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-critical)",
-                }}>
-                  <Icon source={AlertDiamondIcon} />
-                </div>
+                <IconBadge icon={AlertDiamondIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
                 <Text as="h2" variant="headingMd" tone="critical">
                   Danger Zone
                 </Text>

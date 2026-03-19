@@ -35,6 +35,7 @@ import {
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
+import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -273,20 +274,6 @@ const STATUS_LABEL: Record<string, string> = {
   flagged: "Flagged",
 };
 
-// ---------------------------------------------------------------------------
-// Icon badge helper — matches dashboard pattern
-// ---------------------------------------------------------------------------
-
-const iconBadgeStyle: React.CSSProperties = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "var(--p-border-radius-200)",
-  background: "var(--p-color-bg-surface-secondary)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--p-color-icon-emphasis)",
-};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -374,16 +361,7 @@ export default function Fitment() {
                 }}
               >
                 <BlockStack gap="200" inlineAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                    margin: "0 auto",
-                  }}>
-                    <Icon source={item.icon} />
-                  </div>
+                  <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                   <Text as="p" variant="headingLg" fontWeight="bold" tone={item.critical && item.count > 0 ? "critical" : undefined}>
                     {item.count.toLocaleString()}
                   </Text>
@@ -401,9 +379,7 @@ export default function Fitment() {
           <BlockStack gap="300">
             <InlineStack align="space-between">
               <InlineStack gap="200" blockAlign="center">
-                <div style={iconBadgeStyle}>
-                  <Icon source={GaugeIcon} />
-                </div>
+                <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Fitment Coverage</Text>
               </InlineStack>
               <Text as="p" variant="headingMd" fontWeight="bold">
@@ -424,9 +400,7 @@ export default function Fitment() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={iconBadgeStyle}>
-                    <Icon source={WandIcon} />
-                  </div>
+                  <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">Auto Extraction</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
@@ -468,9 +442,7 @@ export default function Fitment() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={iconBadgeStyle}>
-                    <Icon source={TargetIcon} />
-                  </div>
+                  <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">Manual Mapping</Text>
                 </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
@@ -490,9 +462,7 @@ export default function Fitment() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={iconBadgeStyle}>
-                  <Icon source={SearchIcon} />
-                </div>
+                <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Top Makes by Fitment Count</Text>
               </InlineStack>
               <DataTable
@@ -513,9 +483,7 @@ export default function Fitment() {
           <BlockStack gap="400">
             <InlineStack align="space-between">
               <InlineStack gap="200" blockAlign="center">
-                <div style={iconBadgeStyle}>
-                  <Icon source={ChartVerticalIcon} />
-                </div>
+                <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">
                   Recent Fitment Activity
                 </Text>

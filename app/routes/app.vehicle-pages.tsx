@@ -50,6 +50,7 @@ import {
   PLAN_LIMITS,
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
+import { IconBadge } from "../components/IconBadge";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -100,22 +101,6 @@ function formatPower(hp: number | null): string {
   if (!hp) return "";
   return `${hp} HP`;
 }
-
-const iconBadgeStyle = (
-  bg: string = "var(--p-color-bg-surface-secondary)",
-  color: string = "var(--p-color-icon-emphasis)",
-) =>
-  ({
-    width: "32px",
-    height: "32px",
-    borderRadius: "var(--p-border-radius-200)",
-    background: bg,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color,
-    flexShrink: 0,
-  }) as const;
 
 const stepNumberStyle = (active: boolean) =>
   ({
@@ -679,9 +664,7 @@ export default function VehiclePages() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <div style={iconBadgeStyle()}>
-                  <Icon source={PageIcon} />
-                </div>
+                <IconBadge icon={PageIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">
                   How Vehicle Pages Work
                 </Text>
@@ -804,16 +787,7 @@ export default function VehiclePages() {
                 textAlign: "center",
               }}>
                 <BlockStack gap="200" inlineAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                    margin: "0 auto",
-                  }}>
-                    <Icon source={item.icon} />
-                  </div>
+                  <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                   <Text as="p" variant="headingLg" fontWeight="bold">
                     {item.count}
                   </Text>
@@ -831,9 +805,7 @@ export default function VehiclePages() {
           <BlockStack gap="400">
             <InlineStack align="space-between" blockAlign="center" wrap>
               <InlineStack gap="200" blockAlign="center">
-                <div style={iconBadgeStyle()}>
-                  <Icon source={SearchIcon} />
-                </div>
+                <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">
                   Vehicle Browser
                 </Text>
@@ -1013,14 +985,7 @@ export default function VehiclePages() {
             >
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
-                  <div
-                    style={iconBadgeStyle(
-                      "var(--p-color-bg-fill-critical-secondary)",
-                      "var(--p-color-icon-critical)",
-                    )}
-                  >
-                    <Icon source={DeleteIcon} />
-                  </div>
+                  <IconBadge icon={DeleteIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
                   <BlockStack gap="050">
                     <Text as="h2" variant="headingMd">
                       Danger Zone

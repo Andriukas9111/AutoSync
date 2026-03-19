@@ -19,7 +19,6 @@ import {
   Box,
   Divider,
   IndexTable,
-  Icon,
 } from "@shopify/polaris";
 import {
   ExportIcon,
@@ -35,6 +34,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getPlanLimits, getTenant, assertFeature, PLAN_LIMITS } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
+import { IconBadge } from "../components/IconBadge";
 import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
@@ -285,32 +285,6 @@ function formatJobType(type: string): string {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Icon badge helper (matches dashboard visual style)
-// ---------------------------------------------------------------------------
-
-const sectionIconStyle = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "var(--p-border-radius-200)",
-  background: "var(--p-color-bg-surface-secondary)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--p-color-icon-emphasis)",
-} as const;
-
-const statIconStyle = {
-  width: "28px",
-  height: "28px",
-  borderRadius: "var(--p-border-radius-200)",
-  background: "var(--p-color-bg-surface-secondary)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--p-color-icon-emphasis)",
-  margin: "0 auto",
-} as const;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -418,9 +392,7 @@ export default function Push() {
                   textAlign: "center",
                 }}>
                   <BlockStack gap="200" inlineAlign="center">
-                    <div style={statIconStyle}>
-                      <Icon source={item.icon} />
-                    </div>
+                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                     <Text as="p" variant="headingLg" fontWeight="bold">
                       {item.count}
                     </Text>
@@ -439,9 +411,7 @@ export default function Push() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
-                <div style={sectionIconStyle}>
-                  <Icon source={SettingsIcon} />
-                </div>
+                <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Push Options</Text>
               </InlineStack>
 
@@ -576,9 +546,7 @@ export default function Push() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={sectionIconStyle}>
-                    <Icon source={ChartVerticalIcon} />
-                  </div>
+                  <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">Push History</Text>
                 </InlineStack>
                 <IndexTable

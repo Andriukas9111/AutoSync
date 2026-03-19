@@ -23,7 +23,6 @@ import {
   Box,
   Divider,
   Button,
-  Icon,
 } from "@shopify/polaris";
 import {
   GaugeIcon,
@@ -42,6 +41,7 @@ import {
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { IconBadge } from "../components/IconBadge";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -569,15 +569,7 @@ export default function AnalyticsPage() {
         <Layout>
           <Layout.Section>
             <InlineStack gap="200" blockAlign="center">
-              <div style={{
-                width: "28px", height: "28px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: "var(--p-color-bg-surface-secondary)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "var(--p-color-icon-emphasis)",
-              }}>
-                <Icon source={GaugeIcon} />
-              </div>
+              <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
               <Text as="h2" variant="headingLg">
                 Fitment Coverage
               </Text>
@@ -606,16 +598,7 @@ export default function AnalyticsPage() {
                         textAlign: "center",
                       }}>
                         <BlockStack gap="200" inlineAlign="center">
-                          <div style={{
-                            width: "28px", height: "28px",
-                            borderRadius: "var(--p-border-radius-200)",
-                            background: "var(--p-color-bg-surface-secondary)",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            color: "var(--p-color-icon-emphasis)",
-                            margin: "0 auto",
-                          }}>
-                            <Icon source={item.icon} />
-                          </div>
+                          <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                           <Text as="p" variant="headingLg" fontWeight="bold">
                             {item.count}
                           </Text>
@@ -636,15 +619,7 @@ export default function AnalyticsPage() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                  }}>
-                    <Icon source={ProductIcon} />
-                  </div>
+                  <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">
                     Product Status Breakdown
                   </Text>
@@ -672,15 +647,7 @@ export default function AnalyticsPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
                     <InlineStack gap="200" blockAlign="center">
-                      <div style={{
-                        width: "28px", height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}>
-                        <Icon source={TargetIcon} />
-                      </div>
+                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Popular Makes (Top 15)
                       </Text>
@@ -710,15 +677,7 @@ export default function AnalyticsPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
                     <InlineStack gap="200" blockAlign="center">
-                      <div style={{
-                        width: "28px", height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}>
-                        <Icon source={TargetIcon} />
-                      </div>
+                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Popular Models (Top 15)
                       </Text>
@@ -747,15 +706,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={PackageIcon} />
-                    </div>
+                    <IconBadge icon={PackageIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Supplier Performance
                     </Text>
@@ -800,15 +751,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={ChartVerticalIcon} />
-                    </div>
+                    <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Sync Job History
                     </Text>
@@ -848,15 +791,7 @@ export default function AnalyticsPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
                     <InlineStack gap="200" blockAlign="center">
-                      <div style={{
-                        width: "28px", height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}>
-                        <Icon source={SearchIcon} />
-                      </div>
+                      <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Popular Storefront Searches (Last 30 Days)
                       </Text>
@@ -885,15 +820,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={CartIcon} />
-                    </div>
+                    <IconBadge icon={CartIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Conversion Funnel (Last 30 Days)
                     </Text>
@@ -913,15 +840,7 @@ export default function AnalyticsPage() {
                       <InlineGrid columns={{ xs: 2, sm: 4 }} gap="400">
                         <BlockStack gap="100">
                           <InlineStack gap="100" blockAlign="center">
-                            <div style={{
-                              width: "20px", height: "20px",
-                              borderRadius: "var(--p-border-radius-100)",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: "var(--p-color-icon-emphasis)",
-                            }}>
-                              <Icon source={SearchIcon} />
-                            </div>
+                            <IconBadge icon={SearchIcon} size={20} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" tone="subdued">Searches</Text>
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.searches.toLocaleString()}</Text>
@@ -929,15 +848,7 @@ export default function AnalyticsPage() {
 
                         <BlockStack gap="100">
                           <InlineStack gap="100" blockAlign="center">
-                            <div style={{
-                              width: "20px", height: "20px",
-                              borderRadius: "var(--p-border-radius-100)",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: "var(--p-color-icon-emphasis)",
-                            }}>
-                              <Icon source={ViewIcon} />
-                            </div>
+                            <IconBadge icon={ViewIcon} size={20} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" tone="subdued">Product Views</Text>
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.productViews.toLocaleString()}</Text>
@@ -948,15 +859,7 @@ export default function AnalyticsPage() {
 
                         <BlockStack gap="100">
                           <InlineStack gap="100" blockAlign="center">
-                            <div style={{
-                              width: "20px", height: "20px",
-                              borderRadius: "var(--p-border-radius-100)",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: "var(--p-color-icon-emphasis)",
-                            }}>
-                              <Icon source={CartIcon} />
-                            </div>
+                            <IconBadge icon={CartIcon} size={20} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" tone="subdued">Add to Cart</Text>
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.addToCarts.toLocaleString()}</Text>
@@ -967,15 +870,7 @@ export default function AnalyticsPage() {
 
                         <BlockStack gap="100">
                           <InlineStack gap="100" blockAlign="center">
-                            <div style={{
-                              width: "20px", height: "20px",
-                              borderRadius: "var(--p-border-radius-100)",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: "var(--p-color-icon-emphasis)",
-                            }}>
-                              <Icon source={OrderIcon} />
-                            </div>
+                            <IconBadge icon={OrderIcon} size={20} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" tone="subdued">Purchases</Text>
                           </InlineStack>
                           <Text as="p" variant="headingLg">{conversionFunnel.purchases.toLocaleString()}</Text>
@@ -1018,15 +913,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={TargetIcon} />
-                    </div>
+                    <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Conversions by Source
                     </Text>
@@ -1053,15 +940,7 @@ export default function AnalyticsPage() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between">
                     <InlineStack gap="200" blockAlign="center">
-                      <div style={{
-                        width: "28px", height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}>
-                        <Icon source={DatabaseIcon} />
-                      </div>
+                      <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Conversions by Vehicle Type (Top 15)
                       </Text>
@@ -1092,15 +971,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                    }}>
-                      <Icon source={AlertTriangleIcon} />
-                    </div>
+                    <IconBadge icon={AlertTriangleIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Inventory Gap Analysis
                     </Text>

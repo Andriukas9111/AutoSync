@@ -9,7 +9,6 @@ import {
   InlineStack,
   Text,
   Divider,
-  Icon,
   Button,
   Banner,
   Collapsible,
@@ -18,6 +17,7 @@ import {
 } from "@shopify/polaris";
 import { BookOpenIcon } from "@shopify/polaris-icons";
 
+import { IconBadge } from "../components/IconBadge";
 import { authenticate } from "../shopify.server";
 
 // ---------------------------------------------------------------------------
@@ -788,15 +788,7 @@ export default function Help() {
                       >
                         <InlineStack align="space-between" blockAlign="center">
                           <InlineStack gap="200" blockAlign="center">
-                            <div style={{
-                              width: "28px", height: "28px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-surface-secondary)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              color: "var(--p-color-icon-emphasis)",
-                            }}>
-                              <Icon source={BookOpenIcon} />
-                            </div>
+                            <IconBadge icon={BookOpenIcon} color="var(--p-color-icon-emphasis)" />
                             <Text as="h2" variant="headingMd">
                               {section.title}
                             </Text>
@@ -830,15 +822,7 @@ export default function Help() {
         <Card>
           <BlockStack gap="300">
             <InlineStack gap="200" blockAlign="center">
-              <div style={{
-                width: "28px", height: "28px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: "var(--p-color-bg-surface-secondary)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: "var(--p-color-icon-emphasis)",
-              }}>
-                <Icon source={BookOpenIcon} />
-              </div>
+              <IconBadge icon={BookOpenIcon} color="var(--p-color-icon-emphasis)" />
               <Text as="h2" variant="headingMd">
                 Need more help?
               </Text>

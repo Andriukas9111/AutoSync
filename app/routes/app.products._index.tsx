@@ -49,6 +49,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
+import { IconBadge } from "../components/IconBadge";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 
@@ -435,15 +436,7 @@ export default function Products() {
             <Card>
               <Box paddingBlockEnd="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                  }}>
-                    <Icon source={ImportIcon} />
-                  </div>
+                  <IconBadge icon={ImportIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">Get Started</Text>
                 </InlineStack>
               </Box>
@@ -584,16 +577,7 @@ export default function Products() {
                   }}
                 >
                   <BlockStack gap="200" inlineAlign="center">
-                    <div style={{
-                      width: "28px", height: "28px",
-                      borderRadius: "var(--p-border-radius-200)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: "var(--p-color-icon-emphasis)",
-                      margin: "0 auto",
-                    }}>
-                      <Icon source={item.icon} />
-                    </div>
+                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                     <Text as="p" variant="headingLg" fontWeight="bold" tone={item.critical && item.count > 0 ? "critical" : undefined}>
                       {item.count.toLocaleString()}
                     </Text>
@@ -611,15 +595,7 @@ export default function Products() {
         <Card padding="400">
           <BlockStack gap="400">
           <InlineStack gap="200" blockAlign="center">
-            <div style={{
-              width: "28px", height: "28px",
-              borderRadius: "var(--p-border-radius-200)",
-              background: "var(--p-color-bg-surface-secondary)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "var(--p-color-icon-emphasis)",
-            }}>
-              <Icon source={FilterIcon} />
-            </div>
+            <IconBadge icon={FilterIcon} color="var(--p-color-icon-emphasis)" />
             <Text as="h2" variant="headingMd">Filters</Text>
           </InlineStack>
           <InlineStack gap="300" align="start" blockAlign="end" wrap>
@@ -678,15 +654,7 @@ export default function Products() {
           <Card>
             <Box paddingBlockEnd="200">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={ListBulletedIcon} />
-                </div>
+                <IconBadge icon={ListBulletedIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Product Catalog</Text>
               </InlineStack>
             </Box>
@@ -701,15 +669,7 @@ export default function Products() {
           <Card padding="0">
             <Box padding="400" paddingBlockEnd="200">
               <InlineStack gap="200" blockAlign="center">
-                <div style={{
-                  width: "28px", height: "28px",
-                  borderRadius: "var(--p-border-radius-200)",
-                  background: "var(--p-color-bg-surface-secondary)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: "var(--p-color-icon-emphasis)",
-                }}>
-                  <Icon source={ListBulletedIcon} />
-                </div>
+                <IconBadge icon={ListBulletedIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Product Catalog</Text>
               </InlineStack>
             </Box>

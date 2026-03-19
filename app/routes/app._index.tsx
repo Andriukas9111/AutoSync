@@ -41,6 +41,7 @@ import db from "../lib/db.server";
 import { getPlanLimits } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
+import { IconBadge } from "../components/IconBadge";
 
 // ---------------------------------------------------------------------------
 // Loader — aggregate ALL system stats for the dashboard
@@ -476,19 +477,7 @@ export default function Dashboard() {
                         textAlign: "center",
                       }}>
                         <BlockStack gap="200" inlineAlign="center">
-                          <div style={{
-                            width: "28px",
-                            height: "28px",
-                            borderRadius: "var(--p-border-radius-200)",
-                            background: "var(--p-color-bg-surface-secondary)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            color: "var(--p-color-icon-emphasis)",
-                            margin: "0 auto",
-                          }}>
-                            <Icon source={item.icon} />
-                          </div>
+                          <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                           <Text as="p" variant="headingLg" fontWeight="bold">
                             {item.count}
                           </Text>
@@ -517,20 +506,7 @@ export default function Dashboard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "var(--p-border-radius-200)",
-                          background: "var(--p-color-bg-surface-secondary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--p-color-icon-emphasis)",
-                        }}
-                      >
-                        <Icon source={ProductIcon} />
-                      </div>
+                      <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Product Status
                       </Text>
@@ -557,21 +533,7 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-fill-caution-secondary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--p-color-icon-caution)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon source={AlertCircleIcon} />
-                          </div>
+                          <IconBadge icon={AlertCircleIcon} size={22} bg="var(--p-color-bg-fill-caution-secondary)" color="var(--p-color-icon-caution)" />
                           <Text as="span" variant="bodyMd">
                             Unmapped
                           </Text>
@@ -598,21 +560,7 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-fill-success-secondary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--p-color-icon-success)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon source={CheckCircleIcon} />
-                          </div>
+                          <IconBadge icon={CheckCircleIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
                           <Text as="span" variant="bodyMd">
                             Auto Mapped
                           </Text>
@@ -639,21 +587,7 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-fill-success-secondary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--p-color-icon-success)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon source={WandIcon} />
-                          </div>
+                          <IconBadge icon={WandIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
                           <Text as="span" variant="bodyMd">
                             Smart Mapped
                           </Text>
@@ -680,21 +614,7 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-fill-info-secondary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--p-color-icon-info)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon source={TargetIcon} />
-                          </div>
+                          <IconBadge icon={TargetIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
                           <Text as="span" variant="bodyMd">
                             Manual Mapped
                           </Text>
@@ -721,21 +641,7 @@ export default function Dashboard() {
                         blockAlign="center"
                       >
                         <InlineStack gap="200" blockAlign="center">
-                          <div
-                            style={{
-                              width: "22px",
-                              height: "22px",
-                              borderRadius: "var(--p-border-radius-200)",
-                              background: "var(--p-color-bg-fill-warning-secondary)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              color: "var(--p-color-icon-warning)",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Icon source={AlertTriangleIcon} />
-                          </div>
+                          <IconBadge icon={AlertTriangleIcon} size={22} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
                           <Text as="span" variant="bodyMd">
                             Flagged for Review
                           </Text>
@@ -799,20 +705,7 @@ export default function Dashboard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <div
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}
-                    >
-                      <Icon source={ChartVerticalIcon} />
-                    </div>
+                    <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Recent Activity
                     </Text>
@@ -899,20 +792,7 @@ export default function Dashboard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "var(--p-border-radius-200)",
-                          background: "var(--p-color-bg-surface-secondary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--p-color-icon-emphasis)",
-                        }}
-                      >
-                        <Icon source={TargetIcon} />
-                      </div>
+                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Top Makes
                       </Text>
@@ -966,20 +846,7 @@ export default function Dashboard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "var(--p-border-radius-200)",
-                          background: "var(--p-color-bg-surface-secondary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--p-color-icon-emphasis)",
-                        }}
-                      >
-                        <Icon source={DatabaseIcon} />
-                      </div>
+                      <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         YMME Database
                       </Text>
@@ -1058,20 +925,7 @@ export default function Dashboard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <div
-                        style={{
-                          width: "28px",
-                          height: "28px",
-                          borderRadius: "var(--p-border-radius-200)",
-                          background: "var(--p-color-bg-surface-secondary)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--p-color-icon-emphasis)",
-                        }}
-                      >
-                        <Icon source={PackageIcon} />
-                      </div>
+                      <IconBadge icon={PackageIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">
                         Providers
                       </Text>
@@ -1139,20 +993,7 @@ export default function Dashboard() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <div
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: "var(--p-color-icon-emphasis)",
-                      }}
-                    >
-                      <Icon source={StarFilledIcon} />
-                    </div>
+                    <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Plan Usage
                     </Text>

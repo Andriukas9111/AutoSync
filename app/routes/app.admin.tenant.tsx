@@ -35,6 +35,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
 
@@ -406,16 +407,7 @@ export default function TenantDetail() {
                 textAlign: "center",
               }}>
                 <BlockStack gap="200" inlineAlign="center">
-                  <div style={{
-                    width: "28px", height: "28px",
-                    borderRadius: "var(--p-border-radius-200)",
-                    background: "var(--p-color-bg-surface-secondary)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "var(--p-color-icon-emphasis)",
-                    margin: "0 auto",
-                  }}>
-                    <Icon source={item.icon} />
-                  </div>
+                  <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
                   <Text as="p" variant="headingLg" fontWeight="bold">
                     {item.count}
                   </Text>
