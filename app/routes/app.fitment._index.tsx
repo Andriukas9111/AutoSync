@@ -7,7 +7,6 @@ import {
   Card,
   BlockStack,
   InlineStack,
-  InlineGrid,
   Text,
   Badge,
   Button,
@@ -289,17 +288,6 @@ const iconBadgeStyle: React.CSSProperties = {
   color: "var(--p-color-icon-emphasis)",
 };
 
-const statIconBadgeStyle: React.CSSProperties = {
-  width: "32px",
-  height: "32px",
-  borderRadius: "var(--p-border-radius-200)",
-  background: "var(--p-color-bg-surface-secondary)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  color: "var(--p-color-icon-emphasis)",
-};
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -361,109 +349,52 @@ export default function Fitment() {
       ]}
     >
       <BlockStack gap="600">
-        {/* Stats Cards */}
-        <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 7 }} gap="400">
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={ProductIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Total Products</Text>
-              </InlineStack>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {totalProducts.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={ConnectIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Total Fitments</Text>
-              </InlineStack>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {totalFitments.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={WandIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Auto Mapped</Text>
-              </InlineStack>
-              <InlineStack gap="200" blockAlign="baseline">
-                <Text as="p" variant="headingLg" fontWeight="bold">
-                  {autoMapped.toLocaleString()}
-                </Text>
-                <Badge tone="info">{formatPercent(autoMapped, totalProducts)}</Badge>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={WandIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Smart Mapped</Text>
-              </InlineStack>
-              <InlineStack gap="200" blockAlign="baseline">
-                <Text as="p" variant="headingLg" fontWeight="bold">
-                  {smartMapped.toLocaleString()}
-                </Text>
-                <Badge tone="success">{formatPercent(smartMapped, totalProducts)}</Badge>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={TargetIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Manual Mapped</Text>
-              </InlineStack>
-              <InlineStack gap="200" blockAlign="baseline">
-                <Text as="p" variant="headingLg" fontWeight="bold">
-                  {manualMapped.toLocaleString()}
-                </Text>
-                <Badge tone="success">{formatPercent(manualMapped, totalProducts)}</Badge>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={AlertTriangleIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Flagged / Partial</Text>
-              </InlineStack>
-              <Text as="p" variant="headingLg" fontWeight="bold">
-                {(flagged + partial).toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-          <Card>
-            <BlockStack gap="200">
-              <InlineStack gap="200" blockAlign="center">
-                <div style={statIconBadgeStyle}>
-                  <Icon source={AlertCircleIcon} />
-                </div>
-                <Text as="p" variant="bodySm" tone="subdued">Unmapped</Text>
-              </InlineStack>
-              <Text as="p" variant="headingLg" fontWeight="bold" tone="critical">
-                {unmapped.toLocaleString()}
-              </Text>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+        {/* Stats Overview — single card, consistent grid */}
+        <Card padding="0">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            borderBottom: "1px solid var(--p-color-border-secondary)",
+          }}>
+            {([
+              { icon: ProductIcon, label: "Products", count: totalProducts },
+              { icon: ConnectIcon, label: "Fitments", count: totalFitments },
+              { icon: WandIcon, label: "Auto", count: autoMapped },
+              { icon: WandIcon, label: "Smart", count: smartMapped },
+              { icon: TargetIcon, label: "Manual", count: manualMapped },
+              { icon: AlertTriangleIcon, label: "Flagged", count: flagged + partial },
+              { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, critical: true as boolean },
+            ]).map((item, i) => (
+              <div
+                key={item.label}
+                style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < 6 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
+                }}
+              >
+                <BlockStack gap="200" inlineAlign="center">
+                  <div style={{
+                    width: "28px", height: "28px",
+                    borderRadius: "var(--p-border-radius-200)",
+                    background: "var(--p-color-bg-surface-secondary)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "var(--p-color-icon-emphasis)",
+                    margin: "0 auto",
+                  }}>
+                    <Icon source={item.icon} />
+                  </div>
+                  <Text as="p" variant="headingLg" fontWeight="bold" tone={item.critical && item.count > 0 ? "critical" : undefined}>
+                    {item.count.toLocaleString()}
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {item.label}
+                  </Text>
+                </BlockStack>
+              </div>
+            ))}
+          </div>
+        </Card>
 
         {/* Coverage Progress */}
         <Card>
