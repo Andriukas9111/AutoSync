@@ -438,8 +438,6 @@ function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { score: nu
     score += 0.05;
   }
 
-  // Debug
-  matchedHints.push("[s=" + score.toFixed(2) + "]");
 
   return { score: Math.min(1.0, Math.max(0, score)), matchedHints };
 }
