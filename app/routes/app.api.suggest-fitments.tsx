@@ -713,7 +713,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         // Only include engines with meaningful match
-        if (score < 0.25) continue;
+        if (score < 0.01) continue;
 
         const displayName = engineRow.name || "Unknown Engine";
         suggestions.push({
