@@ -425,8 +425,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           .eq("ymme_models.ymme_makes.name", makeName)
           .or(orFilter)
           .limit(50);
-        if (patternEngines) engines.push(...patternEngines);
-        if (patternError) queryError = patternError.message;
+        if (patternEngines) {
+          engines.push(...patternEngines);
+          diagnostics.push(`Path B: ${String(patternEngines.length)} engines for ${makeName} (patterns: ${engineNamePatterns.join(", ")})`);
+        }
+        if (patternError) {
+          queryError = patternError.message;
+          diagnostics.push(`Path B error for ${makeName}: ${patternError.message}`);
+        }
       }
 
       const error = queryError;
