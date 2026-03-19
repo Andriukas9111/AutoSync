@@ -64,28 +64,42 @@ function extractSearchTokens(text: string, knownMakes: string[]): ExtractedToken
 
   const upperText = text.toUpperCase();
 
-  // 1. Find makes present in text
+  // 1. Find makes present in text (word-boundary match, min 3 chars for short names)
   for (const make of knownMakes) {
-    if (upperText.includes(make.toUpperCase())) {
+    const makeUpper = make.toUpperCase();
+    // Skip very short make names (2 chars like "AC", "MG") unless they appear as standalone words
+    if (makeUpper.length <= 2) {
+      const shortRegex = new RegExp(`\\b${makeUpper}\\b`, "i");
+      // Only match 2-char makes if preceded/followed by another automotive keyword
+      if (shortRegex.test(text) && new RegExp(`\\b${makeUpper}\\s+(Ace|Cobra|Schnitzer|ZT|TF|RV8)\\b`, "i").test(text)) {
+        tokens.makes.push(make);
+      }
+    } else if (upperText.includes(makeUpper)) {
       tokens.makes.push(make);
     }
   }
 
   // 2. Model codes: 140i, 240i, 340i, 440i, M40i, 320d, A4, RS3, GTI, etc.
-  //    Pattern: optional letter + 2-3 digits + optional suffix letter(s)
-  const modelCodeRegex = /\b([A-Z]?\d{2,3}[a-z]?[deishx]?)\b/gi;
+  //    Must have a letter prefix OR a letter suffix to be a model code (not just a number)
+  const modelCodeRegex = /\b([A-Z]\d{2,3}[a-z]?[deishx]?|[A-Z]{2,3}\d{1,2}|\d{3}[a-z]?[deishx])\b/gi;
   let m: RegExpExecArray | null;
+  const seenModelCodes = new Set<string>();
   while ((m = modelCodeRegex.exec(text)) !== null) {
     const code = m[1];
-    // Filter out pure numbers that are too short or likely years
-    const numericOnly = /^\d+$/.test(code);
-    if (numericOnly) {
-      const num = parseInt(code, 10);
-      // Skip if it looks like a year (1900-2099) or just a small number
-      if (num >= 1900 && num <= 2099) continue;
-      if (num < 10) continue;
+    // Skip pure numbers (dimensions, weights, etc.)
+    if (/^\d+$/.test(code)) continue;
+    // Skip very short codes (2 chars) that are likely noise
+    if (code.length < 3) continue;
+    // Skip if looks like a year
+    const numPart = parseInt(code.replace(/[^0-9]/g, ""), 10);
+    if (numPart >= 1900 && numPart <= 2099) continue;
+    // Skip common non-model abbreviations
+    if (/^(MST|SKU|MK[0-9]|BW|VW|HP|KW|NM|CC|MM|KG|LB|UK|US|EU|OEM|DIY|LED|VAG|EVO)$/i.test(code)) continue;
+    const key = code.toUpperCase();
+    if (!seenModelCodes.has(key)) {
+      seenModelCodes.add(key);
+      tokens.modelCodes.push(code);
     }
-    tokens.modelCodes.push(code);
   }
 
   // 3. Engine codes: B58, N54, EA211, EA888, M52, S65, etc.
@@ -337,8 +351,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const engineRow = rawRow as unknown as EngineRow;
         const { score, matchedTokens } = scoreEngine(engineRow, tokens, makeName);
 
-        // Only include engines with a meaningful score (beyond just the make match)
-        if (score <= 0.15) continue;
+        // Only include engines with meaningful matches (need model code OR engine code match)
+        if (score < 0.35) continue;
 
         const model = engineRow.model;
         const engineData: EngineDisplayData = {
@@ -398,7 +412,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return data({
       suggestions: uniqueSuggestions.slice(0, 20),
-      hints: [...tokens.modelCodes, ...tokens.engineCodes],
+      hints: [...new Set([...tokens.modelCodes, ...tokens.engineCodes])],
       diagnostics: diagnostics.slice(-10),
     });
   } catch (err) {
