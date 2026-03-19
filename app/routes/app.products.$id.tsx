@@ -426,6 +426,7 @@ export default function ProductDetails() {
 
   const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
   const hints = (suggestionFetcher.data as any)?.hints ?? [];
+  const diagnostics: string[] = (suggestionFetcher.data as any)?.diagnostics ?? [];
   const suggestionsLoading = suggestionFetcher.state === "submitting" || suggestionFetcher.state === "loading";
 
   const handleVehicleChange = useCallback(
@@ -814,7 +815,7 @@ export default function ProductDetails() {
                     <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                       {suggestions.length > 0
                         ? "All suggestions have been accepted!"
-                        : "No vehicle matches found in this product's text. Use manual mapping below."}
+                        : `No vehicle matches found. ${diagnostics.length > 0 ? "Debug: " + diagnostics.join(" | ") : ""}`}
                     </Text>
                   </Box>
                 ) : (
