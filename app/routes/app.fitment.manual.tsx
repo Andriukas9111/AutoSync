@@ -39,6 +39,8 @@ import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
 import type { SuggestedFitment } from "./app.api.suggest-fitments";
+import { ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
+import type { EngineFormatPreset } from "../lib/engine-format";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -82,7 +84,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const specificProductId = url.searchParams.get("product_id");
 
   // Run all queries in parallel
-  const [totalResult, unmappedResult, productResult] = await Promise.all([
+  const [totalResult, unmappedResult, productResult, settingsResult] = await Promise.all([
     db
       .from("products")
       .select("id", { count: "exact", head: true })
@@ -107,16 +109,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           .order("created_at", { ascending: true })
           .limit(1)
           .maybeSingle(),
+    db.from("app_settings")
+      .select("engine_display_format")
+      .eq("shop_id", shopId)
+      .maybeSingle(),
   ]);
 
   const total = totalResult.count ?? 0;
   const unmapped = unmappedResult.count ?? 0;
+
+  const engineFormatPreset: EngineFormatPreset =
+    (settingsResult.data?.engine_display_format as EngineFormatPreset) || "full";
+  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT;
 
   return {
     nextProduct: productResult.data as ProductRecord | null,
     totalProducts: total,
     mappedCount: total - unmapped,
     unmappedCount: unmapped,
+    engineFormatTemplate,
   };
 };
 
@@ -213,7 +224,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function FitmentManual() {
-  const { nextProduct, totalProducts, mappedCount, unmappedCount } =
+  const { nextProduct, totalProducts, mappedCount, unmappedCount, engineFormatTemplate } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
@@ -767,6 +778,7 @@ export default function FitmentManual() {
                       <VehicleSelector
                         key={selectorKey}
                         onChange={handleSelectionChange}
+                        engineFormatTemplate={engineFormatTemplate}
                       />
 
                       <Button

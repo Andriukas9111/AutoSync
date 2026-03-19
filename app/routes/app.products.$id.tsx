@@ -48,6 +48,8 @@ import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
 import { IconBadge } from "../components/IconBadge";
 import type { SuggestedFitment } from "./app.api.suggest-fitments";
+import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
+import type { EngineFormatPreset, EngineDisplayData } from "../lib/engine-format";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -94,27 +96,30 @@ interface Fitment {
   power_hp?: number | null;
   power_kw?: number | null;
   torque_nm?: number | null;
+  cylinders?: number | null;
+  cylinder_config?: string | null;
+  aspiration?: string | null;
 }
 
-type EngineDisplayFormat = "code" | "full_name" | "displacement";
-
-function formatEngine(fitment: Fitment, format: EngineDisplayFormat): string | null {
-  switch (format) {
-    case "code":
-      return fitment.engine_code || fitment.engine || null;
-    case "full_name": {
-      const parts: string[] = [];
-      if (fitment.engine) parts.push(fitment.engine);
-      if (fitment.displacement_cc) parts.push(`${(fitment.displacement_cc / 1000).toFixed(1)}L`);
-      if (fitment.power_hp) parts.push(`${fitment.power_hp}hp`);
-      return parts.length > 0 ? parts.join(" · ") : fitment.engine_code || null;
-    }
-    case "displacement":
-      if (fitment.displacement_cc) return `${(fitment.displacement_cc / 1000).toFixed(1)}L`;
-      return fitment.engine || fitment.engine_code || null;
-    default:
-      return fitment.engine || fitment.engine_code || null;
+function formatFitmentEngine(fitment: Fitment, formatTemplate: string): string | null {
+  const engineData: EngineDisplayData = {
+    name: fitment.engine,
+    code: fitment.engine_code,
+    displacement_cc: fitment.displacement_cc ?? null,
+    fuel_type: fitment.fuel_type,
+    power_hp: fitment.power_hp ?? null,
+    power_kw: fitment.power_kw ?? null,
+    torque_nm: fitment.torque_nm ?? null,
+    cylinders: fitment.cylinders ?? null,
+    cylinder_config: fitment.cylinder_config ?? null,
+    aspiration: fitment.aspiration ?? null,
+  };
+  // If there is no meaningful data at all, return null
+  if (!engineData.name && !engineData.code && !engineData.displacement_cc && !engineData.power_hp) {
+    return null;
   }
+  const result = formatEngineDisplay(engineData, formatTemplate);
+  return result === "Unknown Engine" ? null : result;
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -168,8 +173,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Product not found", { status: 404 });
   }
 
-  const engineDisplayFormat: EngineDisplayFormat =
-    (settingsResult.data?.engine_display_format as EngineDisplayFormat) || "code";
+  const engineFormatPreset: EngineFormatPreset =
+    (settingsResult.data?.engine_display_format as EngineFormatPreset) || "full";
+  const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormatPreset] || DEFAULT_ENGINE_FORMAT;
 
   // Enrich fitments with engine specs
   let fitments = (fitmentsResult.data ?? []) as Fitment[];
@@ -178,7 +184,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   if (engineIds.length > 0) {
     const { data: engines } = await db
       .from("ymme_engines")
-      .select("id, displacement_cc, power_hp, power_kw, torque_nm")
+      .select("id, displacement_cc, power_hp, power_kw, torque_nm, cylinders, cylinder_config, aspiration")
       .in("id", engineIds);
 
     if (engines) {
@@ -191,6 +197,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           power_hp: engineData?.power_hp ?? null,
           power_kw: engineData?.power_kw ?? null,
           torque_nm: engineData?.torque_nm ?? null,
+          cylinders: engineData?.cylinders ?? null,
+          cylinder_config: engineData?.cylinder_config ?? null,
+          aspiration: engineData?.aspiration ?? null,
         };
       });
     }
@@ -200,7 +209,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     product: productResult.data as Product,
     fitments,
     shopDomain: shopId,
-    engineDisplayFormat,
+    engineFormatTemplate,
   };
 };
 
@@ -341,7 +350,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain, engineDisplayFormat } = useLoaderData<typeof loader>();
+  const { product, fitments, shopDomain, engineFormatTemplate } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -778,7 +787,7 @@ export default function ProductDetails() {
                               <InlineStack gap="300" wrap>
                                 <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>
                                 {(() => {
-                                  const engineText = formatEngine(fitment, engineDisplayFormat);
+                                  const engineText = formatFitmentEngine(fitment, engineFormatTemplate);
                                   return engineText ? (
                                     <Text as="span" variant="bodySm" tone="subdued">{engineText}</Text>
                                   ) : null;
@@ -835,7 +844,7 @@ export default function ProductDetails() {
                 {showManualForm && (
                   <>
                     <Divider />
-                    <VehicleSelector onChange={handleVehicleChange} />
+                    <VehicleSelector onChange={handleVehicleChange} engineFormatTemplate={engineFormatTemplate} />
 
                     <BlockStack gap="200">
                       <Text as="p" variant="bodySm" tone="subdued">

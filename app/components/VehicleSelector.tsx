@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
 import { BlockStack, Button, InlineStack, Select } from "@shopify/polaris";
+import { formatEngineDisplay, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
+import type { EngineDisplayData } from "../lib/engine-format";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +43,10 @@ interface Engine {
   torque_nm: number | null;
   year_from: number;
   year_to: number | null;
+  cylinders: number | null;
+  cylinder_config: string | null;
+  aspiration: string | null;
+  modification: string | null;
 }
 
 interface VehicleSelectorProps {
@@ -50,6 +56,8 @@ interface VehicleSelectorProps {
   initialSelection?: Partial<VehicleSelection>;
   /** Compact inline layout (vs. vertical stacked). */
   compact?: boolean;
+  /** Engine format template string from app_settings. Falls back to DEFAULT_ENGINE_FORMAT. */
+  engineFormatTemplate?: string;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -58,6 +66,7 @@ export function VehicleSelector({
   onChange,
   initialSelection,
   compact = false,
+  engineFormatTemplate = DEFAULT_ENGINE_FORMAT,
 }: VehicleSelectorProps) {
   // Fetchers for each cascading level
   const makesFetcher = useFetcher<{ makes?: Make[] }>();
@@ -164,14 +173,23 @@ export function VehicleSelector({
     () => [
       { label: "Select engine...", value: "" },
       ...engines.map((e) => {
-        const parts = [e.name];
-        if (e.displacement_cc) parts.push(`${e.displacement_cc}cc`);
-        if (e.fuel_type) parts.push(e.fuel_type);
-        if (e.power_hp) parts.push(`${e.power_hp}hp`);
-        return { label: parts.join(" — "), value: e.id };
+        const engineData: EngineDisplayData = {
+          name: e.name,
+          code: e.code,
+          displacement_cc: e.displacement_cc,
+          fuel_type: e.fuel_type,
+          power_hp: e.power_hp,
+          power_kw: e.power_kw,
+          torque_nm: e.torque_nm,
+          cylinders: e.cylinders,
+          cylinder_config: e.cylinder_config,
+          aspiration: e.aspiration,
+          modification: e.modification,
+        };
+        return { label: formatEngineDisplay(engineData, engineFormatTemplate), value: e.id };
       }),
     ],
-    [engines],
+    [engines, engineFormatTemplate],
   );
 
   // ── Helpers ──────────────────────────────────────────────────────────────

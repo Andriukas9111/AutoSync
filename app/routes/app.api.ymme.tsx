@@ -137,7 +137,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       let query = db
         .from("ymme_engines")
         .select(
-          "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to",
+          "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
         )
         .eq("model_id", modelId)
         .eq("active", true)

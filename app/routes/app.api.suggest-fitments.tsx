@@ -1,25 +1,21 @@
 /**
- * Fitment Suggestion API — analyzes product text and returns ranked vehicle suggestions.
+ * Fitment Suggestion API — Engine Name Search approach.
  *
- * Used by manual matching UI to show auto-suggestions based on product title,
- * description, and SKU. Combines YMME scanner results with engine hint scoring
- * for more precise engine-level matching.
+ * Extracts search tokens (model codes, engine codes, power, displacement, makes)
+ * from product text, then queries ymme_engines by name to find matches.
+ * Scores each match by how many tokens align with the engine record.
  *
  * POST /app/api/suggest-fitments
  * Body: { title, description?, sku? }
- * Returns: { suggestions: SuggestedFitment[], hints: EngineHint[], diagnostics: string[] }
+ * Returns: { suggestions: SuggestedFitment[], hints: string[], diagnostics: string[] }
  */
 
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { extractFitmentDataV2 } from "../lib/extraction/ymme-extract";
-import { extractVehiclePatterns } from "../lib/extraction/patterns";
-import { extractEngineHints, scoreEngineMatch, formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
-import type { EngineHint, EngineDisplayData, EngineFormatPreset } from "../lib/engine-format";
-import { getYmmeIndex } from "../lib/extraction/ymme-index";
-import type { YmmeIndex } from "../lib/extraction/ymme-index";
+import { formatEngineDisplay, ENGINE_FORMAT_PRESETS, DEFAULT_ENGINE_FORMAT } from "../lib/engine-format";
+import type { EngineDisplayData, EngineFormatPreset } from "../lib/engine-format";
 
 export interface SuggestedFitment {
   make: { id: string; name: string };
@@ -40,8 +36,208 @@ export interface SuggestedFitment {
   yearTo: number | null;
   confidence: number;
   source: string;
-  matchedHints: string[]; // Which hints matched this suggestion
+  matchedHints: string[]; // Which tokens matched this suggestion
 }
+
+// ── Token extraction types ───────────────────────────────────
+
+interface ExtractedTokens {
+  makes: string[];
+  modelCodes: string[];
+  engineCodes: string[];
+  powerValues: number[];
+  displacements: number[];
+  fuelHints: string[];
+}
+
+// ── Token extraction ─────────────────────────────────────────
+
+function extractSearchTokens(text: string, knownMakes: string[]): ExtractedTokens {
+  const tokens: ExtractedTokens = {
+    makes: [],
+    modelCodes: [],
+    engineCodes: [],
+    powerValues: [],
+    displacements: [],
+    fuelHints: [],
+  };
+
+  const upperText = text.toUpperCase();
+
+  // 1. Find makes present in text
+  for (const make of knownMakes) {
+    if (upperText.includes(make.toUpperCase())) {
+      tokens.makes.push(make);
+    }
+  }
+
+  // 2. Model codes: 140i, 240i, 340i, 440i, M40i, 320d, A4, RS3, GTI, etc.
+  //    Pattern: optional letter + 2-3 digits + optional suffix letter(s)
+  const modelCodeRegex = /\b([A-Z]?\d{2,3}[a-z]?[deishx]?)\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = modelCodeRegex.exec(text)) !== null) {
+    const code = m[1];
+    // Filter out pure numbers that are too short or likely years
+    const numericOnly = /^\d+$/.test(code);
+    if (numericOnly) {
+      const num = parseInt(code, 10);
+      // Skip if it looks like a year (1900-2099) or just a small number
+      if (num >= 1900 && num <= 2099) continue;
+      if (num < 10) continue;
+    }
+    tokens.modelCodes.push(code);
+  }
+
+  // 3. Engine codes: B58, N54, EA211, EA888, M52, S65, etc.
+  const engineCodeRegex = /\b([A-Z]{1,2}\d{2,3}[A-Z]?\d{0,2})\b/g;
+  while ((m = engineCodeRegex.exec(text)) !== null) {
+    const code = m[1];
+    // Skip if it matches a known make name (e.g., "BMW" would match B + digits pattern)
+    if (tokens.makes.some((mk) => mk.toUpperCase() === code.toUpperCase())) continue;
+    // Skip very common non-engine abbreviations
+    if (/^(HP|KW|NM|CC|MM|KG|LB|UK|US|EU)$/i.test(code)) continue;
+    tokens.engineCodes.push(code);
+  }
+
+  // 4. Power values: 340hp, 326 Hp, 250 bhp, 190kW, etc.
+  const powerRegex = /\b(\d{2,4})\s*(?:hp|bhp|ps|cv)\b/gi;
+  while ((m = powerRegex.exec(text)) !== null) {
+    tokens.powerValues.push(parseInt(m[1], 10));
+  }
+  // Also check kW (convert to hp: 1kW = 1.341hp)
+  const kwRegex = /\b(\d{2,4})\s*kw\b/gi;
+  while ((m = kwRegex.exec(text)) !== null) {
+    tokens.powerValues.push(Math.round(parseInt(m[1], 10) * 1.341));
+  }
+
+  // 5. Displacement: 3.0, 2.0L, 1.4TSI, 2.5T, etc.
+  const displacementRegex = /\b(\d\.\d)\s*[lL]?\s*(?:TSI|TFSI|TDI|T|i)?\b/g;
+  while ((m = displacementRegex.exec(text)) !== null) {
+    const liters = parseFloat(m[1]);
+    if (liters >= 0.6 && liters <= 8.5) {
+      tokens.displacements.push(Math.round(liters * 1000)); // Convert to cc
+    }
+  }
+
+  // 6. Fuel hints
+  const fuelMap: Record<string, string> = {
+    petrol: "Petrol",
+    gasoline: "Petrol",
+    diesel: "Diesel",
+    hybrid: "Hybrid",
+    electric: "Electric",
+    phev: "Hybrid",
+    "plug-in": "Hybrid",
+    lpg: "LPG",
+    cng: "CNG",
+  };
+  const textLower = text.toLowerCase();
+  for (const [keyword, fuelType] of Object.entries(fuelMap)) {
+    if (textLower.includes(keyword) && !tokens.fuelHints.includes(fuelType)) {
+      tokens.fuelHints.push(fuelType);
+    }
+  }
+
+  return tokens;
+}
+
+// ── Engine scoring ───────────────────────────────────────────
+
+interface EngineRow {
+  id: string;
+  code: string | null;
+  name: string | null;
+  displacement_cc: number | null;
+  fuel_type: string | null;
+  power_hp: number | null;
+  power_kw: number | null;
+  torque_nm: number | null;
+  year_from: number | null;
+  year_to: number | null;
+  aspiration: string | null;
+  cylinders: number | null;
+  cylinder_config: string | null;
+  drive_type: string | null;
+  transmission_type: string | null;
+  body_type: string | null;
+  display_name: string | null;
+  modification: string | null;
+  model: {
+    id: string;
+    name: string;
+    generation: string | null;
+    year_from: number | null;
+    year_to: number | null;
+    make: {
+      id: string;
+      name: string;
+    };
+  };
+}
+
+function scoreEngine(
+  engine: EngineRow,
+  tokens: ExtractedTokens,
+  makeName: string,
+): { score: number; matchedTokens: string[] } {
+  let score = 0;
+  const matchedTokens: string[] = [];
+  const engName = (engine.name || "").toLowerCase();
+
+  // +0.15 base score for make match
+  score += 0.15;
+  matchedTokens.push(makeName);
+
+  // +0.3 if engine name contains a model code from the text
+  for (const code of tokens.modelCodes) {
+    if (engName.includes(code.toLowerCase())) {
+      score += 0.3;
+      matchedTokens.push(code);
+      break; // Only count once
+    }
+  }
+
+  // +0.2 if power_hp matches extracted power value (within 10hp)
+  for (const power of tokens.powerValues) {
+    if (engine.power_hp && Math.abs(engine.power_hp - power) <= 10) {
+      score += 0.2;
+      matchedTokens.push(`${String(power)}hp`);
+      break;
+    }
+  }
+
+  // +0.15 if fuel_type matches extracted fuel hint
+  for (const fuel of tokens.fuelHints) {
+    if (engine.fuel_type && engine.fuel_type.toLowerCase().includes(fuel.toLowerCase())) {
+      score += 0.15;
+      matchedTokens.push(fuel);
+      break;
+    }
+  }
+
+  // +0.1 if displacement matches extracted displacement (within 100cc)
+  for (const disp of tokens.displacements) {
+    if (engine.displacement_cc && Math.abs(engine.displacement_cc - disp) <= 100) {
+      score += 0.1;
+      matchedTokens.push(`${(disp / 1000).toFixed(1)}L`);
+      break;
+    }
+  }
+
+  // +0.1 if engine name contains extracted engine code (B58, N54)
+  for (const code of tokens.engineCodes) {
+    const codeLower = code.toLowerCase();
+    if (engName.includes(codeLower) || (engine.code && engine.code.toLowerCase().includes(codeLower))) {
+      score += 0.1;
+      matchedTokens.push(code);
+      break;
+    }
+  }
+
+  return { score: Math.min(1.0, score), matchedTokens };
+}
+
+// ── Main action ──────────────────────────────────────────────
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -68,149 +264,127 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const engineFormatTemplate = ENGINE_FORMAT_PRESETS[engineFormat] || DEFAULT_ENGINE_FORMAT;
 
   try {
-    // Step 1: Run the full V2 extraction pipeline
-    const extraction = await extractFitmentDataV2(db, {
-      title,
-      description: description || null,
-      descriptionHtml: null,
-      sku: sku || null,
-    });
-
-    // Step 2: Extract engine hints from ALL text sources
+    const diagnostics: string[] = [];
     const allText = [title, description || "", sku || ""].join(" ");
-    const hints = extractEngineHints(allText);
 
-    // Step 3: Get the YMME index for engine scoring
-    const index = await getYmmeIndex(db);
+    // Step 1: Load known makes from DB
+    const { data: makeRows } = await db
+      .from("ymme_makes")
+      .select("id, name")
+      .eq("active", true);
+    const knownMakes = (makeRows || []).map((r: { id: string; name: string }) => r.name);
 
-    // Step 2.5: Run pattern-based extraction for multi-model detection
-    // This catches slash-separated models like "140i/240i/340i/440i"
-    const patternResult = extractVehiclePatterns(allText);
-    const patternSuggestions = resolvePatternFitments(patternResult.result.fitments, index, hints, engineFormatTemplate);
+    // Step 2: Extract search tokens from product text
+    const tokens = extractSearchTokens(allText, knownMakes);
+    diagnostics.push(`Tokens: ${String(tokens.makes.length)} makes, ${String(tokens.modelCodes.length)} model codes, ${String(tokens.engineCodes.length)} engine codes, ${String(tokens.powerValues.length)} power, ${String(tokens.displacements.length)} displacement`);
 
-    // Step 4: Convert extraction results to ranked suggestions
-    const suggestions: SuggestedFitment[] = [...patternSuggestions];
+    if (tokens.makes.length === 0) {
+      diagnostics.push("No known makes found in text");
+      return data({ suggestions: [], hints: tokens.modelCodes, diagnostics });
+    }
 
-    for (const row of extraction.fitmentRows) {
-      // If we have a model but no engine, try to find matching engines
-      if (row.ymme_model_id && !row.ymme_engine_id && hints.length > 0) {
-        const modelEngines = index.enginesByModelId.get(row.ymme_model_id) || [];
+    // Step 3: For each make found, search engines by model code in name
+    const suggestions: SuggestedFitment[] = [];
 
-        // Score each engine against the hints
-        const scoredEngines = modelEngines
-          .map((engine) => {
-            const engineData: EngineDisplayData = {
-              code: engine.code,
-              name: engine.name,
-              displacement_cc: engine.displacementCc,
-              fuel_type: engine.fuelType,
-              power_hp: engine.powerHp,
-              power_kw: engine.powerKw,
-              torque_nm: engine.torqueNm,
-              cylinders: engine.cylinders,
-              cylinder_config: engine.cylinderConfig,
-              aspiration: engine.aspiration,
-              drive_type: engine.driveType,
-              transmission_type: engine.transmissionType,
-              modification: engine.modification,
-              generation: row.variant,
-            };
+    for (const makeName of tokens.makes) {
+      // Build ILIKE patterns from model codes
+      const searchPatterns = tokens.modelCodes.map((code) => `%${code}%`);
 
-            const score = scoreEngineMatch(engineData, hints);
-            const displayName = formatEngineDisplay(engineData, engineFormatTemplate);
-
-            return { engine, score, displayName };
-          })
-          .filter((e) => e.score > 0.1) // Only show engines with some hint match
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 5); // Top 5 engine suggestions per model
-
-        if (scoredEngines.length > 0) {
-          // Add engine-specific suggestions
-          for (const { engine, score, displayName } of scoredEngines) {
-            const matchedHints = hints
-              .filter((h) => {
-                if (h.type === "engine_code" && engine.code?.toLowerCase().includes(h.normalized.toLowerCase())) return true;
-                if (h.type === "displacement" && engine.displacementCc && Math.abs(engine.displacementCc - parseInt(h.normalized)) <= 50) return true;
-                if (h.type === "power" && engine.powerHp && Math.abs(engine.powerHp - parseInt(h.normalized)) <= 10) return true;
-                if (h.type === "fuel_type" && engine.fuelType?.toLowerCase().includes(h.normalized)) return true;
-                return false;
-              })
-              .map((h) => h.value);
-
-            const model = row.ymme_model_id ? index.modelById.get(row.ymme_model_id) : null;
-            const make = row.ymme_make_id ? index.makeById.get(row.ymme_make_id) : null;
-
-            if (make) {
-              suggestions.push({
-                make: { id: make.id, name: make.name },
-                model: model ? { id: model.id, name: model.name, generation: model.generation } : null,
-                engine: {
-                  id: engine.id,
-                  code: engine.code,
-                  name: engine.name,
-                  displayName,
-                  displacementCc: engine.displacementCc,
-                  fuelType: engine.fuelType,
-                  powerHp: engine.powerHp,
-                  aspiration: engine.aspiration,
-                  cylinders: engine.cylinders,
-                  cylinderConfig: engine.cylinderConfig,
-                },
-                yearFrom: engine.yearFrom ?? row.year_from,
-                yearTo: engine.yearTo ?? row.year_to,
-                confidence: Math.min(1.0, row.confidence_score * 0.6 + score * 0.4),
-                source: row.extraction_method,
-                matchedHints,
-              });
-            }
-          }
-        } else {
-          // No engine match — add model-level suggestion
-          addModelLevelSuggestion(suggestions, row, index);
+      // Also search by engine codes if no model codes found
+      if (searchPatterns.length === 0 && tokens.engineCodes.length > 0) {
+        for (const code of tokens.engineCodes) {
+          searchPatterns.push(`%${code}%`);
         }
-      } else {
-        // Already has engine or no hints to match — add as-is
-        const engine = row.ymme_engine_id ? findEngineById(index, row.ymme_engine_id) : null;
-        const model = row.ymme_model_id ? index.modelById.get(row.ymme_model_id) : null;
-        const make = row.ymme_make_id ? index.makeById.get(row.ymme_make_id) : null;
+      }
 
-        if (make) {
-          suggestions.push({
-            make: { id: make.id, name: make.name },
-            model: model ? { id: model.id, name: model.name, generation: model.generation } : null,
-            engine: engine ? {
-              id: engine.id,
-              code: engine.code,
-              name: engine.name,
-              displayName: formatEngineDisplay({
-                code: engine.code,
-                name: engine.name,
-                displacement_cc: engine.displacementCc,
-                fuel_type: engine.fuelType,
-                power_hp: engine.powerHp,
-                cylinders: engine.cylinders,
-                cylinder_config: engine.cylinderConfig,
-                aspiration: engine.aspiration,
-              }, engineFormatTemplate),
-              displacementCc: engine.displacementCc,
-              fuelType: engine.fuelType,
-              powerHp: engine.powerHp,
-              aspiration: engine.aspiration,
-              cylinders: engine.cylinders,
-              cylinderConfig: engine.cylinderConfig,
-            } : null,
-            yearFrom: row.year_from,
-            yearTo: row.year_to,
-            confidence: row.confidence_score,
-            source: row.extraction_method,
-            matchedHints: [],
-          });
-        }
+      if (searchPatterns.length === 0) {
+        diagnostics.push(`Make "${makeName}" found but no model/engine codes to search`);
+        continue;
+      }
+
+      // Build the OR filter for name ILIKE patterns
+      const orFilter = searchPatterns.map((p) => `name.ilike.${p}`).join(",");
+
+      const { data: engines, error } = await db
+        .from("ymme_engines")
+        .select(`
+          id, code, name, displacement_cc, fuel_type, power_hp, power_kw,
+          torque_nm, year_from, year_to, aspiration, cylinders, cylinder_config,
+          drive_type, transmission_type, body_type, display_name, modification,
+          model:ymme_models!inner(id, name, generation, year_from, year_to,
+            make:ymme_makes!inner(id, name)
+          )
+        `)
+        .eq("active", true)
+        .eq("ymme_models.ymme_makes.name", makeName)
+        .or(orFilter)
+        .limit(50);
+
+      if (error) {
+        diagnostics.push(`DB error for ${makeName}: ${error.message}`);
+        continue;
+      }
+
+      if (!engines || engines.length === 0) {
+        diagnostics.push(`No engines found for ${makeName} with patterns: ${searchPatterns.join(", ")}`);
+        continue;
+      }
+
+      diagnostics.push(`Found ${String(engines.length)} engines for ${makeName}`);
+
+      // Step 4: Score each matched engine
+      for (const rawRow of engines) {
+        const engineRow = rawRow as unknown as EngineRow;
+        const { score, matchedTokens } = scoreEngine(engineRow, tokens, makeName);
+
+        // Only include engines with a meaningful score (beyond just the make match)
+        if (score <= 0.15) continue;
+
+        const model = engineRow.model;
+        const engineData: EngineDisplayData = {
+          code: engineRow.code,
+          name: engineRow.name,
+          displacement_cc: engineRow.displacement_cc,
+          fuel_type: engineRow.fuel_type,
+          power_hp: engineRow.power_hp,
+          power_kw: engineRow.power_kw,
+          torque_nm: engineRow.torque_nm,
+          cylinders: engineRow.cylinders,
+          cylinder_config: engineRow.cylinder_config,
+          aspiration: engineRow.aspiration,
+          drive_type: engineRow.drive_type,
+          transmission_type: engineRow.transmission_type,
+          modification: engineRow.modification,
+          generation: model.generation,
+        };
+
+        const displayName = formatEngineDisplay(engineData, engineFormatTemplate);
+
+        suggestions.push({
+          make: { id: model.make.id, name: model.make.name },
+          model: { id: model.id, name: model.name, generation: model.generation },
+          engine: {
+            id: engineRow.id,
+            code: engineRow.code || "",
+            name: engineRow.name,
+            displayName,
+            displacementCc: engineRow.displacement_cc,
+            fuelType: engineRow.fuel_type,
+            powerHp: engineRow.power_hp,
+            aspiration: engineRow.aspiration,
+            cylinders: engineRow.cylinders,
+            cylinderConfig: engineRow.cylinder_config,
+          },
+          yearFrom: engineRow.year_from,
+          yearTo: engineRow.year_to,
+          confidence: score,
+          source: "engine-name-search",
+          matchedHints: matchedTokens,
+        });
       }
     }
 
-    // Deduplicate, suppress model-level when engine-level exists, limit per model, and sort
+    // Step 5: Deduplicate and limit
     const uniqueSuggestions = deduplicateSuggestions(suggestions);
     uniqueSuggestions.sort((a, b) => {
       // Primary: confidence descending
@@ -223,9 +397,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     return data({
-      suggestions: uniqueSuggestions.slice(0, 20), // Top 20
-      hints: hints.map((h) => ({ type: h.type, value: h.value, confidence: h.confidence })),
-      diagnostics: extraction.diagnostics.slice(-10),
+      suggestions: uniqueSuggestions.slice(0, 20),
+      hints: [...tokens.modelCodes, ...tokens.engineCodes],
+      diagnostics: diagnostics.slice(-10),
     });
   } catch (err) {
     console.error("[suggest-fitments] Error:", err);
@@ -238,39 +412,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 // ── Helpers ────────────────────────────────────────────────────
-
-function addModelLevelSuggestion(
-  suggestions: SuggestedFitment[],
-  row: { ymme_make_id: string | null; ymme_model_id: string | null; make: string; model: string | null; variant: string | null; year_from: number | null; year_to: number | null; confidence_score: number; extraction_method: string },
-  index: ReturnType<typeof getYmmeIndex> extends Promise<infer T> ? T : never,
-) {
-  const model = row.ymme_model_id ? index.modelById.get(row.ymme_model_id) : null;
-  const make = row.ymme_make_id ? index.makeById.get(row.ymme_make_id) : null;
-
-  if (make) {
-    suggestions.push({
-      make: { id: make.id, name: make.name },
-      model: model ? { id: model.id, name: model.name, generation: model.generation } : null,
-      engine: null,
-      yearFrom: row.year_from,
-      yearTo: row.year_to,
-      confidence: row.confidence_score,
-      source: row.extraction_method,
-      matchedHints: [],
-    });
-  }
-}
-
-function findEngineById(
-  index: { enginesByModelId: Map<string, import("../lib/extraction/ymme-index").YmmeIndexEngine[]> },
-  engineId: string,
-): import("../lib/extraction/ymme-index").YmmeIndexEngine | null {
-  for (const engines of index.enginesByModelId.values()) {
-    const found = engines.find((e) => e.id === engineId);
-    if (found) return found;
-  }
-  return null;
-}
 
 function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitment[] {
   // Pass 1: Remove exact duplicates (same make+model+engine)
@@ -291,14 +432,13 @@ function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitme
   }
   const suppressed = deduped.filter((s) => {
     if (!s.engine && s.model?.id && pairsWithEngines.has(`${s.make.id}|${s.model.id}`)) {
-      return false; // Remove model-level when engine-level exists
+      return false;
     }
     return true;
   });
 
   // Pass 3: Limit to top 3 engines per make+model (by confidence)
   const engineCountByPair = new Map<string, number>();
-  // Sort by confidence desc first so we keep the best ones
   suppressed.sort((a, b) => b.confidence - a.confidence);
   return suppressed.filter((s) => {
     if (s.engine?.id && s.model?.id) {
@@ -309,201 +449,4 @@ function deduplicateSuggestions(suggestions: SuggestedFitment[]): SuggestedFitme
     }
     return true;
   });
-}
-
-/**
- * Resolve pattern-based fitments against YMME database.
- * This handles multi-model detection (slash-separated) and creates
- * full suggestions with YMME IDs, engine matching, and year expansion.
- */
-function resolvePatternFitments(
-  fitments: Array<{
-    make: string;
-    model: string | null;
-    variant: string | null;
-    year_from: number | null;
-    year_to: number | null;
-    engine: string | null;
-    engine_code: string | null;
-    fuel_type: string | null;
-    confidence: number;
-  }>,
-  index: YmmeIndex,
-  hints: EngineHint[],
-  engineFormatTemplate: string,
-): SuggestedFitment[] {
-  const results: SuggestedFitment[] = [];
-  const currentYear = new Date().getFullYear();
-
-  for (const fit of fitments) {
-    if (!fit.make) continue;
-
-    // Resolve make
-    const makeEntry = Array.from(index.makeById.values()).find(
-      (m) => m.name.toLowerCase() === fit.make.toLowerCase(),
-    );
-    if (!makeEntry) continue;
-
-    // Resolve model — try exact match first, then substring
-    let modelEntry = fit.model
-      ? Array.from(index.modelById.values()).find(
-          (m) =>
-            m.makeId === makeEntry.id &&
-            m.name.toLowerCase() === fit.model!.toLowerCase(),
-        )
-      : null;
-
-    // Fallback: try resolving BMW-style codes to series (e.g., "440i" -> "4 Series")
-    if (!modelEntry && fit.model) {
-      const seriesMatch = fit.model.match(/^(\d)/);
-      if (seriesMatch) {
-        const seriesName = `${seriesMatch[1]} Series`;
-        modelEntry = Array.from(index.modelById.values()).find(
-          (m) =>
-            m.makeId === makeEntry.id &&
-            m.name.toLowerCase() === seriesName.toLowerCase(),
-        );
-      }
-    }
-
-    // Expand year: if year_to is null (open-ended "2016+"), use current year
-    // Also treat yearFrom === yearTo as open-ended (single year = "this year and beyond")
-    const yearFrom = fit.year_from;
-    const yearTo = (fit.year_to != null && fit.year_to === fit.year_from)
-      ? null
-      : fit.year_to ?? (yearFrom ? currentYear : null);
-
-    // Find matching engines
-    if (modelEntry) {
-      const modelEngines = index.enginesByModelId.get(modelEntry.id) || [];
-
-      // Filter engines by year range
-      const matchingEngines = modelEngines.filter((eng) => {
-        if (yearFrom && eng.yearTo && eng.yearTo < yearFrom) return false;
-        if (yearTo && eng.yearFrom && eng.yearFrom > yearTo) return false;
-        return true;
-      });
-
-      // Score engines: use name-based matching since many DBs lack engine codes
-      // Match by: engine code in name, model code in name, power hint, aspiration
-      const scoredEngines = matchingEngines
-        .map((engine) => {
-          let score = 0.2; // Base score for year-matching engine (always show year-compatible engines)
-          const engName = (engine.name || "").toLowerCase();
-
-          // Check if engine name contains the detected model code (e.g., "140i" in "140i (326 Hp)")
-          if (fit.model) {
-            const modelLower = fit.model.toLowerCase();
-            if (engName.includes(modelLower)) score += 0.5;
-          }
-
-          // Check if engine code hint appears in engine name or code
-          if (fit.engine_code) {
-            const codeLower = fit.engine_code.toLowerCase();
-            if (engine.code && engine.code.toLowerCase().startsWith(codeLower)) score += 0.4;
-            if (engName.includes(codeLower)) score += 0.3;
-          }
-
-          // Check power hint
-          const powerHint = hints.find((h) => h.type === "power");
-          if (powerHint && engine.powerHp) {
-            if (Math.abs(engine.powerHp - parseInt(powerHint.normalized)) <= 20) score += 0.2;
-          }
-
-          // Check aspiration hint
-          const aspirationHint = hints.find((h) => h.type === "aspiration");
-          if (aspirationHint && engine.aspiration) {
-            if (engine.aspiration.toLowerCase().includes(aspirationHint.normalized.toLowerCase())) score += 0.15;
-          } else if (aspirationHint) {
-            // Check in engine name
-            if (engName.includes(aspirationHint.normalized.toLowerCase())) score += 0.1;
-          }
-
-          const engineData: EngineDisplayData = {
-            code: engine.code,
-            name: engine.name,
-            displacement_cc: engine.displacementCc,
-            fuel_type: engine.fuelType,
-            power_hp: engine.powerHp,
-            power_kw: engine.powerKw,
-            torque_nm: engine.torqueNm,
-            cylinders: engine.cylinders,
-            cylinder_config: engine.cylinderConfig,
-            aspiration: engine.aspiration,
-            drive_type: engine.driveType,
-            transmission_type: engine.transmissionType,
-            modification: engine.modification,
-            generation: fit.variant,
-          };
-
-          return { engine, score, displayName: formatEngineDisplay(engineData, engineFormatTemplate) };
-        })
-        .filter((e) => e.score > 0.08) // Show engines with any match signal
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 5);
-
-      if (scoredEngines.length > 0) {
-        // Create one suggestion per matching engine
-        for (const { engine, score, displayName } of scoredEngines) {
-          const matchedHints = hints
-            .filter((h) => {
-              if (h.type === "engine_code" && engine.code?.toLowerCase().includes(h.normalized.toLowerCase())) return true;
-              if (h.type === "power" && engine.powerHp && Math.abs(engine.powerHp - parseInt(h.normalized)) <= 15) return true;
-              if (h.type === "fuel_type" && engine.fuelType?.toLowerCase().includes(h.normalized)) return true;
-              if (h.type === "aspiration" && engine.aspiration?.toLowerCase().includes(h.normalized)) return true;
-              return false;
-            })
-            .map((h) => h.value);
-
-          results.push({
-            make: { id: makeEntry.id, name: makeEntry.name },
-            model: { id: modelEntry.id, name: modelEntry.name, generation: modelEntry.generation },
-            engine: {
-              id: engine.id,
-              code: engine.code,
-              name: engine.name,
-              displayName,
-              displacementCc: engine.displacementCc,
-              fuelType: engine.fuelType,
-              powerHp: engine.powerHp,
-              aspiration: engine.aspiration,
-              cylinders: engine.cylinders,
-              cylinderConfig: engine.cylinderConfig,
-            },
-            yearFrom: engine.yearFrom ?? yearFrom,
-            yearTo: engine.yearTo ?? yearTo,
-            confidence: Math.min(1.0, fit.confidence * 0.7 + score * 0.3),
-            source: "pattern",
-            matchedHints,
-          });
-        }
-      } else {
-        // No engine match — add model-level suggestion
-        results.push({
-          make: { id: makeEntry.id, name: makeEntry.name },
-          model: { id: modelEntry.id, name: modelEntry.name, generation: modelEntry.generation },
-          engine: null,
-          yearFrom,
-          yearTo,
-          confidence: fit.confidence * 0.8,
-          source: "pattern",
-          matchedHints: [],
-        });
-      }
-    } else {
-      // No model resolved — make-only suggestion
-      results.push({
-        make: { id: makeEntry.id, name: makeEntry.name },
-        model: fit.model ? { id: "", name: fit.model, generation: fit.variant } : null,
-        engine: null,
-        yearFrom,
-        yearTo,
-        confidence: fit.confidence * 0.5,
-        source: "pattern",
-        matchedHints: [],
-      });
-    }
-  }
-
-  return results;
 }
