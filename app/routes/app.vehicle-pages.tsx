@@ -371,13 +371,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "push_all") {
     try {
-      const { pushVehiclePages } = await import(
+      const { pushVehiclePages, pushThemeTemplate } = await import(
         "../lib/pipeline/vehicle-pages.server"
       );
+
+      // Push theme template first so pages render properly on the storefront
+      let templateNote = "";
+      try {
+        const templateResult = await pushThemeTemplate(admin, shopId);
+        if (templateResult.success) {
+          templateNote = " Theme template installed.";
+        }
+      } catch {
+        // Non-fatal — pages can still be created even if template push fails
+        templateNote = " (Warning: theme template push failed — pages may not render correctly)";
+      }
+
       const result = await pushVehiclePages(admin, shopId);
+
+      if (result.total === 0) {
+        return data({
+          error: "No vehicles found to push. Map fitments to your products first, then try again.",
+        }, { status: 400 });
+      }
+
       return data({
         success: true,
-        message: `Successfully pushed ${result.created + result.updated} vehicle pages (${result.created} created, ${result.updated} updated${result.failed > 0 ? `, ${result.failed} failed` : ""}).`,
+        message: `Successfully pushed ${result.created + result.updated} vehicle pages (${result.created} created, ${result.updated} updated${result.failed > 0 ? `, ${result.failed} failed` : ""}).${templateNote}`,
       });
     } catch (err: unknown) {
       const message =
@@ -478,6 +498,7 @@ export default function VehiclePages() {
         title="Vehicle Pages"
         subtitle="Enterprise — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
+        fullWidth
       >
         <Layout>
           <Layout.Section>
@@ -567,6 +588,7 @@ export default function VehiclePages() {
         title="Vehicle Pages"
         subtitle="Enterprise — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
+        fullWidth
       >
         <Layout>
           <Layout.Section>
@@ -601,6 +623,7 @@ export default function VehiclePages() {
       title="Vehicle Pages"
       subtitle="Enterprise — SEO-optimized vehicle specification pages"
       backAction={{ url: "/app" }}
+      fullWidth
       primaryAction={{
         content: "Push All Vehicle Pages",
         disabled: noVehiclesAvailable || isLoading,

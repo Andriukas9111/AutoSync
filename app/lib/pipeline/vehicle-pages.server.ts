@@ -988,12 +988,11 @@ export async function ensureMetaobjectDefinition(
 export async function getVehiclesForPages(
   shopId: string,
 ): Promise<VehiclePageData[]> {
-  // Get all distinct engine IDs that have fitments for this shop
+  // Get ALL fitments for this shop — both with and without ymme_engine_id
   const { data: fitments, error: fitmentError } = await db
     .from("vehicle_fitments")
-    .select("ymme_engine_id, product_id")
-    .eq("shop_id", shopId)
-    .not("ymme_engine_id", "is", null);
+    .select("ymme_engine_id, product_id, make, model, engine, engine_code, fuel_type, year_from, year_to, variant")
+    .eq("shop_id", shopId);
 
   if (fitmentError) {
     throw new Error(`Failed to query fitments: ${fitmentError.message}`);
@@ -1003,18 +1002,37 @@ export async function getVehiclesForPages(
     return [];
   }
 
-  // Group product IDs by engine ID
-  const productsByEngine = new Map<string, Set<string>>();
+  // Separate fitments into two groups: YMME-linked and text-only
+  const ymmeLinkedFitments: typeof fitments = [];
+  const textOnlyFitments: typeof fitments = [];
   for (const f of fitments) {
-    if (!f.ymme_engine_id) continue;
-    const set = productsByEngine.get(f.ymme_engine_id) ?? new Set();
+    if (f.ymme_engine_id) {
+      ymmeLinkedFitments.push(f);
+    } else if (f.make && f.model) {
+      textOnlyFitments.push(f);
+    }
+  }
+
+  // Group product IDs by engine ID (for YMME-linked)
+  const productsByEngine = new Map<string, Set<string>>();
+  for (const f of ymmeLinkedFitments) {
+    const set = productsByEngine.get(f.ymme_engine_id!) ?? new Set();
     set.add(f.product_id);
-    productsByEngine.set(f.ymme_engine_id, set);
+    productsByEngine.set(f.ymme_engine_id!, set);
+  }
+
+  // Group product IDs by text key (for text-only)
+  const productsByTextKey = new Map<string, Set<string>>();
+  for (const f of textOnlyFitments) {
+    const key = `${f.make}|${f.model}|${f.engine ?? ""}`;
+    const set = productsByTextKey.get(key) ?? new Set();
+    set.add(f.product_id);
+    productsByTextKey.set(key, set);
   }
 
   const engineIds = [...productsByEngine.keys()];
 
-  // Fetch product handles for linked products
+  // Fetch product handles for all linked products
   const allProductIds = [...new Set(fitments.map((f: any) => f.product_id))];
   const { data: products } = await db
     .from("products")
@@ -1027,140 +1045,189 @@ export async function getVehiclesForPages(
     handleMap.set(p.id, p.handle ?? p.id);
   }
 
-  // Fetch engines with model and make joins
-  // Supabase doesn't support deep joins well, so we batch-query
-  const { data: engines, error: engineError } = await db
-    .from("ymme_engines")
-    .select(
-      `
-      id, name, code, displacement_cc, fuel_type,
-      power_hp, power_kw, torque_nm, year_from, year_to,
-      body_type, drive_type, transmission_type,
-      model_id
-    `,
-    )
-    .in("id", engineIds);
-
-  if (engineError) {
-    throw new Error(`Failed to query engines: ${engineError.message}`);
-  }
-
-  if (!engines || engines.length === 0) {
-    return [];
-  }
-
-  // Get model IDs then fetch models
-  const modelIds = [...new Set(engines.map((e: any) => e.model_id))];
-  const { data: models } = await db
-    .from("ymme_models")
-    .select("id, name, generation, make_id")
-    .in("id", modelIds);
-
-  const modelMap = new Map<string, any>();
-  for (const m of models ?? []) {
-    modelMap.set(m.id, m);
-  }
-
-  // Get make IDs then fetch makes
-  const makeIds = [...new Set((models ?? []).map((m: any) => m.make_id))];
-  const { data: makes } = await db
-    .from("ymme_makes")
-    .select("id, name")
-    .in("id", makeIds);
-
-  const makeMap = new Map<string, string>();
-  for (const m of makes ?? []) {
-    makeMap.set(m.id, m.name);
-  }
-
-  // Fetch vehicle specs for these engines
-  const { data: specs, error: specsError } = await db
-    .from("ymme_vehicle_specs")
-    .select("*")
-    .in("engine_id", engineIds);
-
-  if (specsError) {
-    console.error("[vehicle-pages] Specs query error:", specsError.message);
-  }
-
-  const specsMap = new Map<string, any>();
-  for (const s of specs ?? []) {
-    specsMap.set(s.engine_id, s);
-  }
-
-  // Build result
   const result: VehiclePageData[] = [];
 
-  for (const engine of engines) {
-    const model = modelMap.get(engine.model_id);
-    if (!model) continue;
+  // ── Part A: Process YMME-linked fitments (rich engine data) ──
+  if (engineIds.length > 0) {
+    const { data: engines, error: engineError } = await db
+      .from("ymme_engines")
+      .select(
+        `
+        id, name, code, displacement_cc, fuel_type,
+        power_hp, power_kw, torque_nm, year_from, year_to,
+        body_type, drive_type, transmission_type,
+        model_id
+      `,
+      )
+      .in("id", engineIds);
 
-    const makeName = makeMap.get(model.make_id);
-    if (!makeName) continue;
+    if (engineError) {
+      throw new Error(`Failed to query engines: ${engineError.message}`);
+    }
 
-    const engineProductIds = productsByEngine.get(engine.id);
-    const linkedHandles: string[] = [];
-    if (engineProductIds) {
-      for (const pid of engineProductIds) {
-        const handle = handleMap.get(pid);
-        if (handle) linkedHandles.push(handle);
+    if (engines && engines.length > 0) {
+      // Get model IDs then fetch models
+      const modelIds = [...new Set(engines.map((e: any) => e.model_id))];
+      const { data: models } = await db
+        .from("ymme_models")
+        .select("id, name, generation, make_id")
+        .in("id", modelIds);
+
+      const modelMap = new Map<string, any>();
+      for (const m of models ?? []) {
+        modelMap.set(m.id, m);
+      }
+
+      // Get make IDs then fetch makes
+      const makeIds = [...new Set((models ?? []).map((m: any) => m.make_id))];
+      const { data: makes } = await db
+        .from("ymme_makes")
+        .select("id, name")
+        .in("id", makeIds);
+
+      const makeMap = new Map<string, string>();
+      for (const m of makes ?? []) {
+        makeMap.set(m.id, m.name);
+      }
+
+      // Fetch vehicle specs for these engines
+      const { data: specs, error: specsError } = await db
+        .from("ymme_vehicle_specs")
+        .select("*")
+        .in("engine_id", engineIds);
+
+      if (specsError) {
+        console.error("[vehicle-pages] Specs query error:", specsError.message);
+      }
+
+      const specsMap = new Map<string, any>();
+      for (const s of specs ?? []) {
+        specsMap.set(s.engine_id, s);
+      }
+
+      for (const engine of engines) {
+        const model = modelMap.get(engine.model_id);
+        if (!model) continue;
+
+        const makeName = makeMap.get(model.make_id);
+        if (!makeName) continue;
+
+        const engineProductIds = productsByEngine.get(engine.id);
+        const linkedHandles: string[] = [];
+        if (engineProductIds) {
+          for (const pid of engineProductIds) {
+            const handle = handleMap.get(pid);
+            if (handle) linkedHandles.push(handle);
+          }
+        }
+
+        const vehicleSpecs = specsMap.get(engine.id) ?? null;
+
+        // Pull power/torque from specs if engine record is missing them
+        let powerHp: number | null = engine.power_hp;
+        if (powerHp == null && vehicleSpecs?.system_combined_hp) {
+          powerHp = vehicleSpecs.system_combined_hp;
+        }
+        if (powerHp == null) {
+          const rawPower = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Power;
+          const match = rawPower?.match(/(\d+)\s*Hp/i);
+          if (match) powerHp = parseInt(match[1]);
+        }
+        const powerKw: number | null = engine.power_kw ?? (powerHp ? Math.round(powerHp * 0.7457) : null);
+
+        let torqueNm: number | null = engine.torque_nm;
+        if (torqueNm == null && vehicleSpecs?.system_combined_torque_nm) {
+          torqueNm = vehicleSpecs.system_combined_torque_nm;
+        }
+        if (torqueNm == null) {
+          const rawTorque = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Torque;
+          const match = rawTorque?.match(/(\d+)\s*Nm/i);
+          if (match) torqueNm = parseInt(match[1]);
+        }
+
+        // Build a better variant name from raw_specs or engine fields
+        const rawModification = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? null;
+        const variantName = engine.name ?? rawModification ?? (
+          engine.displacement_cc
+            ? `${(engine.displacement_cc / 1000).toFixed(1)}L ${engine.fuel_type ?? ""}${powerHp ? ` (${powerHp} HP)` : ""}`.trim()
+            : `${engine.fuel_type ?? "Unknown"}`
+        );
+
+        // Pull generation from raw_specs if model lacks it
+        const generation = model.generation ?? (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Generation ?? null;
+
+        result.push({
+          engineId: engine.id,
+          make: makeName,
+          model: model.name,
+          generation,
+          variant: variantName,
+          yearFrom: engine.year_from,
+          yearTo: engine.year_to,
+          engineCode: engine.code ?? vehicleSpecs?.engine_model_code ?? null,
+          displacementCc: engine.displacement_cc,
+          powerHp,
+          powerKw,
+          torqueNm,
+          fuelType: engine.fuel_type,
+          bodyType: engine.body_type ?? vehicleSpecs?.body_type ?? null,
+          driveType: engine.drive_type ?? vehicleSpecs?.drive_type ?? null,
+          transmission: engine.transmission_type ?? vehicleSpecs?.transmission_type ?? null,
+          heroImageUrl: vehicleSpecs?.hero_image_url ?? null,
+          specs: vehicleSpecs,
+          linkedProductIds: linkedHandles,
+        });
       }
     }
+  }
 
-    const vehicleSpecs = specsMap.get(engine.id) ?? null;
+  // ── Part B: Process text-only fitments (no YMME engine link) ──
+  // These still deserve vehicle pages — they just have less detail
+  const ymmeEngineIdSet = new Set(engineIds);
+  for (const [textKey, productIds] of productsByTextKey) {
+    const [make, model, engine] = textKey.split("|");
 
-    // Pull power/torque from specs if engine record is missing them
-    let powerHp: number | null = engine.power_hp;
-    if (powerHp == null && vehicleSpecs?.system_combined_hp) {
-      powerHp = vehicleSpecs.system_combined_hp;
-    }
-    if (powerHp == null) {
-      const rawPower = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Power;
-      const match = rawPower?.match(/(\d+)\s*Hp/i);
-      if (match) powerHp = parseInt(match[1]);
-    }
-    const powerKw: number | null = engine.power_kw ?? (powerHp ? Math.round(powerHp * 0.7457) : null);
+    // Skip if we already have a YMME-linked entry for same make+model+engine
+    const alreadyCovered = result.some(
+      (r) =>
+        r.make.toLowerCase() === make.toLowerCase() &&
+        r.model.toLowerCase() === model.toLowerCase(),
+    );
+    if (alreadyCovered) continue;
 
-    let torqueNm: number | null = engine.torque_nm;
-    if (torqueNm == null && vehicleSpecs?.system_combined_torque_nm) {
-      torqueNm = vehicleSpecs.system_combined_torque_nm;
-    }
-    if (torqueNm == null) {
-      const rawTorque = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Torque;
-      const match = rawTorque?.match(/(\d+)\s*Nm/i);
-      if (match) torqueNm = parseInt(match[1]);
+    const linkedHandles: string[] = [];
+    for (const pid of productIds) {
+      const handle = handleMap.get(pid);
+      if (handle) linkedHandles.push(handle);
     }
 
-    // Build a better variant name from raw_specs or engine fields
-    const rawModification = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? null;
-    const variantName = engine.name ?? rawModification ?? (
-      engine.displacement_cc
-        ? `${(engine.displacement_cc / 1000).toFixed(1)}L ${engine.fuel_type ?? ""}${powerHp ? ` (${powerHp} HP)` : ""}`.trim()
-        : `${engine.fuel_type ?? "Unknown"}`
+    // Get representative fitment data for year/fuel/etc
+    const representative = textOnlyFitments.find(
+      (f) => `${f.make}|${f.model}|${f.engine ?? ""}` === textKey,
     );
 
-    // Pull generation from raw_specs if model lacks it
-    const generation = model.generation ?? (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Generation ?? null;
+    const variantName = engine || `${make} ${model}`;
 
     result.push({
-      engineId: engine.id,
-      make: makeName,
-      model: model.name,
-      generation,
+      // Use a stable text-based ID for sync tracking
+      engineId: `text:${make.toLowerCase()}-${model.toLowerCase()}-${(engine || "").toLowerCase()}`.replace(/[^a-z0-9:-]/g, "-"),
+      make,
+      model,
+      generation: representative?.variant ?? null,
       variant: variantName,
-      yearFrom: engine.year_from,
-      yearTo: engine.year_to,
-      engineCode: engine.code ?? vehicleSpecs?.engine_model_code ?? null,
-      displacementCc: engine.displacement_cc,
-      powerHp,
-      powerKw,
-      torqueNm,
-      fuelType: engine.fuel_type,
-      bodyType: engine.body_type ?? vehicleSpecs?.body_type ?? null,
-      driveType: engine.drive_type ?? vehicleSpecs?.drive_type ?? null,
-      transmission: engine.transmission_type ?? vehicleSpecs?.transmission_type ?? null,
-      heroImageUrl: vehicleSpecs?.hero_image_url ?? null,
-      specs: vehicleSpecs,
+      yearFrom: representative?.year_from ?? null,
+      yearTo: representative?.year_to ?? null,
+      engineCode: representative?.engine_code ?? null,
+      displacementCc: null,
+      powerHp: null,
+      powerKw: null,
+      torqueNm: null,
+      fuelType: representative?.fuel_type ?? null,
+      bodyType: null,
+      driveType: null,
+      transmission: null,
+      heroImageUrl: null,
+      specs: null,
       linkedProductIds: linkedHandles,
     });
   }
