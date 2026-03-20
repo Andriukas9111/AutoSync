@@ -142,9 +142,18 @@
    * otherwise fall back to Shopify search.
    */
   function redirectToCollection(proxyUrl, makeName, modelName) {
+    // Build a conventional collection handle as fallback
+    function buildFallbackHandle(make, model) {
+      var slug = (make + (model ? ' ' + model : '') + ' parts')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      return '/collections/' + slug;
+    }
+
     if (!proxyUrl || !makeName) {
-      // No proxy URL — go straight to search
-      window.location.href = '/search?q=' + encodeURIComponent((makeName || '') + ' ' + (modelName || '')) + '&type=product';
+      // No proxy URL — try conventional collection handle
+      window.location.href = buildFallbackHandle(makeName || '', modelName);
       return;
     }
 
@@ -154,13 +163,13 @@
         if (data && data.found && data.url) {
           window.location.href = data.url;
         } else {
-          // No collection found — fall back to search
-          window.location.href = '/search?q=' + encodeURIComponent(makeName + (modelName ? ' ' + modelName : '')) + '&type=product';
+          // No collection in DB — try conventional handle (e.g. /collections/audi-a3-parts)
+          window.location.href = buildFallbackHandle(makeName, modelName);
         }
       })
       .catch(function () {
-        // API error — fall back to search
-        window.location.href = '/search?q=' + encodeURIComponent(makeName + (modelName ? ' ' + modelName : '')) + '&type=product';
+        // API error — try conventional handle
+        window.location.href = buildFallbackHandle(makeName, modelName);
       });
   }
 

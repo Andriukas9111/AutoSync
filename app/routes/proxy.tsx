@@ -255,59 +255,78 @@ async function handleCollectionLookup(params: URLSearchParams) {
 
   if (!make) return json({ error: "Missing make parameter" }, 400);
 
-  // Look up collection mapping by make + optional model
-  let query = db
-    .from("collection_mappings")
-    .select("handle, title, type, make, model")
-    .eq("shop_id", shop)
-    .ilike("make", make);
+  const found = (row: { handle: string; title: string; type: string }) =>
+    json({
+      found: true,
+      handle: row.handle,
+      title: row.title,
+      type: row.type,
+      url: `/collections/${row.handle}`,
+    });
 
   if (model) {
-    // Try exact model match first (make_model collection)
-    const { data: modelMatch } = await query.ilike("model", model).maybeSingle();
-    if (modelMatch) {
-      return json({
-        found: true,
-        handle: modelMatch.handle,
-        title: modelMatch.title,
-        type: modelMatch.type,
-        url: `/collections/${modelMatch.handle}`,
-      });
-    }
+    // 1. Prefer make_model collection (most specific non-year match)
+    const { data: modelMatch } = await db
+      .from("collection_mappings")
+      .select("handle, title, type")
+      .eq("shop_id", shop)
+      .ilike("make", make)
+      .ilike("model", model)
+      .eq("type", "make_model")
+      .limit(1)
+      .maybeSingle();
 
-    // Fall back to make-only collection
+    if (modelMatch) return found(modelMatch);
+
+    // 2. Fall back to any collection with this make+model (e.g. make_model_year)
+    const { data: anyModelMatch } = await db
+      .from("collection_mappings")
+      .select("handle, title, type")
+      .eq("shop_id", shop)
+      .ilike("make", make)
+      .ilike("model", model)
+      .limit(1)
+      .maybeSingle();
+
+    if (anyModelMatch) return found(anyModelMatch);
+
+    // 3. Fall back to make-only collection
     const { data: makeMatch } = await db
       .from("collection_mappings")
-      .select("handle, title, type, make, model")
+      .select("handle, title, type")
       .eq("shop_id", shop)
       .ilike("make", make)
       .is("model", null)
+      .limit(1)
       .maybeSingle();
 
-    if (makeMatch) {
-      return json({
-        found: true,
-        handle: makeMatch.handle,
-        title: makeMatch.title,
-        type: makeMatch.type,
-        url: `/collections/${makeMatch.handle}`,
-      });
-    }
+    if (makeMatch) return found(makeMatch);
 
     return json({ found: false });
   }
 
-  // Make-only lookup
-  const { data: makeMatch } = await query.maybeSingle();
-  if (makeMatch) {
-    return json({
-      found: true,
-      handle: makeMatch.handle,
-      title: makeMatch.title,
-      type: makeMatch.type,
-      url: `/collections/${makeMatch.handle}`,
-    });
-  }
+  // Make-only lookup — get make-only collection first, then any with this make
+  const { data: makeOnly } = await db
+    .from("collection_mappings")
+    .select("handle, title, type")
+    .eq("shop_id", shop)
+    .ilike("make", make)
+    .is("model", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (makeOnly) return found(makeOnly);
+
+  // If no make-only collection, return the first one with this make
+  const { data: anyMake } = await db
+    .from("collection_mappings")
+    .select("handle, title, type")
+    .eq("shop_id", shop)
+    .ilike("make", make)
+    .limit(1)
+    .maybeSingle();
+
+  if (anyMake) return found(anyMake);
 
   return json({ found: false });
 }
