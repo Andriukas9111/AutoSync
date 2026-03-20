@@ -25,7 +25,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // Also push the theme template so pages render properly
         const templateResult = await pushThemeTemplate(admin, shopId, session);
         const result = await pushVehiclePages(admin, shopId);
-        const templateNote = templateResult.success ? " Theme template installed." : "";
+        const templateNote = templateResult.success
+          ? " Theme template installed."
+          : ` (Template error: ${templateResult.error || "unknown"})`;
         return data({
           success: true,
           message: `Published ${result.created} vehicle pages, updated ${result.updated}.${templateNote}`,
