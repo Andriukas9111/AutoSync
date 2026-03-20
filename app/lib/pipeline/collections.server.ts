@@ -439,9 +439,53 @@ async function processCollectionTarget(
 
     const collection = data?.collectionCreate?.collection;
     if (collection) {
+      // Publish to all sales channels so products are visible
+      await publishToAllChannels(admin, collection.id);
       await upsertCollectionMapping(shopId, collection, target, strategy);
       result.created++;
     }
+  }
+}
+
+// ── Publish to Sales Channels ───────────────────────────────
+
+/**
+ * Publishes a resource (collection, product, etc.) to all active sales channels.
+ * Without this, newly created collections are invisible on the Online Store.
+ */
+async function publishToAllChannels(admin: any, resourceId: string) {
+  try {
+    // Get all available publications (sales channels)
+    const pubResp = await admin.graphql(`query {
+      publications(first: 20) {
+        nodes { id name }
+      }
+    }`);
+    const pubJson = await pubResp.json();
+    const publications = pubJson?.data?.publications?.nodes ?? [];
+
+    if (publications.length === 0) return;
+
+    // Publish to each channel
+    const publishResp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+      publishablePublish(id: $id, input: $input) {
+        publishable { availablePublicationsCount { count } }
+        userErrors { field message }
+      }
+    }`, {
+      variables: {
+        id: resourceId,
+        input: publications.map((p: any) => ({ publicationId: p.id })),
+      },
+    });
+
+    const publishJson = await publishResp.json();
+    const publishErrors = publishJson?.data?.publishablePublish?.userErrors;
+    if (publishErrors?.length) {
+      console.error(`[collections] Publish errors for ${resourceId}:`, publishErrors.map((e: any) => e.message).join(", "));
+    }
+  } catch (err) {
+    console.error("[collections] publishToAllChannels error:", err instanceof Error ? err.message : err);
   }
 }
 

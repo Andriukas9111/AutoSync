@@ -200,19 +200,42 @@ async function handleYears(params: URLSearchParams) {
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
+  // Fetch model's own year range to clamp engine years
+  const { data: model } = await db
+    .from("ymme_models")
+    .select("year_from, year_to")
+    .eq("id", modelId)
+    .maybeSingle();
+
+  const modelYearFrom = model?.year_from ?? null;
+  const modelYearTo = model?.year_to ?? new Date().getFullYear();
+
   const { data: engines, error } = await db
     .from("ymme_engines")
     .select("year_from, year_to")
     .eq("model_id", modelId)
-    .eq("active", true);
+    .eq("active", true)
+    .not("year_from", "is", null);
 
   if (error) return json({ error: error.message }, 500);
 
+  const currentYear = new Date().getFullYear();
   const yearSet = new Set<number>();
   for (const engine of engines ?? []) {
     const from = engine.year_from;
-    const to = engine.year_to ?? new Date().getFullYear();
-    for (let y = from; y <= to; y++) {
+    if (typeof from !== "number" || from < 1900) continue;
+    const to = engine.year_to ?? currentYear;
+    for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
+      // Clamp to model's year range
+      if (modelYearFrom != null && y < modelYearFrom) continue;
+      if (y > modelYearTo) continue;
+      yearSet.add(y);
+    }
+  }
+
+  // Fallback to model range if no engine years found
+  if (yearSet.size === 0 && modelYearFrom != null) {
+    for (let y = modelYearFrom; y <= modelYearTo; y++) {
       yearSet.add(y);
     }
   }

@@ -1418,6 +1418,13 @@ export async function pushVehiclePages(
       // Shopify Pages are no longer created — rendering is handled by the
       // metaobject's renderable capability and the theme template.
       if (metaobjectGid) {
+        // Publish metaobject to all sales channels (Online Store etc.)
+        try {
+          await publishMetaobjectToChannels(admin, metaobjectGid);
+        } catch (pubErr) {
+          console.error(`[vehicle-pages] Publish error for ${vehicle.make} ${vehicle.model}:`, pubErr instanceof Error ? pubErr.message : pubErr);
+        }
+
         if (isUpdate) {
           result.updated++;
         } else {
@@ -1485,6 +1492,46 @@ export async function pushVehiclePages(
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// 3b. Publish Metaobjects to Sales Channels
+// ---------------------------------------------------------------------------
+
+/**
+ * Publishes a metaobject to all active sales channels (Online Store, etc.).
+ * Without this, metaobject entries won't be visible on the storefront even
+ * if the definition has onlineStore capability enabled.
+ */
+async function publishMetaobjectToChannels(admin: any, metaobjectGid: string) {
+  // Get all available publications (sales channels)
+  const pubResp = await admin.graphql(`query {
+    publications(first: 20) {
+      nodes { id name }
+    }
+  }`);
+  const pubJson = await pubResp.json();
+  const publications = pubJson?.data?.publications?.nodes ?? [];
+
+  if (publications.length === 0) return;
+
+  const publishResp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+    publishablePublish(id: $id, input: $input) {
+      publishable { availablePublicationsCount { count } }
+      userErrors { field message }
+    }
+  }`, {
+    variables: {
+      id: metaobjectGid,
+      input: publications.map((p: any) => ({ publicationId: p.id })),
+    },
+  });
+
+  const publishJson = await publishResp.json();
+  const publishErrors = publishJson?.data?.publishablePublish?.userErrors;
+  if (publishErrors?.length) {
+    console.error(`[vehicle-pages] Publish errors for ${metaobjectGid}:`, publishErrors.map((e: any) => e.message).join(", "));
+  }
 }
 
 // ---------------------------------------------------------------------------
