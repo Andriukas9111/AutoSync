@@ -764,9 +764,25 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
 // ---------- Loader (GET requests) ----------
 // ---------- Vehicle Specs handler (Enterprise) ----------
 async function handleVehicleSpecs(params: URLSearchParams) {
-  const engineId = params.get("engine_id");
+  let engineId = params.get("engine_id");
   const shop = params.get("shop");
-  if (!engineId) return json({ error: "Missing engine_id" }, 400);
+  const handle = params.get("handle");
+
+  // If handle is provided instead of engine_id, look up from vehicle_page_sync
+  if (!engineId && handle && shop) {
+    const { data: syncRow } = await db
+      .from("vehicle_page_sync")
+      .select("engine_id")
+      .eq("shop_id", shop)
+      .eq("metaobject_handle", handle)
+      .eq("sync_status", "synced")
+      .maybeSingle();
+    if (syncRow) {
+      engineId = syncRow.engine_id;
+    }
+  }
+
+  if (!engineId) return json({ error: "Missing engine_id or handle" }, 400);
 
   // Verify fitmentBadge feature (Starter+) — powers compatibility table, specs, floating bar
   if (shop) {

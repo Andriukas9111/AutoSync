@@ -34,3 +34,7 @@ template = "blocks/vin-decode.liquid"
 [[blocks]]
 name = "Vehicle Showcase"
 template = "blocks/vehicle-specs-page.liquid"
+
+[[blocks]]
+name = "Vehicle Spec Detail"
+template = "blocks/vehicle-spec-detail.liquid"

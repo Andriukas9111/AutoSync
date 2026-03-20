@@ -1,0 +1,660 @@
+{% comment %}
+  AutoSync Vehicle Spec Detail
+  Renders full vehicle specification data on metaobject vehicle spec pages.
+  Fetches data from the App Proxy by extracting the handle from the current URL.
+  Place this block on the Vehicle Specification (default) metaobject template.
+{% endcomment %}
+
+{% liquid
+  assign proxy_url = shop.url | append: '/apps/autosync'
+%}
+
+<div
+  class="avsd-root"
+  data-avsd-root
+  data-proxy-url="{{ proxy_url }}"
+  id="avsd-{{ block.id }}"
+  style="
+    --avsd-primary: {{ block.settings.primary_color | default: '#2563eb' }};
+    --avsd-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --avsd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --avsd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --avsd-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --avsd-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --avsd-radius: {{ block.settings.border_radius | default: 12 }}px;
+    --avsd-accent: {{ block.settings.accent_color | default: '#10b981' }};
+  "
+>
+  <!-- Loading State -->
+  <div class="avsd-loading" data-avsd-loading>
+    <div class="avsd-spinner"></div>
+    <p>Loading vehicle specifications...</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="avsd-error" data-avsd-error style="display:none;">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <p>Unable to load vehicle specifications.</p>
+    <button class="avsd-retry-btn" data-avsd-retry>Try Again</button>
+  </div>
+
+  <!-- Content (populated by JS using safe DOM methods) -->
+  <div class="avsd-content" data-avsd-content style="display:none;"></div>
+</div>
+
+<style>
+  .avsd-root {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: var(--avsd-text);
+    background: var(--avsd-bg);
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px 48px;
+  }
+
+  /* Loading */
+  .avsd-loading {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 80px 20px; gap: 16px; color: var(--avsd-muted);
+  }
+  .avsd-spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--avsd-border);
+    border-top-color: var(--avsd-primary);
+    border-radius: 50%;
+    animation: avsd-spin 0.8s linear infinite;
+  }
+  @keyframes avsd-spin { to { transform: rotate(360deg); } }
+
+  /* Error */
+  .avsd-error {
+    text-align: center; padding: 80px 20px; color: var(--avsd-muted);
+  }
+  .avsd-error svg { margin: 0 auto 12px; display: block; }
+  .avsd-error p { margin: 0 0 16px; font-size: 15px; }
+  .avsd-retry-btn {
+    padding: 10px 24px; border: 1px solid var(--avsd-border); border-radius: var(--avsd-radius);
+    background: var(--avsd-bg); color: var(--avsd-text); cursor: pointer; font-size: 14px; font-weight: 500;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .avsd-retry-btn:hover { border-color: var(--avsd-primary); background: var(--avsd-card-bg); }
+
+  /* ── Hero Section ── */
+  .avsd-hero {
+    display: flex; gap: 32px; align-items: flex-start;
+    margin-bottom: 32px; padding: 32px;
+    background: linear-gradient(135deg, var(--avsd-card-bg) 0%, var(--avsd-bg) 100%);
+    border: 1px solid var(--avsd-border);
+    border-radius: var(--avsd-radius);
+  }
+  .avsd-hero__image {
+    width: 280px; height: 200px; flex-shrink: 0;
+    border-radius: calc(var(--avsd-radius) - 4px);
+    overflow: hidden; background: var(--avsd-bg);
+    border: 1px solid var(--avsd-border);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .avsd-hero__image img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  .avsd-hero__image-placeholder {
+    color: var(--avsd-muted); opacity: 0.3;
+  }
+  .avsd-hero__info { flex: 1; min-width: 0; }
+  .avsd-hero__breadcrumb {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--avsd-primary); font-weight: 600; margin: 0 0 8px;
+  }
+  .avsd-hero__title {
+    font-size: 28px; font-weight: 800; margin: 0 0 4px;
+    letter-spacing: -0.02em; line-height: 1.2;
+  }
+  .avsd-hero__variant {
+    font-size: 18px; font-weight: 500; color: var(--avsd-muted);
+    margin: 0 0 16px;
+  }
+  .avsd-hero__badges {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+  }
+  .avsd-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+    background: var(--avsd-bg); border: 1px solid var(--avsd-border); color: var(--avsd-text);
+  }
+  .avsd-badge--primary {
+    background: color-mix(in srgb, var(--avsd-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--avsd-primary) 30%, transparent);
+    color: var(--avsd-primary);
+  }
+  .avsd-badge--accent {
+    background: color-mix(in srgb, var(--avsd-accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--avsd-accent) 30%, transparent);
+    color: var(--avsd-accent);
+  }
+  .avsd-badge svg { flex-shrink: 0; }
+  .avsd-hero__overview {
+    font-size: 14px; line-height: 1.7; color: var(--avsd-muted);
+    margin: 0; max-width: 600px;
+  }
+
+  /* ── Quick Stats Strip ── */
+  .avsd-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px; background: var(--avsd-border);
+    border: 1px solid var(--avsd-border);
+    border-radius: var(--avsd-radius);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .avsd-stat {
+    background: var(--avsd-bg); padding: 16px 20px;
+    text-align: center;
+  }
+  .avsd-stat__icon { margin-bottom: 6px; color: var(--avsd-primary); }
+  .avsd-stat__value {
+    font-size: 20px; font-weight: 800; margin: 0;
+    letter-spacing: -0.02em;
+  }
+  .avsd-stat__label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--avsd-muted); font-weight: 600; margin: 4px 0 0;
+  }
+
+  /* ── Spec Sections (Tabs) ── */
+  .avsd-tabs {
+    display: flex; gap: 4px; border-bottom: 2px solid var(--avsd-border);
+    margin-bottom: 0; padding: 0 4px; overflow-x: auto;
+    scrollbar-width: none; -ms-overflow-style: none;
+  }
+  .avsd-tabs::-webkit-scrollbar { display: none; }
+  .avsd-tab {
+    padding: 12px 20px; font-size: 13px; font-weight: 600;
+    color: var(--avsd-muted); cursor: pointer; border: none;
+    background: none; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px; transition: color 0.2s, border-color 0.2s;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .avsd-tab:hover { color: var(--avsd-text); }
+  .avsd-tab--active {
+    color: var(--avsd-primary);
+    border-bottom-color: var(--avsd-primary);
+  }
+
+  .avsd-tab-panels { margin-bottom: 32px; }
+  .avsd-tab-panel {
+    display: none; padding: 24px 0;
+  }
+  .avsd-tab-panel--active { display: block; }
+
+  .avsd-spec-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+    border: 1px solid var(--avsd-border); border-radius: var(--avsd-radius);
+    overflow: hidden;
+  }
+  .avsd-spec-row {
+    display: contents;
+  }
+  .avsd-spec-row:nth-child(odd) .avsd-spec-key,
+  .avsd-spec-row:nth-child(odd) .avsd-spec-val {
+    background: var(--avsd-card-bg);
+  }
+  .avsd-spec-key {
+    padding: 12px 16px; font-size: 13px; font-weight: 600;
+    color: var(--avsd-muted); border-bottom: 1px solid var(--avsd-border);
+  }
+  .avsd-spec-val {
+    padding: 12px 16px; font-size: 14px; font-weight: 500;
+    color: var(--avsd-text); border-bottom: 1px solid var(--avsd-border);
+  }
+  .avsd-spec-row:last-child .avsd-spec-key,
+  .avsd-spec-row:last-child .avsd-spec-val {
+    border-bottom: none;
+  }
+
+  .avsd-spec-empty {
+    padding: 40px 20px; text-align: center;
+    color: var(--avsd-muted); font-size: 14px;
+  }
+
+  /* ── Products Section ── */
+  .avsd-products-heading {
+    font-size: 20px; font-weight: 700; margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .avsd-products-sub {
+    font-size: 14px; color: var(--avsd-muted); margin: 0 0 20px;
+  }
+  .avsd-products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .avsd-product-card {
+    border: 1px solid var(--avsd-border); border-radius: var(--avsd-radius);
+    overflow: hidden; text-decoration: none; color: inherit;
+    background: var(--avsd-bg);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  }
+  .avsd-product-card:hover {
+    border-color: var(--avsd-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    transform: translateY(-2px);
+  }
+  .avsd-product-card__img {
+    width: 100%; aspect-ratio: 1; object-fit: cover;
+    background: var(--avsd-card-bg); display: block;
+  }
+  .avsd-product-card__body {
+    padding: 12px 14px;
+  }
+  .avsd-product-card__title {
+    font-size: 13px; font-weight: 600; margin: 0 0 6px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; line-height: 1.4;
+  }
+  .avsd-product-card__price {
+    font-size: 14px; font-weight: 700; color: var(--avsd-primary);
+    margin: 0;
+  }
+
+  /* ── Powered by Footer ── */
+  .avsd-footer {
+    text-align: center; padding: 24px 0;
+    font-size: 11px; color: var(--avsd-muted); opacity: 0.6;
+    letter-spacing: 0.02em;
+  }
+  .avsd-footer a {
+    color: var(--avsd-primary); text-decoration: none; font-weight: 600;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .avsd-hero {
+      flex-direction: column; gap: 20px; padding: 20px;
+    }
+    .avsd-hero__image {
+      width: 100%; height: 180px;
+    }
+    .avsd-hero__title { font-size: 22px; }
+    .avsd-hero__variant { font-size: 15px; }
+    .avsd-stats { grid-template-columns: repeat(2, 1fr); }
+    .avsd-spec-grid { grid-template-columns: 1fr 1fr; }
+    .avsd-products-grid {
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+  }
+  @media (max-width: 480px) {
+    .avsd-root { padding: 0 12px 32px; }
+    .avsd-hero { padding: 16px; }
+    .avsd-hero__title { font-size: 20px; }
+    .avsd-stats { grid-template-columns: repeat(2, 1fr); }
+    .avsd-tab { padding: 10px 14px; font-size: 12px; }
+  }
+</style>
+
+<script>
+(function() {
+  var root = document.getElementById('avsd-{{ block.id }}');
+  if (!root) return;
+
+  var proxyUrl = root.dataset.proxyUrl;
+  var loadingEl = root.querySelector('[data-avsd-loading]');
+  var errorEl = root.querySelector('[data-avsd-error]');
+  var contentEl = root.querySelector('[data-avsd-content]');
+  var retryBtn = root.querySelector('[data-avsd-retry]');
+
+  // Extract handle from URL: /pages/vehicle-specs/{handle}
+  var pathParts = window.location.pathname.split('/');
+  var handle = pathParts[pathParts.length - 1] || '';
+
+  if (!handle || !proxyUrl) {
+    showError();
+    return;
+  }
+
+  if (retryBtn) {
+    retryBtn.addEventListener('click', function() {
+      showLoading();
+      fetchData();
+    });
+  }
+
+  fetchData();
+
+  function fetchData() {
+    var url = new URL(proxyUrl);
+    url.searchParams.set('path', 'vehicle-specs');
+    url.searchParams.set('handle', handle);
+
+    fetch(url.toString())
+      .then(function(resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function(data) {
+        if (!data.vehicle) throw new Error('No vehicle data');
+        renderVehicle(data.vehicle, data.products || []);
+      })
+      .catch(function(err) {
+        console.error('[AutoSync] Vehicle spec detail error:', err);
+        showError();
+      });
+  }
+
+  function showLoading() {
+    loadingEl.style.display = 'flex';
+    errorEl.style.display = 'none';
+    contentEl.style.display = 'none';
+  }
+
+  function showError() {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'block';
+    contentEl.style.display = 'none';
+  }
+
+  // Safe DOM element creation helpers
+  function el(tag, className, textContent) {
+    var e = document.createElement(tag);
+    if (className) e.className = className;
+    if (textContent) e.textContent = textContent;
+    return e;
+  }
+
+  function svgEl(svgMarkup) {
+    var t = document.createElement('template');
+    t.innerHTML = svgMarkup.trim();
+    return t.content.firstChild;
+  }
+
+  function createBadge(iconSvg, text, extraClass) {
+    var span = el('span', 'avsd-badge' + (extraClass ? ' ' + extraClass : ''));
+    span.appendChild(svgEl(iconSvg));
+    span.appendChild(document.createTextNode(' ' + text));
+    return span;
+  }
+
+  function createStatCard(iconSvg, value, label) {
+    var card = el('div', 'avsd-stat');
+    var iconDiv = el('div', 'avsd-stat__icon');
+    iconDiv.appendChild(svgEl(iconSvg));
+    card.appendChild(iconDiv);
+    card.appendChild(el('p', 'avsd-stat__value', value));
+    card.appendChild(el('p', 'avsd-stat__label', label));
+    return card;
+  }
+
+  function createSpecRow(key, value) {
+    var row = el('div', 'avsd-spec-row');
+    row.appendChild(el('div', 'avsd-spec-key', key));
+    row.appendChild(el('div', 'avsd-spec-val', value));
+    return row;
+  }
+
+  // SVG icon strings
+  var icons = {
+    calendar: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    code: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    fuel: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v17"/><path d="M13 10h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 6"/><line x1="3" y1="22" x2="13" y2="22"/></svg>',
+    car: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h1"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
+    gear: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    settings: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>',
+    bolt: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    torque: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>',
+    engine: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+    speed: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-6.88 17.23"/><path d="M12 2a10 10 0 0 1 6.88 17.23"/><line x1="12" y1="12" x2="12" y2="8"/></svg>',
+    timer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    carLarge: '<svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h1"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>',
+    imgPlaceholder: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+  };
+
+  function renderVehicle(v, products) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    contentEl.style.display = 'block';
+
+    // Clear content safely
+    while (contentEl.firstChild) contentEl.removeChild(contentEl.firstChild);
+
+    // ── Hero Section ──
+    var hero = el('div', 'avsd-hero');
+
+    var heroImage = el('div', 'avsd-hero__image');
+    if (v.heroImageUrl) {
+      var img = document.createElement('img');
+      img.src = v.heroImageUrl;
+      img.alt = (v.make || '') + ' ' + (v.model || '');
+      img.loading = 'lazy';
+      heroImage.appendChild(img);
+    } else {
+      var ph = el('div', 'avsd-hero__image-placeholder');
+      ph.appendChild(svgEl(icons.carLarge));
+      heroImage.appendChild(ph);
+    }
+    hero.appendChild(heroImage);
+
+    var heroInfo = el('div', 'avsd-hero__info');
+
+    // Breadcrumb
+    var bc = el('p', 'avsd-hero__breadcrumb');
+    bc.textContent = (v.make || '') + ' \u203A ' + (v.model || '');
+    heroInfo.appendChild(bc);
+
+    heroInfo.appendChild(el('h1', 'avsd-hero__title', (v.make || '') + ' ' + (v.model || '')));
+    heroInfo.appendChild(el('p', 'avsd-hero__variant', v.variant || ''));
+
+    // Badges
+    var badgesDiv = el('div', 'avsd-hero__badges');
+    if (v.yearRange) badgesDiv.appendChild(createBadge(icons.calendar, v.yearRange));
+    if (v.engineCode) badgesDiv.appendChild(createBadge(icons.code, v.engineCode, 'avsd-badge--primary'));
+    if (v.fuelType) badgesDiv.appendChild(createBadge(icons.fuel, v.fuelType, 'avsd-badge--accent'));
+    if (v.bodyType) badgesDiv.appendChild(createBadge(icons.car, v.bodyType));
+    if (v.driveType) badgesDiv.appendChild(createBadge(icons.gear, v.driveType));
+    if (v.transmission) badgesDiv.appendChild(createBadge(icons.settings, v.transmission));
+    heroInfo.appendChild(badgesDiv);
+
+    if (v.overview) {
+      heroInfo.appendChild(el('p', 'avsd-hero__overview', v.overview));
+    }
+
+    hero.appendChild(heroInfo);
+    contentEl.appendChild(hero);
+
+    // ── Quick Stats Strip ──
+    var statDefs = [];
+    if (v.powerHp) statDefs.push({ icon: icons.bolt, val: v.powerHp + ' HP', lbl: 'Power' });
+    if (v.torqueNm) statDefs.push({ icon: icons.torque, val: v.torqueNm + ' Nm', lbl: 'Torque' });
+    if (v.displacement) statDefs.push({ icon: icons.engine, val: v.displacement, lbl: 'Displacement' });
+    if (v.topSpeed) statDefs.push({ icon: icons.speed, val: v.topSpeed, lbl: 'Top Speed' });
+    if (v.acceleration) statDefs.push({ icon: icons.timer, val: v.acceleration, lbl: '0-100 km/h' });
+    if (v.fuelType) statDefs.push({ icon: icons.fuel, val: v.fuelType, lbl: 'Fuel Type' });
+
+    if (statDefs.length > 0) {
+      var statsGrid = el('div', 'avsd-stats');
+      for (var si = 0; si < statDefs.length; si++) {
+        statsGrid.appendChild(createStatCard(statDefs[si].icon, statDefs[si].val, statDefs[si].lbl));
+      }
+      contentEl.appendChild(statsGrid);
+    }
+
+    // ── Spec Sections (Tabs) ──
+    var specs = v.specs || {};
+    var sectionNames = {
+      engine: 'Engine', performance: 'Performance', transmission: 'Drivetrain',
+      dimensions: 'Dimensions', fuel: 'Fuel & Emissions', capacity: 'Weight & Capacity'
+    };
+    var sectionOrder = ['engine', 'performance', 'transmission', 'dimensions', 'fuel', 'capacity'];
+    var activeSections = [];
+
+    for (var soi = 0; soi < sectionOrder.length; soi++) {
+      var sk = sectionOrder[soi];
+      if (specs[sk] && Object.keys(specs[sk]).length > 0) {
+        activeSections.push(sk);
+      }
+    }
+
+    if (activeSections.length > 0) {
+      var tabsDiv = el('div', 'avsd-tabs');
+      tabsDiv.setAttribute('data-avsd-tabs', '');
+
+      for (var ti = 0; ti < activeSections.length; ti++) {
+        var tabBtn = el('button', 'avsd-tab' + (ti === 0 ? ' avsd-tab--active' : ''), sectionNames[activeSections[ti]]);
+        tabBtn.setAttribute('data-avsd-tab', activeSections[ti]);
+        tabsDiv.appendChild(tabBtn);
+      }
+      contentEl.appendChild(tabsDiv);
+
+      var panelsDiv = el('div', 'avsd-tab-panels');
+      for (var pi = 0; pi < activeSections.length; pi++) {
+        var panelKey = activeSections[pi];
+        var panel = el('div', 'avsd-tab-panel' + (pi === 0 ? ' avsd-tab-panel--active' : ''));
+        panel.setAttribute('data-avsd-panel', panelKey);
+
+        var entries = specs[panelKey];
+        var entryKeys = Object.keys(entries);
+
+        if (entryKeys.length > 0) {
+          var grid = el('div', 'avsd-spec-grid');
+          for (var ei = 0; ei < entryKeys.length; ei++) {
+            grid.appendChild(createSpecRow(entryKeys[ei], entries[entryKeys[ei]]));
+          }
+          panel.appendChild(grid);
+        } else {
+          panel.appendChild(el('div', 'avsd-spec-empty', 'No data available for this section.'));
+        }
+
+        panelsDiv.appendChild(panel);
+      }
+      contentEl.appendChild(panelsDiv);
+
+      // Tab click handlers
+      var allTabs = tabsDiv.querySelectorAll('[data-avsd-tab]');
+      var allPanels = panelsDiv.querySelectorAll('[data-avsd-panel]');
+      for (var tbi = 0; tbi < allTabs.length; tbi++) {
+        allTabs[tbi].addEventListener('click', function() {
+          var target = this.getAttribute('data-avsd-tab');
+          for (var x = 0; x < allTabs.length; x++) allTabs[x].classList.remove('avsd-tab--active');
+          for (var y = 0; y < allPanels.length; y++) allPanels[y].classList.remove('avsd-tab-panel--active');
+          this.classList.add('avsd-tab--active');
+          var targetPanel = panelsDiv.querySelector('[data-avsd-panel="' + target + '"]');
+          if (targetPanel) targetPanel.classList.add('avsd-tab-panel--active');
+        });
+      }
+    }
+
+    // ── Compatible Products ──
+    if (products.length > 0) {
+      contentEl.appendChild(el('h2', 'avsd-products-heading', 'Compatible Parts & Accessories'));
+      contentEl.appendChild(el('p', 'avsd-products-sub', products.length + ' product' + (products.length !== 1 ? 's' : '') + ' confirmed compatible with this vehicle'));
+
+      var prodGrid = el('div', 'avsd-products-grid');
+      for (var pi2 = 0; pi2 < products.length; pi2++) {
+        var prod = products[pi2];
+        var card = document.createElement('a');
+        card.href = '/products/' + prod.handle;
+        card.className = 'avsd-product-card';
+
+        if (prod.imageUrl) {
+          var prodImg = document.createElement('img');
+          prodImg.className = 'avsd-product-card__img';
+          prodImg.src = prod.imageUrl;
+          prodImg.alt = prod.title;
+          prodImg.loading = 'lazy';
+          card.appendChild(prodImg);
+        } else {
+          var prodPh = el('div', 'avsd-product-card__img');
+          prodPh.style.display = 'flex';
+          prodPh.style.alignItems = 'center';
+          prodPh.style.justifyContent = 'center';
+          prodPh.appendChild(svgEl(icons.imgPlaceholder));
+          card.appendChild(prodPh);
+        }
+
+        var body = el('div', 'avsd-product-card__body');
+        body.appendChild(el('p', 'avsd-product-card__title', prod.title));
+        if (prod.price) body.appendChild(el('p', 'avsd-product-card__price', prod.price));
+        card.appendChild(body);
+
+        prodGrid.appendChild(card);
+      }
+      contentEl.appendChild(prodGrid);
+    }
+
+    // Footer
+    var footer = el('div', 'avsd-footer');
+    footer.appendChild(document.createTextNode('Vehicle data powered by '));
+    var footerLink = document.createElement('a');
+    footerLink.href = 'https://autosync.app';
+    footerLink.target = '_blank';
+    footerLink.rel = 'noopener';
+    footerLink.textContent = 'AutoSync';
+    footer.appendChild(footerLink);
+    contentEl.appendChild(footer);
+  }
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Vehicle Spec Detail",
+  "target": "section",
+  "templates": ["metaobject/vehicle_spec"],
+  "settings": [
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Color",
+      "default": "#2563eb"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent Color",
+      "default": "#10b981"
+    },
+    {
+      "type": "color",
+      "id": "background_color",
+      "label": "Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#1a1a2e"
+    },
+    {
+      "type": "color",
+      "id": "muted_color",
+      "label": "Muted Text Color",
+      "default": "#6b7280"
+    },
+    {
+      "type": "color",
+      "id": "border_color",
+      "label": "Border Color",
+      "default": "#e5e7eb"
+    },
+    {
+      "type": "color",
+      "id": "card_bg",
+      "label": "Card Background",
+      "default": "#f9fafb"
+    },
+    {
+      "type": "range",
+      "id": "border_radius",
+      "label": "Border Radius",
+      "min": 0,
+      "max": 20,
+      "step": 2,
+      "default": 12,
+      "unit": "px"
+    }
+  ]
+}
+{% endschema %}
