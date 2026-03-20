@@ -640,7 +640,7 @@ export default function VehiclePages() {
           content: "Delete All Pages",
           destructive: true,
           onAction: () => setDeleteModalOpen(true),
-          disabled: syncStats.synced === 0 || isLoading,
+          disabled: isLoading,
         },
         {
           content: "Reset Definition",
