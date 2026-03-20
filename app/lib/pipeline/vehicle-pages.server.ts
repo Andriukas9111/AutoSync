@@ -1525,7 +1525,7 @@ export async function deleteVehiclePages(
                 id
                 handle
                 title
-                body
+                bodyHtml
               }
             }
             pageInfo { hasNextPage endCursor }
@@ -1543,18 +1543,20 @@ export async function deleteVehiclePages(
       for (const edge of edges) {
         const pageGid = edge.node.id;
         const handle = edge.node.handle || "";
-        const body = edge.node.body || "";
+        const bodyHtml = edge.node.bodyHtml || "";
 
         if (deletedPageGids.has(pageGid)) continue;
 
         // Delete if:
         // 1. Handle starts with our prefix, OR
-        // 2. Body contains our unique CSS marker (old-style full-HTML pages)
+        // 2. HTML body contains our unique CSS marker (old-style full-HTML pages)
+        // NOTE: Must use bodyHtml (not body) — body is plain text with HTML stripped,
+        // so CSS markers inside <style> tags wouldn't appear in body.
         const isOurPage =
           handle.startsWith("vehicle-specs-") ||
-          body.includes("--avsp-primary") ||
-          body.includes(".avsp-hero") ||
-          body.includes("avsp-quickspecs");
+          bodyHtml.includes("--avsp-primary") ||
+          bodyHtml.includes(".avsp-hero") ||
+          bodyHtml.includes("avsp-quickspecs");
 
         if (!isOurPage) continue;
 
