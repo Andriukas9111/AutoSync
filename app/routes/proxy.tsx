@@ -864,7 +864,7 @@ async function handleVehicleSpecs(params: URLSearchParams) {
       "Compression Ratio": specs.compression_ratio,
       "Bore x Stroke": specs.bore_stroke,
       "Valves Per Cylinder": specs.valves_per_cylinder?.toString(),
-      "Power": engine.power_hp ? `${engine.power_hp} HP / ${engine.power_kw} kW` : null,
+      "Power": engine.power_hp ? `${engine.power_hp} HP${engine.power_kw ? ' / ' + engine.power_kw + ' kW' : ''}` : null,
       "Torque": engine.torque_nm ? `${engine.torque_nm} Nm` : null,
     });
     specSections.transmission = filterNulls({

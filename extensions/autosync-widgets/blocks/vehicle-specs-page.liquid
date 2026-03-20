@@ -261,37 +261,13 @@
     border: 1.5px solid var(--avs-border);
     overflow: hidden;
   }
-  .avs-card::before {
-    content: '';
-    position: absolute;
-    inset: -1.5px;
-    border-radius: calc(var(--avs-radius) + 1px);
-    padding: 1.5px;
-    background: linear-gradient(135deg,
-      var(--avs-border) 0%,
-      var(--avs-border) 100%
-    );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-    transition: background 0.3s ease;
-    opacity: 0;
-  }
   .avs-card:hover {
     transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--avs-primary) 50%, transparent);
     box-shadow:
-      0 8px 24px -4px color-mix(in srgb, var(--avs-primary) 12%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--avs-primary) 30%, transparent),
+      0 8px 24px -4px color-mix(in srgb, var(--avs-primary) 14%, transparent),
       0 2px 8px -2px rgba(0, 0, 0, 0.06);
-    border-color: transparent;
-  }
-  .avs-card:hover::before {
-    opacity: 1;
-    background: linear-gradient(135deg,
-      var(--avs-primary),
-      color-mix(in srgb, var(--avs-primary) 50%, #a855f7),
-      var(--avs-primary)
-    );
   }
 
   /* Card > Header */
