@@ -455,12 +455,24 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       console.warn("[proxy] Product search after plate lookup failed:", searchErr);
     }
 
+    // Merge MOT data into vehicle when DVLA returns incomplete info
+    if (motHistory) {
+      if ((!vehicle.model || vehicle.model === "Unknown") && motHistory.model) {
+        vehicle.model = motHistory.model;
+      }
+      if ((!vehicle.make || vehicle.make === "Unknown") && motHistory.make) {
+        vehicle.make = motHistory.make;
+      }
+    }
+
     return json({
       vehicle,
       motHistory: motHistory
         ? {
-            motTests: motHistory.motTests.slice(0, 5),
+            motTests: motHistory.motTests ?? [],
             firstUsedDate: motHistory.firstUsedDate,
+            make: motHistory.make,
+            model: motHistory.model,
           }
         : null,
       compatibleProducts,

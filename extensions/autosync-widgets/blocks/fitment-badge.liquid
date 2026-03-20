@@ -8,8 +8,8 @@
   data-autosync-fitment-badge
   data-product-id="{{ product.id }}"
   data-product-tags="{{ product.tags | join: ',' }}"
-  data-product-metafield-make="{{ product.metafields.autosync_fitment.make.value }}"
-  data-product-metafield-model="{{ product.metafields.autosync_fitment.model.value }}"
+  data-product-metafield-make="{{ product.metafields.autosync_fitment.make_names.value | json }}"
+  data-product-metafield-model="{{ product.metafields.autosync_fitment.model_names.value | json }}"
   id="autosync-fitment-badge-{{ block.id }}"
   style="
     --autosync-badge-success: {{ block.settings.success_color }};

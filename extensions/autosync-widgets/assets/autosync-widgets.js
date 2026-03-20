@@ -889,8 +889,18 @@
 
   function initFitmentBadge(container) {
     var productTags = (container.dataset.productTags || '').toLowerCase();
-    var metaMake = (container.dataset.productMetafieldMake || '').toLowerCase();
-    var metaModel = (container.dataset.productMetafieldModel || '').toLowerCase();
+
+    // Parse make_names and model_names as JSON arrays (list.single_line_text_field)
+    var metaMakeNames = [];
+    var metaModelNames = [];
+    try {
+      var rawMake = container.dataset.productMetafieldMake || '';
+      if (rawMake) metaMakeNames = JSON.parse(rawMake).map(function (s) { return s.toLowerCase(); });
+    } catch (e) { /* fallback */ }
+    try {
+      var rawModel = container.dataset.productMetafieldModel || '';
+      if (rawModel) metaModelNames = JSON.parse(rawModel).map(function (s) { return s.toLowerCase(); });
+    } catch (e) { /* fallback */ }
 
     var fitsEl = container.querySelector('[data-autosync-badge-fits]');
     var nofitEl = container.querySelector('[data-autosync-badge-nofit]');
@@ -913,11 +923,16 @@
       var modelLower = vehicle.modelName.toLowerCase();
 
       var fits = false;
+      // Check tags first (fastest)
       if (productTags) {
-        fits = productTags.indexOf(makeLower) !== -1 && productTags.indexOf(modelLower) !== -1;
+        fits = productTags.indexOf('_autosync_' + makeLower) !== -1
+          || (productTags.indexOf(makeLower) !== -1 && productTags.indexOf(modelLower) !== -1);
       }
-      if (!fits && metaMake && metaModel) {
-        fits = metaMake.indexOf(makeLower) !== -1 && metaModel.indexOf(modelLower) !== -1;
+      // Check metafield arrays
+      if (!fits && metaMakeNames.length > 0) {
+        var makeMatch = metaMakeNames.indexOf(makeLower) !== -1;
+        var modelMatch = metaModelNames.indexOf(modelLower) !== -1;
+        fits = makeMatch && modelMatch;
       }
 
       if (fits) {
