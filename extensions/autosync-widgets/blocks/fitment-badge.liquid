@@ -14,6 +14,8 @@
   style="
     --autosync-badge-success: {{ block.settings.success_color }};
     --autosync-badge-warning: {{ block.settings.warning_color }};
+    padding-top: {{ block.settings.padding_top }}px;
+    padding-bottom: {{ block.settings.padding_bottom }}px;
   "
 >
   <div class="autosync-fitment-badge__content autosync-fitment-badge--hidden" data-autosync-badge-fits>
@@ -63,6 +65,26 @@
       "id": "show_vehicle_name",
       "label": "Show Vehicle Name",
       "default": true
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
+      "unit": "px"
     }
   ]
 }

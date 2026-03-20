@@ -8,6 +8,7 @@
   data-autosync-plate-lookup
   data-proxy-url="{{ shop.url }}/apps/autosync"
   id="autosync-plate-lookup-{{ block.id }}"
+  style="padding-top: {{ block.settings.padding_top }}px; padding-bottom: {{ block.settings.padding_bottom }}px;"
 >
   {% if block.settings.heading != blank %}
     <h2 class="autosync-plate-lookup__heading">{{ block.settings.heading }}</h2>
@@ -77,6 +78,26 @@
       "id": "button_text",
       "label": "Button Text",
       "default": "Look Up"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
+      "unit": "px"
     }
   ]
 }

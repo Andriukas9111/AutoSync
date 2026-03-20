@@ -906,6 +906,7 @@ async function handleVehicleSpecs(params: URLSearchParams) {
     vehicle: {
       engineId: engine.id,
       make: make?.name,
+      makeLogoUrl: make?.logo_url ?? null,
       model: model?.name,
       generation: model?.generation,
       variant: formattedVariant,
@@ -969,7 +970,7 @@ async function handleVehicleGallery(params: URLSearchParams) {
   if (ymmeIds.length > 0) {
     const { data: engines } = await db
       .from("ymme_engines")
-      .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name))")
+      .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name, logo_url))")
       .in("id", ymmeIds);
     for (const e of engines ?? []) {
       engineMap.set(String(e.id), e);
@@ -1031,6 +1032,7 @@ async function handleVehicleGallery(params: URLSearchParams) {
     const displacementL = engine?.displacement_cc ? `${(engine.displacement_cc / 1000).toFixed(1)}L` : "";
     const powerHp = engine?.power_hp ?? null;
     const fuelType = engine?.fuel_type ?? "";
+    const logoUrl = engine?.ymme_models?.ymme_makes?.logo_url ?? null;
 
     return {
       engineId: s.engine_id,
@@ -1040,6 +1042,7 @@ async function handleVehicleGallery(params: URLSearchParams) {
       displacement: displacementL,
       powerHp,
       fuelType,
+      logoUrl,
       url: `/pages/vehicle-specs/${handle}`,
       handle,
     };

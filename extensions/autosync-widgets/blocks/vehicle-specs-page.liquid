@@ -1,5 +1,5 @@
 {% comment %}
-  AutoSync Vehicle Showcase
+  AutoSync Vehicle Showcase — Premium Gallery
   Displays a browsable gallery of all vehicle specification pages.
   Add this block to any page (home, collection, custom page) to showcase
   all vehicles with fitment data. Each card links to the full spec page.
@@ -9,10 +9,16 @@
   assign proxy_url = shop.url | append: '/apps/autosync'
 %}
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
 <div
   class="autosync-vehicle-showcase"
   data-autosync-vehicle-showcase
   data-proxy-url="{{ proxy_url }}"
+  data-show-logos="{{ block.settings.show_brand_logos | default: true }}"
+  data-show-specs="{{ block.settings.show_spec_pills | default: true }}"
   id="autosync-vehicle-showcase-{{ block.id }}"
   style="
     --avs-primary: {{ block.settings.primary_color | default: '#2563eb' }};
@@ -20,73 +26,112 @@
     --avs-text: {{ block.settings.text_color | default: '#1a1a2e' }};
     --avs-muted: {{ block.settings.muted_color | default: '#6b7280' }};
     --avs-border: {{ block.settings.border_color | default: '#e5e7eb' }};
-    --avs-radius: {{ block.settings.border_radius | default: 10 }}px;
+    --avs-radius: {{ block.settings.border_radius | default: 12 }}px;
     --avs-section-bg: {{ block.settings.section_bg | default: '#f9fafb' }};
+    padding-top: {{ block.settings.padding_top | default: 40 }}px;
+    padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
+    max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
+    padding-left: {{ block.settings.container_padding | default: 16 }}px;
+    padding-right: {{ block.settings.container_padding | default: 16 }}px;
   "
 >
   {% if block.settings.heading != blank %}
-    <h2 class="avs-heading">{{ block.settings.heading }}</h2>
+    <div class="avs-heading-wrap" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">
+      <div class="avs-heading-accent" {% if block.settings.heading_alignment == 'left' %}style="margin-left: 0;"{% endif %}></div>
+      <h2 class="avs-heading">{{ block.settings.heading }}</h2>
+    </div>
   {% endif %}
 
   {% if block.settings.subheading != blank %}
-    <p class="avs-subheading">{{ block.settings.subheading }}</p>
+    <p class="avs-subheading" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.subheading }}</p>
   {% endif %}
 
   <!-- Search/Filter Bar -->
+  {% if block.settings.show_search != false %}
   <div class="avs-filter" data-avs-filter>
     <div class="avs-filter__search">
       <svg class="avs-filter__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input type="text" class="avs-filter__input" data-avs-search placeholder="Search vehicles..." />
+      <input type="text" class="avs-filter__input" data-avs-search placeholder="Search by make, model, fuel type..." />
     </div>
     <div class="avs-filter__count" data-avs-count></div>
   </div>
+  {% endif %}
 
   <!-- Loading -->
   <div class="avs-loading" data-avs-loading>
     <div class="avs-spinner"></div>
-    <p>Loading vehicles...</p>
+    <p class="avs-loading__text">Loading vehicles...</p>
   </div>
 
   <!-- Empty State -->
   <div class="avs-empty" data-avs-empty style="display:none;">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h1"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-    <p>No vehicle specification pages found.</p>
+    <div class="avs-empty__icon-wrap">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C1.4 11.3 1 12.1 1 13v3c0 .6.4 1 1 1h1"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+    </div>
+    <p class="avs-empty__title">No vehicle specification pages found.</p>
     <p class="avs-empty__hint">Push vehicle pages from the AutoSync admin to populate this gallery.</p>
   </div>
 
   <!-- Vehicle Grid -->
-  <div class="avs-grid" data-avs-grid style="display:none;"></div>
+  <div class="avs-grid" data-avs-grid data-columns="{{ block.settings.columns | default: 'auto' }}" style="display:none;"></div>
+
+  <!-- Footer -->
+  <div class="avs-footer">
+    <svg class="avs-footer__logo" width="20" height="20" viewBox="0 0 1200 1200" fill="none"><path fill="currentColor" d="M475.97,954.05l1.15-2.09c.26-.47.74-1.38.9-1.88,3.43-2.52,6.07-7.05,5.08-11.15.27-.44.68-1.39.85-1.87,3.7-2.85,6.29-7.47,6.15-12.07.3-.43.61-1.46.86-1.93l2.59-1.43c.75-.41.14-2.37-.47-2.71l.87-1.86,2.58-1.38c.75-.4.05-2.55-.44-2.87.23-.45.77-1.24,1.07-1.69,2-1.41,3.82-4.02,2.99-6.2l.79-1.86,2.64-1.4c.76-.41.1-2.42-.52-2.74l.87-1.86,2.5-1.27c.72-.37-.15-2.16-.37-2.88.23-.76.59-2.16.93-2.82,4.78-3.57,19-34.98,21.07-40.92.09-.25-.15-.79-.03-1.03,2.43-1.98,3.74-4.54,5.38-7.85l46.96-94.81c1.69-3.41,2.79-6.31,2.73-9.53,10.04-20.44,16.99-42.51,29.07-62.04,1.51-.81,2.45-3.2,2.96-4.78.18-.57.81-1.61,1.07-2.17,4.55-3.53,6.73-9.47,9.88-14.92,2.97-5.15,7.64-9.61,7.93-15.01.6-.88,1.65-2.22,2.17-3.08,2.18-1.23,4.45-3.6,3.83-5.93.56-.79,1.83-2.17,2.12-3.05,3.84-2.5,5.83-6.93,7.75-11.18,9.67-13.7,19.34-27.27,30.77-39.85l19.64-21.62c9.69-10.67,18.68-20.01,29.53-29.6l19.62-17.35,31.01-25.01c3.32-2.68,8.39-6.65,5.99-11.54l-25.43-51.94-75.53-151.3-67.09-134.73c-4.27-8.57-13.25-13.64-21.47-14.59-8.62-1-21.01,1.61-25.31,10.39l-47.54,96.96-13.24,28.33-80.24,165.62-48.41,99.53-250.39,517.49c-4.44,9.18-7.86,15.46-5.58,27.17,2.52,13,18.9,25.22,34.53,19.43l297.19-110.08c8.82-3.27,14-9.71,18.05-17.06Z"/><path fill="currentColor" d="M728.87,955.34c4.84,9.54,10.97,15.02,20.54,18.57l289.84,107.29c10.02,3.71,21.67-.68,27.65-6.95s11.2-18.55,6.35-28.37l-69.4-140.74-123.43-248.48-41.65-84.41-36.42-72.5c-.98-1.95-3.81-4.07-5.45-4.64s-5.59.13-7.09,1.43c-13.12,11.34-37.55,39.1-48.25,53.11-47.54,62.24-86.7,138.7-92.9,217.9-.78,9.91-3.53,20.04.33,29.51,6.35,15.6,14.58,29.51,22.26,44.66l57.62,113.62Z"/></svg>
+    <span class="avs-footer__text">Powered by <strong>AutoSync</strong></span>
+  </div>
 </div>
 
 <style>
+  /* ── Base ────────────────────────────────────────── */
   .autosync-vehicle-showcase {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     color: var(--avs-text);
     background: var(--avs-bg);
-    max-width: 1200px;
     margin: 0 auto;
-    padding: 32px 16px;
   }
 
-  .avs-heading {
-    font-size: 28px;
-    font-weight: 700;
-    margin: 0 0 8px;
+  /* ── Heading ────────────────────────────────────── */
+  .avs-heading-wrap {
     text-align: center;
-    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    position: relative;
+  }
+  .avs-heading-accent {
+    width: 48px;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(135deg, var(--avs-primary), color-mix(in srgb, var(--avs-primary) 60%, #a855f7));
+    margin: 0 auto 14px;
+  }
+  .avs-heading {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 30px;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+    background: linear-gradient(135deg, var(--avs-text) 0%, color-mix(in srgb, var(--avs-text) 70%, var(--avs-primary)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
   .avs-subheading {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 15px;
     color: var(--avs-muted);
-    margin: 0 0 24px;
+    margin: 0 0 28px;
     text-align: center;
+    font-weight: 400;
+    line-height: 1.5;
   }
 
+  /* ── Search / Filter ────────────────────────────── */
   .avs-filter {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 24px;
+    gap: 14px;
+    margin-bottom: 28px;
   }
   .avs-filter__search {
     flex: 1;
@@ -94,45 +139,66 @@
   }
   .avs-filter__icon {
     position: absolute;
-    left: 14px;
+    left: 16px;
     top: 50%;
     transform: translateY(-50%);
     color: var(--avs-muted);
     pointer-events: none;
+    opacity: 0.6;
   }
   .avs-filter__input {
     width: 100%;
-    padding: 12px 14px 12px 42px;
-    border: 1px solid var(--avs-border);
-    border-radius: var(--avs-radius);
+    padding: 13px 16px 13px 46px;
+    border: 1.5px solid var(--avs-border);
+    border-radius: calc(var(--avs-radius) + 2px);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 14px;
+    font-weight: 400;
     background: var(--avs-section-bg);
     color: var(--avs-text);
     outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
     box-sizing: border-box;
+  }
+  .avs-filter__input::placeholder {
+    color: var(--avs-muted);
+    opacity: 0.6;
   }
   .avs-filter__input:focus {
     border-color: var(--avs-primary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--avs-primary) 15%, transparent);
+    background: var(--avs-bg);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--avs-primary) 12%, transparent);
   }
   .avs-filter__count {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
     color: var(--avs-muted);
     white-space: nowrap;
     font-weight: 500;
+    padding: 6px 14px;
+    background: var(--avs-section-bg);
+    border-radius: 20px;
+    border: 1px solid var(--avs-border);
   }
 
+  /* ── Loading ────────────────────────────────────── */
   .avs-loading {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 60px 20px;
-    gap: 12px;
+    padding: 72px 20px;
+    gap: 16px;
+  }
+  .avs-loading__text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 14px;
     color: var(--avs-muted);
+    margin: 0;
+    font-weight: 500;
   }
   .avs-spinner {
-    width: 28px; height: 28px;
+    width: 32px;
+    height: 32px;
     border: 3px solid var(--avs-border);
     border-top-color: var(--avs-primary);
     border-radius: 50%;
@@ -140,130 +206,300 @@
   }
   @keyframes avs-spin { to { transform: rotate(360deg); } }
 
+  /* ── Empty State ────────────────────────────────── */
   .avs-empty {
     text-align: center;
-    padding: 60px 20px;
-    color: var(--avs-muted);
+    padding: 72px 20px;
   }
-  .avs-empty svg { margin: 0 auto 12px; display: block; }
-  .avs-empty p { margin: 0 0 4px; font-size: 15px; }
-  .avs-empty__hint { font-size: 13px; opacity: 0.7; }
+  .avs-empty__icon-wrap {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--avs-section-bg);
+    color: var(--avs-muted);
+    opacity: 0.5;
+  }
+  .avs-empty__title {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin: 0 0 6px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--avs-text);
+  }
+  .avs-empty__hint {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    margin: 0;
+    font-size: 13px;
+    color: var(--avs-muted);
+    opacity: 0.7;
+  }
 
+  /* ── Grid ───────────────────────────────────────── */
   .avs-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 18px;
   }
 
+  /* ── Card ───────────────────────────────────────── */
   .avs-card {
-    background: var(--avs-section-bg);
-    border: 1px solid var(--avs-border);
+    position: relative;
+    background: var(--avs-bg);
     border-radius: var(--avs-radius);
-    padding: 20px;
+    padding: 22px;
     text-decoration: none;
     color: inherit;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+    gap: 14px;
     cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+    border: 1.5px solid var(--avs-border);
+    overflow: hidden;
+  }
+  .avs-card::before {
+    content: '';
+    position: absolute;
+    inset: -1.5px;
+    border-radius: calc(var(--avs-radius) + 1px);
+    padding: 1.5px;
+    background: linear-gradient(135deg,
+      var(--avs-border) 0%,
+      var(--avs-border) 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: background 0.3s ease;
+    opacity: 0;
   }
   .avs-card:hover {
-    border-color: var(--avs-primary);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow:
+      0 8px 24px -4px color-mix(in srgb, var(--avs-primary) 12%, transparent),
+      0 2px 8px -2px rgba(0, 0, 0, 0.06);
+    border-color: transparent;
   }
+  .avs-card:hover::before {
+    opacity: 1;
+    background: linear-gradient(135deg,
+      var(--avs-primary),
+      color-mix(in srgb, var(--avs-primary) 50%, #a855f7),
+      var(--avs-primary)
+    );
+  }
+
+  /* Card > Header */
   .avs-card__header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
   }
   .avs-card__logo {
-    width: 44px;
-    height: 44px;
-    border-radius: 10px;
-    background: var(--avs-bg);
-    border: 1px solid var(--avs-border);
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: var(--avs-section-bg);
+    border: 1.5px solid var(--avs-border);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--avs-primary);
     flex-shrink: 0;
-    text-transform: uppercase;
+    overflow: hidden;
+    transition: border-color 0.25s ease;
+  }
+  .avs-card:hover .avs-card__logo {
+    border-color: color-mix(in srgb, var(--avs-primary) 40%, transparent);
+  }
+  .avs-card__logo img {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+  }
+  .avs-card__logo-fallback {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: linear-gradient(135deg, var(--avs-primary), color-mix(in srgb, var(--avs-primary) 60%, #6366f1));
   }
   .avs-card__titles {
     flex: 1;
     min-width: 0;
   }
   .avs-card__make {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--avs-muted);
-    font-weight: 600;
-    margin: 0;
+    letter-spacing: 0.1em;
+    color: var(--avs-primary);
+    font-weight: 700;
+    margin: 0 0 2px;
+    line-height: 1.2;
   }
   .avs-card__model {
-    font-size: 16px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 17px;
     font-weight: 700;
     margin: 0;
     color: var(--avs-text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
   }
   .avs-card__variant {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
     color: var(--avs-muted);
-    margin: 0;
+    margin: 2px 0 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 400;
+    line-height: 1.3;
   }
+
+  /* Card > Spec Pills */
   .avs-card__specs {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 7px;
   }
-  .avs-card__tag {
+  .avs-card__pill {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
+    gap: 5px;
+    padding: 5px 11px;
     border-radius: 20px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 12px;
     font-weight: 500;
-    background: var(--avs-bg);
+    background: var(--avs-section-bg);
     border: 1px solid var(--avs-border);
     color: var(--avs-text);
+    line-height: 1;
+    transition: border-color 0.2s ease, background 0.2s ease;
   }
-  .avs-card__tag--primary {
-    background: color-mix(in srgb, var(--avs-primary) 10%, transparent);
-    border-color: color-mix(in srgb, var(--avs-primary) 25%, transparent);
+  .avs-card__pill svg {
+    flex-shrink: 0;
+    opacity: 0.55;
+  }
+  .avs-card__pill--power {
+    background: color-mix(in srgb, var(--avs-primary) 8%, var(--avs-bg));
+    border-color: color-mix(in srgb, var(--avs-primary) 20%, transparent);
     color: var(--avs-primary);
     font-weight: 600;
   }
-  .avs-card__arrow {
+  .avs-card__pill--power svg { opacity: 0.85; }
+
+  /* Card > Footer link */
+  .avs-card__footer {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    color: var(--avs-muted);
-    transition: color 0.2s, transform 0.2s;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 4px;
   }
-  .avs-card:hover .avs-card__arrow {
+  .avs-card__link {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--avs-primary);
-    transform: translateX(4px);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: gap 0.2s ease;
+  }
+  .avs-card:hover .avs-card__link {
+    gap: 8px;
+  }
+  .avs-card__link svg {
+    transition: transform 0.2s ease;
+  }
+  .avs-card:hover .avs-card__link svg {
+    transform: translateX(2px);
   }
 
-  @media (max-width: 640px) {
+  /* ── Responsive ─────────────────────────────────── */
+  @media (max-width: 768px) {
+    .avs-grid {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .avs-heading {
+      font-size: 24px;
+    }
+    .avs-card {
+      padding: 18px;
+    }
+    .avs-card__logo {
+      width: 46px;
+      height: 46px;
+    }
+    .avs-card__logo img {
+      width: 30px;
+      height: 30px;
+    }
+  }
+  @media (max-width: 480px) {
+    .autosync-vehicle-showcase {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
     .avs-grid {
       grid-template-columns: 1fr;
     }
-    .avs-heading { font-size: 22px; }
-    .avs-filter { flex-direction: column; align-items: stretch; }
-    .avs-filter__count { text-align: right; }
+    .avs-heading {
+      font-size: 22px;
+    }
+    .avs-filter {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .avs-filter__count {
+      text-align: center;
+    }
+  }
+
+  /* ── Footer ───────────────────────────────────── */
+  .avs-footer {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 24px 0 0; margin-top: 32px;
+    border-top: 1px solid var(--avs-border);
+    color: var(--avs-muted); font-size: 12px; opacity: 0.5;
+  }
+  .avs-footer__logo { color: var(--avs-primary); }
+  .avs-footer__text strong { font-weight: 700; color: var(--avs-primary); }
+
+  /* ── Card entrance animation ────────────────────── */
+  @keyframes avs-fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .avs-card {
+    animation: avs-fadeUp 0.35s ease both;
   }
 </style>
 
@@ -312,106 +548,175 @@
       gridEl.style.display = 'none';
     }
 
+    /* Static SVG icon helper — only used for known safe static markup */
+    function svgEl(html) {
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      return tmp.firstChild;
+    }
+
     function renderGrid(vehicles) {
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'none';
       gridEl.style.display = 'grid';
       gridEl.textContent = '';
-      countEl.textContent = vehicles.length + ' vehicle' + (vehicles.length !== 1 ? 's' : '');
 
-      vehicles.forEach(function(v) {
+      var colsSetting = gridEl.getAttribute('data-columns') || 'auto';
+      if (colsSetting === 'auto') {
+        gridEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
+      } else {
+        gridEl.style.gridTemplateColumns = 'repeat(' + colsSetting + ', 1fr)';
+      }
+
+      var showLogos = container.getAttribute('data-show-logos') !== 'false';
+      var showSpecs = container.getAttribute('data-show-specs') !== 'false';
+
+      if (countEl) countEl.textContent = vehicles.length + ' vehicle' + (vehicles.length !== 1 ? 's' : '');
+
+      vehicles.forEach(function(v, idx) {
         var card = document.createElement('a');
         card.href = v.url;
         card.className = 'avs-card';
+        card.style.animationDelay = Math.min(idx * 0.04, 0.6) + 's';
 
-        // Header: logo + titles
+        /* ── Header: logo + titles ── */
         var header = document.createElement('div');
         header.className = 'avs-card__header';
 
-        var logo = document.createElement('div');
-        logo.className = 'avs-card__logo';
-        logo.textContent = (v.make || '?').substring(0, 2);
-        header.appendChild(logo);
+        if (showLogos) {
+          var logo = document.createElement('div');
+          logo.className = 'avs-card__logo';
+
+          if (v.logoUrl) {
+            var img = document.createElement('img');
+            img.src = v.logoUrl;
+            img.alt = (v.make || '') + ' logo';
+            img.loading = 'lazy';
+            img.onerror = function() {
+              /* On image error, replace with gradient fallback */
+              this.parentNode.removeChild(this);
+              var fb = document.createElement('span');
+              fb.className = 'avs-card__logo-fallback';
+              fb.textContent = (v.make || '??').substring(0, 2).toUpperCase();
+              logo.appendChild(fb);
+            };
+            logo.appendChild(img);
+          } else {
+            var fallback = document.createElement('span');
+            fallback.className = 'avs-card__logo-fallback';
+            fallback.textContent = (v.make || '??').substring(0, 2).toUpperCase();
+            logo.appendChild(fallback);
+          }
+          header.appendChild(logo);
+        }
 
         var titles = document.createElement('div');
         titles.className = 'avs-card__titles';
 
         var makeP = document.createElement('p');
         makeP.className = 'avs-card__make';
-        makeP.textContent = v.make;
+        makeP.textContent = v.make || '';
         titles.appendChild(makeP);
 
         var modelP = document.createElement('p');
         modelP.className = 'avs-card__model';
-        modelP.textContent = v.model;
+        modelP.textContent = v.model || '';
         titles.appendChild(modelP);
 
-        header.appendChild(titles);
-        card.appendChild(header);
-
-        // Variant
         if (v.variant) {
           var variantP = document.createElement('p');
           variantP.className = 'avs-card__variant';
           variantP.textContent = v.variant;
-          card.appendChild(variantP);
+          titles.appendChild(variantP);
         }
 
-        // Spec tags
-        var specs = document.createElement('div');
-        specs.className = 'avs-card__specs';
+        header.appendChild(titles);
+        card.appendChild(header);
 
-        if (v.powerHp) {
-          var tag = document.createElement('span');
-          tag.className = 'avs-card__tag avs-card__tag--primary';
-          tag.textContent = v.powerHp + ' HP';
-          specs.appendChild(tag);
-        }
-        if (v.displacement) {
-          var tag2 = document.createElement('span');
-          tag2.className = 'avs-card__tag';
-          tag2.textContent = v.displacement;
-          specs.appendChild(tag2);
-        }
-        if (v.fuelType) {
-          var tag3 = document.createElement('span');
-          tag3.className = 'avs-card__tag';
-          tag3.textContent = v.fuelType;
-          specs.appendChild(tag3);
-        }
-        card.appendChild(specs);
+        /* ── Spec pills ── */
+        if (showSpecs) {
+          var specs = document.createElement('div');
+          specs.className = 'avs-card__specs';
 
-        // Arrow
-        var arrow = document.createElement('div');
-        arrow.className = 'avs-card__arrow';
-        arrow.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg> <span style="font-size:13px;font-weight:500;margin-left:4px;">View Specs</span>';
-        card.appendChild(arrow);
+          if (v.powerHp) {
+            var pill1 = document.createElement('span');
+            pill1.className = 'avs-card__pill avs-card__pill--power';
+            pill1.appendChild(svgEl('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'));
+            var pill1Text = document.createElement('span');
+            pill1Text.textContent = v.powerHp + ' HP';
+            pill1.appendChild(pill1Text);
+            specs.appendChild(pill1);
+          }
+          if (v.displacement) {
+            var pill2 = document.createElement('span');
+            pill2.className = 'avs-card__pill';
+            pill2.appendChild(svgEl('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>'));
+            var pill2Text = document.createElement('span');
+            pill2Text.textContent = v.displacement;
+            pill2.appendChild(pill2Text);
+            specs.appendChild(pill2);
+          }
+          if (v.fuelType) {
+            var pill3 = document.createElement('span');
+            pill3.className = 'avs-card__pill';
+            pill3.appendChild(svgEl('<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C12 2 7 8 7 13a5 5 0 0 0 10 0c0-5-5-11-5-11Z"/></svg>'));
+            var pill3Text = document.createElement('span');
+            pill3Text.textContent = v.fuelType;
+            pill3.appendChild(pill3Text);
+            specs.appendChild(pill3);
+          }
 
+          if (specs.childNodes.length > 0) {
+            card.appendChild(specs);
+          }
+        }
+
+        /* ── Footer: View Specs link ── */
+        var footer = document.createElement('div');
+        footer.className = 'avs-card__footer';
+
+        var link = document.createElement('span');
+        link.className = 'avs-card__link';
+        var linkText = document.createElement('span');
+        linkText.textContent = 'View Specs';
+        link.appendChild(linkText);
+        link.appendChild(svgEl('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'));
+        footer.appendChild(link);
+
+        card.appendChild(footer);
         gridEl.appendChild(card);
       });
     }
 
-    // Search filter
+    /* ── Search filter ── */
     if (searchInput) {
+      var debounceTimer;
       searchInput.addEventListener('input', function() {
-        var q = searchInput.value.toLowerCase().trim();
-        if (!q) {
-          renderGrid(allVehicles);
-          return;
-        }
-        var filtered = allVehicles.filter(function(v) {
-          var text = (v.make + ' ' + v.model + ' ' + (v.variant || '') + ' ' + (v.fuelType || '') + ' ' + (v.displacement || '')).toLowerCase();
-          return text.indexOf(q) !== -1;
-        });
-        if (filtered.length === 0) {
-          gridEl.style.display = 'none';
-          emptyEl.style.display = 'block';
-          emptyEl.querySelector('p').textContent = 'No vehicles match "' + searchInput.value + '"';
-          countEl.textContent = '0 vehicles';
-        } else {
-          emptyEl.style.display = 'none';
-          renderGrid(filtered);
-        }
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+          var q = searchInput.value.toLowerCase().trim();
+          if (!q) {
+            renderGrid(allVehicles);
+            return;
+          }
+          var filtered = allVehicles.filter(function(v) {
+            var text = [v.make, v.model, v.variant, v.fuelType, v.displacement]
+              .filter(Boolean).join(' ').toLowerCase();
+            return text.indexOf(q) !== -1;
+          });
+          if (filtered.length === 0) {
+            gridEl.style.display = 'none';
+            emptyEl.style.display = 'block';
+            var titleEl = emptyEl.querySelector('.avs-empty__title');
+            if (titleEl) {
+              titleEl.textContent = 'No vehicles match "' + searchInput.value + '"';
+            }
+            countEl.textContent = '0 vehicles';
+          } else {
+            emptyEl.style.display = 'none';
+            renderGrid(filtered);
+          }
+        }, 150);
       });
     }
   })();
@@ -434,6 +739,69 @@
       "id": "subheading",
       "label": "Subheading",
       "default": "Browse detailed specs for all supported vehicles"
+    },
+    {
+      "type": "select",
+      "id": "container_width",
+      "label": "Container Width",
+      "options": [
+        { "value": "full", "label": "Full Width" },
+        { "value": "1400", "label": "Extra Wide (1400px)" },
+        { "value": "1200", "label": "Standard (1200px)" },
+        { "value": "1000", "label": "Narrow (1000px)" },
+        { "value": "800", "label": "Compact (800px)" }
+      ],
+      "default": "1200"
+    },
+    {
+      "type": "range",
+      "id": "container_padding",
+      "label": "Container Padding",
+      "min": 0,
+      "max": 60,
+      "step": 4,
+      "default": 16,
+      "unit": "px"
+    },
+    {
+      "type": "select",
+      "id": "columns",
+      "label": "Grid Columns",
+      "options": [
+        { "value": "2", "label": "2 Columns" },
+        { "value": "3", "label": "3 Columns" },
+        { "value": "4", "label": "4 Columns" },
+        { "value": "auto", "label": "Auto-fit" }
+      ],
+      "default": "auto"
+    },
+    {
+      "type": "select",
+      "id": "heading_alignment",
+      "label": "Heading Alignment",
+      "options": [
+        { "value": "left", "label": "Left" },
+        { "value": "center", "label": "Center" }
+      ],
+      "default": "center"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_search",
+      "label": "Show Search Bar",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_brand_logos",
+      "label": "Show Brand Logos",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_spec_pills",
+      "label": "Show Spec Pills (HP, Displacement, Fuel)",
+      "default": true
     },
     {
       "type": "color",
@@ -468,7 +836,7 @@
     {
       "type": "color",
       "id": "section_bg",
-      "label": "Section Background",
+      "label": "Card Background",
       "default": "#f9fafb"
     },
     {
@@ -478,7 +846,27 @@
       "min": 0,
       "max": 24,
       "step": 2,
-      "default": 10,
+      "default": 12,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_top",
+      "label": "Top Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
+      "unit": "px"
+    },
+    {
+      "type": "range",
+      "id": "padding_bottom",
+      "label": "Bottom Padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "default": 40,
       "unit": "px"
     }
   ]
