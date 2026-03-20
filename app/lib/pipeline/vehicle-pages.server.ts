@@ -1501,21 +1501,38 @@ export async function deleteVehiclePages(
 ): Promise<{ deleted: number }> {
   let deleted = 0;
 
-  // ── 1. Delete ALL Shopify Pages with vehicle-specs handle prefix ───
-  // Query Shopify directly instead of relying on DB records (which may
-  // have NULL page_gid for pre-migration records).
+  // ── 1. Delete ALL vehicle-related Shopify Pages ────────────────────
+  // Search broadly: find pages whose body contains our unique CSS marker,
+  // OR whose handle starts with "vehicle-specs-". This catches both old-style
+  // pages (created with full HTML body) and any with our handle prefix.
   const deletedPageGids = new Set<string>();
+
+  // Strategy: search ALL pages and filter by our CSS marker in body content.
+  // Shopify Pages API search query: use title patterns for vehicle makes.
+  // Safer approach: search for pages containing ".avsp" body content via
+  // the pages list API, checking body content on our side.
   let hasMorePages = true;
   let pagesCursor: string | null = null;
 
   while (hasMorePages) {
     try {
-      const resp: any = await admin.graphql(PAGES_SEARCH, {
-        variables: {
-          query: "handle:vehicle-specs-*",
-          first: 50,
-          after: pagesCursor,
-        },
+      // Fetch all pages (no query filter — we check content ourselves)
+      const resp: any = await admin.graphql(`
+        query($first: Int!, $after: String) {
+          pages(first: $first, after: $after) {
+            edges {
+              node {
+                id
+                handle
+                title
+                body
+              }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      `, {
+        variables: { first: 50, after: pagesCursor },
       });
       const json: any = await resp.json();
       const edges: any[] = json?.data?.pages?.edges ?? [];
@@ -1526,10 +1543,20 @@ export async function deleteVehiclePages(
       for (const edge of edges) {
         const pageGid = edge.node.id;
         const handle = edge.node.handle || "";
+        const body = edge.node.body || "";
 
-        // Only delete pages that start with our prefix
-        if (!handle.startsWith("vehicle-specs-")) continue;
         if (deletedPageGids.has(pageGid)) continue;
+
+        // Delete if:
+        // 1. Handle starts with our prefix, OR
+        // 2. Body contains our unique CSS marker (old-style full-HTML pages)
+        const isOurPage =
+          handle.startsWith("vehicle-specs-") ||
+          body.includes("--avsp-primary") ||
+          body.includes(".avsp-hero") ||
+          body.includes("avsp-quickspecs");
+
+        if (!isOurPage) continue;
 
         try {
           const deleteResp = await admin.graphql(PAGE_DELETE, {
@@ -1540,8 +1567,9 @@ export async function deleteVehiclePages(
           if (!userErrors || userErrors.length === 0) {
             deleted++;
             deletedPageGids.add(pageGid);
+            console.error(`[vehicle-pages] Deleted old Shopify page: ${handle} (${edge.node.title})`);
           } else {
-            console.error(`[vehicle-pages] Page delete errors for ${pageGid}: ${userErrors.map((e: any) => e.message).join(", ")}`);
+            console.error(`[vehicle-pages] Page delete errors for ${handle}: ${userErrors.map((e: any) => e.message).join(", ")}`);
           }
         } catch (err) {
           console.error(
@@ -1560,22 +1588,25 @@ export async function deleteVehiclePages(
     }
   }
 
-  // ── 2. Delete metaobjects (paginated) ─────────────────────────────
-  let hasNextPage = true;
-  let cursor: string | null = null;
+  // ── 2. Delete metaobjects — restart from beginning each batch ─────
+  // After deleting items, cursors become stale. Always query from the
+  // start until no more items remain.
+  let safetyCounter = 0;
+  const MAX_BATCHES = 20; // prevent infinite loops
 
-  while (hasNextPage) {
+  while (safetyCounter < MAX_BATCHES) {
+    safetyCounter++;
+
     const response: any = await admin.graphql(METAOBJECTS_LIST, {
       variables: {
         type: "$app:vehicle_spec",
         first: 50,
-        after: cursor,
+        after: null, // Always start from beginning
       },
     });
 
     const json: any = await response.json();
     const edges: any[] = json?.data?.metaobjects?.edges ?? [];
-    const pageInfo: any = json?.data?.metaobjects?.pageInfo;
 
     if (edges.length === 0) break;
 
@@ -1590,6 +1621,7 @@ export async function deleteVehiclePages(
 
         if (!userErrors || userErrors.length === 0) {
           deleted++;
+          console.error(`[vehicle-pages] Deleted metaobject: ${edge.node.handle}`);
         }
       } catch (err) {
         console.error(
@@ -1599,11 +1631,8 @@ export async function deleteVehiclePages(
       }
 
       // Rate limit
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
-
-    hasNextPage = pageInfo?.hasNextPage ?? false;
-    cursor = pageInfo?.endCursor ?? null;
   }
 
   // ── 3. Clear sync records ─────────────────────────────────────────
@@ -1693,12 +1722,21 @@ export async function pushThemeTemplate(
   _shopId: string,
 ): Promise<{ success: boolean; themeId?: string; error?: string }> {
   try {
-    // 1. Get the active/published theme via GraphQL
-    const themesResp = await admin.graphql(`query {
-      themes(first: 10, roles: MAIN) {
-        nodes { id name role }
-      }
-    }`);
+    // 1. Get the active/published theme AND resolve the actual metaobject type name
+    const [themesResp, defResp] = await Promise.all([
+      admin.graphql(`query {
+        themes(first: 10, roles: MAIN) {
+          nodes { id name role }
+        }
+      }`),
+      admin.graphql(`query {
+        metaobjectDefinitionByType(type: "$app:vehicle_spec") {
+          id
+          type
+        }
+      }`),
+    ]);
+
     const themesJson = await themesResp.json();
     const mainTheme = themesJson?.data?.themes?.nodes?.[0];
 
@@ -1707,6 +1745,20 @@ export async function pushThemeTemplate(
     }
 
     const themeId = mainTheme.id; // GID format
+
+    // Resolve the actual metaobject type (e.g., "app--334692253697--vehicle_spec")
+    // This is critical: the template filename must match EXACTLY
+    const defJson = await defResp.json();
+    const resolvedType = defJson?.data?.metaobjectDefinitionByType?.type;
+
+    if (!resolvedType) {
+      return { success: false, error: "Vehicle spec metaobject definition not found — push pages first to create it" };
+    }
+
+    // Convert type like "app--334692253697--vehicle_spec" to template path
+    // Shopify expects: templates/metaobject/{type}.json
+    const templateFilename = `templates/metaobject/${resolvedType}.json`;
+    console.error(`[vehicle-pages] Resolved template filename: ${templateFilename}`);
 
     // 2. Build the JSON template and section Liquid
     const templateJson = JSON.stringify({
@@ -1732,7 +1784,7 @@ export async function pushThemeTemplate(
         themeId,
         files: [
           {
-            filename: "templates/metaobject/app--334692253697--vehicle_spec.json",
+            filename: templateFilename,
             body: { type: "TEXT", value: templateJson },
           },
           {

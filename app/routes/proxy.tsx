@@ -914,19 +914,77 @@ async function handleVehicleGallery(params: URLSearchParams) {
     return json({ vehicles: [] });
   }
 
-  // Fetch engine data for all synced vehicles
-  const engineIds = synced.map((s: { engine_id: string }) => s.engine_id);
-  const { data: engines } = await db
-    .from("ymme_engines")
-    .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name))")
-    .in("id", engineIds);
+  // Separate YMME-linked engine IDs from text-based ones
+  const ymmeIds: string[] = [];
+  const textIds: string[] = [];
+  for (const s of synced) {
+    if (s.engine_id.startsWith("text:")) {
+      textIds.push(s.engine_id);
+    } else {
+      ymmeIds.push(s.engine_id);
+    }
+  }
 
+  // Fetch YMME engine data for linked vehicles
   const engineMap = new Map<string, any>();
-  for (const e of engines ?? []) {
-    engineMap.set(String(e.id), e);
+  if (ymmeIds.length > 0) {
+    const { data: engines } = await db
+      .from("ymme_engines")
+      .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name))")
+      .in("id", ymmeIds);
+    for (const e of engines ?? []) {
+      engineMap.set(String(e.id), e);
+    }
+  }
+
+  // For text-based vehicles, get fitment data from vehicle_fitments
+  const textFitmentMap = new Map<string, any>();
+  if (textIds.length > 0) {
+    // Text IDs look like "text:audi-a3-2-0-tfsi" — we need to find matching fitments
+    // Get all unique fitments for this shop to match against
+    const { data: fitments } = await db
+      .from("vehicle_fitments")
+      .select("make, model, engine, engine_code, fuel_type, year_from, year_to")
+      .eq("shop_id", shop)
+      .is("ymme_engine_id", null)
+      .limit(500);
+
+    // Build lookup by the same text key format used in getVehiclesForPages
+    for (const f of fitments ?? []) {
+      if (!f.make || !f.model) continue;
+      const key = `text:${f.make.toLowerCase()}-${f.model.toLowerCase()}-${(f.engine || "").toLowerCase()}`.replace(/[^a-z0-9:-]/g, "-");
+      if (!textFitmentMap.has(key)) {
+        textFitmentMap.set(key, f);
+      }
+    }
   }
 
   const vehicles = synced.map((s: { engine_id: string; metaobject_handle: string | null }) => {
+    const handle = s.metaobject_handle ?? "";
+    const isText = s.engine_id.startsWith("text:");
+
+    if (isText) {
+      // Text-based vehicle — use fitment data or parse from handle
+      const fitment = textFitmentMap.get(s.engine_id);
+      const make = fitment?.make ?? "";
+      const model = fitment?.model ?? "";
+      const variant = fitment?.engine ?? `${make} ${model}`;
+      const fuelType = fitment?.fuel_type ?? "";
+
+      return {
+        engineId: s.engine_id,
+        make,
+        model,
+        variant,
+        displacement: "",
+        powerHp: null as number | null,
+        fuelType,
+        url: `/pages/vehicle-specs/${handle}`,
+        handle,
+      };
+    }
+
+    // YMME-linked vehicle — use engine data
     const engine = engineMap.get(String(s.engine_id));
     const make = engine?.ymme_models?.ymme_makes?.name ?? "";
     const model = engine?.ymme_models?.name ?? "";
@@ -934,7 +992,6 @@ async function handleVehicleGallery(params: URLSearchParams) {
     const displacementL = engine?.displacement_cc ? `${(engine.displacement_cc / 1000).toFixed(1)}L` : "";
     const powerHp = engine?.power_hp ?? null;
     const fuelType = engine?.fuel_type ?? "";
-    const handle = s.metaobject_handle ?? "";
 
     return {
       engineId: s.engine_id,
