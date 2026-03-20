@@ -898,6 +898,60 @@ function filterNulls(obj: Record<string, string | null | undefined>): Record<str
   return result;
 }
 
+// ---------- Vehicle Gallery handler (lists all vehicle spec pages) ----------
+async function handleVehicleGallery(params: URLSearchParams) {
+  const shop = params.get("shop") ?? "";
+
+  // Fetch all synced vehicle pages for this shop
+  const { data: synced } = await db
+    .from("vehicle_page_sync")
+    .select("engine_id, metaobject_handle, sync_status")
+    .eq("shop_id", shop)
+    .eq("sync_status", "synced")
+    .order("metaobject_handle", { ascending: true });
+
+  if (!synced || synced.length === 0) {
+    return json({ vehicles: [] });
+  }
+
+  // Fetch engine data for all synced vehicles
+  const engineIds = synced.map((s: { engine_id: string }) => s.engine_id);
+  const { data: engines } = await db
+    .from("ymme_engines")
+    .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name))")
+    .in("id", engineIds);
+
+  const engineMap = new Map<string, any>();
+  for (const e of engines ?? []) {
+    engineMap.set(String(e.id), e);
+  }
+
+  const vehicles = synced.map((s: { engine_id: string; metaobject_handle: string | null }) => {
+    const engine = engineMap.get(String(s.engine_id));
+    const make = engine?.ymme_models?.ymme_makes?.name ?? "";
+    const model = engine?.ymme_models?.name ?? "";
+    const variant = engine?.name ?? "";
+    const displacementL = engine?.displacement_cc ? `${(engine.displacement_cc / 1000).toFixed(1)}L` : "";
+    const powerHp = engine?.power_hp ?? null;
+    const fuelType = engine?.fuel_type ?? "";
+    const handle = s.metaobject_handle ?? "";
+
+    return {
+      engineId: s.engine_id,
+      make,
+      model,
+      variant,
+      displacement: displacementL,
+      powerHp,
+      fuelType,
+      url: `/pages/vehicle-specs/${handle}`,
+      handle,
+    };
+  }).filter((v: { make: string }) => v.make); // Filter out any without data
+
+  return json({ vehicles });
+}
+
 function buildVehicleOverview(
   make: string | undefined,
   model: string | undefined,
@@ -972,6 +1026,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleVinDecode(params, null);
     case "vehicle-specs":
       return handleVehicleSpecs(params);
+    case "vehicle-gallery":
+      return handleVehicleGallery(params);
     case "heartbeat":
       return json({ ok: true, ts: Date.now() });
     default:

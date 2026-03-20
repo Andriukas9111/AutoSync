@@ -11,7 +11,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await assertFeature(shopId, "vehiclePages");
   } catch (e) {
     if (e instanceof BillingGateError) {
-      return data({ error: "Vehicle Pages requires Enterprise plan", requiredPlan: "enterprise" }, { status: 403 });
+      return data({ error: "Vehicle Pages requires Professional plan or higher", requiredPlan: "professional" }, { status: 403 });
     }
     throw e;
   }
