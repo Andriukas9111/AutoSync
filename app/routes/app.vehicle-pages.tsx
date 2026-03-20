@@ -371,21 +371,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "push_all") {
     try {
-      const { pushVehiclePages, pushThemeTemplate } = await import(
+      const { pushVehiclePages } = await import(
         "../lib/pipeline/vehicle-pages.server"
       );
-
-      // Push theme template first so pages render properly on the storefront
-      let templateNote = "";
-      try {
-        const templateResult = await pushThemeTemplate(admin, shopId);
-        if (templateResult.success) {
-          templateNote = " Theme template installed.";
-        }
-      } catch {
-        // Non-fatal — pages can still be created even if template push fails
-        templateNote = " (Warning: theme template push failed — pages may not render correctly)";
-      }
 
       const result = await pushVehiclePages(admin, shopId);
 
@@ -397,7 +385,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       return data({
         success: true,
-        message: `Successfully pushed ${result.created + result.updated} vehicle pages (${result.created} created, ${result.updated} updated${result.failed > 0 ? `, ${result.failed} failed` : ""}).${templateNote}`,
+        message: `Successfully pushed ${result.created + result.updated} vehicle pages (${result.created} created, ${result.updated} updated${result.failed > 0 ? `, ${result.failed} failed` : ""}). All entries published to sales channels.`,
       });
     } catch (err: unknown) {
       const message =
