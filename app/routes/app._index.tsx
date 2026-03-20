@@ -593,48 +593,25 @@ export default function Dashboard() {
 
                 <CoverageBar percent={coverage} />
 
-                {/* Compact status chips */}
+                {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  <StatusChip
-                    icon={AlertCircleIcon}
-                    label="Unmapped"
-                    count={unmapped}
-                    bg="var(--p-color-bg-fill-caution-secondary)"
-                    color="var(--p-color-icon-caution)"
-                    onClick={() => navigate("/app/products?status=unmapped")}
-                  />
-                  <StatusChip
-                    icon={CheckCircleIcon}
-                    label="Auto Mapped"
-                    count={autoMapped}
-                    bg="var(--p-color-bg-fill-success-secondary)"
-                    color="var(--p-color-icon-success)"
-                    onClick={() => navigate("/app/products?status=auto_mapped")}
-                  />
-                  <StatusChip
-                    icon={WandIcon}
-                    label="Smart Mapped"
-                    count={smartMapped}
-                    bg="var(--p-color-bg-fill-success-secondary)"
-                    color="var(--p-color-icon-success)"
-                    onClick={() => navigate("/app/products?status=smart_mapped")}
-                  />
-                  <StatusChip
-                    icon={TargetIcon}
-                    label="Manual Mapped"
-                    count={manualMapped}
-                    bg="var(--p-color-bg-fill-info-secondary)"
-                    color="var(--p-color-icon-info)"
-                    onClick={() => navigate("/app/products?status=manual_mapped")}
-                  />
-                  <StatusChip
-                    icon={AlertTriangleIcon}
-                    label="Flagged"
-                    count={flagged}
-                    bg="var(--p-color-bg-fill-warning-secondary)"
-                    color="var(--p-color-icon-warning)"
-                    onClick={() => navigate("/app/products?status=flagged")}
-                  />
+                  {([
+                    { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, status: "unmapped" },
+                    { icon: CheckCircleIcon, label: "Auto Mapped", count: autoMapped, status: "auto_mapped" },
+                    { icon: WandIcon, label: "Smart Mapped", count: smartMapped, status: "smart_mapped" },
+                    { icon: TargetIcon, label: "Manual Mapped", count: manualMapped, status: "manual_mapped" },
+                    { icon: AlertTriangleIcon, label: "Flagged", count: flagged, status: "flagged" },
+                  ] as const).map((item) => (
+                    <StatusChip
+                      key={item.status}
+                      icon={item.icon}
+                      label={item.label}
+                      count={item.count}
+                      bg="var(--p-color-bg-surface-secondary)"
+                      color="var(--p-color-icon-emphasis)"
+                      onClick={() => navigate(`/app/products?status=${item.status}`)}
+                    />
+                  ))}
                 </div>
 
                 {unmapped > 0 && (
@@ -820,9 +797,14 @@ export default function Dashboard() {
                   </Text>
                 ) : (
                   <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                    gap: "6px",
+                    maxHeight: "320px",
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1px",
+                    background: "var(--p-color-border-secondary)",
+                    borderRadius: "var(--p-border-radius-200)",
+                    border: "1px solid var(--p-color-border-secondary)",
                   }}>
                     {recentJobs.map((job: any) => (
                       <div
@@ -832,10 +814,8 @@ export default function Dashboard() {
                           alignItems: "center",
                           justifyContent: "space-between",
                           gap: "12px",
-                          padding: "8px 12px",
-                          borderRadius: "var(--p-border-radius-200)",
-                          background: "var(--p-color-bg-surface-secondary)",
-                          border: "1px solid var(--p-color-border-secondary)",
+                          padding: "10px 16px",
+                          background: "var(--p-color-bg-surface)",
                         }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
@@ -884,20 +864,31 @@ export default function Dashboard() {
 
             {/* ─── Plan Usage ─── */}
             <Card>
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">Plan Usage</Text>
+                    <Text as="h2" variant="headingMd">
+                      {`${planLabel} Plan`}
+                    </Text>
                   </InlineStack>
-                  <Badge tone={plan === "free" ? "warning" : "success"}>
-                    {planLabel}
-                  </Badge>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" variant="headingLg" fontWeight="bold">
+                      {planPrice}
+                    </Text>
+                    {plan !== "free" && (
+                      <Text as="span" variant="bodySm" tone="subdued">/mo</Text>
+                    )}
+                    <Button onClick={() => navigate("/app/plans")} size="slim" variant="plain">
+                      {plan === "enterprise" ? "View plan" : "Upgrade"}
+                    </Button>
+                  </InlineStack>
                 </InlineStack>
                 <Divider />
 
+                {/* Usage meters */}
+                <Text as="h3" variant="headingSm">Usage</Text>
                 <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-                  {/* Product usage */}
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodyMd">Products</Text>
@@ -913,8 +904,6 @@ export default function Dashboard() {
                       />
                     )}
                   </BlockStack>
-
-                  {/* Fitment usage */}
                   <BlockStack gap="200">
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodyMd">Fitments</Text>
@@ -930,25 +919,147 @@ export default function Dashboard() {
                       />
                     )}
                   </BlockStack>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">Providers</Text>
+                      <Text as="span" variant="bodyMd" tone="subdued">
+                        {`${providerCount} / ${limits.providers === Infinity ? "\u221E" : String(limits.providers)}`}
+                      </Text>
+                    </InlineStack>
+                    {limits.providers !== Infinity && limits.providers > 0 && (
+                      <ProgressBar
+                        progress={Math.min(100, Math.round((providerCount / limits.providers) * 100))}
+                        size="small"
+                        tone={providerCount >= limits.providers ? "critical" : "primary"}
+                      />
+                    )}
+                  </BlockStack>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd">Collections</Text>
+                      <Text as="span" variant="bodyMd" tone="subdued">
+                        {collectionCount.toLocaleString()}
+                      </Text>
+                    </InlineStack>
+                  </BlockStack>
                 </InlineGrid>
 
-                {plan === "free" && (
+                <Divider />
+
+                {/* Feature summary */}
+                <Text as="h3" variant="headingSm">Included Features</Text>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gap: "8px",
+                }}>
+                  {([
+                    { label: "Push Tags", on: limits.features.pushTags },
+                    { label: "Push Metafields", on: limits.features.pushMetafields },
+                    { label: "Auto Extraction", on: limits.features.autoExtraction },
+                    { label: "Bulk Operations", on: limits.features.bulkOperations },
+                    { label: "Smart Collections", on: !!limits.features.smartCollections },
+                    { label: "Collection SEO Images", on: limits.features.collectionSeoImages },
+                    { label: "API Integration", on: limits.features.apiIntegration },
+                    { label: "FTP Import", on: limits.features.ftpImport },
+                    { label: "YMME Widget", on: limits.features.ymmeWidget },
+                    { label: "Fitment Badge", on: limits.features.fitmentBadge },
+                    { label: "Compatibility Table", on: limits.features.compatibilityTable },
+                    { label: "Floating Bar", on: limits.features.floatingBar },
+                    { label: "My Garage", on: limits.features.myGarage },
+                    { label: "Wheel Finder", on: limits.features.wheelFinder },
+                    { label: "Plate Lookup", on: limits.features.plateLookup },
+                    { label: "VIN Decode", on: limits.features.vinDecode },
+                    { label: "Pricing Engine", on: limits.features.pricingEngine },
+                    { label: "Vehicle Pages", on: limits.features.vehiclePages },
+                  ] as const).map((feat) => (
+                    <div key={feat.label} style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      padding: "6px 10px",
+                      borderRadius: "var(--p-border-radius-200)",
+                      background: feat.on
+                        ? "var(--p-color-bg-surface-secondary)"
+                        : "transparent",
+                      opacity: feat.on ? 1 : 0.45,
+                    }}>
+                      <span style={{
+                        fontSize: "14px",
+                        color: feat.on
+                          ? "var(--p-color-text-success)"
+                          : "var(--p-color-text-secondary)",
+                        lineHeight: 1,
+                      }}>
+                        {feat.on ? "\u2713" : "\u2715"}
+                      </span>
+                      <Text as="span" variant="bodySm" tone={feat.on ? undefined : "subdued"}>
+                        {feat.label}
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Extra details row */}
+                <Divider />
+                <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
+                  <BlockStack gap="050">
+                    <Text as="p" variant="bodySm" tone="subdued">Analytics</Text>
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      {limits.features.dashboardAnalytics === "none"
+                        ? "None"
+                        : limits.features.dashboardAnalytics === "basic"
+                          ? "Basic"
+                          : limits.features.dashboardAnalytics === "full_export"
+                            ? "Full + Export"
+                            : "Full"}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="050">
+                    <Text as="p" variant="bodySm" tone="subdued">Collections</Text>
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      {!limits.features.smartCollections
+                        ? "None"
+                        : limits.features.smartCollections === "make"
+                          ? "By Make"
+                          : limits.features.smartCollections === "make_model"
+                            ? "Make + Model"
+                            : "Full"}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="050">
+                    <Text as="p" variant="bodySm" tone="subdued">Widget Styling</Text>
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      {limits.features.widgetCustomisation === "none"
+                        ? "None"
+                        : limits.features.widgetCustomisation === "basic"
+                          ? "Basic"
+                          : "Full CSS"}
+                    </Text>
+                  </BlockStack>
+                  <BlockStack gap="050">
+                    <Text as="p" variant="bodySm" tone="subdued">Scheduled Fetches</Text>
+                    <Text as="p" variant="bodyMd" fontWeight="medium">
+                      {limits.scheduledFetchesPerDay === Infinity
+                        ? "Unlimited"
+                        : limits.scheduledFetchesPerDay === 0
+                          ? "None"
+                          : `${limits.scheduledFetchesPerDay}/day`}
+                    </Text>
+                  </BlockStack>
+                </InlineGrid>
+
+                {plan !== "enterprise" && (
                   <>
                     <Divider />
-                    <Banner
-                      title="Upgrade your plan"
-                      tone="warning"
-                      action={{
-                        content: "View Plans",
-                        onAction: () => navigate("/app/plans"),
-                      }}
-                    >
-                      <p>
-                        You are on the Free plan with limited product and
-                        fitment capacity. Upgrade to unlock auto-extraction,
-                        collections, API providers, and more.
-                      </p>
-                    </Banner>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Upgrade to unlock more features and higher limits
+                      </Text>
+                      <Button onClick={() => navigate("/app/plans")} size="slim">
+                        Compare Plans
+                      </Button>
+                    </InlineStack>
                   </>
                 )}
               </BlockStack>

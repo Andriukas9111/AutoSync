@@ -8,7 +8,7 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits } from "../lib/billing.server";
+import { getPlanLimits, loadPlanConfigsFromDB } from "../lib/billing.server";
 import { isAdminShop } from "../lib/admin.server";
 import { PageFooter } from "../components/PageFooter";
 import type { PlanTier } from "../lib/types";
@@ -44,6 +44,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .update({ plan: "enterprise" as PlanTier })
       .eq("shop_id", shopId);
   }
+
+  // Prime the plan config cache from DB (warm for all child loaders)
+  await loadPlanConfigsFromDB();
 
   // For admin shops, always use enterprise regardless of current DB state
   const plan = isAdmin

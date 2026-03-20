@@ -4,7 +4,7 @@ import db from "../lib/db.server";
 import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
-import { getTenant } from "../lib/billing.server";
+import { getTenant, getPlanLimits } from "../lib/billing.server";
 
 // ---------- CORS helpers ----------
 const corsHeaders = {
@@ -254,6 +254,17 @@ async function handleSearch(params: URLSearchParams) {
   const year = params.get("year");
   const shop = params.get("shop") ?? "";
 
+  // Verify ymmeWidget feature (Starter+)
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME search requires the Starter plan or higher" }, 403);
+      }
+    }
+  }
+
   if (!make || !model) {
     return json({ error: "Missing make and/or model parameter" }, 400);
   }
@@ -314,14 +325,15 @@ async function handleSearch(params: URLSearchParams) {
 async function handlePlateLookup(params: URLSearchParams, body: string | null) {
   const shop = params.get("shop");
 
-  // Verify Enterprise plan
+  // Verify plateLookup feature (Enterprise)
   if (shop) {
     const tenant = await getTenant(shop);
-    if (!tenant || tenant.plan !== "enterprise") {
-      return json(
-        { error: "Plate lookup requires the Enterprise plan" },
-        403,
-      );
+    if (!tenant) {
+      return json({ error: "Shop not found" }, 404);
+    }
+    const limits = getPlanLimits(tenant.plan);
+    if (!limits.features.plateLookup) {
+      return json({ error: "Plate lookup requires the Enterprise plan" }, 403);
     }
   }
 
@@ -402,18 +414,15 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
 async function handleWheelSearch(params: URLSearchParams) {
   const shop = params.get("shop");
 
-  // Verify Business+ plan
+  // Verify wheelFinder feature (Professional+)
   if (shop) {
     const tenant = await getTenant(shop);
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const allowedPlans = ["business", "enterprise"];
-    if (!allowedPlans.includes(tenant.plan)) {
-      return json(
-        { error: "Wheel Finder requires the Business plan or higher" },
-        403,
-      );
+    const limits = getPlanLimits(tenant.plan);
+    if (!limits.features.wheelFinder) {
+      return json({ error: "Wheel Finder requires the Professional plan or higher" }, 403);
     }
   }
 
@@ -543,14 +552,15 @@ async function handleWheelSearch(params: URLSearchParams) {
 async function handleVinDecode(params: URLSearchParams, body: string | null) {
   const shop = params.get("shop");
 
-  // Verify Enterprise plan
+  // Verify vinDecode feature (Enterprise)
   if (shop) {
     const tenant = await getTenant(shop);
-    if (!tenant || tenant.plan !== "enterprise") {
-      return json(
-        { error: "VIN Decode requires the Enterprise plan" },
-        403,
-      );
+    if (!tenant) {
+      return json({ error: "Shop not found" }, 404);
+    }
+    const limits = getPlanLimits(tenant.plan);
+    if (!limits.features.vinDecode) {
+      return json({ error: "VIN Decode requires the Enterprise plan" }, 403);
     }
   }
 
@@ -639,6 +649,17 @@ async function handleVehicleSpecs(params: URLSearchParams) {
   const engineId = params.get("engine_id");
   const shop = params.get("shop");
   if (!engineId) return json({ error: "Missing engine_id" }, 400);
+
+  // Verify fitmentBadge feature (Starter+) — powers compatibility table, specs, floating bar
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.fitmentBadge) {
+        return json({ error: "Vehicle specs requires the Starter plan or higher" }, 403);
+      }
+    }
+  }
 
   // Fetch engine with full joins
   const { data: engine } = await db

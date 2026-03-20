@@ -21,7 +21,6 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
   bulkOperations: "Bulk Operations",
   smartCollections: "Smart Collections",
   collectionSeoImages: "Collection SEO Images",
-  customVehicles: "Custom Vehicles",
   apiIntegration: "API Integration",
   ftpImport: "FTP Import",
   ymmeWidget: "YMME Search Widget",
@@ -36,7 +35,6 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
   dashboardAnalytics: "Dashboard Analytics",
   pricingEngine: "Competitive Pricing Engine",
   vehiclePages: "Vehicle Pages",
-  prioritySupport: "Priority Support",
 };
 
 // ---------------------------------------------------------------------------

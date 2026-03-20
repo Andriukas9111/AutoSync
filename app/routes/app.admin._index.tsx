@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, useRevalidator, useNavigate } from "react-router";
 import { data } from "react-router";
@@ -21,7 +21,6 @@ import {
   ProgressBar,
   Spinner,
   TextField,
-  Link,
   Tabs,
   Icon,
   Popover,
@@ -33,6 +32,20 @@ import {
   ProductIcon,
   LinkIcon,
   DatabaseIcon,
+  RefreshIcon,
+  SettingsIcon,
+  ChartVerticalIcon,
+  ImportIcon,
+  ClockIcon,
+  AlertCircleIcon,
+  CheckCircleIcon,
+  SearchIcon,
+  ConnectIcon,
+  DeleteIcon,
+  ResetIcon,
+  CollectionIcon,
+  WandIcon,
+  GaugeIcon,
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
@@ -221,7 +234,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "admin-purge-tenant": {
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-purge-tenant", message: "No shop specified" });
-      // Delete in FK-safe order
       await db.from("vehicle_fitments").delete().eq("shop_id", targetShop);
       await db.from("tenant_active_makes").delete().eq("shop_id", targetShop);
       await db.from("collection_mappings").delete().eq("shop_id", targetShop);
@@ -245,7 +257,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return data({ ok: true, intent: "admin-purge-collections", message: `All collection mappings purged for ${targetShop}.` });
     }
     case "admin-shopify-cleanup": {
-      // Remove AutoSync data from a tenant's Shopify store (tags, metafields, collections)
       const targetShop = formData.get("shop_id") as string;
       const cleanupType = formData.get("cleanup_type") as string || "all";
       if (!targetShop) return data({ ok: false, intent: "admin-shopify-cleanup", message: "No shop specified" });
@@ -269,14 +280,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
     case "admin-rebuild-collections": {
-      // Rebuild all collections for a tenant with fresh SEO and logos
       const targetShop = formData.get("shop_id") as string;
       const strategy = (formData.get("strategy") as "make" | "make_model" | "make_model_year") || "make";
       if (!targetShop) return data({ ok: false, intent: "admin-rebuild-collections", message: "No shop specified" });
       try {
-        // First remove existing collections
         const removeResult = await removeAllCollections(targetShop, admin);
-        // Then recreate with SEO and images
         const createResult = await createSmartCollections(targetShop, admin, strategy, {
           seoEnabled: true,
           imagesEnabled: true,
@@ -290,7 +298,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
     case "admin-reset-fitment-status": {
-      // Reset all product fitment statuses for a tenant (useful for re-extraction)
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-reset-fitment-status", message: "No shop specified" });
       const { data: updatedRows, error } = await db
@@ -300,10 +307,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .select("id");
       const count = updatedRows?.length ?? 0;
       if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
-      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count ?? 0} products reset to pending for re-extraction.` });
+      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to pending for re-extraction.` });
     }
     case "admin-update-tenant-counts": {
-      // Recalculate product & fitment counts for a tenant
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-update-tenant-counts", message: "No shop specified" });
       const [productCount, fitmentCount] = await Promise.all([
@@ -323,6 +329,137 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
+// QuickActionCard — matches dashboard design system
+// ---------------------------------------------------------------------------
+function QuickActionCard({
+  icon,
+  label,
+  description,
+  onClick,
+  primary = false,
+  badge,
+  loading = false,
+}: {
+  icon: any;
+  label: string;
+  description: string;
+  onClick: () => void;
+  primary?: boolean;
+  badge?: { content: string; tone: "success" | "warning" | "critical" | "info" | "attention" };
+  loading?: boolean;
+}) {
+  return (
+    <div
+      onClick={loading ? undefined : onClick}
+      onKeyDown={(e) => { if (!loading && (e.key === "Enter" || e.key === " ")) onClick(); }}
+      role="button"
+      tabIndex={0}
+      style={{
+        cursor: loading ? "wait" : "pointer",
+        borderRadius: "var(--p-border-radius-300)",
+        border: primary
+          ? "2px solid var(--p-color-border-emphasis)"
+          : "1px solid var(--p-color-border)",
+        padding: "var(--p-space-400)",
+        background: primary
+          ? "var(--p-color-bg-surface-secondary)"
+          : "var(--p-color-bg-surface)",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
+        opacity: loading ? 0.7 : 1,
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.borderColor = primary
+          ? "var(--p-color-border-emphasis)"
+          : "var(--p-color-border)";
+      }}
+    >
+      <BlockStack gap="200">
+        <InlineStack gap="200" blockAlign="center" align="space-between">
+          <InlineStack gap="200" blockAlign="center">
+            <div
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: primary
+                  ? "var(--p-color-bg-fill-emphasis)"
+                  : "var(--p-color-bg-surface-secondary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: primary
+                  ? "var(--p-color-text-inverse)"
+                  : "var(--p-color-icon-emphasis)",
+              }}
+            >
+              {loading ? <Spinner size="small" /> : <Icon source={icon} />}
+            </div>
+            <Text as="span" variant="headingSm">
+              {label}
+            </Text>
+          </InlineStack>
+          {badge && (
+            <Badge tone={badge.tone}>{badge.content}</Badge>
+          )}
+        </InlineStack>
+        <Text as="p" variant="bodySm" tone="subdued">
+          {description}
+        </Text>
+      </BlockStack>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StatCard — icon badge + number + label (same as dashboard StatusChip)
+// ---------------------------------------------------------------------------
+function StatCard({
+  icon,
+  value,
+  label,
+  sublabel,
+  bg,
+  color,
+}: {
+  icon: any;
+  value: string;
+  label: string;
+  sublabel?: string;
+  bg: string;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "12px",
+        padding: "16px",
+        borderRadius: "var(--p-border-radius-300)",
+        background: "var(--p-color-bg-surface)",
+        border: "1px solid var(--p-color-border-secondary)",
+        flex: "1 1 0",
+        minWidth: "140px",
+      }}
+    >
+      <IconBadge icon={icon} size={36} bg={bg} color={color} />
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        <Text as="span" variant="headingLg" fontWeight="bold">{value}</Text>
+        <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
+        {sublabel && (
+          <Text as="span" variant="bodySm" tone="subdued">{sublabel}</Text>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // TenantPurgeActions — per-tenant dropdown with purge options
 // ---------------------------------------------------------------------------
 function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: string }) {
@@ -337,7 +474,6 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
   const isLoading = fetcher.state !== "idle";
 
   const actions = [
-    // ── Management Tools ──
     {
       content: "Rebuild Collections (SEO + Logos)",
       onAction: () => {
@@ -383,7 +519,6 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
         );
       },
     },
-    // ── Destructive Actions ──
     {
       content: "Purge Fitments",
       destructive: true,
@@ -434,7 +569,7 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
             loading={isLoading}
             disabled={isLoading}
           >
-            {isLoading ? "Working..." : "Actions ▾"}
+            {isLoading ? "Working..." : "Actions \u25BE"}
           </Button>
         }
         onClose={() => setPopoverActive(false)}
@@ -479,6 +614,16 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
     </>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const fmtDate = (d: string | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "\u2014";
+const fmtShort = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtType = (t: string) =>
+  t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
 
 // ---------------------------------------------------------------------------
 // Component
@@ -526,15 +671,9 @@ export default function AdminPanel() {
     const allErrors: string[] = [];
 
     setScrapeState({
-      running: true,
-      currentBrand: "Loading...",
-      brandIndex: 0,
-      totalBrands: 0,
-      brandsProcessed: 0,
-      modelsProcessed: 0,
-      enginesProcessed: 0,
-      specsProcessed: 0,
-      errors: [],
+      running: true, currentBrand: "Loading...", brandIndex: 0,
+      totalBrands: 0, brandsProcessed: 0, modelsProcessed: 0,
+      enginesProcessed: 0, specsProcessed: 0, errors: [],
     });
 
     while (!stopRef.current) {
@@ -564,15 +703,9 @@ export default function AdminPanel() {
 
         brandIndex++;
         setScrapeState({
-          running: true,
-          currentBrand: result.brand_name,
-          brandIndex,
-          totalBrands,
-          brandsProcessed: brandIndex,
-          modelsProcessed: totalModels,
-          enginesProcessed: totalEngines,
-          specsProcessed: totalSpecs,
-          errors: allErrors,
+          running: true, currentBrand: result.brand_name, brandIndex,
+          totalBrands, brandsProcessed: brandIndex, modelsProcessed: totalModels,
+          enginesProcessed: totalEngines, specsProcessed: totalSpecs, errors: allErrors,
         });
 
         if (brandIndex >= totalBrands) break;
@@ -586,7 +719,6 @@ export default function AdminPanel() {
     revalidator.revalidate();
   }
 
-  // Auto-refresh after NHTSA sync
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok && fetcher.data?.intent === "sync-nhtsa") {
       const t = setTimeout(() => revalidator.revalidate(), 2000);
@@ -611,14 +743,12 @@ export default function AdminPanel() {
     { id: "activity", content: "Activity" },
   ];
 
-  const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
-  const fmtShort = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  const fmtType = (t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-
-  // YMME coverage
   const ymmeTotal = ymmeCounts.makes + ymmeCounts.models + ymmeCounts.engines;
-  const ymmeTarget = 65000; // 387 brands × ~40 models × ~4 engines average
+  const ymmeTarget = 65000;
   const ymmePct = Math.min(100, Math.round((ymmeTotal / ymmeTarget) * 100));
+
+  const activeTenants = tenants.filter((t) => !t.uninstalled_at).length;
+  const paidTenants = tenants.filter((t) => t.plan !== "free" && !t.uninstalled_at).length;
 
   return (
     <Page
@@ -626,11 +756,19 @@ export default function AdminPanel() {
       title="Admin Panel"
       subtitle="Operations center — manage tenants, data, and system health"
       primaryAction={{
-        content: isRefreshing ? "Refreshing..." : "Refresh All Data",
+        content: isRefreshing ? "Refreshing..." : "Refresh All",
+        icon: RefreshIcon,
         onAction: () => revalidator.revalidate(),
         loading: isRefreshing,
         disabled: isRefreshing,
       }}
+      secondaryActions={[
+        {
+          content: "Manage Plans",
+          icon: SettingsIcon,
+          onAction: () => navigate("/app/admin/plans"),
+        },
+      ]}
     >
       <Layout>
         {/* Banner */}
@@ -644,42 +782,57 @@ export default function AdminPanel() {
           </Layout.Section>
         )}
 
-        {/* ═══════════════════ KPI ROW ═══════════════════ */}
+        {/* ═══════════════════ STAT CARDS ═══════════════════ */}
         <Layout.Section>
-          <Card padding="0">
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              borderBottom: "1px solid var(--p-color-border-secondary)",
-            }}>
-              {[
-                { icon: PersonIcon, count: totalTenants.toLocaleString(), label: "Total Tenants", extra: Object.entries(planBreakdown).map(([p, c]) => `${cap(p)}: ${c}`).join(", ") },
-                { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products", extra: "All tenants" },
-                { icon: LinkIcon, count: totalFitments.toLocaleString(), label: "Total Fitments", extra: totalFitments > 0 ? "Active" : "Empty" },
-                { icon: DatabaseIcon, count: ymmeTotal.toLocaleString(), label: "YMME Database", extra: `${ymmeCounts.makes} makes · ${ymmeCounts.models} models · ${ymmeCounts.engines} engines` },
-              ].map((item, i) => (
-                <div key={item.label} style={{
-                  padding: "var(--p-space-400)",
-                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
-                  textAlign: "center",
-                }}>
-                  <BlockStack gap="200" inlineAlign="center">
-                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {item.count}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {item.label}
-                    </Text>
-                    {item.extra && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        {item.extra}
-                      </Text>
-                    )}
-                  </BlockStack>
-                </div>
-              ))}
-            </div>
+          <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+            <StatCard
+              icon={PersonIcon}
+              value={totalTenants.toLocaleString()}
+              label="Total Tenants"
+              sublabel={`${activeTenants} active · ${paidTenants} paid`}
+              bg="var(--p-color-bg-fill-info-secondary)"
+              color="var(--p-color-icon-info)"
+            />
+            <StatCard
+              icon={ProductIcon}
+              value={totalProducts.toLocaleString()}
+              label="Total Products"
+              sublabel="All tenants"
+              bg="var(--p-color-bg-fill-success-secondary)"
+              color="var(--p-color-icon-success)"
+            />
+            <StatCard
+              icon={LinkIcon}
+              value={totalFitments.toLocaleString()}
+              label="Total Fitments"
+              sublabel={totalFitments > 0 ? "Active" : "Empty"}
+              bg="var(--p-color-bg-fill-warning-secondary)"
+              color="var(--p-color-icon-warning)"
+            />
+            <StatCard
+              icon={DatabaseIcon}
+              value={ymmeTotal.toLocaleString()}
+              label="YMME Database"
+              sublabel={`${ymmeCounts.makes} makes · ${ymmeCounts.models} models`}
+              bg="var(--p-color-bg-fill-secondary)"
+              color="var(--p-color-icon-emphasis)"
+            />
+          </InlineGrid>
+        </Layout.Section>
+
+        {/* ═══════════════════ PLAN BREAKDOWN BADGES ═══════════════════ */}
+        <Layout.Section>
+          <Card>
+            <InlineStack gap="300" align="space-between" blockAlign="center">
+              <Text as="h2" variant="headingSm">Plan Distribution</Text>
+              <InlineStack gap="200" wrap>
+                {Object.entries(planBreakdown).map(([plan, count]) => (
+                  <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier]}>
+                    {`${cap(plan)}: ${count}`}
+                  </Badge>
+                ))}
+              </InlineStack>
+            </InlineStack>
           </Card>
         </Layout.Section>
 
@@ -692,7 +845,72 @@ export default function AdminPanel() {
                 {/* ──── OVERVIEW ──── */}
                 {selectedTab === 0 && (
                   <BlockStack gap="600">
-                    {/* Merchant table */}
+                    {/* Quick Actions */}
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">Quick Actions</Text>
+                      <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+                        <QuickActionCard
+                          icon={ImportIcon}
+                          label="Sync NHTSA"
+                          description="Fetch makes & models from NHTSA"
+                          onClick={() => fetcher.submit({ intent: "sync-nhtsa" }, { method: "post" })}
+                          loading={isSyncing && fetcher.formData?.get("intent") === "sync-nhtsa"}
+                          badge={{ content: "API", tone: "info" }}
+                        />
+                        <QuickActionCard
+                          icon={DatabaseIcon}
+                          label="YMME Database"
+                          description="Browse makes, models, engines"
+                          onClick={() => setSelectedTab(2)}
+                        />
+                        <QuickActionCard
+                          icon={PersonIcon}
+                          label="Manage Tenants"
+                          description="View tenant details and usage"
+                          onClick={() => setSelectedTab(1)}
+                          badge={totalTenants > 0 ? { content: `${totalTenants}`, tone: "success" } : undefined}
+                        />
+                        <QuickActionCard
+                          icon={SettingsIcon}
+                          label="Plan Config"
+                          description="Adjust plan pricing and limits"
+                          onClick={() => navigate("/app/admin/plans")}
+                          primary
+                        />
+                      </InlineGrid>
+
+                      <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
+                        <QuickActionCard
+                          icon={ChartVerticalIcon}
+                          label="Activity Log"
+                          description="View recent sync jobs across tenants"
+                          onClick={() => setSelectedTab(3)}
+                        />
+                        <QuickActionCard
+                          icon={SearchIcon}
+                          label="YMME Browser"
+                          description="Browse the global vehicle database"
+                          onClick={() => navigate("/app/vehicles")}
+                        />
+                        <QuickActionCard
+                          icon={GaugeIcon}
+                          label="Analytics"
+                          description="Platform-wide analytics overview"
+                          onClick={() => navigate("/app/analytics")}
+                        />
+                        <QuickActionCard
+                          icon={RefreshIcon}
+                          label="Refresh Data"
+                          description="Reload all admin panel data"
+                          onClick={() => revalidator.revalidate()}
+                          loading={isRefreshing}
+                        />
+                      </InlineGrid>
+                    </BlockStack>
+
+                    <Divider />
+
+                    {/* Merchant Overview Table */}
                     <BlockStack gap="300">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="h2" variant="headingMd">Merchant Overview</Text>
@@ -701,83 +919,27 @@ export default function AdminPanel() {
                       <DataTable
                         columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text", "text"]}
                         headings={["Merchant", "Plan", "Products", "Fitments", "Providers", "Success Rate", "Last Active"]}
-                        rows={tenantUsage.map((t) => [
+                        rows={tenantUsage.slice(0, 5).map((t) => [
                           t.domain.replace(".myshopify.com", ""),
                           cap(t.plan),
                           t.products.toLocaleString(),
                           t.fitments.toLocaleString(),
                           String(t.providers),
-                          t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "—",
-                          t.lastActivity ? new Date(t.lastActivity).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—",
+                          t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "\u2014",
+                          t.lastActivity ? new Date(t.lastActivity).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "\u2014",
                         ])}
                       />
                     </BlockStack>
 
                     <Divider />
 
-                    {/* Quick actions */}
-                    <BlockStack gap="300">
-                      <Text as="h2" variant="headingMd">Quick Actions</Text>
-                      <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
-                        <Box background="bg-surface-secondary" padding="400" borderRadius="200">
-                          <BlockStack gap="200">
-                            <Text as="p" variant="headingSm">Sync Vehicle Data</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Fetch makes and models from NHTSA
-                            </Text>
-                            <fetcher.Form method="post">
-                              <input type="hidden" name="intent" value="sync-nhtsa" />
-                              <Button submit loading={isSyncing} variant="primary" fullWidth>
-                                {isSyncing ? "Syncing..." : "Sync NHTSA"}
-                              </Button>
-                            </fetcher.Form>
-                          </BlockStack>
-                        </Box>
-
-                        <Box background="bg-surface-secondary" padding="400" borderRadius="200">
-                          <BlockStack gap="200">
-                            <Text as="p" variant="headingSm">YMME Database</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Browse makes, models, engines
-                            </Text>
-                            <Button fullWidth onClick={() => setSelectedTab(2)}>
-                              View YMME Data
-                            </Button>
-                          </BlockStack>
-                        </Box>
-
-                        <Box background="bg-surface-secondary" padding="400" borderRadius="200">
-                          <BlockStack gap="200">
-                            <Text as="p" variant="headingSm">Rebuild All Collections</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Regenerate with SEO + brand logos
-                            </Text>
-                            <Button fullWidth onClick={() => setSelectedTab(1)} variant="secondary">
-                              Go to Tenants → Actions
-                            </Button>
-                          </BlockStack>
-                        </Box>
-
-                        <Box background="bg-surface-secondary" padding="400" borderRadius="200">
-                          <BlockStack gap="200">
-                            <Text as="p" variant="headingSm">Tenant Details</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">
-                              Drill into any merchant's data
-                            </Text>
-                            <Button fullWidth onClick={() => setSelectedTab(1)}>
-                              Manage Tenants
-                            </Button>
-                          </BlockStack>
-                        </Box>
-                      </InlineGrid>
-                    </BlockStack>
-
-                    <Divider />
-
-                    {/* Recent activity */}
+                    {/* Recent Activity */}
                     {recentJobs.length > 0 && (
                       <BlockStack gap="300">
-                        <Text as="h2" variant="headingMd">Recent Activity</Text>
+                        <InlineStack align="space-between" blockAlign="center">
+                          <Text as="h2" variant="headingMd">Recent Activity</Text>
+                          <Button size="slim" variant="plain" onClick={() => setSelectedTab(3)}>View All</Button>
+                        </InlineStack>
                         <DataTable
                           columnContentTypes={["text", "text", "text", "text"]}
                           headings={["Merchant", "Type", "Status", "When"]}
@@ -793,26 +955,50 @@ export default function AdminPanel() {
 
                     <Divider />
 
-                    {/* System info */}
-                    <InlineGrid columns={{ xs: 1, sm: 3 }} gap="400">
-                      <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                    {/* System Info — compact */}
+                    <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
+                      <div style={{
+                        padding: "12px 16px",
+                        borderRadius: "var(--p-border-radius-300)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        border: "1px solid var(--p-color-border-secondary)",
+                      }}>
                         <BlockStack gap="100">
-                          <Text as="p" variant="bodySm" fontWeight="semibold">Database</Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={DatabaseIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                            <Text as="p" variant="bodySm" fontWeight="semibold">Database</Text>
+                          </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">Supabase (PostgreSQL)</Text>
                         </BlockStack>
-                      </Box>
-                      <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                      </div>
+                      <div style={{
+                        padding: "12px 16px",
+                        borderRadius: "var(--p-border-radius-300)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        border: "1px solid var(--p-color-border-secondary)",
+                      }}>
                         <BlockStack gap="100">
-                          <Text as="p" variant="bodySm" fontWeight="semibold">Framework</Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={ConnectIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                            <Text as="p" variant="bodySm" fontWeight="semibold">Framework</Text>
+                          </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">React Router 7 + Polaris</Text>
                         </BlockStack>
-                      </Box>
-                      <Box background="bg-surface-secondary" padding="300" borderRadius="200">
+                      </div>
+                      <div style={{
+                        padding: "12px 16px",
+                        borderRadius: "var(--p-border-radius-300)",
+                        background: "var(--p-color-bg-surface-secondary)",
+                        border: "1px solid var(--p-color-border-secondary)",
+                      }}>
                         <BlockStack gap="100">
-                          <Text as="p" variant="bodySm" fontWeight="semibold">Data Sources</Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={WandIcon} size={22} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
+                            <Text as="p" variant="bodySm" fontWeight="semibold">Data Sources</Text>
+                          </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">NHTSA · auto-data.net · Manual</Text>
                         </BlockStack>
-                      </Box>
+                      </div>
                     </InlineGrid>
                   </BlockStack>
                 )}
@@ -831,7 +1017,7 @@ export default function AdminPanel() {
                         />
                       </div>
                       <Text as="span" variant="bodySm" tone="subdued">
-                        {filteredTenants.length} of {tenants.length} tenants
+                        {`${filteredTenants.length} of ${tenants.length} tenants`}
                       </Text>
                     </InlineStack>
 
@@ -914,7 +1100,7 @@ export default function AdminPanel() {
                 {/* ──── YMME DATABASE ──── */}
                 {selectedTab === 2 && (
                   <BlockStack gap="600">
-                    {/* Chunked scrape banner */}
+                    {/* Scrape complete banner */}
                     {scrapeState && !scrapeState.running && (
                       <Banner
                         title={`Scrape complete — ${scrapeState.brandsProcessed} brands, ${scrapeState.modelsProcessed} models, ${scrapeState.enginesProcessed} engines, ${scrapeState.specsProcessed} specs.${scrapeState.errors.length > 0 ? ` ${scrapeState.errors.length} errors.` : ""}`}
@@ -923,7 +1109,7 @@ export default function AdminPanel() {
                       />
                     )}
 
-                    {/* ═══ Live Scrape Progress ═══ */}
+                    {/* Live Scrape Progress */}
                     {(() => {
                       const runningJob = scrapeJobs.find((j: any) => j.status === "running");
                       if (!runningJob) return null;
@@ -980,70 +1166,66 @@ export default function AdminPanel() {
                       );
                     })()}
 
-                    {/* Stats row — single card grid */}
-                    <Card padding="0">
-                      <div style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                        borderBottom: "1px solid var(--p-color-border-secondary)",
-                      }}>
-                        {[
-                          { label: "Makes", value: ymmeCounts.makes },
-                          { label: "Models", value: ymmeCounts.models },
-                          { label: "Engines", value: ymmeCounts.engines },
-                          { label: "Specs", value: ymmeCounts.specs },
-                          { label: "Aliases", value: ymmeCounts.aliases },
-                          { label: "Fitments", value: totalFitments },
-                        ].map((s, i) => (
-                          <div key={s.label} style={{
-                            padding: "var(--p-space-400)",
-                            borderRight: i < 5 ? "1px solid var(--p-color-border-secondary)" : "none",
-                            textAlign: "center",
-                          }}>
-                            <BlockStack gap="200" inlineAlign="center">
-                              <Text as="p" variant="headingLg" fontWeight="bold">
-                                {s.value.toLocaleString()}
-                              </Text>
-                              <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
-                            </BlockStack>
+                    {/* YMME Stats — using StatCard pattern */}
+                    <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="300">
+                      {[
+                        { icon: DatabaseIcon, label: "Makes", value: ymmeCounts.makes, bg: "var(--p-color-bg-fill-info-secondary)", color: "var(--p-color-icon-info)" },
+                        { icon: DatabaseIcon, label: "Models", value: ymmeCounts.models, bg: "var(--p-color-bg-fill-success-secondary)", color: "var(--p-color-icon-success)" },
+                        { icon: DatabaseIcon, label: "Engines", value: ymmeCounts.engines, bg: "var(--p-color-bg-fill-warning-secondary)", color: "var(--p-color-icon-warning)" },
+                        { icon: DatabaseIcon, label: "Specs", value: ymmeCounts.specs, bg: "var(--p-color-bg-fill-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: DatabaseIcon, label: "Aliases", value: ymmeCounts.aliases, bg: "var(--p-color-bg-fill-info-secondary)", color: "var(--p-color-icon-info)" },
+                        { icon: LinkIcon, label: "Fitments", value: totalFitments, bg: "var(--p-color-bg-fill-success-secondary)", color: "var(--p-color-icon-success)" },
+                      ].map((s) => (
+                        <div key={s.label} style={{
+                          display: "flex", alignItems: "center", gap: "10px",
+                          padding: "12px 16px", borderRadius: "var(--p-border-radius-300)",
+                          background: "var(--p-color-bg-surface)", border: "1px solid var(--p-color-border-secondary)",
+                        }}>
+                          <IconBadge icon={s.icon} size={28} bg={s.bg} color={s.color} />
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <Text as="span" variant="headingSm">{s.value.toLocaleString()}</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
                           </div>
-                        ))}
-                      </div>
-                    </Card>
+                        </div>
+                      ))}
+                    </InlineGrid>
 
                     {/* Coverage bar */}
-                    <Box background="bg-surface-secondary" padding="400" borderRadius="200">
+                    <Card>
                       <BlockStack gap="200">
                         <InlineStack align="space-between">
-                          <Text as="p" variant="headingSm">Database Coverage</Text>
-                          <Text as="p" variant="bodySm" fontWeight="bold">{ymmeTotal.toLocaleString()} / ~65,000 target</Text>
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={GaugeIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                            <Text as="p" variant="headingSm">Database Coverage</Text>
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeTotal.toLocaleString()} / ~65,000 target`}</Text>
                         </InlineStack>
                         <ProgressBar progress={ymmePct} size="medium" tone="primary" />
                         <Text as="p" variant="bodySm" tone="subdued">
                           Target: 387 brands with all models, engines, and full vehicle specs from auto-data.net
                         </Text>
                       </BlockStack>
-                    </Box>
+                    </Card>
 
                     <Divider />
 
-                    {/* ═══ Data Sources ═══ */}
+                    {/* Data Sources */}
                     <Text as="h2" variant="headingMd">Data Sources</Text>
-
                     <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-                      {/* Auto-data.net — PRIMARY (Chunked brand-by-brand) */}
-                      <Box background="bg-surface-secondary" padding="400" borderRadius="200" borderWidth="025" borderColor="border">
+                      {/* Auto-data.net — PRIMARY */}
+                      <Card>
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h3" variant="headingSm">Auto-Data.net</Text>
+                            <InlineStack gap="200" blockAlign="center">
+                              <IconBadge icon={DatabaseIcon} size={28} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                              <Text as="h3" variant="headingSm">Auto-Data.net</Text>
+                            </InlineStack>
                             <Badge tone="success">Primary Source</Badge>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            387 global brands with full 4-level deep scraping: brands, models, engines, and 90+ vehicle spec fields. Processes one brand at a time to avoid serverless timeouts.
+                            387 global brands with full 4-level deep scraping: brands, models, engines, and 90+ vehicle spec fields.
                           </Text>
                           <Divider />
-
-                          {/* Delay & specs controls */}
                           <InlineGrid columns={{ xs: 1, sm: 2 }} gap="200">
                             <Select
                               label="Delay between requests"
@@ -1068,21 +1250,13 @@ export default function AdminPanel() {
                               disabled={scrapeState?.running ?? false}
                             />
                           </InlineGrid>
-
                           <InlineStack gap="200">
                             {!scrapeState?.running ? (
-                              <Button
-                                variant="primary"
-                                onClick={() => startChunkedScrape()}
-                              >
+                              <Button variant="primary" onClick={() => startChunkedScrape()}>
                                 Start Scrape
                               </Button>
                             ) : (
-                              <Button
-                                variant="primary"
-                                tone="critical"
-                                onClick={() => { stopRef.current = true; }}
-                              >
+                              <Button variant="primary" tone="critical" onClick={() => { stopRef.current = true; }}>
                                 Stop Scrape
                               </Button>
                             )}
@@ -1091,17 +1265,16 @@ export default function AdminPanel() {
                             </Button>
                           </InlineStack>
 
-                          {/* Progress display during scrape */}
+                          {/* Progress during scrape */}
                           {scrapeState?.running && (
-                            <Box background="bg-surface" padding="400" borderRadius="200">
+                            <Card>
                               <BlockStack gap="300">
                                 <InlineStack gap="200" blockAlign="center">
                                   <Spinner size="small" />
                                   <Text as="p" variant="bodySm" fontWeight="semibold">
-                                    Scraping: {scrapeState.currentBrand}
+                                    {`Scraping: ${scrapeState.currentBrand}`}
                                   </Text>
                                 </InlineStack>
-
                                 {scrapeState.totalBrands > 0 && (
                                   <>
                                     <ProgressBar
@@ -1110,55 +1283,44 @@ export default function AdminPanel() {
                                       tone="primary"
                                     />
                                     <Text as="p" variant="bodySm" tone="subdued">
-                                      Brand {scrapeState.brandsProcessed} of {scrapeState.totalBrands}
-                                      {" "}({Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}%)
+                                      {`Brand ${scrapeState.brandsProcessed} of ${scrapeState.totalBrands} (${Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}%)`}
                                     </Text>
                                   </>
                                 )}
-
                                 <InlineGrid columns={{ xs: 1, sm: 3 }} gap="200">
-                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
-                                    <BlockStack gap="100" inlineAlign="center">
-                                      <Text as="p" variant="bodySm" tone="subdued">Models</Text>
-                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
-                                        {scrapeState.modelsProcessed.toLocaleString()}
-                                      </Text>
-                                    </BlockStack>
-                                  </Box>
-                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
-                                    <BlockStack gap="100" inlineAlign="center">
-                                      <Text as="p" variant="bodySm" tone="subdued">Engines</Text>
-                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
-                                        {scrapeState.enginesProcessed.toLocaleString()}
-                                      </Text>
-                                    </BlockStack>
-                                  </Box>
-                                  <Box background="bg-surface-secondary" padding="200" borderRadius="100">
-                                    <BlockStack gap="100" inlineAlign="center">
-                                      <Text as="p" variant="bodySm" tone="subdued">Specs</Text>
-                                      <Text as="p" variant="headingSm" fontWeight="bold" alignment="center">
-                                        {scrapeState.specsProcessed.toLocaleString()}
-                                      </Text>
-                                    </BlockStack>
-                                  </Box>
+                                  {[
+                                    { label: "Models", value: scrapeState.modelsProcessed },
+                                    { label: "Engines", value: scrapeState.enginesProcessed },
+                                    { label: "Specs", value: scrapeState.specsProcessed },
+                                  ].map((s) => (
+                                    <div key={s.label} style={{
+                                      padding: "8px 12px", borderRadius: "var(--p-border-radius-200)",
+                                      background: "var(--p-color-bg-surface-secondary)", textAlign: "center",
+                                    }}>
+                                      <Text as="p" variant="headingSm" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                                      <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                                    </div>
+                                  ))}
                                 </InlineGrid>
-
                                 {scrapeState.errors.length > 0 && (
                                   <Text as="p" variant="bodySm" tone="critical">
-                                    {scrapeState.errors.length} error(s) so far
+                                    {`${scrapeState.errors.length} error(s) so far`}
                                   </Text>
                                 )}
                               </BlockStack>
-                            </Box>
+                            </Card>
                           )}
                         </BlockStack>
-                      </Box>
+                      </Card>
 
                       {/* NHTSA — SECONDARY */}
-                      <Box background="bg-surface-secondary" padding="400" borderRadius="200" borderWidth="025" borderColor="border">
+                      <Card>
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h3" variant="headingSm">NHTSA vPIC (USA)</Text>
+                            <InlineStack gap="200" blockAlign="center">
+                              <IconBadge icon={ImportIcon} size={28} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                              <Text as="h3" variant="headingSm">NHTSA vPIC (USA)</Text>
+                            </InlineStack>
                             <Badge tone="info">Gap Filler</Badge>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
@@ -1168,7 +1330,7 @@ export default function AdminPanel() {
                           <InlineStack gap="200">
                             <fetcher.Form method="post">
                               <input type="hidden" name="intent" value="sync-nhtsa" />
-                              <Button submit loading={isSyncing}>
+                              <Button submit loading={isSyncing} variant="primary">
                                 {isSyncing ? "Syncing..." : "Sync NHTSA"}
                               </Button>
                             </fetcher.Form>
@@ -1182,10 +1344,10 @@ export default function AdminPanel() {
                             </InlineStack>
                           )}
                         </BlockStack>
-                      </Box>
+                      </Card>
                     </InlineGrid>
 
-                    {/* ═══ Scrape Job History ═══ */}
+                    {/* Scrape Job History */}
                     {scrapeJobs.length > 0 && (
                       <>
                         <Divider />
@@ -1202,7 +1364,7 @@ export default function AdminPanel() {
                                   const m = Math.floor((s % 3600) / 60);
                                   return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
                                 })()
-                              : j.status === "running" ? "Running..." : "—";
+                              : j.status === "running" ? "Running..." : "\u2014";
                             const isDeep = j.type === "deep_specs_backfill";
                             return [
                               j.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
@@ -1212,7 +1374,7 @@ export default function AdminPanel() {
                                 ? `${r.specsUpserted ?? 0} / ${r.imagesFound ?? 0}`
                                 : `${r.specsProcessed ?? 0} / ${r.enginesProcessed ?? 0}`,
                               dur,
-                              j.startedAt ? new Date(j.startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—",
+                              j.startedAt ? new Date(j.startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "\u2014",
                             ];
                           })}
                         />
@@ -1224,7 +1386,10 @@ export default function AdminPanel() {
                 {/* ──── ACTIVITY ──── */}
                 {selectedTab === 3 && (
                   <BlockStack gap="400">
-                    <Text as="h2" variant="headingMd">All Sync Jobs</Text>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingMd">All Sync Jobs</Text>
+                      <Badge tone="info">{`${recentJobs.length} recent`}</Badge>
+                    </InlineStack>
 
                     {recentJobs.length === 0 ? (
                       <Banner title="No activity yet" tone="info">
@@ -1238,7 +1403,7 @@ export default function AdminPanel() {
                           const started = new Date(j.created_at);
                           const dur = j.completed_at
                             ? `${Math.round((new Date(j.completed_at).getTime() - started.getTime()) / 1000)}s`
-                            : j.status === "running" ? "Running..." : "—";
+                            : j.status === "running" ? "Running..." : "\u2014";
                           return [
                             j.shop_id.replace(".myshopify.com", ""),
                             fmtType(j.type),

@@ -1,22 +1,40 @@
 import db from "./db.server";
-import type { PlanTier, PlanLimits, Tenant } from "./types";
+import { PLAN_ORDER } from "./types";
+import type { PlanTier, PlanLimits, PlanConfig, Tenant } from "./types";
 
 // ---------------------------------------------------------------------------
 // Plan tier order (used for upgrade path lookups)
 // ---------------------------------------------------------------------------
-const PLAN_ORDER: PlanTier[] = [
-  "free",
-  "starter",
-  "growth",
-  "professional",
-  "business",
-  "enterprise",
-];
+// Re-export from types.ts so client code can import without .server dependency
+export { PLAN_ORDER } from "./types";
+export type { PlanConfig } from "./types";
 
 // ---------------------------------------------------------------------------
-// Plan limits — fully defined for every tier
+// Module-level cache for DB-backed plan configurations
 // ---------------------------------------------------------------------------
-export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
+interface PlanConfigCache {
+  configs: Record<PlanTier, PlanConfig>;
+  limits: Record<PlanTier, PlanLimits>;
+  loadedAt: number;
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let _planConfigCache: PlanConfigCache | null = null;
+
+/** Check if the cache is still fresh */
+function isCacheFresh(): boolean {
+  return !!_planConfigCache && (Date.now() - _planConfigCache.loadedAt) < CACHE_TTL_MS;
+}
+
+/** Force-invalidate the cache (called after admin saves) */
+export function invalidatePlanConfigCache(): void {
+  _planConfigCache = null;
+}
+
+// ---------------------------------------------------------------------------
+// Plan limits — hardcoded defaults (fallback if DB is unavailable)
+// ---------------------------------------------------------------------------
+const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
     products: 50,
     fitments: 200,
@@ -30,7 +48,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       bulkOperations: false,
       smartCollections: false,
       collectionSeoImages: false,
-      customVehicles: false,
       apiIntegration: false,
       ftpImport: false,
       ymmeWidget: false,
@@ -45,13 +62,12 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       vehiclePages: false,
       widgetCustomisation: "none",
       dashboardAnalytics: "none",
-      prioritySupport: false,
     },
   },
 
   starter: {
-    products: 1_000,
-    fitments: 5_000,
+    products: 500,
+    fitments: 2_500,
     providers: 1,
     scheduledFetchesPerDay: 0,
     activeMakes: 10,
@@ -62,7 +78,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       bulkOperations: false,
       smartCollections: false,
       collectionSeoImages: false,
-      customVehicles: false,
       apiIntegration: false,
       ftpImport: false,
       ymmeWidget: true,
@@ -77,13 +92,12 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       vehiclePages: false,
       widgetCustomisation: "basic",
       dashboardAnalytics: "basic",
-      prioritySupport: false,
     },
   },
 
   growth: {
-    products: 10_000,
-    fitments: 50_000,
+    products: 5_000,
+    fitments: 25_000,
     providers: 3,
     scheduledFetchesPerDay: 1,
     activeMakes: 30,
@@ -94,7 +108,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       bulkOperations: true,
       smartCollections: "make",
       collectionSeoImages: false,
-      customVehicles: false,
       apiIntegration: false,
       ftpImport: false,
       ymmeWidget: true,
@@ -109,13 +122,12 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       vehiclePages: false,
       widgetCustomisation: "full",
       dashboardAnalytics: "full",
-      prioritySupport: false,
     },
   },
 
   professional: {
-    products: 50_000,
-    fitments: 250_000,
+    products: 25_000,
+    fitments: 100_000,
     providers: 5,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
@@ -125,29 +137,27 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       autoExtraction: true,
       bulkOperations: true,
       smartCollections: "make_model",
-      collectionSeoImages: true,
-      customVehicles: true,
+      collectionSeoImages: false,
       apiIntegration: true,
-      ftpImport: false,
+      ftpImport: true,
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: true,
       floatingBar: true,
-      myGarage: true,
-      wheelFinder: false,
+      myGarage: false,
+      wheelFinder: true,
       plateLookup: false,
       vinDecode: false,
-      pricingEngine: true,
+      pricingEngine: false,
       vehiclePages: false,
       widgetCustomisation: "full",
       dashboardAnalytics: "full",
-      prioritySupport: false,
     },
   },
 
   business: {
-    products: 200_000,
-    fitments: 1_000_000,
+    products: 100_000,
+    fitments: 500_000,
     providers: 15,
     scheduledFetchesPerDay: 6,
     activeMakes: 999_999,
@@ -158,7 +168,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       bulkOperations: true,
       smartCollections: "full",
       collectionSeoImages: true,
-      customVehicles: true,
       apiIntegration: true,
       ftpImport: true,
       ymmeWidget: true,
@@ -173,7 +182,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       vehiclePages: false,
       widgetCustomisation: "full",
       dashboardAnalytics: "full_export",
-      prioritySupport: true,
     },
   },
 
@@ -190,7 +198,6 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       bulkOperations: true,
       smartCollections: "full",
       collectionSeoImages: true,
-      customVehicles: true,
       apiIntegration: true,
       ftpImport: true,
       ymmeWidget: true,
@@ -205,10 +212,188 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       vehiclePages: true,
       widgetCustomisation: "full_css",
       dashboardAnalytics: "full_export",
-      prioritySupport: true,
     },
   },
 };
+
+// ---------------------------------------------------------------------------
+// Default plan configs (used for seeding DB + as fallback)
+// ---------------------------------------------------------------------------
+const DEFAULT_PLAN_CONFIGS: Record<PlanTier, Omit<PlanConfig, "limits">> = {
+  free: { tier: "free", name: "Free", priceMonthly: 0, badge: null, description: "Explore the platform with basic manual mapping", isActive: true },
+  starter: { tier: "starter", name: "Starter", priceMonthly: 19, badge: null, description: "Activate your store with fitment data and widgets", isActive: true },
+  growth: { tier: "growth", name: "Growth", priceMonthly: 49, badge: "MOST POPULAR", description: "Automate fitment extraction and collections", isActive: true },
+  professional: { tier: "professional", name: "Professional", priceMonthly: 99, badge: null, description: "Integrate with external data providers and APIs", isActive: true },
+  business: { tier: "business", name: "Business", priceMonthly: 179, badge: "BEST VALUE", description: "Convert visitors with advanced features and analytics", isActive: true },
+  enterprise: { tier: "enterprise", name: "Enterprise", priceMonthly: 299, badge: null, description: "The complete automotive platform with every feature", isActive: true },
+};
+
+// ---------------------------------------------------------------------------
+// Exported alias — reads from DB cache when available, hardcoded fallback
+// ---------------------------------------------------------------------------
+export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = new Proxy(DEFAULT_PLAN_LIMITS, {
+  get(target, prop: string) {
+    if (_planConfigCache && prop in _planConfigCache.limits) {
+      return _planConfigCache.limits[prop as PlanTier];
+    }
+    return target[prop as PlanTier];
+  },
+});
+
+// ---------------------------------------------------------------------------
+// DB-backed plan config loading
+// ---------------------------------------------------------------------------
+
+/** Convert a DB row to a PlanConfig object */
+function dbRowToPlanConfig(row: Record<string, unknown>): PlanConfig {
+  const tier = row.tier as PlanTier;
+  const features = (row.features || {}) as PlanLimits["features"];
+  return {
+    tier,
+    name: row.name as string,
+    priceMonthly: Number(row.price_monthly),
+    badge: (row.badge as string) || null,
+    description: (row.description as string) || null,
+    isActive: row.is_active !== false,
+    limits: {
+      products: row.products_limit === 999999999 ? Infinity : Number(row.products_limit),
+      fitments: row.fitments_limit === 999999999 ? Infinity : Number(row.fitments_limit),
+      providers: row.providers_limit === 999999999 ? Infinity : Number(row.providers_limit),
+      scheduledFetchesPerDay: row.scheduled_fetches_per_day === 999999999 ? Infinity : Number(row.scheduled_fetches_per_day),
+      activeMakes: Number(row.active_makes),
+      features,
+    },
+  };
+}
+
+/**
+ * Load plan configurations from DB into the module-level cache.
+ * Called by app.tsx parent loader so the cache is warm before child loaders run.
+ * Returns the full configs record for components that need pricing/badge info.
+ */
+export async function loadPlanConfigsFromDB(): Promise<Record<PlanTier, PlanConfig>> {
+  // Return cached if fresh
+  if (isCacheFresh() && _planConfigCache) {
+    return _planConfigCache.configs;
+  }
+
+  try {
+    const { data, error } = await db
+      .from("plan_configurations")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (error || !data || data.length === 0) {
+      // DB table doesn't exist yet or is empty — return defaults
+      return buildDefaultConfigs();
+    }
+
+    const configs = {} as Record<PlanTier, PlanConfig>;
+    const limits = {} as Record<PlanTier, PlanLimits>;
+
+    for (const row of data) {
+      const config = dbRowToPlanConfig(row);
+      configs[config.tier] = config;
+      limits[config.tier] = config.limits;
+    }
+
+    // Ensure all tiers are present (fill gaps with defaults)
+    for (const tier of PLAN_ORDER) {
+      if (!configs[tier]) {
+        const defaultConfig = buildDefaultConfigs()[tier];
+        configs[tier] = defaultConfig;
+        limits[tier] = defaultConfig.limits;
+      }
+    }
+
+    _planConfigCache = { configs, limits, loadedAt: Date.now() };
+    return configs;
+  } catch {
+    // On any error, return defaults without caching
+    return buildDefaultConfigs();
+  }
+}
+
+/** Build default PlanConfig records from hardcoded data */
+function buildDefaultConfigs(): Record<PlanTier, PlanConfig> {
+  const configs = {} as Record<PlanTier, PlanConfig>;
+  for (const tier of PLAN_ORDER) {
+    configs[tier] = {
+      ...DEFAULT_PLAN_CONFIGS[tier],
+      limits: DEFAULT_PLAN_LIMITS[tier],
+    };
+  }
+  return configs;
+}
+
+/**
+ * Get all plan configs (with pricing, badges, descriptions).
+ * Uses cache when available, loads from DB if stale.
+ */
+export async function getPlanConfigs(): Promise<Record<PlanTier, PlanConfig>> {
+  return loadPlanConfigsFromDB();
+}
+
+/**
+ * Save a single plan configuration to the DB.
+ * Called from the admin panel. Invalidates cache after save.
+ */
+export async function savePlanConfig(config: PlanConfig): Promise<void> {
+  const { error } = await db
+    .from("plan_configurations")
+    .upsert({
+      tier: config.tier,
+      name: config.name,
+      price_monthly: config.priceMonthly,
+      products_limit: config.limits.products === Infinity ? 999999999 : config.limits.products,
+      fitments_limit: config.limits.fitments === Infinity ? 999999999 : config.limits.fitments,
+      providers_limit: config.limits.providers === Infinity ? 999999999 : config.limits.providers,
+      scheduled_fetches_per_day: config.limits.scheduledFetchesPerDay === Infinity ? 999999999 : config.limits.scheduledFetchesPerDay,
+      active_makes: config.limits.activeMakes,
+      features: config.limits.features,
+      badge: config.badge,
+      description: config.description,
+      is_active: config.isActive,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "tier" });
+
+  if (error) {
+    throw new Error(`Failed to save plan config for ${config.tier}: ${error.message}`);
+  }
+
+  invalidatePlanConfigCache();
+}
+
+/**
+ * Save all plan configurations at once (bulk admin save).
+ */
+export async function saveAllPlanConfigs(configs: PlanConfig[]): Promise<void> {
+  const rows = configs.map((c) => ({
+    tier: c.tier,
+    name: c.name,
+    price_monthly: c.priceMonthly,
+    products_limit: c.limits.products === Infinity ? 999999999 : c.limits.products,
+    fitments_limit: c.limits.fitments === Infinity ? 999999999 : c.limits.fitments,
+    providers_limit: c.limits.providers === Infinity ? 999999999 : c.limits.providers,
+    scheduled_fetches_per_day: c.limits.scheduledFetchesPerDay === Infinity ? 999999999 : c.limits.scheduledFetchesPerDay,
+    active_makes: c.limits.activeMakes,
+    features: c.limits.features,
+    badge: c.badge,
+    description: c.description,
+    is_active: c.isActive,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await db
+    .from("plan_configurations")
+    .upsert(rows, { onConflict: "tier" });
+
+  if (error) {
+    throw new Error(`Failed to save plan configs: ${error.message}`);
+  }
+
+  invalidatePlanConfigCache();
+}
 
 // ---------------------------------------------------------------------------
 // BillingGateError — thrown when a tenant exceeds their plan
@@ -234,9 +419,12 @@ export class BillingGateError extends Error {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Return the full limits object for a given plan tier. */
+/** Return the full limits object for a given plan tier (cache-aware). */
 export function getPlanLimits(plan: PlanTier): PlanLimits {
-  return PLAN_LIMITS[plan];
+  if (_planConfigCache?.limits[plan]) {
+    return _planConfigCache.limits[plan];
+  }
+  return DEFAULT_PLAN_LIMITS[plan];
 }
 
 /** Fetch a tenant row from Supabase by shop_id. */
@@ -289,12 +477,13 @@ export function getNextPlan(plan: PlanTier): PlanTier {
   return PLAN_ORDER[idx + 1];
 }
 
-/** Find the cheapest plan that unlocks a given feature. */
+/** Find the cheapest plan that unlocks a given feature (cache-aware). */
 export function getMinimumPlanForFeature(
   feature: keyof PlanLimits["features"],
 ): PlanTier {
   for (const plan of PLAN_ORDER) {
-    const value = PLAN_LIMITS[plan].features[feature];
+    const limits = getPlanLimits(plan);
+    const value = limits.features[feature];
     if (value !== false && value !== "none") return plan;
   }
   return "enterprise";
@@ -304,24 +493,21 @@ export function getMinimumPlanForFeature(
 // Shopify Billing API — create & manage recurring app subscriptions
 // ---------------------------------------------------------------------------
 
-/** Monthly prices for each paid tier (must match PLANS in app.plans.tsx) */
-const PLAN_PRICES: Record<PlanTier, number> = {
-  free: 0,
-  starter: 19,
-  growth: 49,
-  professional: 99,
-  business: 179,
-  enterprise: 299,
-};
+/** Get the monthly price for a tier (cache-aware, falls back to defaults) */
+function getPlanPrice(tier: PlanTier): number {
+  if (_planConfigCache?.configs[tier]) {
+    return _planConfigCache.configs[tier].priceMonthly;
+  }
+  return DEFAULT_PLAN_CONFIGS[tier].priceMonthly;
+}
 
-const PLAN_NAMES: Record<PlanTier, string> = {
-  free: "Free",
-  starter: "Starter",
-  growth: "Growth",
-  professional: "Professional",
-  business: "Business",
-  enterprise: "Enterprise",
-};
+/** Get the display name for a tier (cache-aware) */
+function getPlanName(tier: PlanTier): string {
+  if (_planConfigCache?.configs[tier]) {
+    return _planConfigCache.configs[tier].name;
+  }
+  return DEFAULT_PLAN_CONFIGS[tier].name;
+}
 
 /**
  * Create a Shopify AppSubscription for a plan change.
@@ -345,8 +531,8 @@ export async function createBillingSubscription(
     return { cancelled: true };
   }
 
-  const price = PLAN_PRICES[newPlan];
-  const name = `AutoSync ${PLAN_NAMES[newPlan]}`;
+  const price = getPlanPrice(newPlan);
+  const name = `AutoSync ${getPlanName(newPlan)}`;
 
   const response = await admin.graphql(
     `#graphql

@@ -1,5 +1,24 @@
 export type PlanTier = "free" | "starter" | "growth" | "professional" | "business" | "enterprise";
 
+export const PLAN_ORDER: PlanTier[] = [
+  "free",
+  "starter",
+  "growth",
+  "professional",
+  "business",
+  "enterprise",
+];
+
+export interface PlanConfig {
+  tier: PlanTier;
+  name: string;
+  priceMonthly: number;
+  limits: PlanLimits;
+  badge: string | null;
+  description: string | null;
+  isActive: boolean;
+}
+
 export type FitmentStatus = "unmapped" | "auto_mapped" | "smart_mapped" | "manual_mapped" | "partial" | "flagged";
 
 export type SyncJobType = "fetch" | "extract" | "push" | "provider_import" | "scrape";
@@ -22,7 +41,6 @@ export interface PlanLimits {
     bulkOperations: boolean;
     smartCollections: false | "make" | "make_model" | "full";
     collectionSeoImages: boolean;
-    customVehicles: boolean;
     apiIntegration: boolean;
     ftpImport: boolean;
     ymmeWidget: boolean;
@@ -37,7 +55,6 @@ export interface PlanLimits {
     vehiclePages: boolean;
     widgetCustomisation: "none" | "basic" | "full" | "full_css";
     dashboardAnalytics: "none" | "basic" | "full" | "full_export";
-    prioritySupport: boolean;
   };
 }
 
