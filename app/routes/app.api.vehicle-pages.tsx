@@ -23,7 +23,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "push": {
       try {
         // Also push the theme template so pages render properly
-        const templateResult = await pushThemeTemplate(admin, shopId);
+        const templateResult = await pushThemeTemplate(admin, shopId, session);
         const result = await pushVehiclePages(admin, shopId);
         const templateNote = templateResult.success ? " Theme template installed." : "";
         return data({
@@ -76,7 +76,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const newId = await ensureMetaobjectDefinition(admin, shopId);
 
         // Also push template
-        await pushThemeTemplate(admin, shopId);
+        await pushThemeTemplate(admin, shopId, session);
 
         return data({ success: true, message: `Definition recreated (${newId}). Push vehicle pages again to create entries.` });
       } catch (e) {
@@ -86,7 +86,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     case "push_template": {
       try {
-        const result = await pushThemeTemplate(admin, shopId);
+        const result = await pushThemeTemplate(admin, shopId, session);
         if (result.success) {
           return data({ success: true, message: `Theme template pushed to theme ${result.themeId}` });
         }
