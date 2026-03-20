@@ -9,13 +9,8 @@ export function PageFooter() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <div
-      style={{
-        borderTop: "1px solid var(--p-color-border-secondary)",
-        padding: "16px 0 0",
-        marginTop: "32px",
-      }}
-    >
+    <div className="as-app-footer">
+
       <InlineStack align="space-between" blockAlign="center" wrap>
         <InlineStack gap="300" blockAlign="center">
           <AutoSyncLogo size={20} />

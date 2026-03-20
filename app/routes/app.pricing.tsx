@@ -56,6 +56,7 @@ import {
   resolveAlert,
 } from "../lib/pipeline/pricing.server";
 import type { PlanTier } from "../lib/types";
+import { formatPrice } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -237,8 +238,8 @@ export default function PricingPage() {
     { label: "Round to .99", value: "0.99" },
     { label: "Round to .95", value: "0.95" },
     { label: "Round to .49", value: "0.49" },
-    { label: "Round to nearest £5", value: "5" },
-    { label: "Round to nearest £10", value: "10" },
+    { label: "Round to nearest 5", value: "5" },
+    { label: "Round to nearest 10", value: "10" },
   ];
 
   return (
@@ -392,7 +393,7 @@ export default function PricingPage() {
                       <IndexTable.Cell>
                         <Text as="span" variant="bodyMd" fontWeight="semibold">
                           {rule.rule_type === "fixed" || rule.rule_type === "map"
-                            ? `£${Number(rule.value).toFixed(2)}`
+                            ? formatPrice(rule.value)
                             : `${rule.value}%`}
                         </Text>
                       </IndexTable.Cell>
@@ -474,7 +475,7 @@ export default function PricingPage() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="300" blockAlign="center">
-                <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-magic)" bg="var(--p-color-bg-fill-magic-secondary)" />
+                <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd" fontWeight="semibold">Recent Price Changes</Text>
               </InlineStack>
 
@@ -514,16 +515,16 @@ export default function PricingPage() {
                           <Badge>{h.change_type}</Badge>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
-                          <Text as="span" variant="bodySm">£{Number(h.old_price).toFixed(2)}</Text>
+                          <Text as="span" variant="bodySm">{formatPrice(h.old_price)}</Text>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
                           <Text as="span" variant="bodySm" fontWeight="semibold">
-                            £{Number(h.new_price).toFixed(2)}
+                            {formatPrice(h.new_price)}
                           </Text>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
                           <Text as="span" variant="bodySm" tone={change > 0 ? "success" : "critical"}>
-                            {change > 0 ? "+" : ""}£{change.toFixed(2)} ({pct}%)
+                            {change > 0 ? "+" : ""}{formatPrice(change)} ({pct}%)
                           </Text>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
@@ -589,7 +590,7 @@ export default function PricingPage() {
                 </Box>
                 <Box minWidth="150px">
                   <TextField
-                    label={ruleType === "fixed" || ruleType === "map" ? "Amount (£)" : "Percentage (%)"}
+                    label={ruleType === "fixed" || ruleType === "map" ? "Amount" : "Percentage (%)"}
                     name="value"
                     value={ruleValue}
                     onChange={setRuleValue}
@@ -652,7 +653,7 @@ export default function PricingPage() {
               <InlineStack gap="400">
                 <Box minWidth="150px">
                   <TextField
-                    label="Floor price (£)"
+                    label="Floor price"
                     value={minPrice}
                     onChange={setMinPrice}
                     type="number"
@@ -662,7 +663,7 @@ export default function PricingPage() {
                 </Box>
                 <Box minWidth="150px">
                   <TextField
-                    label="Ceiling price (£)"
+                    label="Ceiling price"
                     value={maxPrice}
                     onChange={setMaxPrice}
                     type="number"
@@ -711,7 +712,7 @@ export default function PricingPage() {
               <InlineStack gap="400">
                 <Badge tone="info">{`${(fetcher.data as any).preview.total_affected} products affected`}</Badge>
                 <Badge tone="success">{`Avg markup: ${(fetcher.data as any).preview.avg_markup_percent}%`}</Badge>
-                <Badge>{`Revenue change: £${(fetcher.data as any).preview.total_revenue_change.toFixed(2)}`}</Badge>
+                <Badge>{`Revenue change: ${formatPrice((fetcher.data as any).preview.total_revenue_change)}`}</Badge>
               </InlineStack>
 
               {(fetcher.data as any).preview.changes.length > 0 ? (
@@ -732,13 +733,13 @@ export default function PricingPage() {
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm">{c.title}</Text>
                       </IndexTable.Cell>
-                      <IndexTable.Cell>£{Number(c.old_price).toFixed(2)}</IndexTable.Cell>
+                      <IndexTable.Cell>{formatPrice(c.old_price)}</IndexTable.Cell>
                       <IndexTable.Cell>
-                        <Text as="span" fontWeight="semibold">£{Number(c.new_price).toFixed(2)}</Text>
+                        <Text as="span" fontWeight="semibold">{formatPrice(c.new_price)}</Text>
                       </IndexTable.Cell>
                       <IndexTable.Cell>
                         <Text as="span" tone={c.new_price > c.old_price ? "success" : "critical"}>
-                          {c.new_price > c.old_price ? "+" : ""}£{(c.new_price - c.old_price).toFixed(2)}
+                          {c.new_price > c.old_price ? "+" : ""}{formatPrice(c.new_price - c.old_price)}
                         </Text>
                       </IndexTable.Cell>
                       <IndexTable.Cell>

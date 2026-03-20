@@ -118,20 +118,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const totalProducts = count ?? 0;
   const totalPages = Math.ceil(totalProducts / PAGE_SIZE);
 
-  // Status breakdown
-  const { data: statusCounts } = await db
-    .from("products")
-    .select("fitment_status")
-    .eq("shop_id", shopId)
-    .eq("provider_id", providerId);
-
+  // Status breakdown — server-side counts (no row limit)
+  const statuses = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"] as const;
+  const statusResults = await Promise.all(
+    statuses.map((s) =>
+      db.from("products").select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("provider_id", providerId).eq("fitment_status", s),
+    ),
+  );
   const statusBreakdown: Record<string, number> = {};
-  if (statusCounts) {
-    for (const row of statusCounts) {
-      const status = row.fitment_status ?? "unmapped";
-      statusBreakdown[status] = (statusBreakdown[status] ?? 0) + 1;
-    }
-  }
+  statuses.forEach((s, i) => {
+    const c = statusResults[i].count ?? 0;
+    if (c > 0) statusBreakdown[s] = c;
+  });
 
   return {
     provider,

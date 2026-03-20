@@ -15,8 +15,16 @@ import {
   Box,
   Modal,
   Collapsible,
+  Icon,
 } from "@shopify/polaris";
-import { StarFilledIcon, QuestionCircleIcon } from "@shopify/polaris-icons";
+import {
+  StarFilledIcon,
+  QuestionCircleIcon,
+  CheckSmallIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  InfoIcon,
+} from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
 import { authenticate } from "../shopify.server";
@@ -96,7 +104,7 @@ function getHighlights(config: PlanConfig): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Feature comparison — generated from plan configs
+// Feature comparison
 // ---------------------------------------------------------------------------
 
 interface ComparisonRow {
@@ -107,46 +115,41 @@ interface ComparisonRow {
 }
 
 const COMPARISON_ROWS: ComparisonRow[] = [
-  // Capacity
-  { label: "Products", category: "Capacity", getValue: (l) => l.products === Infinity ? "Unlimited" : l.products.toLocaleString() },
-  { label: "Fitments", category: "Capacity", getValue: (l) => l.fitments === Infinity ? "Unlimited" : l.fitments.toLocaleString() },
-  { label: "Providers", category: "Capacity", getValue: (l) => l.providers === Infinity ? "Unlimited" : String(l.providers) },
-  { label: "Active Makes", category: "Capacity", getValue: (l) => l.activeMakes >= 999_999 ? "Unlimited" : String(l.activeMakes) },
-  { label: "Scheduled Fetches/Day", category: "Capacity", getValue: (l) => l.scheduledFetchesPerDay === Infinity ? "Unlimited" : l.scheduledFetchesPerDay === 0 ? "—" : String(l.scheduledFetchesPerDay), comingSoon: true },
-  // Data & Sync
-  { label: "Push Tags", category: "Data & Sync", getValue: (l) => l.features.pushTags ? "✓" : "—" },
-  { label: "Push Metafields", category: "Data & Sync", getValue: (l) => l.features.pushMetafields ? "✓" : "—" },
-  { label: "Auto Extraction", category: "Data & Sync", getValue: (l) => l.features.autoExtraction ? "✓" : "—" },
-  { label: "Bulk Operations", category: "Data & Sync", getValue: (l) => l.features.bulkOperations ? "✓" : "—" },
-  { label: "API Integration", category: "Data & Sync", getValue: (l) => l.features.apiIntegration ? "✓" : "—" },
-  { label: "FTP Import", category: "Data & Sync", getValue: (l) => l.features.ftpImport ? "✓" : "—" },
-  // Collections
-  { label: "Smart Collections", category: "Collections", getValue: (l) => {
+  { label: "Products", category: "CAPACITY", getValue: (l) => l.products === Infinity ? "Unlimited" : l.products.toLocaleString() },
+  { label: "Fitments", category: "CAPACITY", getValue: (l) => l.fitments === Infinity ? "Unlimited" : l.fitments.toLocaleString() },
+  { label: "Providers", category: "CAPACITY", getValue: (l) => l.providers === Infinity ? "Unlimited" : String(l.providers) },
+  { label: "Active Makes", category: "CAPACITY", getValue: (l) => l.activeMakes >= 999_999 ? "Unlimited" : String(l.activeMakes) },
+  { label: "Scheduled Fetches/Day", category: "CAPACITY", getValue: (l) => l.scheduledFetchesPerDay === Infinity ? "Unlimited" : l.scheduledFetchesPerDay === 0 ? "—" : String(l.scheduledFetchesPerDay), comingSoon: true },
+  { label: "Push Tags", category: "DATA & SYNC", getValue: (l) => l.features.pushTags ? "✓" : "—" },
+  { label: "Push Metafields", category: "DATA & SYNC", getValue: (l) => l.features.pushMetafields ? "✓" : "—" },
+  { label: "Auto Extraction", category: "DATA & SYNC", getValue: (l) => l.features.autoExtraction ? "✓" : "—" },
+  { label: "Bulk Operations", category: "DATA & SYNC", getValue: (l) => l.features.bulkOperations ? "✓" : "—" },
+  { label: "API Integration", category: "DATA & SYNC", getValue: (l) => l.features.apiIntegration ? "✓" : "—" },
+  { label: "FTP Import", category: "DATA & SYNC", getValue: (l) => l.features.ftpImport ? "✓" : "—" },
+  { label: "Smart Collections", category: "COLLECTIONS", getValue: (l) => {
     if (l.features.smartCollections === "full") return "Full";
     if (l.features.smartCollections === "make_model") return "Make + Model";
     if (l.features.smartCollections === "make") return "By Make";
     return "—";
   }},
-  { label: "Collection SEO Images", category: "Collections", getValue: (l) => l.features.collectionSeoImages ? "✓" : "—" },
-  // Storefront Widgets
-  { label: "YMME Search Widget", category: "Storefront Widgets", getValue: (l) => l.features.ymmeWidget ? "✓" : "—" },
-  { label: "Fitment Badge", category: "Storefront Widgets", getValue: (l) => l.features.fitmentBadge ? "✓" : "—" },
-  { label: "Compatibility Table", category: "Storefront Widgets", getValue: (l) => l.features.compatibilityTable ? "✓" : "—" },
-  { label: "Floating Vehicle Bar", category: "Storefront Widgets", getValue: (l) => l.features.floatingBar ? "✓" : "—" },
-  { label: "My Garage", category: "Storefront Widgets", getValue: (l) => l.features.myGarage ? "✓" : "—" },
-  { label: "Wheel Finder", category: "Storefront Widgets", getValue: (l) => l.features.wheelFinder ? "✓" : "—" },
-  { label: "Plate Lookup (DVLA + MOT)", category: "Storefront Widgets", getValue: (l) => l.features.plateLookup ? "✓" : "—" },
-  { label: "VIN Decode", category: "Storefront Widgets", getValue: (l) => l.features.vinDecode ? "✓" : "—" },
-  // Advanced
-  { label: "Vehicle Pages (SEO)", category: "Advanced Features", getValue: (l) => l.features.vehiclePages ? "✓" : "—" },
-  { label: "Pricing Engine", category: "Advanced Features", getValue: (l) => l.features.pricingEngine ? "✓" : "—" },
-  { label: "Widget Customisation", category: "Advanced Features", getValue: (l) => {
+  { label: "Collection SEO Images", category: "COLLECTIONS", getValue: (l) => l.features.collectionSeoImages ? "✓" : "—" },
+  { label: "YMME Search Widget", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.ymmeWidget ? "✓" : "—" },
+  { label: "Fitment Badge", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.fitmentBadge ? "✓" : "—" },
+  { label: "Compatibility Table", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.compatibilityTable ? "✓" : "—" },
+  { label: "Floating Vehicle Bar", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.floatingBar ? "✓" : "—" },
+  { label: "My Garage", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.myGarage ? "✓" : "—" },
+  { label: "Wheel Finder", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.wheelFinder ? "✓" : "—" },
+  { label: "Plate Lookup (DVLA + MOT)", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.plateLookup ? "✓" : "—" },
+  { label: "VIN Decode", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.vinDecode ? "✓" : "—" },
+  { label: "Vehicle Pages (SEO)", category: "ADVANCED", getValue: (l) => l.features.vehiclePages ? "✓" : "—" },
+  { label: "Pricing Engine", category: "ADVANCED", getValue: (l) => l.features.pricingEngine ? "✓" : "—" },
+  { label: "Widget Customisation", category: "ADVANCED", getValue: (l) => {
     if (l.features.widgetCustomisation === "full_css") return "Full + CSS";
     if (l.features.widgetCustomisation === "full") return "Full";
     if (l.features.widgetCustomisation === "basic") return "Basic";
     return "—";
   }},
-  { label: "Analytics", category: "Advanced Features", getValue: (l) => {
+  { label: "Analytics", category: "ADVANCED", getValue: (l) => {
     if (l.features.dashboardAnalytics === "full_export") return "Full + Export";
     if (l.features.dashboardAnalytics === "full") return "Full";
     if (l.features.dashboardAnalytics === "basic") return "Basic";
@@ -186,32 +189,17 @@ const FAQ_ITEMS = [
 ];
 
 // ---------------------------------------------------------------------------
-// CSS injection for responsive grid
+// Plan subtitles
 // ---------------------------------------------------------------------------
 
-const STYLE_ID = "autosync-plans-grid-css";
-
-function useResponsiveGridStyles() {
-  useEffect(() => {
-    if (document.getElementById(STYLE_ID)) return;
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = [
-      ".as-plans-grid { display:grid; gap:16px; grid-template-columns:repeat(3,1fr); }",
-      "@media(max-width:1200px){ .as-plans-grid { grid-template-columns:repeat(2,1fr); } }",
-      "@media(max-width:680px){ .as-plans-grid { grid-template-columns:1fr; } }",
-      ".as-plan-cell { display:flex; flex-direction:column; height:100%; }",
-      ".as-card-outer { flex:1; display:flex; flex-direction:column; border-radius:var(--p-border-radius-300); overflow:hidden; transition:box-shadow 0.15s ease; }",
-      ".as-card-outer:hover { box-shadow: var(--p-shadow-400); }",
-      ".as-card-body { flex:1; display:flex; flex-direction:column; }",
-      ".as-card-inner { display:flex; flex-direction:column; height:100%; }",
-      ".as-features { flex:1; padding-top:16px; padding-bottom:16px; }",
-      ".as-btn-area { padding-top:16px; margin-top:auto; }",
-    ].join("\n");
-    document.head.appendChild(style);
-    return () => { style.remove(); };
-  }, []);
-}
+const PLAN_SUBTITLES: Record<PlanTier, string> = {
+  free: "For getting started",
+  starter: "For small stores",
+  growth: "For growing businesses",
+  professional: "For established stores",
+  business: "For large catalogues",
+  enterprise: "For maximum capability",
+};
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -221,7 +209,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Handle billing confirmation callback from Shopify
   const url = new URL(request.url);
   const billingConfirmed = url.searchParams.get("billing_confirmed");
   const chargeId = url.searchParams.get("charge_id");
@@ -232,17 +219,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       await confirmBillingSubscription(shopId, chargeId);
       billingSuccess = true;
     } catch {
-      // Confirmation failed — continue to show current plan
+      // Confirmation failed
     }
   }
 
   const tenant = await getTenant(shopId);
   const currentPlan: PlanTier = tenant?.plan ?? "free";
-
-  // Load plan configs from DB (dynamic pricing, badges)
   const planConfigs = await getPlanConfigs();
 
-  // Serialize configs (Infinity → large number for JSON)
   const serializedConfigs: Record<string, {
     tier: PlanTier;
     name: string;
@@ -269,20 +253,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         fitments: c.limits.fitments === Infinity ? 999_999_999 : c.limits.fitments,
         providers: c.limits.providers === Infinity ? 999_999_999 : c.limits.providers,
         scheduledFetchesPerDay: c.limits.scheduledFetchesPerDay === Infinity ? 999_999_999 : c.limits.scheduledFetchesPerDay,
+        activeMakes: c.limits.activeMakes === Infinity ? 999_999_999 : c.limits.activeMakes,
       },
     };
   }
 
-  return {
-    currentPlan,
-    shopId,
-    billingSuccess,
-    planConfigs: serializedConfigs,
-  };
+  return { currentPlan, shopId, billingSuccess, planConfigs: serializedConfigs };
 };
 
 // ---------------------------------------------------------------------------
-// Action — change plan via Shopify Billing API
+// Action
 // ---------------------------------------------------------------------------
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -309,11 +289,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const configs = await getPlanConfigs();
     const planName = configs[newPlan]?.name ?? newPlan;
 
-    return data({
-      redirectUrl: result.confirmationUrl,
-      plan: newPlan,
-      planName,
-    });
+    return data({ redirectUrl: result.confirmationUrl, plan: newPlan, planName });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Billing error";
     return data({ error: message }, { status: 500 });
@@ -321,7 +297,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
-// Deserialize plan config (restore Infinity from large numbers)
+// Deserialize
 // ---------------------------------------------------------------------------
 
 function deserializeConfig(raw: Record<string, unknown>): PlanConfig {
@@ -334,6 +310,7 @@ function deserializeConfig(raw: Record<string, unknown>): PlanConfig {
       fitments: r.limits.fitments >= 999_999_999 ? Infinity : r.limits.fitments,
       providers: r.limits.providers >= 999_999_999 ? Infinity : r.limits.providers,
       scheduledFetchesPerDay: r.limits.scheduledFetchesPerDay >= 999_999_999 ? Infinity : r.limits.scheduledFetchesPerDay,
+      activeMakes: r.limits.activeMakes >= 999_999_999 ? Infinity : r.limits.activeMakes,
     },
   };
 }
@@ -343,13 +320,10 @@ function deserializeConfig(raw: Record<string, unknown>): PlanConfig {
 // ---------------------------------------------------------------------------
 
 export default function Plans() {
-  useResponsiveGridStyles();
-
   const { currentPlan, billingSuccess, planConfigs: rawConfigs } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
-  // Deserialize plan configs
   const configs: Record<PlanTier, PlanConfig> = {} as Record<PlanTier, PlanConfig>;
   for (const tier of PLAN_ORDER) {
     configs[tier] = deserializeConfig(rawConfigs[tier] as unknown as Record<string, unknown>);
@@ -364,7 +338,6 @@ export default function Plans() {
     | { error: string }
     | undefined;
 
-  // Handle Shopify billing redirect
   useEffect(() => {
     if (fetcherData && "redirectUrl" in fetcherData) {
       window.top
@@ -375,20 +348,8 @@ export default function Plans() {
 
   const activePlan: PlanTier =
     fetcherData && "success" in fetcherData ? fetcherData.plan : currentPlan;
-
   const currentIndex = PLAN_ORDER.indexOf(activePlan);
   const isSubmitting = fetcher.state !== "idle";
-
-  function getButtonProps(tier: PlanTier) {
-    const tierIndex = PLAN_ORDER.indexOf(tier);
-    if (tier === activePlan) {
-      return { label: "Current Plan", disabled: true, tone: "success" as const };
-    }
-    if (tierIndex > currentIndex) {
-      return { label: "Upgrade", disabled: false, tone: "primary" as const };
-    }
-    return { label: "Downgrade", disabled: false, tone: "critical" as const };
-  }
 
   function handlePlanClick(tier: PlanTier) {
     if (tier === activePlan) return;
@@ -397,19 +358,12 @@ export default function Plans() {
 
   function handleConfirm() {
     if (!confirmTier) return;
-    fetcher.submit(
-      { plan: confirmTier },
-      { method: "POST" },
-    );
+    fetcher.submit({ plan: confirmTier }, { method: "POST" });
     setConfirmTier(null);
   }
 
   const confirmConfig = confirmTier ? configs[confirmTier] : null;
-  const isUpgrade = confirmTier
-    ? PLAN_ORDER.indexOf(confirmTier) > currentIndex
-    : false;
-
-  // Get unique comparison categories
+  const isUpgrade = confirmTier ? PLAN_ORDER.indexOf(confirmTier) > currentIndex : false;
   const categories = [...new Set(COMPARISON_ROWS.map((r) => r.category))];
 
   return (
@@ -419,19 +373,14 @@ export default function Plans() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
-        {/* Billing confirmation success */}
+        {/* Banners */}
         {billingSuccess && (
           <Banner title="Plan activated successfully" tone="success" onDismiss={() => {}}>
             <p>Your subscription has been confirmed by Shopify. All features are now active.</p>
           </Banner>
         )}
-        {/* Success/Error banners */}
         {fetcherData && "success" in fetcherData && (
-          <Banner
-            title={`Successfully switched to ${fetcherData.planName} plan`}
-            tone="success"
-            onDismiss={() => {}}
-          >
+          <Banner title={`Successfully switched to ${fetcherData.planName} plan`} tone="success" onDismiss={() => {}}>
             <p>Your plan has been updated. All features for the {fetcherData.planName} plan are now active.</p>
           </Banner>
         )}
@@ -441,147 +390,148 @@ export default function Plans() {
           </Banner>
         )}
 
-        {/* Savings callout */}
-        <div style={{
-          textAlign: "center",
-          padding: "var(--p-space-500) var(--p-space-400)",
-          background: "var(--p-color-bg-surface)",
-          borderRadius: "var(--p-border-radius-300)",
-          border: "1px solid var(--p-color-border)",
-        }}>
+        {/* Header */}
+        <div style={{ textAlign: "center", padding: "8px 0 0" }}>
           <BlockStack gap="200" inlineAlign="center">
-            <Text as="h1" variant="headingXl">
-              Choose the right plan for your store
-            </Text>
+            <Text as="h1" variant="headingXl">Pick your plan</Text>
             <Text as="p" variant="bodyMd" tone="subdued">
-              All plans include access to our global vehicle database with 352+ makes, 4,900+ models, and 50,000+ engines.
-              No setup fees. Cancel anytime.
+              Cancel or change your plan anytime. All plans include access to our global vehicle database.
             </Text>
           </BlockStack>
         </div>
 
-        {/* ─── Plan cards grid ─── */}
-        <div className="as-plans-grid">
+        {/* ─── Plan cards — Shopify-style ─── */}
+        <div className="as-plan-grid" style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: "16px",
+        }}>
+          <style>{`
+            @media(max-width:900px) { .as-plan-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+            @media(max-width:580px) { .as-plan-grid { grid-template-columns: 1fr !important; } }
+          `}</style>
           {PLAN_ORDER.map((tier) => {
             const config = configs[tier];
-            const btnProps = getButtonProps(tier);
             const isCurrent = tier === activePlan;
+            const tierIndex = PLAN_ORDER.indexOf(tier);
             const highlights = getHighlights(config);
+            const hasBadge = !!config.badge;
 
             return (
-              <div key={tier} className="as-plan-cell">
-                <div
-                  className="as-card-outer"
-                  style={{
-                    outline: config.badge
-                      ? "2px solid var(--p-color-border-info)"
-                      : isCurrent
-                        ? "2px solid var(--p-color-border-success)"
-                        : "1px solid var(--p-color-border)",
-                  }}
-                >
-                  {/* Badge banner (MOST POPULAR / BEST VALUE) */}
-                  {config.badge && (
-                    <div
-                      style={{
-                        background: config.badge === "MOST POPULAR"
-                          ? "var(--p-color-bg-fill-info)"
-                          : "var(--p-color-bg-fill-success)",
-                        color: config.badge === "MOST POPULAR"
-                          ? "var(--p-color-text-info-on-bg-fill)"
-                          : "var(--p-color-text-success-on-bg-fill)",
-                        textAlign: "center",
-                        padding: "6px 0",
-                        fontSize: "12px",
-                        fontWeight: 600,
-                        letterSpacing: "0.5px",
-                      }}
-                    >
-                      {config.badge}
-                    </div>
+              <div
+                key={tier}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  borderRadius: "var(--p-border-radius-300)",
+                  border: isCurrent
+                    ? "2px solid var(--p-color-border-emphasis)"
+                    : "1px solid var(--p-color-border)",
+                  background: "var(--p-color-bg-surface)",
+                  overflow: "hidden",
+                  transition: "box-shadow 150ms ease",
+                  position: "relative",
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.boxShadow = "none";
+                }}
+              >
+                {/* Badge area — always same height so cards align */}
+                <div style={{
+                  textAlign: "center",
+                  padding: "6px 0",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  letterSpacing: "0.5px",
+                  minHeight: "27px",
+                  color: hasBadge ? "var(--p-color-text-emphasis)" : "transparent",
+                  borderBottom: "1px solid var(--p-color-border)",
+                }}>
+                  {hasBadge ? config.badge : "\u00A0"}
+                </div>
+
+                {/* Card content */}
+                <div style={{
+                  padding: "20px",
+                  display: "flex",
+                  flexDirection: "column",
+                  flex: 1,
+                }}>
+                  {/* Plan name + subtitle */}
+                  <BlockStack gap="050">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h2" variant="headingLg" fontWeight="bold">
+                        {config.name}
+                      </Text>
+                      {isCurrent && <Badge tone="info">Current</Badge>}
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {PLAN_SUBTITLES[tier]}
+                    </Text>
+                  </BlockStack>
+
+                  {/* Price */}
+                  <div style={{ margin: "16px 0" }}>
+                    {config.priceMonthly === 0 ? (
+                      <BlockStack gap="050">
+                        <Text as="span" variant="heading2xl" fontWeight="bold">Free</Text>
+                        <Text as="span" variant="bodySm" tone="subdued">forever</Text>
+                      </BlockStack>
+                    ) : (
+                      <BlockStack gap="050">
+                        <InlineStack gap="100" blockAlign="end">
+                          <Text as="span" variant="heading2xl" fontWeight="bold">
+                            {`$${String(config.priceMonthly)}`}
+                          </Text>
+                          <Text as="span" variant="bodySm" tone="subdued">USD/month</Text>
+                        </InlineStack>
+                      </BlockStack>
+                    )}
+                  </div>
+
+                  {/* CTA button */}
+                  {isCurrent ? (
+                    <Button disabled fullWidth>Current Plan</Button>
+                  ) : tierIndex > currentIndex ? (
+                    <Button variant="primary" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
+                      {`Select ${config.name}`}
+                    </Button>
+                  ) : (
+                    <Button variant="primary" tone="critical" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
+                      Downgrade
+                    </Button>
                   )}
 
-                  {/* Card body */}
-                  <div className="as-card-body">
-                    <div
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        flexDirection: "column",
-                        padding: "var(--p-space-400)",
-                        background: "var(--p-color-bg-surface)",
-                      }}
-                    >
-                      <div className="as-card-inner">
-                        {/* Header + Price */}
-                        <BlockStack gap="300">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <Text as="h2" variant="headingLg">
-                              {config.name}
-                            </Text>
-                            {isCurrent && <Badge tone="success">Current</Badge>}
-                          </InlineStack>
+                  {/* Divider */}
+                  <div style={{ margin: "16px 0 12px" }}>
+                    <Divider />
+                  </div>
 
-                          <BlockStack gap="100">
-                            <InlineStack gap="100" blockAlign="end">
-                              <Text as="span" variant="heading2xl">
-                                ${String(config.priceMonthly)}
-                              </Text>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {config.priceMonthly === 0 ? "forever" : "per month"}
-                              </Text>
-                            </InlineStack>
-                            {config.description && (
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                {config.description}
-                              </Text>
-                            )}
-                          </BlockStack>
-
-                          <Divider />
-                        </BlockStack>
-
-                        {/* Features list */}
-                        <div className="as-features">
-                          <BlockStack gap="200">
-                            {highlights.map((feature, idx) => (
-                              <InlineStack key={idx} gap="200" blockAlign="start" wrap={false}>
-                                <span
-                                  style={{
-                                    color: "var(--p-color-text-success)",
-                                    fontSize: "14px",
-                                    flexShrink: 0,
-                                    lineHeight: 1.4,
-                                  }}
-                                >
-                                  ✓
-                                </span>
-                                <Text as="span" variant="bodySm">
-                                  {feature}
-                                </Text>
-                              </InlineStack>
-                            ))}
-                          </BlockStack>
-                        </div>
-
-                        {/* Action button */}
-                        <div className="as-btn-area">
-                          <Divider />
-                          <div style={{ paddingTop: "16px" }}>
-                            <Button
-                              variant={isCurrent ? undefined : "primary"}
-                              tone={btnProps.tone === "critical" ? "critical" : undefined}
-                              disabled={btnProps.disabled || isSubmitting}
-                              loading={isSubmitting}
-                              onClick={() => handlePlanClick(tier)}
-                              fullWidth
-                            >
-                              {btnProps.label}
-                            </Button>
+                  {/* Features list — fills remaining space */}
+                  <div style={{ flex: 1 }}>
+                    <BlockStack gap="200">
+                      {highlights.map((feature, idx) => (
+                        <InlineStack key={idx} gap="200" blockAlign="start" wrap={false}>
+                          <div style={{
+                            width: "18px",
+                            height: "18px",
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            color: "var(--p-color-icon-emphasis)",
+                            marginTop: "1px",
+                          }}>
+                            <Icon source={CheckSmallIcon} />
                           </div>
-                        </div>
-                      </div>
-                    </div>
+                          <Text as="span" variant="bodySm">{feature}</Text>
+                        </InlineStack>
+                      ))}
+                    </BlockStack>
                   </div>
                 </div>
               </div>
@@ -594,60 +544,44 @@ export default function Plans() {
           <BlockStack gap="400">
             <InlineStack gap="200" blockAlign="center">
               <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingLg">
-                Feature Comparison
-              </Text>
+              <Text as="h2" variant="headingMd">Feature Comparison</Text>
             </InlineStack>
             <Divider />
 
             <Box overflowX="scroll">
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  minWidth: "780px",
-                }}
-              >
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "780px" }}>
                 <thead>
                   <tr>
-                    <th
-                      style={{
-                        textAlign: "left",
-                        padding: "12px 8px",
-                        borderBottom: "2px solid var(--p-color-border)",
-                        fontWeight: 600,
-                        fontSize: "13px",
-                        position: "sticky",
-                        left: 0,
-                        background: "var(--p-color-bg-surface)",
-                        zIndex: 1,
-                        minWidth: "180px",
-                      }}
-                    >
+                    <th style={{
+                      textAlign: "left",
+                      padding: "12px 8px",
+                      borderBottom: "2px solid var(--p-color-border)",
+                      fontWeight: 600,
+                      fontSize: "13px",
+                      position: "sticky",
+                      left: 0,
+                      background: "var(--p-color-bg-surface)",
+                      zIndex: 1,
+                      minWidth: "180px",
+                    }}>
                       Feature
                     </th>
                     {PLAN_ORDER.map((tier) => {
                       const c = configs[tier];
                       return (
-                        <th
-                          key={tier}
-                          style={{
-                            textAlign: "center",
-                            padding: "12px 6px",
-                            borderBottom: "2px solid var(--p-color-border)",
-                            fontWeight: 600,
-                            fontSize: "13px",
-                            backgroundColor:
-                              tier === activePlan
-                                ? "var(--p-color-bg-surface-info)"
-                                : undefined,
-                            minWidth: "90px",
-                          }}
-                        >
+                        <th key={tier} style={{
+                          textAlign: "center",
+                          padding: "12px 6px",
+                          borderBottom: "2px solid var(--p-color-border)",
+                          fontWeight: 600,
+                          fontSize: "13px",
+                          backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
+                          minWidth: "90px",
+                        }}>
                           {c.name}
                           <br />
                           <span style={{ fontWeight: 400, fontSize: "12px", color: "var(--p-color-text-subdued)" }}>
-                            ${String(c.priceMonthly)}/{c.priceMonthly === 0 ? "free" : "mo"}
+                            {c.priceMonthly === 0 ? "Free" : `$${String(c.priceMonthly)}/mo`}
                           </span>
                         </th>
                       );
@@ -658,47 +592,35 @@ export default function Plans() {
                   {categories.map((category) => {
                     const categoryRows = COMPARISON_ROWS.filter((r) => r.category === category);
                     return [
-                      // Category header row
                       <tr key={`cat-${category}`}>
-                        <td
-                          colSpan={7}
-                          style={{
-                            padding: "10px 8px 6px",
-                            fontWeight: 700,
-                            fontSize: "12px",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.5px",
-                            color: "var(--p-color-text-subdued)",
-                            borderBottom: "1px solid var(--p-color-border)",
-                            background: "var(--p-color-bg-surface-secondary)",
-                          }}
-                        >
+                        <td colSpan={7} style={{
+                          padding: "10px 8px 6px",
+                          fontWeight: 700,
+                          fontSize: "11px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px",
+                          color: "var(--p-color-text-subdued)",
+                          borderBottom: "1px solid var(--p-color-border)",
+                          background: "var(--p-color-bg-surface-secondary)",
+                        }}>
                           {category}
                         </td>
                       </tr>,
-                      // Feature rows
                       ...categoryRows.map((row) => (
                         <tr key={row.label}>
-                          <td
-                            style={{
-                              padding: "10px 8px",
-                              borderBottom: "1px solid var(--p-color-border)",
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              position: "sticky",
-                              left: 0,
-                              background: "var(--p-color-bg-surface)",
-                              zIndex: 1,
-                            }}
-                          >
+                          <td style={{
+                            padding: "10px 8px",
+                            borderBottom: "1px solid var(--p-color-border-secondary)",
+                            fontSize: "13px",
+                            fontWeight: 500,
+                            position: "sticky",
+                            left: 0,
+                            background: "var(--p-color-bg-surface)",
+                            zIndex: 1,
+                          }}>
                             {row.label}
                             {row.comingSoon && (
-                              <span style={{
-                                fontSize: "10px",
-                                color: "var(--p-color-text-info)",
-                                marginLeft: "6px",
-                                fontWeight: 400,
-                              }}>
+                              <span style={{ fontSize: "10px", color: "var(--p-color-text-info)", marginLeft: "6px", fontWeight: 400 }}>
                                 Coming Soon
                               </span>
                             )}
@@ -706,28 +628,17 @@ export default function Plans() {
                           {PLAN_ORDER.map((tier) => {
                             const value = row.getValue(configs[tier].limits);
                             return (
-                              <td
-                                key={tier}
-                                style={{
-                                  textAlign: "center",
-                                  padding: "10px 6px",
-                                  borderBottom: "1px solid var(--p-color-border)",
-                                  fontSize: "13px",
-                                  backgroundColor:
-                                    tier === activePlan
-                                      ? "var(--p-color-bg-surface-info)"
-                                      : undefined,
-                                  color:
-                                    value === "—"
-                                      ? "var(--p-color-text-subdued)"
-                                      : "var(--p-color-text)",
-                                }}
-                              >
+                              <td key={tier} style={{
+                                textAlign: "center",
+                                padding: "10px 6px",
+                                borderBottom: "1px solid var(--p-color-border-secondary)",
+                                fontSize: "13px",
+                                backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
+                                color: value === "—" ? "var(--p-color-text-subdued)" : "var(--p-color-text)",
+                              }}>
                                 {value === "✓" ? (
                                   <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>✓</span>
-                                ) : (
-                                  value
-                                )}
+                                ) : value}
                               </td>
                             );
                           })}
@@ -743,12 +654,10 @@ export default function Plans() {
 
         {/* ─── FAQ ─── */}
         <Card>
-          <BlockStack gap="400">
+          <BlockStack gap="300">
             <InlineStack gap="200" blockAlign="center">
               <IconBadge icon={QuestionCircleIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingLg">
-                Frequently Asked Questions
-              </Text>
+              <Text as="h2" variant="headingMd">Frequently Asked Questions</Text>
             </InlineStack>
             <Divider />
 
@@ -760,7 +669,7 @@ export default function Plans() {
                     style={{
                       cursor: "pointer",
                       padding: "14px 0",
-                      borderBottom: idx < FAQ_ITEMS.length - 1 ? "1px solid var(--p-color-border)" : undefined,
+                      borderBottom: idx < FAQ_ITEMS.length - 1 ? "1px solid var(--p-color-border-secondary)" : undefined,
                     }}
                     role="button"
                     tabIndex={0}
@@ -772,17 +681,10 @@ export default function Plans() {
                     }}
                   >
                     <InlineStack align="space-between" blockAlign="center">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {faq.q}
-                      </Text>
-                      <span style={{
-                        fontSize: "18px",
-                        color: "var(--p-color-text-subdued)",
-                        transition: "transform 0.15s ease",
-                        transform: openFaqIndex === idx ? "rotate(45deg)" : "none",
-                      }}>
-                        +
-                      </span>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">{faq.q}</Text>
+                      <div style={{ flexShrink: 0, color: "var(--p-color-icon-subdued)" }}>
+                        <Icon source={openFaqIndex === idx ? ChevronUpIcon : ChevronDownIcon} />
+                      </div>
                     </InlineStack>
                     <Collapsible
                       open={openFaqIndex === idx}
@@ -790,9 +692,7 @@ export default function Plans() {
                       transition={{ duration: "150ms", timingFunction: "ease-in-out" }}
                     >
                       <div style={{ paddingTop: "10px" }}>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {faq.a}
-                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{faq.a}</Text>
                       </div>
                     </Collapsible>
                   </div>
@@ -802,16 +702,40 @@ export default function Plans() {
           </BlockStack>
         </Card>
 
-        {/* How plans work info */}
-        {activePlan !== "enterprise" && (
-          <Banner title="How billing works" tone="info">
-            <p>
-              All charges are processed through Shopify&apos;s managed billing system.
-              Upgrades take effect immediately with prorated billing.
-              Downgrades take effect at the end of your current billing cycle.
-            </p>
-          </Banner>
-        )}
+        {/* How billing works */}
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={InfoIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">How Billing Works</Text>
+            </InlineStack>
+            <Divider />
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: "12px",
+            }}>
+              {[
+                { title: "Shopify Managed", desc: "All charges appear on your Shopify invoice. No separate payment method needed." },
+                { title: "Upgrade Instantly", desc: "Upgrades take effect immediately. You'll be redirected to Shopify to approve the charge." },
+                { title: "Downgrade Anytime", desc: "Downgrades take effect at the end of your current billing cycle. Your data stays safe." },
+                { title: "Cancel Anytime", desc: "Cancel your subscription at any time. Downgrade to Free with no penalties." },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  padding: "12px 16px",
+                  borderRadius: "var(--p-border-radius-300)",
+                  background: "var(--p-color-bg-surface-secondary)",
+                  border: "1px solid var(--p-color-border-secondary)",
+                }}>
+                  <BlockStack gap="100">
+                    <Text as="span" variant="headingSm">{`${String(i + 1)}. ${item.title}`}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">{item.desc}</Text>
+                  </BlockStack>
+                </div>
+              ))}
+            </div>
+          </BlockStack>
+        </Card>
       </BlockStack>
 
       {/* Confirmation modal */}

@@ -52,6 +52,7 @@ import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
+import { formatPrice } from "../lib/types";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -149,17 +150,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Products query error:", error);
   }
 
-  // Status breakdown for the header
-  const { data: statusCounts } = await db
-    .from("products")
-    .select("fitment_status")
-    .eq("shop_id", shopId);
-
+  // Status breakdown for the header — use server-side counts (no row limit)
+  const statuses = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"] as const;
+  const statusResults = await Promise.all(
+    statuses.map((s) =>
+      db.from("products").select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("fitment_status", s),
+    ),
+  );
   const breakdown: Record<string, number> = {};
-  for (const p of statusCounts ?? []) {
-    const s = (p as { fitment_status: string | null }).fitment_status || "unmapped";
-    breakdown[s] = (breakdown[s] ?? 0) + 1;
-  }
+  statuses.forEach((s, i) => {
+    const c = statusResults[i].count ?? 0;
+    if (c > 0) breakdown[s] = c;
+  });
 
   return {
     products: (products ?? []) as Product[],
@@ -277,11 +280,8 @@ export default function Products() {
     });
   };
 
-  const fmtPrice = (price: string | null) => {
-    if (!price) return "—";
-    const num = parseFloat(price);
-    return isNaN(num) ? "—" : `£${num.toFixed(2)}`;
-  };
+  // Use shared formatPrice from types.ts
+  const fmtPrice = formatPrice;
 
   // ── Bulk Actions ────────────────────────────────────────────────────────
 

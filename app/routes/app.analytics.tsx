@@ -195,10 +195,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("product_id")
       .eq("shop_id", shopId),
 
-    // Product status breakdown
-    db.from("products")
-      .select("status")
-      .eq("shop_id", shopId),
+    // Product fitment status breakdown — server-side counts (no row limit)
+    Promise.all(
+      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"].map((s) =>
+        db.from("products").select("id", { count: "exact", head: true })
+          .eq("shop_id", shopId).eq("fitment_status", s)
+          .then((r) => ({ status: s, count: r.count ?? 0 })),
+      ),
+    ),
 
     // Fitments grouped by make (top 15)
     db.from("vehicle_fitments")
@@ -256,11 +260,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     coveragePercent,
   };
 
-  // ── Status breakdown ───────────────────────────────────────
+  // ── Status breakdown (from server-side counts) ─────────────
   const statusCounts: Record<string, number> = {};
-  for (const p of statusRes.data ?? []) {
-    const s = (p as { status: string }).status || "unknown";
-    statusCounts[s] = (statusCounts[s] ?? 0) + 1;
+  for (const entry of (statusRes as { status: string; count: number }[])) {
+    if (entry.count > 0) statusCounts[entry.status] = entry.count;
   }
   const statusBreakdown: StatusBreakdown[] = Object.entries(statusCounts)
     .map(([status, count]) => ({ status, count }))

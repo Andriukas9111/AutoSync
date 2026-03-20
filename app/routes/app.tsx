@@ -113,12 +113,24 @@ export default function App() {
               50.1% { transform: scaleX(1); transform-origin: right; }
               100% { transform: scaleX(0); transform-origin: right; }
             }
+            /* ── Global App Layout ── */
+            .as-app-container {
+              max-width: 1200px !important;
+              margin: 0 auto !important;
+              padding-bottom: 24px !important;
+              box-sizing: border-box !important;
+            }
+            .as-app-footer {
+              border-top: 1px solid var(--p-color-border-secondary);
+              padding: 16px var(--p-space-500) 0;
+              margin-top: 32px;
+              max-width: 1200px !important;
+              box-sizing: border-box !important;
+            }
           `}</style>
-          <div style={{ maxWidth: 1700, margin: "0 auto" }}>
+          <div className="as-app-container">
             <Outlet />
-            <div style={{ padding: "0 var(--p-space-600)" }}>
-              <PageFooter />
-            </div>
+            <PageFooter />
           </div>
         </Frame>
       </PolarisAppProvider>

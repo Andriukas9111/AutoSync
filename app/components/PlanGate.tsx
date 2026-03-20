@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Banner, BlockStack, Button } from "@shopify/polaris";
 import type { PlanTier, PlanLimits } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -135,13 +136,13 @@ export function PlanGate({
   }
 
   return (
-    <s-banner tone="warning">
-      <s-stack direction="block" gap="base">
-        <s-text>{upgradeMessage}</s-text>
-        <s-button href="/app/plans" variant="primary">
+    <Banner tone="warning">
+      <BlockStack gap="200">
+        <p>{upgradeMessage}</p>
+        <Button variant="primary" url="/app/plans">
           View Plans
-        </s-button>
-      </s-stack>
-    </s-banner>
+        </Button>
+      </BlockStack>
+    </Banner>
   );
 }

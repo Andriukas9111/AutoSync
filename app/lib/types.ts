@@ -19,6 +19,30 @@ export interface PlanConfig {
   isActive: boolean;
 }
 
+/**
+ * Format a numeric price for display using the browser's locale.
+ * Defaults to USD — pass a Shopify `currency` code (ISO 4217) to override.
+ */
+export function formatPrice(
+  value: string | number | null | undefined,
+  currencyCode = "USD",
+): string {
+  if (value == null) return "—";
+  const num = typeof value === "number" ? value : parseFloat(String(value));
+  if (isNaN(num)) return "—";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(num);
+  } catch {
+    // Fallback if currency code is invalid
+    return `${num.toFixed(2)}`;
+  }
+}
+
 export type FitmentStatus = "unmapped" | "auto_mapped" | "smart_mapped" | "manual_mapped" | "partial" | "flagged";
 
 export type SyncJobType = "fetch" | "extract" | "push" | "provider_import" | "scrape";

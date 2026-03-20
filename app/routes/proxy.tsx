@@ -248,6 +248,70 @@ async function handleEngines(params: URLSearchParams) {
   return json({ engines });
 }
 
+async function handleCollectionLookup(params: URLSearchParams) {
+  const shop = params.get("shop") ?? "";
+  const make = params.get("make");
+  const model = params.get("model");
+
+  if (!make) return json({ error: "Missing make parameter" }, 400);
+
+  // Look up collection mapping by make + optional model
+  let query = db
+    .from("collection_mappings")
+    .select("handle, title, type, make, model")
+    .eq("shop_id", shop)
+    .ilike("make", make);
+
+  if (model) {
+    // Try exact model match first (make_model collection)
+    const { data: modelMatch } = await query.ilike("model", model).maybeSingle();
+    if (modelMatch) {
+      return json({
+        found: true,
+        handle: modelMatch.handle,
+        title: modelMatch.title,
+        type: modelMatch.type,
+        url: `/collections/${modelMatch.handle}`,
+      });
+    }
+
+    // Fall back to make-only collection
+    const { data: makeMatch } = await db
+      .from("collection_mappings")
+      .select("handle, title, type, make, model")
+      .eq("shop_id", shop)
+      .ilike("make", make)
+      .is("model", null)
+      .maybeSingle();
+
+    if (makeMatch) {
+      return json({
+        found: true,
+        handle: makeMatch.handle,
+        title: makeMatch.title,
+        type: makeMatch.type,
+        url: `/collections/${makeMatch.handle}`,
+      });
+    }
+
+    return json({ found: false });
+  }
+
+  // Make-only lookup
+  const { data: makeMatch } = await query.maybeSingle();
+  if (makeMatch) {
+    return json({
+      found: true,
+      handle: makeMatch.handle,
+      title: makeMatch.title,
+      type: makeMatch.type,
+      url: `/collections/${makeMatch.handle}`,
+    });
+  }
+
+  return json({ found: false });
+}
+
 async function handleSearch(params: URLSearchParams) {
   const make = params.get("make");
   const model = params.get("model");
@@ -867,6 +931,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleYears(params);
     case "engines":
       return handleEngines(params);
+    case "collection-lookup":
+      return handleCollectionLookup(params);
     case "search":
       return handleSearch(params);
     case "wheel-search":

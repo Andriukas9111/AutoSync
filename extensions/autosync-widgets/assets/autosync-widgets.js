@@ -137,6 +137,33 @@
     saveGarage([]);
   }
 
+  /**
+   * Redirect to collection page if a matching collection exists,
+   * otherwise fall back to Shopify search.
+   */
+  function redirectToCollection(proxyUrl, makeName, modelName) {
+    if (!proxyUrl || !makeName) {
+      // No proxy URL — go straight to search
+      window.location.href = '/search?q=' + encodeURIComponent((makeName || '') + ' ' + (modelName || '')) + '&type=product';
+      return;
+    }
+
+    // Call collection-lookup endpoint
+    proxyFetch(proxyUrl, 'collection-lookup', { make: makeName, model: modelName || '' })
+      .then(function (data) {
+        if (data && data.found && data.url) {
+          window.location.href = data.url;
+        } else {
+          // No collection found — fall back to search
+          window.location.href = '/search?q=' + encodeURIComponent(makeName + (modelName ? ' ' + modelName : '')) + '&type=product';
+        }
+      })
+      .catch(function () {
+        // API error — fall back to search
+        window.location.href = '/search?q=' + encodeURIComponent(makeName + (modelName ? ' ' + modelName : '')) + '&type=product';
+      });
+  }
+
   // --------------- Custom Make Dropdown ---------------
 
   function createMakeInitials(name) {
@@ -361,7 +388,26 @@
       enable: function () {
         trigger.disabled = false;
       },
-      getSelected: function () { return selectedMake; }
+      getSelected: function () { return selectedMake; },
+      /** Programmatically select a make by ID (used for restoring saved selection) */
+      selectById: function (makeId) {
+        var found = null;
+        for (var i = 0; i < allMakes.length; i++) {
+          if (String(allMakes[i].id) === String(makeId)) { found = allMakes[i]; break; }
+        }
+        if (!found) return;
+        selectedMake = found;
+        setDisplay(found.name, found.logo_url, found.name);
+        // Sync hidden select
+        var hiddenSelect = container.querySelector('[data-autosync-level="make"]');
+        if (hiddenSelect) {
+          clearChildren(hiddenSelect);
+          hiddenSelect.appendChild(addOption(hiddenSelect, '', 'Select Make'));
+          var opt = addOption(hiddenSelect, found.id, found.name);
+          hiddenSelect.appendChild(opt);
+          hiddenSelect.value = found.id;
+        }
+      }
     };
   }
 
@@ -377,26 +423,34 @@
     if (spinner) spinner.classList.remove('autosync-ymme__field-spinner--active');
   }
 
-  // --------------- Garage UI ---------------
+  // --------------- Garage UI (Popover) ---------------
+
+  function updateGarageBadge(container) {
+    var badge = container.querySelector('[data-autosync-garage-badge]');
+    if (!badge) return;
+    var count = getGarage().length;
+    badge.textContent = String(count);
+    badge.style.display = count > 0 ? '' : 'none';
+  }
 
   function renderGarageUI(container) {
-    var garageEl = container.querySelector('[data-autosync-garage]');
-    if (!garageEl) return;
+    // Render into the popover panel
+    var popover = container.querySelector('[data-autosync-garage-popover]');
+    if (!popover) return;
 
-    var vehiclesEl = garageEl.querySelector('[data-autosync-garage-vehicles]');
-    var emptyEl = garageEl.querySelector('[data-autosync-garage-empty]');
+    var vehiclesEl = popover.querySelector('[data-autosync-garage-vehicles]');
+    var emptyEl = popover.querySelector('[data-autosync-garage-empty]');
     var garage = getGarage();
 
     if (!vehiclesEl) return;
     clearChildren(vehiclesEl);
+    updateGarageBadge(container);
 
     if (garage.length === 0) {
-      garageEl.classList.add('autosync-ymme__garage--empty');
       if (emptyEl) emptyEl.style.display = '';
       return;
     }
 
-    garageEl.classList.remove('autosync-ymme__garage--empty');
     if (emptyEl) emptyEl.style.display = 'none';
 
     garage.forEach(function (v, idx) {
@@ -430,12 +484,11 @@
       selectBtn.title = 'Load this vehicle';
       selectBtn.addEventListener('click', function () {
         storeVehicle(v);
-
-        // Mark session source
         try { sessionStorage.setItem('autosync_search_source', 'garage'); } catch (e) { /* */ }
-
-        var searchQuery = encodeURIComponent(v.makeName + ' ' + v.modelName);
-        window.location.href = '/search?q=' + searchQuery + '&type=product';
+        var proxyUrl = container.closest('[data-proxy-url]')
+          ? container.closest('[data-proxy-url]').dataset.proxyUrl
+          : container.dataset.proxyUrl;
+        redirectToCollection(proxyUrl, v.makeName, v.modelName);
       });
       actions.appendChild(selectBtn);
 
@@ -443,7 +496,6 @@
       removeBtn.type = 'button';
       removeBtn.className = 'autosync-ymme__garage-remove-btn';
       removeBtn.title = 'Remove vehicle';
-      // Build SVG X icon via DOM
       var xIcon = createSvgIcon(12, 12, [
         { d: 'M9 3L3 9', stroke: 'currentColor', strokeWidth: '1.5', linecap: 'round' },
         { d: 'M3 3l6 6', stroke: 'currentColor', strokeWidth: '1.5', linecap: 'round' }
@@ -457,6 +509,61 @@
 
       chip.appendChild(actions);
       vehiclesEl.appendChild(chip);
+    });
+  }
+
+  function initGaragePopover(container) {
+    var trigger = container.querySelector('[data-autosync-garage-trigger]');
+    var popover = container.querySelector('[data-autosync-garage-popover]');
+    if (!trigger || !popover) return;
+
+    var isOpen = false;
+
+    function open() {
+      isOpen = true;
+      popover.style.display = '';
+      renderGarageUI(container);
+    }
+
+    function close() {
+      isOpen = false;
+      popover.style.display = 'none';
+    }
+
+    trigger.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isOpen) { close(); } else { open(); }
+    });
+
+    // Close on outside click
+    document.addEventListener('click', function (e) {
+      if (isOpen && !trigger.contains(e.target) && !popover.contains(e.target)) {
+        close();
+      }
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', function (e) {
+      if (isOpen && e.key === 'Escape') close();
+    });
+
+    // Clear garage button inside popover
+    var clearBtn = popover.querySelector('[data-autosync-garage-clear]');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        clearGarage();
+        renderGarageUI(container);
+      });
+    }
+
+    // Initial badge count
+    updateGarageBadge(container);
+
+    // Listen for garage changes from other widgets
+    window.addEventListener('autosync:garage-changed', function () {
+      updateGarageBadge(container);
+      if (isOpen) renderGarageUI(container);
     });
   }
 
@@ -493,6 +600,104 @@
       setSelectLoading(makeSelect);
     }
 
+    /**
+     * Restore the YMME dropdowns from the last stored vehicle selection.
+     * This chains API calls: make → models → model → years → year → engines → engine
+     * so the widget always shows the user's last selection on every page.
+     */
+    function restoreLastSelection() {
+      var saved = getStoredVehicle();
+      if (!saved || !saved.makeId) return;
+
+      // 1. Set make
+      state.make = saved.makeId;
+      state.makeName = saved.makeName || '';
+      if (customMakeDropdown) {
+        customMakeDropdown.selectById(saved.makeId);
+      } else {
+        makeSelect.value = String(saved.makeId);
+      }
+
+      if (!saved.modelId) return;
+
+      // 2. Load models, then set model
+      setSelectLoading(modelSelect);
+      showFieldSpinner(container, 'model');
+      proxyFetch(proxyUrl, 'models', { make_id: saved.makeId }).then(function (data) {
+        clearChildren(modelSelect);
+        modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
+        (data.models || []).forEach(function (m) {
+          var label = escapeText(m.name);
+          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
+          if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
+          var opt = addOption(modelSelect, m.id, label);
+          opt.dataset.name = m.name;
+          modelSelect.appendChild(opt);
+        });
+        modelSelect.disabled = false;
+        hideFieldSpinner(container, 'model');
+
+        // Set the saved model
+        state.model = saved.modelId;
+        state.modelName = saved.modelName || '';
+        modelSelect.value = String(saved.modelId);
+
+        if (!saved.year) return;
+
+        // 3. Load years, then set year
+        setSelectLoading(yearSelect);
+        showFieldSpinner(container, 'year');
+        return proxyFetch(proxyUrl, 'years', { model_id: saved.modelId });
+      }).then(function (data) {
+        if (!data) return;
+        clearChildren(yearSelect);
+        yearSelect.appendChild(addOption(yearSelect, '', 'Select Year'));
+        (data.years || []).forEach(function (y) {
+          yearSelect.appendChild(addOption(yearSelect, y, String(y)));
+        });
+        yearSelect.disabled = false;
+        hideFieldSpinner(container, 'year');
+
+        // Set the saved year
+        state.year = saved.year;
+        yearSelect.value = String(saved.year);
+        if (searchBtn) searchBtn.disabled = false;
+
+        // 4. Load engines if applicable
+        if (!engineSelect || !showEngine) return;
+
+        setSelectLoading(engineSelect);
+        showFieldSpinner(container, 'engine');
+        return proxyFetch(proxyUrl, 'engines', { model_id: saved.modelId, year: saved.year });
+      }).then(function (data) {
+        if (!data || !engineSelect) return;
+        clearChildren(engineSelect);
+        engineSelect.appendChild(addOption(engineSelect, '', 'Any Engine'));
+        (data.engines || []).forEach(function (e) {
+          var label = escapeText(e.name);
+          if (e.displacement_cc) label += ' ' + e.displacement_cc + 'cc';
+          if (e.fuel_type) label += ' ' + escapeText(e.fuel_type);
+          var opt = addOption(engineSelect, e.id, label);
+          opt.dataset.name = e.name;
+          engineSelect.appendChild(opt);
+        });
+        engineSelect.disabled = false;
+        hideFieldSpinner(container, 'engine');
+
+        // Set the saved engine if one was stored
+        if (saved.engineId) {
+          state.engine = saved.engineId;
+          state.engineName = saved.engineName || '';
+          engineSelect.value = String(saved.engineId);
+        }
+      }).catch(function () {
+        // Restoration failed — user can still re-select manually
+        hideFieldSpinner(container, 'model');
+        hideFieldSpinner(container, 'year');
+        hideFieldSpinner(container, 'engine');
+      });
+    }
+
     proxyFetch(proxyUrl, 'makes').then(function (data) {
       allMakesData = data.makes || [];
 
@@ -508,6 +713,9 @@
         });
         makeSelect.disabled = false;
       }
+
+      // After makes are loaded, restore the last YMME selection if any
+      restoreLastSelection();
     }).catch(function () {
       if (customMakeDropdown) {
         customMakeDropdown.setError();
@@ -643,47 +851,20 @@
           sessionStorage.setItem('autosync_search_source', 'widget');
         } catch (e) { /* ignore */ }
 
-        // Show save to garage button if garage feature is enabled
+        // Auto-save to garage when searching (user can remove later)
         if (showGarage) {
-          showSaveGarage(container, vehicle);
-        }
-
-        var searchQuery = encodeURIComponent(state.makeName + ' ' + state.modelName);
-        window.location.href = '/search?q=' + searchQuery + '&type=product';
-      });
-    }
-
-    // Save to Garage
-    var saveGarageBtn = container.querySelector('[data-autosync-save-garage-btn]');
-    if (saveGarageBtn) {
-      saveGarageBtn.addEventListener('click', function () {
-        var vehicle = getStoredVehicle();
-        if (vehicle && vehicle.makeName) {
           addToGarage(vehicle);
-          renderGarageUI(container);
-          hideSaveGarage(container);
         }
+
+        // Try collection redirect first, fall back to search
+        redirectToCollection(proxyUrl, state.makeName, state.modelName);
       });
     }
 
-    // Clear garage
-    var clearGarageBtn = container.querySelector('[data-autosync-garage-clear]');
-    if (clearGarageBtn) {
-      clearGarageBtn.addEventListener('click', function () {
-        clearGarage();
-        renderGarageUI(container);
-      });
-    }
-
-    // Initial garage render
+    // Initialize garage popover (replaces old inline garage list)
     if (showGarage) {
-      renderGarageUI(container);
+      initGaragePopover(container);
     }
-
-    // Listen for garage changes from other widgets
-    window.addEventListener('autosync:garage-changed', function () {
-      renderGarageUI(container);
-    });
   }
 
   function showSaveGarage(container, vehicle) {
@@ -930,7 +1111,7 @@
             if (partsBtn && data.compatibleCount > 0) {
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.onclick = function () {
-                window.location.href = '/search?q=' + encodeURIComponent(v.make + ' ' + v.model) + '&type=product';
+                redirectToCollection(proxyUrl, v.make, v.model);
               };
             }
           }
@@ -1125,7 +1306,7 @@
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.classList.remove('autosync-vin-decode--hidden');
               partsBtn.onclick = function () {
-                window.location.href = '/search?q=' + encodeURIComponent(v.make + ' ' + v.model) + '&type=product';
+                redirectToCollection(proxyUrl, v.make, v.model);
               };
             }
           }

@@ -40,7 +40,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits } from "../lib/billing.server";
+import { getPlanLimits, getPlanConfigs } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
@@ -146,9 +146,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const fitmentCount = fitmentCountResult.count ?? 0;
 
+  // Dynamic plan price from configs (not hardcoded)
+  const planConfigsMap = await getPlanConfigs();
+  const currentPlanConfig = planConfigsMap[plan];
+  const planPrice = currentPlanConfig
+    ? currentPlanConfig.priceMonthly === 0
+      ? "$0"
+      : `$${String(currentPlanConfig.priceMonthly)}`
+    : "$0";
+  const planName = currentPlanConfig?.name ?? plan.charAt(0).toUpperCase() + plan.slice(1);
+
   return {
     shopId,
     plan,
+    planPrice,
+    planName,
     limits,
     isFirstTime,
     hasPushed: (pushCountResult.count ?? 0) > 0,
@@ -389,6 +401,8 @@ function CoverageBar({ percent }: { percent: number }) {
 export default function Dashboard() {
   const {
     plan,
+    planPrice,
+    planName,
     limits,
     isFirstTime,
     hasPushed,
@@ -415,15 +429,13 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(true);
 
   const coverage = totalProducts > 0 ? Math.round((mapped / totalProducts) * 100) : 0;
-  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const planLabel = planName;
   const showOnboarding = totalProducts < 1 || fitmentCount < 1;
 
   const productUsagePercent =
     limits.products === Infinity ? 0 : Math.min(100, Math.round((totalProducts / limits.products) * 100));
   const fitmentUsagePercent =
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
-
-  const planPrice = plan === "free" ? "$0" : plan === "starter" ? "$19" : plan === "growth" ? "$49" : plan === "professional" ? "$99" : plan === "business" ? "$179" : "$299";
 
   return (
     <Page title="Dashboard" fullWidth>
