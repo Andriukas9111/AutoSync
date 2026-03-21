@@ -474,125 +474,244 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       console.warn("[proxy] MOT history lookup failed:", motErr);
     }
 
-    // Search for compatible products using DVLA make/model/year
-    // DVLA returns full model descriptions (e.g. "M340I XDRIVE MHEV AUTO")
-    // but vehicle_fitments stores YMME model names (e.g. "3 Series").
-    // We need to resolve DVLA → YMME before querying fitments.
-    let resolvedModel: string | null = null;
+    // ── YMME Resolution ──
+    // DVLA returns verbose data: make="BMW", model="M340I XDRIVE MHEV AUTO",
+    // year=2022, engineCapacity=2998, fuelType="HYBRID ELECTRIC".
+    // We resolve this to exact YMME IDs so the widget can use restoreById()
+    // which chains: make → models → model → years → year → engines → engine.
+    interface ResolvedVehicle {
+      makeId: string | null;
+      makeName: string | null;
+      modelId: string | null;
+      modelName: string | null;
+      year: string | null;
+      engineId: string | null;
+      engineName: string | null;
+    }
+    const resolved: ResolvedVehicle = {
+      makeId: null, makeName: null,
+      modelId: null, modelName: null,
+      year: null,
+      engineId: null, engineName: null,
+    };
     let debugInfo: Record<string, unknown> = {};
+
     try {
       const dvlaMake = vehicle.make; // e.g. "BMW"
       const dvlaModel = vehicle.model; // e.g. "M340I XDRIVE MHEV AUTO"
       const dvlaYear = vehicle.yearOfManufacture; // e.g. 2022
+      const dvlaCC = vehicle.engineCapacity; // e.g. 2998
+      const dvlaFuel = vehicle.fuelType; // e.g. "HYBRID ELECTRIC"
 
-      debugInfo = { dvlaMake, dvlaModel, dvlaYear };
+      debugInfo = { dvlaMake, dvlaModel, dvlaYear, dvlaCC, dvlaFuel };
 
-      // Strategy 1: Resolve DVLA model to YMME model(s)
-      const { data: ymmeModels } = await db
-        .from("ymme_models")
-        .select("id, name, ymme_makes!inner(name)")
-        .ilike("ymme_makes.name", dvlaMake)
-        .eq("active", true);
+      // 1. Resolve Make — simple name match
+      const { data: ymmesMake } = await db
+        .from("ymme_makes")
+        .select("id, name")
+        .ilike("name", dvlaMake)
+        .eq("active", true)
+        .limit(1)
+        .maybeSingle();
 
-      debugInfo.ymmeModelsCount = ymmeModels?.length ?? 0;
-
-      let resolvedModelNames: string[] = [];
-
-      if (ymmeModels && ymmeModels.length > 0) {
-        const modelIds = ymmeModels.map((m) => m.id);
-
-        // Check engine variants — DVLA model often contains the engine variant name
-        // e.g. "M340I XDRIVE MHEV AUTO" matches engine variant "M340i"
-        // Use range queries to work around Supabase's 1000-row default limit
-        const allEngines: { model_id: string; name: string | null; code: string | null }[] = [];
-        const BATCH_SIZE = 50; // Supabase .in() has a practical limit
-        for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
-          const batch = modelIds.slice(i, i + BATCH_SIZE);
-          const { data: batchEngines } = await db
-            .from("ymme_engines")
-            .select("model_id, name, code")
-            .in("model_id", batch)
-            .eq("active", true)
-            .limit(5000);
-          if (batchEngines) allEngines.push(...batchEngines);
-        }
-
-        debugInfo.enginesCount = allEngines.length;
-
-        const dvlaModelUpper = dvlaModel.toUpperCase();
-
-        for (const engine of allEngines) {
-          const engineName = (engine.name ?? "").toUpperCase();
-          const engineCode = (engine.code ?? "").toUpperCase();
-
-          // Extract the base variant from engine name (e.g. "M340i (374 Hp)" → "M340I")
-          const baseVariant = engineName.split("(")[0].trim();
-
-          // Require minimum 4 chars to avoid false positives like "40I" matching "M340I"
-          if (
-            baseVariant.length >= 4 &&
-            dvlaModelUpper.includes(baseVariant)
-          ) {
-            const matchedModel = ymmeModels.find(
-              (m) => m.id === engine.model_id,
-            );
-            if (matchedModel) {
-              resolvedModelNames.push(matchedModel.name);
-            }
-          } else if (
-            engineCode.length >= 4 &&
-            dvlaModelUpper.includes(engineCode)
-          ) {
-            const matchedModel = ymmeModels.find(
-              (m) => m.id === engine.model_id,
-            );
-            if (matchedModel) {
-              resolvedModelNames.push(matchedModel.name);
-            }
-          }
-        }
-
-        // Also check if DVLA model directly contains any YMME model name
-        // e.g. "GOLF GTI" contains "GOLF" → matches YMME model "Golf"
-        // Require minimum 3 chars to avoid false positives
-        for (const model of ymmeModels) {
-          const modelNameUpper = model.name.toUpperCase();
-          if (
-            modelNameUpper.length >= 3 &&
-            dvlaModelUpper.includes(modelNameUpper)
-          ) {
-            resolvedModelNames.push(model.name);
-          }
-        }
-
-        // Deduplicate
-        resolvedModelNames = [...new Set(resolvedModelNames)];
+      if (ymmesMake) {
+        resolved.makeId = ymmesMake.id;
+        resolved.makeName = ymmesMake.name;
       }
+      debugInfo.resolvedMake = resolved.makeName;
 
-      // Strategy 2: Also check ymme_aliases for DVLA model → YMME model mapping
-      if (resolvedModelNames.length === 0) {
-        const { data: aliases } = await db
+      if (!resolved.makeId) {
+        // Try aliases for the make (e.g., "VW" → "Volkswagen")
+        const { data: makeAlias } = await db
           .from("ymme_aliases")
-          .select("canonical_name, alias_type")
-          .ilike("alias_name", `%${dvlaModel}%`)
-          .eq("alias_type", "model")
-          .limit(5);
-
-        if (aliases && aliases.length > 0) {
-          resolvedModelNames = aliases.map((a) => a.canonical_name);
+          .select("canonical_name")
+          .ilike("alias_name", dvlaMake)
+          .eq("alias_type", "make")
+          .limit(1)
+          .maybeSingle();
+        if (makeAlias) {
+          const { data: aliasedMake } = await db
+            .from("ymme_makes")
+            .select("id, name")
+            .ilike("name", makeAlias.canonical_name)
+            .eq("active", true)
+            .limit(1)
+            .maybeSingle();
+          if (aliasedMake) {
+            resolved.makeId = aliasedMake.id;
+            resolved.makeName = aliasedMake.name;
+          }
         }
       }
 
-      debugInfo.resolvedModels = resolvedModelNames;
+      // 2. Resolve Model — match engine variant names in DVLA model string
+      if (resolved.makeId) {
+        const { data: ymmeModels } = await db
+          .from("ymme_models")
+          .select("id, name, year_from, year_to")
+          .eq("make_id", resolved.makeId)
+          .eq("active", true);
 
-      // Pick the best resolved model name for the YMME widget
-      // Prefer the first one — it's the most specific match
-      if (resolvedModelNames.length > 0) {
-        resolvedModel = resolvedModelNames[0];
+        debugInfo.ymmeModelsCount = ymmeModels?.length ?? 0;
+
+        if (ymmeModels && ymmeModels.length > 0) {
+          const modelIds = ymmeModels.map((m) => m.id);
+          const dvlaModelUpper = dvlaModel.toUpperCase();
+
+          // Fetch ALL engines for this make's models (with full data for matching)
+          const allEngines: {
+            id: string; model_id: string; name: string | null;
+            code: string | null; displacement_cc: number | null;
+            fuel_type: string | null; year_from: number | null;
+            year_to: number | null; power_hp: number | null;
+          }[] = [];
+          const BATCH_SIZE = 50;
+          for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
+            const batch = modelIds.slice(i, i + BATCH_SIZE);
+            const { data: batchEngines } = await db
+              .from("ymme_engines")
+              .select("id, model_id, name, code, displacement_cc, fuel_type, year_from, year_to, power_hp")
+              .in("model_id", batch)
+              .eq("active", true)
+              .limit(5000);
+            if (batchEngines) allEngines.push(...batchEngines);
+          }
+
+          debugInfo.enginesCount = allEngines.length;
+
+          // Score each engine against DVLA data — best match wins
+          interface EngineMatch {
+            engine: typeof allEngines[0];
+            model: typeof ymmeModels[0];
+            score: number;
+          }
+          const candidates: EngineMatch[] = [];
+
+          for (const engine of allEngines) {
+            const engineName = (engine.name ?? "").toUpperCase();
+            const engineCode = (engine.code ?? "").toUpperCase();
+            const baseVariant = engineName.split("(")[0].trim();
+
+            // Must match variant name in DVLA model string (min 4 chars)
+            let variantMatch = false;
+            if (baseVariant.length >= 4 && dvlaModelUpper.includes(baseVariant)) {
+              variantMatch = true;
+            } else if (engineCode.length >= 4 && dvlaModelUpper.includes(engineCode)) {
+              variantMatch = true;
+            }
+
+            if (!variantMatch) continue;
+
+            const matchedModel = ymmeModels.find((m) => m.id === engine.model_id);
+            if (!matchedModel) continue;
+
+            // Score the match
+            let score = 10; // Base score for variant name match
+
+            // +5 for displacement match (within 50cc tolerance)
+            if (dvlaCC && engine.displacement_cc) {
+              const ccDiff = Math.abs(dvlaCC - engine.displacement_cc);
+              if (ccDiff <= 50) score += 5;
+              if (ccDiff === 0) score += 2; // Exact match bonus
+            }
+
+            // +5 for fuel type match
+            if (dvlaFuel && engine.fuel_type) {
+              const dvlaFuelUpper = dvlaFuel.toUpperCase();
+              const engineFuelUpper = engine.fuel_type.toUpperCase();
+              // Check keyword overlap: "HYBRID ELECTRIC" vs "Mild Hybrid Steptronic"
+              const dvlaWords = dvlaFuelUpper.split(/\s+/);
+              const engineWords = engineFuelUpper.split(/\s+/);
+              for (const dw of dvlaWords) {
+                if (dw.length >= 3) {
+                  for (const ew of engineWords) {
+                    if (ew.includes(dw) || dw.includes(ew)) {
+                      score += 3;
+                      break;
+                    }
+                  }
+                }
+              }
+              // Direct substring checks
+              if (dvlaFuelUpper.includes("HYBRID") && engineFuelUpper.includes("HYBRID")) score += 2;
+              if (dvlaFuelUpper.includes("DIESEL") && engineFuelUpper.includes("DIESEL")) score += 2;
+              if (dvlaFuelUpper.includes("PETROL") && (engineFuelUpper.includes("PETROL") || engineFuelUpper.includes("GASOLINE"))) score += 2;
+              if (dvlaFuelUpper.includes("ELECTRIC") && engineFuelUpper.includes("ELECTRIC")) score += 2;
+            }
+
+            // +3 for year in range
+            if (dvlaYear && engine.year_from) {
+              const yearTo = engine.year_to ?? new Date().getFullYear();
+              if (dvlaYear >= engine.year_from && dvlaYear <= yearTo) {
+                score += 3;
+              }
+            }
+
+            candidates.push({ engine, model: matchedModel, score });
+          }
+
+          // Sort by score descending — best match first
+          candidates.sort((a, b) => b.score - a.score);
+
+          debugInfo.topCandidates = candidates.slice(0, 5).map((c) => ({
+            engine: c.engine.name,
+            model: c.model.name,
+            score: c.score,
+            cc: c.engine.displacement_cc,
+            fuel: c.engine.fuel_type,
+          }));
+
+          if (candidates.length > 0) {
+            const best = candidates[0];
+            resolved.modelId = best.model.id;
+            resolved.modelName = best.model.name;
+            resolved.engineId = best.engine.id;
+            resolved.engineName = best.engine.name;
+          }
+
+          // Fallback: if no engine variant matched, try direct model name match
+          if (!resolved.modelId) {
+            for (const model of ymmeModels) {
+              const modelNameUpper = model.name.toUpperCase();
+              if (modelNameUpper.length >= 3 && dvlaModelUpper.includes(modelNameUpper)) {
+                resolved.modelId = model.id;
+                resolved.modelName = model.name;
+                break;
+              }
+            }
+          }
+
+          // Fallback: check aliases
+          if (!resolved.modelId) {
+            const { data: aliases } = await db
+              .from("ymme_aliases")
+              .select("canonical_name")
+              .ilike("alias_name", `%${dvlaModel}%`)
+              .eq("alias_type", "model")
+              .limit(1)
+              .maybeSingle();
+            if (aliases) {
+              const aliasModel = ymmeModels.find(
+                (m) => m.name.toUpperCase() === aliases.canonical_name.toUpperCase()
+              );
+              if (aliasModel) {
+                resolved.modelId = aliasModel.id;
+                resolved.modelName = aliasModel.name;
+              }
+            }
+          }
+        }
+
+        // 3. Year — direct from DVLA
+        if (dvlaYear) {
+          resolved.year = String(dvlaYear);
+        }
       }
+
+      debugInfo.resolved = resolved;
     } catch (searchErr) {
       const errMsg = searchErr instanceof Error ? searchErr.message : String(searchErr);
-      console.warn("[proxy] Product search after plate lookup failed:", errMsg);
+      console.warn("[proxy] YMME resolution after plate lookup failed:", errMsg);
       debugInfo.searchError = errMsg;
     }
 
@@ -618,7 +737,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
             fuelType: motHistory.fuelType,
           }
         : null,
-      resolvedModel,
+      resolved,
       _debug: debugInfo,
     });
   } catch (err) {

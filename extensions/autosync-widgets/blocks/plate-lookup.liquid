@@ -47,7 +47,7 @@ if(RB)RB.addEventListener('click',function(){if(lr)doL(lr);});
 B.addEventListener('click',function(){var r=I.value.trim().replace(/\s+/g,'');if(r.length<2)return;lr=r;doL(r);});
 function doL(r){B.disabled=true;B.textContent='Looking up...';EE.style.display='none';RE.style.display='none';LE.style.display='flex';
 fetch(P+'?path=plate-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration:r})})
-.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.resolvedModel||null,r);})
+.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.resolved||null,r);})
 .catch(function(){B.disabled=false;B.innerHTML=BH;LE.style.display='none';sE('Failed to look up registration. Please try again.');});}
 function sE(m){var x=EE.querySelector('[data-apl-error-msg]');if(x)x.textContent=m;EE.style.display='block';RE.style.display='none';}
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!==undefined&&x!==null)e.textContent=String(x);return e;}
@@ -56,7 +56,7 @@ var IC={cd:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="
 cs:'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
 ar:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
 cl:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'};
-function rR(v,mH,rm,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
+function rR(v,mH,rv,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
 var card=el('div','apl-card'),hdr=el('div','apl-card__header'),rb=el('div','apl-card__reg');
 rb.appendChild(el('span','apl-card__reg-flag','GB'));rb.appendChild(el('span','apl-card__reg-text',fR(rg)));hdr.appendChild(rb);
 hdr.appendChild(el('h2','apl-card__title',(v.make||'')+' '+(v.model||'')));
@@ -80,10 +80,10 @@ var it=el('div','apl-details__item');it.appendChild(el('span','apl-details__labe
 dt.appendChild(dg);card.appendChild(dt);
 /* MOT & Tax */
 if(R.dataset.showTax!=='false'){var st=el('div','apl-statuses');st.appendChild(mS('MOT',v.motStatus,v.motExpiryDate,'Expires'));st.appendChild(mS('Tax',v.taxStatus,v.taxDueDate,'Due'));card.appendChild(st);}
-RE.appendChild(card);sG(v,rm,rg);
+RE.appendChild(card);sG(v,rv,rg);
 /* Find Parts — use resolved YMME model name for collection lookup */
 if(v.make){var fw=el('div','apl-find-wrap'),fb=el('button','apl-find-btn');fb.appendChild(document.createTextNode('Find Parts for This Vehicle '));fb.appendChild(si(IC.ar));
-var useMd=rm||v.model||'';
+var useMd=(rv&&rv.modelName)?rv.modelName:(v.model||'');
 fb.addEventListener('click',function(){fb.disabled=true;fb.textContent='Finding parts...';var mk=v.make;
 fetch(P+'?path=collection-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({make:mk,model:useMd})})
 .then(function(r){return r.json();}).then(function(d){if(d.data&&d.data.found&&d.data.url)window.location.href=d.data.url;else window.location.href='/collections/'+mk.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';})
@@ -113,14 +113,17 @@ if(lb==='MOT')c=s==='Valid'?'apl-st--valid':s==='Not valid'?'apl-st--invalid':'a
 else c=s==='Taxed'?'apl-st--valid':s==='SORN'?'apl-st--warn':'apl-st--invalid';
 var bg=el('div',c),bd=el('span','apl-st__badge');bd.appendChild(el('span','apl-st__dot'));bd.appendChild(document.createTextNode(s));bg.appendChild(bd);
 if(da)bg.appendChild(el('p','apl-st__sub',dl+': '+fD(da)));inn.appendChild(bg);w.appendChild(inn);return w;}
-function sG(v,rm,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
-var ymmeModel=rm||v.model||'';
+function sG(v,rv,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
+var ymmeModel=(rv&&rv.modelName)?rv.modelName:(v.model||'');
 var e={makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
+if(rv&&rv.makeId)e.makeId=rv.makeId;if(rv&&rv.modelId)e.modelId=rv.modelId;if(rv&&rv.engineId)e.engineId=rv.engineId;if(rv&&rv.engineName)e.engineName=rv.engineName;
 var dup=false;for(var i=0;i<g.length;i++){if(g[i].makeName===e.makeName&&g[i].modelName===e.modelName&&g[i].year===e.year){dup=true;break;}}
 if(!dup){g.unshift(e);if(g.length>3)g=g.slice(0,3);localStorage.setItem(K,JSON.stringify(g));window.dispatchEvent(new CustomEvent('autosync:garage-changed',{detail:g}));}
 aH(rg,{make:v.make,model:ymmeModel});
-localStorage.setItem('autosync_vehicle',JSON.stringify({makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'}));
-window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:{makeName:v.make,modelName:ymmeModel,year:String(v.yearOfManufacture||'')}}));}catch(x){}}
+var sv={makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
+if(rv&&rv.makeId){sv.makeId=rv.makeId;sv.modelId=rv.modelId||'';sv.engineId=rv.engineId||'';sv.engineName=rv.engineName||'';}
+localStorage.setItem('autosync_vehicle',JSON.stringify(sv));
+window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:sv}));}catch(x){}}
 function fR(r){r=r.replace(/\s/g,'').toUpperCase();return r.length===7?r.substring(0,4)+' '+r.substring(4):r;}
 function fD(d){if(!d)return'\u2014';try{var x=new Date(d);return isNaN(x.getTime())?d:x.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
 sHist();
