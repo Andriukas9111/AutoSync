@@ -3,6 +3,10 @@
   Persistent bar showing the customer's selected vehicle
 {% endcomment %}
 
+{% liquid
+  assign logo_url = 'autosync-logo.svg' | asset_url
+%}
+
 <div
   class="autosync-vehicle-bar autosync-vehicle-bar--{{ block.settings.position }} autosync-vehicle-bar--hidden"
   data-autosync-vehicle-bar
@@ -15,7 +19,7 @@
   "
 >
   <div class="autosync-vehicle-bar__inner">
-    <span class="autosync-vehicle-bar__icon">&#128663;</span>
+    <img class="autosync-vehicle-bar__icon" src="{{ logo_url }}" alt="AutoSync" width="18" height="18" style="vertical-align: middle;" />
     <span class="autosync-vehicle-bar__label">Your Vehicle:</span>
     <span class="autosync-vehicle-bar__vehicle" data-autosync-bar-vehicle></span>
 

@@ -515,6 +515,8 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
             firstUsedDate: motHistory.firstUsedDate,
             make: motHistory.make,
             model: motHistory.model,
+            primaryColour: motHistory.primaryColour,
+            fuelType: motHistory.fuelType,
           }
         : null,
       compatibleProducts,
