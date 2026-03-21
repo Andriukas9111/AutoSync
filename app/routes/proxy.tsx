@@ -478,7 +478,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     // DVLA returns full model descriptions (e.g. "M340I XDRIVE MHEV AUTO")
     // but vehicle_fitments stores YMME model names (e.g. "3 Series").
     // We need to resolve DVLA → YMME before querying fitments.
-    let compatibleProducts: unknown[] = [];
+    let resolvedModel: string | null = null;
     let debugInfo: Record<string, unknown> = {};
     try {
       const dvlaMake = vehicle.make; // e.g. "BMW"
@@ -585,55 +585,11 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
 
       debugInfo.resolvedModels = resolvedModelNames;
 
-      // Query vehicle_fitments using resolved model names
-      let fitments: { product_id: string }[] | null = null;
-
+      // Pick the best resolved model name for the YMME widget
+      // Prefer the first one — it's the most specific match
       if (resolvedModelNames.length > 0) {
-        let fitmentQuery = db
-          .from("vehicle_fitments")
-          .select("product_id")
-          .ilike("make", dvlaMake)
-          .lte("year_from", dvlaYear)
-          .or(`year_to.gte.${dvlaYear},year_to.is.null`);
-
-        if (resolvedModelNames.length === 1) {
-          fitmentQuery = fitmentQuery.ilike("model", resolvedModelNames[0]);
-        } else {
-          const modelFilter = resolvedModelNames
-            .map((m) => `model.ilike.${m}`)
-            .join(",");
-          fitmentQuery = fitmentQuery.or(modelFilter);
-        }
-
-        const result = await fitmentQuery;
-        fitments = result.data;
-        debugInfo.fitmentQueryResult = { count: fitments?.length ?? 0, error: result.error?.message };
+        resolvedModel = resolvedModelNames[0];
       }
-
-      // Strategy 3: Fallback — search by make + year only (broad match)
-      if (!fitments || fitments.length === 0) {
-        const { data: broadFitments } = await db
-          .from("vehicle_fitments")
-          .select("product_id")
-          .ilike("make", dvlaMake)
-          .lte("year_from", dvlaYear)
-          .or(`year_to.gte.${dvlaYear},year_to.is.null`)
-          .limit(100);
-        fitments = broadFitments;
-        debugInfo.usedFallback = true;
-        debugInfo.fallbackCount = fitments?.length ?? 0;
-      }
-
-      if (fitments && fitments.length > 0) {
-        const productIds = [...new Set(fitments.map((f) => f.product_id))];
-        debugInfo.uniqueProductIds = productIds.length;
-        const { data: products } = await db
-          .from("products")
-          .select("id, shopify_gid, title, handle, image_url, price")
-          .in("id", productIds.slice(0, 50));
-        compatibleProducts = products ?? [];
-      }
-      debugInfo.compatibleProductsCount = compatibleProducts.length;
     } catch (searchErr) {
       const errMsg = searchErr instanceof Error ? searchErr.message : String(searchErr);
       console.warn("[proxy] Product search after plate lookup failed:", errMsg);
@@ -662,8 +618,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
             fuelType: motHistory.fuelType,
           }
         : null,
-      compatibleProducts,
-      compatibleCount: compatibleProducts.length,
+      resolvedModel,
       _debug: debugInfo,
     });
   } catch (err) {

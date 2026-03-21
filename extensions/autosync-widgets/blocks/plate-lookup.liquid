@@ -2,7 +2,7 @@
   assign proxy_url = shop.url | append: '/apps/autosync'
   assign logo_url = 'autosync-logo.svg' | asset_url
 %}
-<div class="apl-root" data-apl-root data-proxy-url="{{ proxy_url }}" data-logo-url="{{ logo_url }}" data-show-mot="{{ block.settings.show_mot_history | default: true }}" data-show-products="{{ block.settings.show_products | default: true }}" data-show-tax="{{ block.settings.show_tax_status | default: true }}" id="apl-{{ block.id }}" style="--apl-primary:{{ block.settings.primary_color | default: '#005bd2' }};--apl-bg:{{ block.settings.background_color | default: '#ffffff' }};--apl-text:{{ block.settings.text_color | default: '#1a1a2e' }};--apl-muted:{{ block.settings.muted_color | default: '#6b7280' }};--apl-border:{{ block.settings.border_color | default: '#e5e7eb' }};--apl-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--apl-radius:{{ block.settings.border_radius | default: 10 }}px;padding-top:{{ block.settings.padding_top | default: 40 }}px;padding-bottom:{{ block.settings.padding_bottom | default: 40 }}px;max-width:{% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};padding-left:{{ block.settings.container_padding | default: 24 }}px;padding-right:{{ block.settings.container_padding | default: 24 }}px;">
+<div class="apl-root" data-apl-root data-proxy-url="{{ proxy_url }}" data-logo-url="{{ logo_url }}" data-show-mot="{{ block.settings.show_mot_history | default: true }}" data-show-tax="{{ block.settings.show_tax_status | default: true }}" id="apl-{{ block.id }}" style="--apl-primary:{{ block.settings.primary_color | default: '#005bd2' }};--apl-bg:{{ block.settings.background_color | default: '#ffffff' }};--apl-text:{{ block.settings.text_color | default: '#1a1a2e' }};--apl-muted:{{ block.settings.muted_color | default: '#6b7280' }};--apl-border:{{ block.settings.border_color | default: '#e5e7eb' }};--apl-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--apl-radius:{{ block.settings.border_radius | default: 10 }}px;padding-top:{{ block.settings.padding_top | default: 40 }}px;padding-bottom:{{ block.settings.padding_bottom | default: 40 }}px;max-width:{% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};padding-left:{{ block.settings.container_padding | default: 24 }}px;padding-right:{{ block.settings.container_padding | default: 24 }}px;">
   {% if block.settings.heading != blank %}
   <div class="apl-heading-wrap" style="text-align:{{ block.settings.heading_alignment | default: 'center' }};">
     <div class="apl-heading-accent" {% if block.settings.heading_alignment == 'left' %}style="margin-left:0;"{% endif %}></div>
@@ -47,7 +47,7 @@ if(RB)RB.addEventListener('click',function(){if(lr)doL(lr);});
 B.addEventListener('click',function(){var r=I.value.trim().replace(/\s+/g,'');if(r.length<2)return;lr=r;doL(r);});
 function doL(r){B.disabled=true;B.textContent='Looking up...';EE.style.display='none';RE.style.display='none';LE.style.display='flex';
 fetch(P+'?path=plate-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration:r})})
-.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.compatibleProducts||[],r);})
+.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.resolvedModel||null,r);})
 .catch(function(){B.disabled=false;B.innerHTML=BH;LE.style.display='none';sE('Failed to look up registration. Please try again.');});}
 function sE(m){var x=EE.querySelector('[data-apl-error-msg]');if(x)x.textContent=m;EE.style.display='block';RE.style.display='none';}
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!==undefined&&x!==null)e.textContent=String(x);return e;}
@@ -56,7 +56,7 @@ var IC={cd:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="
 cs:'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
 ar:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
 cl:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'};
-function rR(v,mH,pr,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
+function rR(v,mH,rm,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
 var card=el('div','apl-card'),hdr=el('div','apl-card__header'),rb=el('div','apl-card__reg');
 rb.appendChild(el('span','apl-card__reg-flag','GB'));rb.appendChild(el('span','apl-card__reg-text',fR(rg)));hdr.appendChild(rb);
 hdr.appendChild(el('h2','apl-card__title',(v.make||'')+' '+(v.model||'')));
@@ -80,13 +80,14 @@ var it=el('div','apl-details__item');it.appendChild(el('span','apl-details__labe
 dt.appendChild(dg);card.appendChild(dt);
 /* MOT & Tax */
 if(R.dataset.showTax!=='false'){var st=el('div','apl-statuses');st.appendChild(mS('MOT',v.motStatus,v.motExpiryDate,'Expires'));st.appendChild(mS('Tax',v.taxStatus,v.taxDueDate,'Due'));card.appendChild(st);}
-RE.appendChild(card);sG(v,rg);
-/* Find Parts */
+RE.appendChild(card);sG(v,rm,rg);
+/* Find Parts — use resolved YMME model name for collection lookup */
 if(v.make){var fw=el('div','apl-find-wrap'),fb=el('button','apl-find-btn');fb.appendChild(document.createTextNode('Find Parts for This Vehicle '));fb.appendChild(si(IC.ar));
-fb.addEventListener('click',function(){fb.disabled=true;fb.textContent='Finding parts...';var mk=v.make,md=v.model||'';
-fetch(P+'?path=collection-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({make:mk,model:md})})
-.then(function(r){return r.json();}).then(function(d){if(d.data&&d.data.found&&d.data.url)window.location.href=d.data.url;else window.location.href='/collections/'+mk.toLowerCase().replace(/\s+/g,'-')+'-'+md.toLowerCase().replace(/\s+/g,'-')+'-parts';})
-.catch(function(){window.location.href='/collections/'+v.make.toLowerCase().replace(/\s+/g,'-')+'-'+(v.model||'').toLowerCase().replace(/\s+/g,'-')+'-parts';});});
+var useMd=rm||v.model||'';
+fb.addEventListener('click',function(){fb.disabled=true;fb.textContent='Finding parts...';var mk=v.make;
+fetch(P+'?path=collection-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({make:mk,model:useMd})})
+.then(function(r){return r.json();}).then(function(d){if(d.data&&d.data.found&&d.data.url)window.location.href=d.data.url;else window.location.href='/collections/'+mk.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';})
+.catch(function(){window.location.href='/collections/'+v.make.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';});});
 fw.appendChild(fb);RE.appendChild(fw);}
 /* MOT History */
 var ts=(mH&&mH.motTests)?mH.motTests:[];
@@ -104,12 +105,6 @@ li.appendChild(dd);(function(r2,d2){r2.addEventListener('click',function(){d2.cl
 ls.appendChild(li);}
 if(s5){var sa=el('button','apl-mot__showall','Show all '+ts.length+' tests');sa.addEventListener('click',function(){var its=ls.querySelectorAll('li');for(var j=0;j<its.length;j++)its[j].style.display='';this.style.display='none';});var sl=el('li','');sl.appendChild(sa);ls.appendChild(sl);}
 ms.appendChild(ls);tg.addEventListener('click',function(){tg.classList.toggle('apl-mot__toggle--open');ls.classList.toggle('apl-mot__list--open');});RE.appendChild(ms);}
-/* Products */
-if(R.dataset.showProducts!=='false'&&pr.length>0){var pS=el('div','apl-products');pS.appendChild(el('h3','apl-products__title','Compatible Parts'));var pg=el('div','apl-products__grid');
-for(var pi=0;pi<Math.min(pr.length,6);pi++){var p=pr[pi],pc=document.createElement('a');pc.href='/products/'+p.handle;pc.className='apl-product';
-if(p.image_url){var im=document.createElement('img');im.className='apl-product__img';im.src=p.image_url;im.alt=p.title;im.loading='lazy';pc.appendChild(im);}
-var bd=el('div','apl-product__body');bd.appendChild(el('p','apl-product__name',p.title));if(p.price)bd.appendChild(el('p','apl-product__price','\u00A3'+Number(p.price).toFixed(2)));pc.appendChild(bd);pg.appendChild(pc);}
-pS.appendChild(pg);RE.appendChild(pS);}
 /* Footer */
 var ft=el('div','apl-footer'),lo=document.createElement('img');lo.src=L;lo.alt='AutoSync';lo.width=16;lo.height=16;ft.appendChild(lo);
 var pw=el('span');pw.textContent='Powered by ';pw.appendChild(el('strong','','AutoSync'));ft.appendChild(pw);RE.appendChild(ft);RE.style.display='block';}
@@ -118,13 +113,14 @@ if(lb==='MOT')c=s==='Valid'?'apl-st--valid':s==='Not valid'?'apl-st--invalid':'a
 else c=s==='Taxed'?'apl-st--valid':s==='SORN'?'apl-st--warn':'apl-st--invalid';
 var bg=el('div',c),bd=el('span','apl-st__badge');bd.appendChild(el('span','apl-st__dot'));bd.appendChild(document.createTextNode(s));bg.appendChild(bd);
 if(da)bg.appendChild(el('p','apl-st__sub',dl+': '+fD(da)));inn.appendChild(bg);w.appendChild(inn);return w;}
-function sG(v,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
-var e={makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
+function sG(v,rm,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
+var ymmeModel=rm||v.model||'';
+var e={makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
 var dup=false;for(var i=0;i<g.length;i++){if(g[i].makeName===e.makeName&&g[i].modelName===e.modelName&&g[i].year===e.year){dup=true;break;}}
 if(!dup){g.unshift(e);if(g.length>3)g=g.slice(0,3);localStorage.setItem(K,JSON.stringify(g));window.dispatchEvent(new CustomEvent('autosync:garage-changed',{detail:g}));}
-aH(rg,v);
-localStorage.setItem('autosync_vehicle',JSON.stringify({makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'}));
-window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:{makeName:v.make,modelName:v.model,year:String(v.yearOfManufacture||'')}}));}catch(x){}}
+aH(rg,{make:v.make,model:ymmeModel});
+localStorage.setItem('autosync_vehicle',JSON.stringify({makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'}));
+window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:{makeName:v.make,modelName:ymmeModel,year:String(v.yearOfManufacture||'')}}));}catch(x){}}
 function fR(r){r=r.replace(/\s/g,'').toUpperCase();return r.length===7?r.substring(0,4)+' '+r.substring(4):r;}
 function fD(d){if(!d)return'\u2014';try{var x=new Date(d);return isNaN(x.getTime())?d:x.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
 sHist();
@@ -144,7 +140,6 @@ sHist();
     { "type": "select", "id": "heading_alignment", "label": "Heading Alignment", "options": [{ "value": "left", "label": "Left" }, { "value": "center", "label": "Center" }], "default": "center" },
     { "type": "checkbox", "id": "show_mot_history", "label": "Show MOT History", "default": true },
     { "type": "checkbox", "id": "show_tax_status", "label": "Show MOT & Tax Status", "default": true },
-    { "type": "checkbox", "id": "show_products", "label": "Show Compatible Products", "default": true },
     { "type": "color", "id": "primary_color", "label": "Primary Color", "default": "#005bd2" },
     { "type": "color", "id": "background_color", "label": "Background Color", "default": "#ffffff" },
     { "type": "color", "id": "text_color", "label": "Text Color", "default": "#1a1a2e" },
