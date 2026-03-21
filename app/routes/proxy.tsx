@@ -474,16 +474,145 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       console.warn("[proxy] MOT history lookup failed:", motErr);
     }
 
-    // Search for compatible products using the identified make/model/year
+    // Search for compatible products using DVLA make/model/year
+    // DVLA returns full model descriptions (e.g. "M340I XDRIVE MHEV AUTO")
+    // but vehicle_fitments stores YMME model names (e.g. "3 Series").
+    // We need to resolve DVLA → YMME before querying fitments.
     let compatibleProducts: unknown[] = [];
     try {
-      const { data: fitments } = await db
-        .from("vehicle_fitments")
-        .select("product_id")
-        .ilike("make", vehicle.make)
-        .ilike("model", `%${vehicle.model}%`)
-        .lte("year_from", vehicle.yearOfManufacture)
-        .or(`year_to.gte.${vehicle.yearOfManufacture},year_to.is.null`);
+      const dvlaMake = vehicle.make; // e.g. "BMW"
+      const dvlaModel = vehicle.model; // e.g. "M340I XDRIVE MHEV AUTO"
+      const dvlaYear = vehicle.yearOfManufacture; // e.g. 2022
+
+      // Strategy 1: Resolve DVLA model to YMME model(s)
+      // Find all YMME models for this make, then check which model names
+      // appear in vehicle_fitments for this shop + year range
+      const { data: ymmeModels } = await db
+        .from("ymme_models")
+        .select("id, name, ymme_makes!inner(name)")
+        .ilike("ymme_makes.name", dvlaMake)
+        .eq("active", true);
+
+      // Try to match DVLA model string to YMME models:
+      // - Check if DVLA model contains a YMME model name (e.g. "M340I..." contains "M3"? No)
+      // - Check if any YMME engine variant name matches the DVLA model
+      // - Check YMME aliases for model name mappings
+      let resolvedModelNames: string[] = [];
+
+      if (ymmeModels && ymmeModels.length > 0) {
+        const modelIds = ymmeModels.map((m) => m.id);
+
+        // Check engine variants — DVLA model often contains the engine variant name
+        // e.g. "M340I XDRIVE MHEV AUTO" matches engine variant "M340i"
+        const { data: matchingEngines } = await db
+          .from("ymme_engines")
+          .select("model_id, name, code")
+          .in("model_id", modelIds)
+          .eq("active", true);
+
+        if (matchingEngines) {
+          const dvlaModelUpper = dvlaModel.toUpperCase();
+
+          for (const engine of matchingEngines) {
+            // Check if the DVLA model contains the engine name or code
+            const engineName = (engine.name ?? "").toUpperCase();
+            const engineCode = (engine.code ?? "").toUpperCase();
+
+            // Extract the base variant from engine name (e.g. "M340i (374 Hp)" → "M340I")
+            const baseVariant = engineName.split("(")[0].trim();
+
+            if (
+              baseVariant.length >= 3 &&
+              dvlaModelUpper.includes(baseVariant)
+            ) {
+              const matchedModel = ymmeModels.find(
+                (m) => m.id === engine.model_id,
+              );
+              if (matchedModel) {
+                resolvedModelNames.push(matchedModel.name);
+              }
+            } else if (
+              engineCode.length >= 3 &&
+              dvlaModelUpper.includes(engineCode)
+            ) {
+              const matchedModel = ymmeModels.find(
+                (m) => m.id === engine.model_id,
+              );
+              if (matchedModel) {
+                resolvedModelNames.push(matchedModel.name);
+              }
+            }
+          }
+        }
+
+        // Also check if DVLA model directly contains any YMME model name
+        // e.g. "GOLF GTI" contains "GOLF" → matches YMME model "Golf"
+        const dvlaModelUpper = dvlaModel.toUpperCase();
+        for (const model of ymmeModels) {
+          const modelNameUpper = model.name.toUpperCase();
+          if (
+            modelNameUpper.length >= 2 &&
+            dvlaModelUpper.includes(modelNameUpper)
+          ) {
+            resolvedModelNames.push(model.name);
+          }
+        }
+
+        // Deduplicate
+        resolvedModelNames = [...new Set(resolvedModelNames)];
+      }
+
+      // Strategy 2: Also check ymme_aliases for DVLA model → YMME model mapping
+      if (resolvedModelNames.length === 0) {
+        const { data: aliases } = await db
+          .from("ymme_aliases")
+          .select("canonical_name, alias_type")
+          .ilike("alias_name", `%${dvlaModel}%`)
+          .eq("alias_type", "model")
+          .limit(5);
+
+        if (aliases && aliases.length > 0) {
+          resolvedModelNames = aliases.map((a) => a.canonical_name);
+        }
+      }
+
+      // Query vehicle_fitments using resolved model names
+      let fitments: { product_id: string }[] | null = null;
+
+      if (resolvedModelNames.length > 0) {
+        // Use resolved YMME model names
+        let fitmentQuery = db
+          .from("vehicle_fitments")
+          .select("product_id")
+          .ilike("make", dvlaMake)
+          .lte("year_from", dvlaYear)
+          .or(`year_to.gte.${dvlaYear},year_to.is.null`);
+
+        if (resolvedModelNames.length === 1) {
+          fitmentQuery = fitmentQuery.ilike("model", resolvedModelNames[0]);
+        } else {
+          // Multiple possible models — use OR filter
+          const modelFilter = resolvedModelNames
+            .map((m) => `model.ilike.${m}`)
+            .join(",");
+          fitmentQuery = fitmentQuery.or(modelFilter);
+        }
+
+        const result = await fitmentQuery;
+        fitments = result.data;
+      }
+
+      // Strategy 3: Fallback — search by make + year only (broad match)
+      if (!fitments || fitments.length === 0) {
+        const { data: broadFitments } = await db
+          .from("vehicle_fitments")
+          .select("product_id")
+          .ilike("make", dvlaMake)
+          .lte("year_from", dvlaYear)
+          .or(`year_to.gte.${dvlaYear},year_to.is.null`)
+          .limit(100);
+        fitments = broadFitments;
+      }
 
       if (fitments && fitments.length > 0) {
         const productIds = [...new Set(fitments.map((f) => f.product_id))];
