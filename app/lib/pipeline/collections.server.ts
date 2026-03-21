@@ -416,6 +416,8 @@ async function processCollectionTarget(
       if (logoUrl) {
         await setCollectionImage(admin, collection.id, logoUrl);
       }
+      // Always publish to all sales channels (ensures visibility even on update)
+      await publishToAllChannels(admin, collection.id);
       await upsertCollectionMapping(shopId, collection, target, strategy);
       result.updated++;
     }
