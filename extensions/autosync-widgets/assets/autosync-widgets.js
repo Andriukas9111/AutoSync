@@ -616,8 +616,21 @@
      */
     function restoreLastSelection() {
       var saved = getStoredVehicle();
-      if (!saved || !saved.makeId) return;
+      if (!saved) return;
 
+      // If we have IDs (from YMME or garage), use fast ID-based restore
+      if (saved.makeId) {
+        restoreById(saved);
+        return;
+      }
+
+      // If we only have names (from plate lookup / VIN decode), match by name
+      if (saved.makeName) {
+        restoreByName(saved);
+      }
+    }
+
+    function restoreById(saved) {
       // 1. Set make
       state.make = saved.makeId;
       state.makeName = saved.makeName || '';
@@ -701,6 +714,114 @@
         }
       }).catch(function () {
         // Restoration failed — user can still re-select manually
+        hideFieldSpinner(container, 'model');
+        hideFieldSpinner(container, 'year');
+        hideFieldSpinner(container, 'engine');
+      });
+    }
+
+    /**
+     * Restore YMME dropdowns by matching make/model/year by NAME.
+     * Used when vehicle data comes from plate lookup or VIN decode (no database IDs).
+     */
+    function restoreByName(saved) {
+      var tMake = (saved.makeName || '').toUpperCase();
+      var tModel = (saved.modelName || '').toUpperCase();
+      var tYear = saved.year ? String(saved.year) : null;
+      if (!tMake || !allMakesData.length) return;
+
+      // Find make by name
+      var fMake = null;
+      for (var mi = 0; mi < allMakesData.length; mi++) {
+        if (allMakesData[mi].name.toUpperCase() === tMake) {
+          fMake = allMakesData[mi];
+          break;
+        }
+      }
+      if (!fMake) return;
+
+      // Select make
+      state.make = fMake.id;
+      state.makeName = fMake.name;
+      if (customMakeDropdown) {
+        customMakeDropdown.selectById(fMake.id);
+      } else {
+        makeSelect.value = String(fMake.id);
+      }
+
+      if (!tModel) return;
+
+      // Fetch models and match by name
+      setSelectLoading(modelSelect);
+      showFieldSpinner(container, 'model');
+      proxyFetch(proxyUrl, 'models', { make_id: fMake.id }).then(function (data) {
+        clearChildren(modelSelect);
+        modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
+        var models = data.models || [];
+        var fModel = null;
+        models.forEach(function (m) {
+          var label = escapeText(m.name);
+          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
+          if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
+          var opt = addOption(modelSelect, m.id, label);
+          opt.dataset.name = m.name;
+          modelSelect.appendChild(opt);
+          if (m.name.toUpperCase() === tModel) fModel = m;
+        });
+        modelSelect.disabled = false;
+        hideFieldSpinner(container, 'model');
+
+        if (!fModel) return;
+
+        state.model = fModel.id;
+        state.modelName = fModel.name;
+        modelSelect.value = String(fModel.id);
+
+        if (!tYear) return;
+
+        // Fetch years
+        setSelectLoading(yearSelect);
+        showFieldSpinner(container, 'year');
+        return proxyFetch(proxyUrl, 'years', { model_id: fModel.id });
+      }).then(function (data) {
+        if (!data) return;
+        clearChildren(yearSelect);
+        yearSelect.appendChild(addOption(yearSelect, '', 'Select Year'));
+        var years = data.years || [];
+        var foundYear = false;
+        years.forEach(function (y) {
+          yearSelect.appendChild(addOption(yearSelect, y, String(y)));
+          if (String(y) === tYear) foundYear = true;
+        });
+        yearSelect.disabled = false;
+        hideFieldSpinner(container, 'year');
+
+        if (!foundYear) return;
+
+        state.year = tYear;
+        yearSelect.value = tYear;
+        if (searchBtn) searchBtn.disabled = false;
+
+        // Fetch engines
+        if (!engineSelect || !showEngine) return;
+        setSelectLoading(engineSelect);
+        showFieldSpinner(container, 'engine');
+        return proxyFetch(proxyUrl, 'engines', { model_id: state.model, year: tYear });
+      }).then(function (data) {
+        if (!data || !engineSelect) return;
+        clearChildren(engineSelect);
+        engineSelect.appendChild(addOption(engineSelect, '', 'Any Engine'));
+        (data.engines || []).forEach(function (e) {
+          var label = escapeText(e.name);
+          if (e.displacement_cc) label += ' ' + e.displacement_cc + 'cc';
+          if (e.fuel_type) label += ' ' + escapeText(e.fuel_type);
+          var opt = addOption(engineSelect, e.id, label);
+          opt.dataset.name = e.name;
+          engineSelect.appendChild(opt);
+        });
+        engineSelect.disabled = false;
+        hideFieldSpinner(container, 'engine');
+      }).catch(function () {
         hideFieldSpinner(container, 'model');
         hideFieldSpinner(container, 'year');
         hideFieldSpinner(container, 'engine');
@@ -871,119 +992,9 @@
     }
 
     // Listen for vehicle changes from plate lookup, VIN decode, garage, etc.
-    // This populates the YMME dropdowns when a vehicle is selected elsewhere.
+    // This populates the YMME dropdowns when a vehicle is selected on the same page.
     window.addEventListener('autosync:vehicle-changed', function () {
-      var saved = getStoredVehicle();
-      if (!saved) return;
-
-      // If saved data has makeId (from YMME or garage), use existing restore
-      if (saved.makeId) {
-        restoreLastSelection();
-        return;
-      }
-
-      // Otherwise, match by name (from plate lookup / VIN decode)
-      if (!saved.makeName || !allMakesData.length) return;
-      var tMake = saved.makeName.toUpperCase();
-      var tModel = (saved.modelName || '').toUpperCase();
-      var tYear = saved.year ? String(saved.year) : null;
-
-      // Find make by name in loaded makes data
-      var fMake = null;
-      for (var mi = 0; mi < allMakesData.length; mi++) {
-        if (allMakesData[mi].name.toUpperCase() === tMake) {
-          fMake = allMakesData[mi];
-          break;
-        }
-      }
-      if (!fMake) return;
-
-      // Select make in dropdown
-      state.make = fMake.id;
-      state.makeName = fMake.name;
-      if (customMakeDropdown) {
-        customMakeDropdown.selectById(fMake.id);
-      } else {
-        makeSelect.value = String(fMake.id);
-      }
-
-      if (!tModel) return;
-
-      // Fetch models and match by name
-      setSelectLoading(modelSelect);
-      showFieldSpinner(container, 'model');
-      proxyFetch(proxyUrl, 'models', { make_id: fMake.id }).then(function (data) {
-        clearChildren(modelSelect);
-        modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
-        var models = data.models || [];
-        var fModel = null;
-        models.forEach(function (m) {
-          var label = escapeText(m.name);
-          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
-          if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
-          var opt = addOption(modelSelect, m.id, label);
-          opt.dataset.name = m.name;
-          modelSelect.appendChild(opt);
-          if (m.name.toUpperCase() === tModel) fModel = m;
-        });
-        modelSelect.disabled = false;
-        hideFieldSpinner(container, 'model');
-
-        if (!fModel) return;
-
-        state.model = fModel.id;
-        state.modelName = fModel.name;
-        modelSelect.value = String(fModel.id);
-
-        if (!tYear) return;
-
-        // Fetch years
-        setSelectLoading(yearSelect);
-        showFieldSpinner(container, 'year');
-        return proxyFetch(proxyUrl, 'years', { model_id: fModel.id });
-      }).then(function (data) {
-        if (!data) return;
-        clearChildren(yearSelect);
-        yearSelect.appendChild(addOption(yearSelect, '', 'Select Year'));
-        var years = data.years || [];
-        var foundYear = false;
-        years.forEach(function (y) {
-          yearSelect.appendChild(addOption(yearSelect, y, String(y)));
-          if (String(y) === tYear) foundYear = true;
-        });
-        yearSelect.disabled = false;
-        hideFieldSpinner(container, 'year');
-
-        if (!foundYear) return;
-
-        state.year = tYear;
-        yearSelect.value = tYear;
-        if (searchBtn) searchBtn.disabled = false;
-
-        // Fetch engines if applicable
-        if (!engineSelect || !showEngine) return;
-        setSelectLoading(engineSelect);
-        showFieldSpinner(container, 'engine');
-        return proxyFetch(proxyUrl, 'engines', { model_id: state.model, year: tYear });
-      }).then(function (data) {
-        if (!data || !engineSelect) return;
-        clearChildren(engineSelect);
-        engineSelect.appendChild(addOption(engineSelect, '', 'Any Engine'));
-        (data.engines || []).forEach(function (e) {
-          var label = escapeText(e.name);
-          if (e.displacement_cc) label += ' ' + e.displacement_cc + 'cc';
-          if (e.fuel_type) label += ' ' + escapeText(e.fuel_type);
-          var opt = addOption(engineSelect, e.id, label);
-          opt.dataset.name = e.name;
-          engineSelect.appendChild(opt);
-        });
-        engineSelect.disabled = false;
-        hideFieldSpinner(container, 'engine');
-      }).catch(function () {
-        hideFieldSpinner(container, 'model');
-        hideFieldSpinner(container, 'year');
-        hideFieldSpinner(container, 'engine');
-      });
+      restoreLastSelection();
     });
 
     // Initialize garage popover (replaces old inline garage list)
