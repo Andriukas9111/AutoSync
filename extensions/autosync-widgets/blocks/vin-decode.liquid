@@ -1,21 +1,17 @@
-{% comment %}
-  AutoSync VIN Decode — Premium Edition
-  Enterprise-only feature — decodes 17-char VIN via NHTSA API
-  Features: live character counter, input validation, vehicle card, spec grid, compatible products
-{% endcomment %}
-
+{% comment %}AutoSync VIN Decode — Enterprise{% endcomment %}
 {% liquid
   assign proxy_url = shop.url | append: '/apps/autosync'
+  assign logo_url = 'autosync-logo.svg' | asset_url
 %}
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <div
   class="avd-root"
   data-avd-root
   data-proxy-url="{{ proxy_url }}"
+  data-logo-url="{{ logo_url }}"
   data-show-products="{{ block.settings.show_products | default: true }}"
   data-show-raw="{{ block.settings.show_raw_data | default: false }}"
   id="avd-{{ block.id }}"
@@ -46,7 +42,6 @@
     <p class="avd-subheading" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.subheading }}</p>
   {% endif %}
 
-  <!-- VIN Input -->
   <div class="avd-vin-form">
     <div class="avd-vin-input-wrap">
       <div class="avd-vin-badge">
@@ -70,20 +65,17 @@
     </button>
   </div>
 
-  <!-- Loading -->
   <div class="avd-loading" data-avd-loading style="display:none;">
     <div class="avd-spinner"></div>
     <p class="avd-loading__text">Decoding VIN...</p>
   </div>
 
-  <!-- Error -->
   <div class="avd-error" data-avd-error style="display:none;">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
     <p class="avd-error__msg" data-avd-error-msg>Something went wrong.</p>
     <button type="button" class="avd-error__retry" data-avd-retry>Try Again</button>
   </div>
 
-  <!-- Results (populated by JS) -->
   <div class="avd-results" data-avd-results style="display:none;"></div>
 </div>
 
@@ -95,6 +87,7 @@
   if (!root) return;
 
   var proxyUrl = root.dataset.proxyUrl;
+  var logoUrl = root.dataset.logoUrl;
   var showProducts = root.dataset.showProducts !== 'false';
   var loadingEl = root.querySelector('[data-avd-loading]');
   var errorEl = root.querySelector('[data-avd-error]');
@@ -108,7 +101,6 @@
 
   if (!input || !submitBtn) return;
 
-  
   input.addEventListener('input', function() {
     this.value = this.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
     var len = this.value.length;
@@ -171,7 +163,6 @@
     return e;
   }
 
-  
   function svgIcon(markup) {
     var t = document.createElement('template');
     t.innerHTML = markup.trim();
@@ -182,7 +173,7 @@
     code: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
     specs: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
     products: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
-    logo: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+    arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
   };
 
   function renderResults(vehicle, products, vin) {
@@ -190,7 +181,7 @@
 
     var card = el('div', 'avd-vehicle-card');
 
-    
+    /* Header */
     var header = el('div', 'avd-vehicle-card__header');
     var vinTag = el('div', 'avd-vehicle-card__vin-tag');
     vinTag.appendChild(svgIcon(ICONS.code));
@@ -206,17 +197,16 @@
     if (vehicle.plantCountry) subtitleParts.push(vehicle.plantCountry);
     if (subtitleParts.length) header.appendChild(el('p', 'avd-vehicle-card__subtitle', subtitleParts.join(' \u2022 ')));
 
-    
     var badges = el('div', 'avd-vehicle-card__badges');
-    if (vehicle.fuelType) { var b = el('span', 'avd-badge avd-badge--accent', vehicle.fuelType); badges.appendChild(b); }
-    if (vehicle.bodyClass) { var b2 = el('span', 'avd-badge avd-badge--primary', vehicle.bodyClass); badges.appendChild(b2); }
-    if (vehicle.driveType) { var b3 = el('span', 'avd-badge avd-badge--muted', vehicle.driveType); badges.appendChild(b3); }
-    if (vehicle.transmissionStyle) { var b4 = el('span', 'avd-badge avd-badge--muted', vehicle.transmissionStyle); badges.appendChild(b4); }
+    if (vehicle.fuelType) badges.appendChild(el('span', 'avd-badge avd-badge--accent', vehicle.fuelType));
+    if (vehicle.bodyClass) badges.appendChild(el('span', 'avd-badge avd-badge--primary', vehicle.bodyClass));
+    if (vehicle.driveType) badges.appendChild(el('span', 'avd-badge avd-badge--muted', vehicle.driveType));
+    if (vehicle.transmissionStyle) badges.appendChild(el('span', 'avd-badge avd-badge--muted', vehicle.transmissionStyle));
     if (badges.childNodes.length) header.appendChild(badges);
 
     card.appendChild(header);
 
-    
+    /* Spec Grid */
     var specSection = el('div', 'avd-spec-section');
     var specTitle = el('div', 'avd-spec-section__title');
     specTitle.appendChild(svgIcon(ICONS.specs));
@@ -233,7 +223,7 @@
       ['Displacement', vehicle.engineDisplacement ? vehicle.engineDisplacement + ' L' : null],
       ['Transmission', vehicle.transmissionStyle],
       ['Manufacturer', vehicle.manufacturer],
-      ['Country of Origin', vehicle.plantCountry],
+      ['Country', vehicle.plantCountry],
       ['Trim', vehicle.trim]
     ];
 
@@ -248,7 +238,6 @@
       }
     }
 
-    
     if (addedCount % 2 !== 0) {
       var spacer = el('div', 'avd-spec-item');
       spacer.style.background = 'transparent';
@@ -259,7 +248,36 @@
     specSection.appendChild(grid);
     card.appendChild(specSection);
 
-    
+    /* Find Parts Button */
+    if (vehicle.make) {
+      var findBtn = el('button', 'avd-find-parts', 'Find Parts for This Vehicle \u2192');
+      findBtn.type = 'button';
+      findBtn.addEventListener('click', function() {
+        var mk = vehicle.make;
+        var md = vehicle.model || '';
+        fetch(proxyUrl + '?path=collection-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ make: mk, model: md }),
+        })
+          .then(function(r) { return r.json(); })
+          .then(function(res) {
+            if (res.data && res.data.found && res.data.url) {
+              window.location.href = res.data.url;
+            } else {
+              var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
+              window.location.href = '/collections/' + slug;
+            }
+          })
+          .catch(function() {
+            var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
+            window.location.href = '/collections/' + slug;
+          });
+      });
+      card.appendChild(findBtn);
+    }
+
+    /* Compatible Products */
     if (showProducts && products.length > 0) {
       card.appendChild(el('div', 'avd-divider'));
 
@@ -270,7 +288,7 @@
       prodsSection.appendChild(prodsTitle);
 
       var prodsGrid = el('div', 'avd-products-grid');
-      var maxProds = Math.min(products.length, 12);
+      var maxProds = Math.min(products.length, 6);
       for (var j = 0; j < maxProds; j++) {
         var p = products[j];
         var a = document.createElement('a');
@@ -292,16 +310,21 @@
       card.appendChild(prodsSection);
     }
 
-    
+    /* Footer */
     var footer = el('div', 'avd-footer');
-    footer.appendChild(svgIcon(ICONS.logo));
+    var logoImg = document.createElement('img');
+    logoImg.src = logoUrl;
+    logoImg.alt = 'AutoSync';
+    logoImg.width = 18;
+    logoImg.height = 18;
+    logoImg.className = 'avd-footer__logo';
+    footer.appendChild(logoImg);
     footer.appendChild(el('span', 'avd-footer__text', 'Powered by AutoSync'));
     card.appendChild(footer);
 
     resultsEl.appendChild(card);
     resultsEl.style.display = 'block';
 
-    
     try {
       var stored = { make: vehicle.make, model: vehicle.model, year: vehicle.modelYear, source: 'vin' };
       localStorage.setItem('autosync_vehicle', JSON.stringify(stored));

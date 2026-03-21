@@ -1,21 +1,18 @@
 {% comment %}
   AutoSync Plate Lookup — Premium Edition
-  Enterprise-only feature — DVLA VES + MOT History via App Proxy
-  Features: UK plate styling, vehicle card, MOT timeline, defect list, compatible products
+  Enterprise-only — DVLA VES + MOT History via App Proxy
 {% endcomment %}
 
 {% liquid
   assign proxy_url = shop.url | append: '/apps/autosync'
+  assign logo_url = 'autosync-logo.svg' | asset_url
 %}
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <div
   class="apl-root"
   data-apl-root
   data-proxy-url="{{ proxy_url }}"
+  data-logo-url="{{ logo_url }}"
   data-show-mot="{{ block.settings.show_mot_history | default: true }}"
   data-show-products="{{ block.settings.show_products | default: true }}"
   data-show-tax="{{ block.settings.show_tax_status | default: true }}"
@@ -49,7 +46,6 @@
     <p class="apl-subheading" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.subheading }}</p>
   {% endif %}
 
-  <!-- UK Number Plate Input -->
   <div class="apl-plate-form">
     <div class="apl-plate-input-wrap">
       <div class="apl-plate-badge">
@@ -78,20 +74,17 @@
     </button>
   </div>
 
-  <!-- Loading -->
   <div class="apl-loading" data-apl-loading style="display:none;">
     <div class="apl-spinner"></div>
     <p class="apl-loading__text">Looking up vehicle...</p>
   </div>
 
-  <!-- Error -->
   <div class="apl-error" data-apl-error style="display:none;">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
     <p class="apl-error__msg" data-apl-error-msg>Something went wrong.</p>
     <button type="button" class="apl-error__retry" data-apl-retry>Try Again</button>
   </div>
 
-  <!-- Results (populated by JS) -->
   <div class="apl-results" data-apl-results style="display:none;"></div>
 </div>
 
@@ -103,13 +96,14 @@
   if (!root) return;
 
   var proxyUrl = root.dataset.proxyUrl;
+  var logoUrl = root.dataset.logoUrl;
   var loadingEl = root.querySelector('[data-apl-loading]');
   var errorEl = root.querySelector('[data-apl-error]');
   var resultsEl = root.querySelector('[data-apl-results]');
   var input = root.querySelector('[data-apl-input]');
   var submitBtn = root.querySelector('[data-apl-submit]');
   var retryBtn = root.querySelector('[data-apl-retry]');
-  var originalBtnHTML = submitBtn ? submitBtn.textContent : '';
+  var btnHTML = submitBtn ? submitBtn.innerHTML : '';
   var lastReg = '';
 
   if (!input || !submitBtn) return;
@@ -139,205 +133,260 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnHTML;
+        submitBtn.innerHTML = btnHTML;
         if (data.error) { showError(data.error); return; }
         if (data.vehicle) renderResults(data.vehicle, data.motHistory, data.compatibleProducts || [], reg);
       })
       .catch(function() {
         submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnHTML;
+        submitBtn.innerHTML = btnHTML;
         showError('Failed to look up registration. Please try again.');
       });
   }
 
   function showError(msg) {
-    var msgEl = errorEl.querySelector('[data-apl-error-msg]');
-    if (msgEl) msgEl.textContent = msg;
+    var m = errorEl.querySelector('[data-apl-error-msg]');
+    if (m) m.textContent = msg;
     errorEl.style.display = 'block';
     resultsEl.style.display = 'none';
   }
 
-  function el(tag, className, text) {
+  function el(tag, cls, txt) {
     var e = document.createElement(tag);
-    if (className) e.className = className;
-    if (text !== undefined && text !== null) e.textContent = String(text);
+    if (cls) e.className = cls;
+    if (txt !== undefined && txt !== null) e.textContent = String(txt);
     return e;
   }
 
-  
-  function svgIcon(markup) {
+  function svgIcon(mk) {
     var t = document.createElement('template');
-    t.innerHTML = markup.trim();
+    t.innerHTML = mk.trim();
     return t.content.firstChild;
   }
 
-  var ICONS = {
-    shield: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-    search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-    speed: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-6.88 17.23"/><path d="M12 2a10 10 0 0 1 6.88 17.23"/><line x1="12" y1="12" x2="12" y2="8"/></svg>',
-    warn: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-    cross: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-    logo: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>'
+  var IC = {
+    shield: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    chevDown: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+    chevSm: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+    arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
   };
 
-  function renderResults(vehicle, motHistory, products, reg) {
+  function renderResults(v, motHist, products, reg) {
     while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
 
+    /* Vehicle Card */
     var card = el('div', 'apl-vehicle-card');
-    var header = el('div', 'apl-vehicle-card__header');
-    var regBadge = el('div', 'apl-vehicle-card__reg');
-    regBadge.appendChild(el('span', 'apl-vehicle-card__reg-flag', 'GB'));
-    regBadge.appendChild(document.createTextNode(formatReg(reg)));
-    header.appendChild(regBadge);
-    header.appendChild(el('h2', 'apl-vehicle-card__title', (vehicle.make || '') + ' ' + (vehicle.model || '')));
-    header.appendChild(el('p', 'apl-vehicle-card__subtitle', vehicle.yearOfManufacture ? vehicle.yearOfManufacture + ' \u2022 ' + (vehicle.colour || '') : (vehicle.colour || '')));
-    card.appendChild(header);
+    var hdr = el('div', 'apl-vehicle-card__header');
+    var regB = el('div', 'apl-vehicle-card__reg');
+    regB.appendChild(el('span', 'apl-vehicle-card__reg-flag', 'GB'));
+    regB.appendChild(el('span', 'apl-vehicle-card__reg-text', fmtReg(reg)));
+    hdr.appendChild(regB);
+    hdr.appendChild(el('h2', 'apl-vehicle-card__title', (v.make || '') + ' ' + (v.model || '')));
+    var sub = v.yearOfManufacture ? v.yearOfManufacture + ' \u2022 ' + (v.colour || '') : (v.colour || '');
+    if (sub) hdr.appendChild(el('p', 'apl-vehicle-card__subtitle', sub));
+    card.appendChild(hdr);
 
-    var details = el('div', 'apl-details');
+    /* Details grid */
+    var dg = el('div', 'apl-details');
     var defs = [
-      { label: 'Fuel Type', value: vehicle.fuelType || '\u2014' },
-      { label: 'Engine', value: vehicle.engineCapacity ? vehicle.engineCapacity + 'cc' : '\u2014' },
-      { label: 'Colour', value: vehicle.colour || '\u2014' },
-      { label: 'Year', value: vehicle.yearOfManufacture || '\u2014' }
+      ['Fuel Type', v.fuelType || '\u2014'],
+      ['Engine', v.engineCapacity ? v.engineCapacity + 'cc' : '\u2014'],
+      ['Colour', v.colour || '\u2014'],
+      ['Year', v.yearOfManufacture || '\u2014']
     ];
 
     if (root.dataset.showTax !== 'false') {
-      var motStatus = vehicle.motStatus || 'Unknown';
-      var motVal = el('div');
-      var motBadge = el('span', 'apl-status ' + (motStatus === 'Valid' ? 'apl-status--pass' : motStatus === 'Not valid' ? 'apl-status--fail' : 'apl-status--warn'));
-      motBadge.appendChild(el('span', 'apl-status__dot'));
-      motBadge.appendChild(document.createTextNode(motStatus));
-      motVal.appendChild(motBadge);
-      if (vehicle.motExpiryDate) { var exp = el('p', 'apl-mot-card__expiry', 'Expires: ' + formatDate(vehicle.motExpiryDate)); exp.style.marginTop = '4px'; motVal.appendChild(exp); }
-      defs.push({ label: 'MOT Status', valueEl: motVal });
-
-      var taxStatus = vehicle.taxStatus || 'Unknown';
-      var taxVal = el('div');
-      var taxBadge = el('span', 'apl-status ' + (taxStatus === 'Taxed' ? 'apl-status--pass' : taxStatus === 'SORN' ? 'apl-status--warn' : 'apl-status--fail'));
-      taxBadge.appendChild(el('span', 'apl-status__dot'));
-      taxBadge.appendChild(document.createTextNode(taxStatus));
-      taxVal.appendChild(taxBadge);
-      if (vehicle.taxDueDate) { var tExp = el('p', 'apl-mot-card__expiry', 'Due: ' + formatDate(vehicle.taxDueDate)); tExp.style.marginTop = '4px'; taxVal.appendChild(tExp); }
-      defs.push({ label: 'Tax Status', valueEl: taxVal });
+      defs.push(['MOT Status', null, motBadge(v.motStatus, v.motExpiryDate, 'Expires')]);
+      defs.push(['Tax Status', null, taxBadge(v.taxStatus, v.taxDueDate)]);
     }
 
     for (var i = 0; i < defs.length; i++) {
-      var d = el('div', 'apl-detail');
-      d.appendChild(el('p', 'apl-detail__label', defs[i].label));
-      if (defs[i].valueEl) d.appendChild(defs[i].valueEl);
-      else d.appendChild(el('p', 'apl-detail__value', defs[i].value));
-      details.appendChild(d);
+      var dd = el('div', 'apl-detail');
+      dd.appendChild(el('p', 'apl-detail__label', defs[i][0]));
+      if (defs[i][2]) dd.appendChild(defs[i][2]);
+      else dd.appendChild(el('p', 'apl-detail__value', defs[i][1]));
+      dg.appendChild(dd);
     }
-    card.appendChild(details);
-
-    if (products.length > 0) {
-      var partsBtn = el('button', 'apl-find-parts');
-      partsBtn.appendChild(svgIcon(ICONS.search));
-      partsBtn.appendChild(document.createTextNode('Find ' + products.length + ' Compatible Part' + (products.length !== 1 ? 's' : '')));
-      partsBtn.addEventListener('click', function() { window.location.href = '/collections/all?make=' + encodeURIComponent(vehicle.make); });
-      card.appendChild(partsBtn);
-    }
+    card.appendChild(dg);
     resultsEl.appendChild(card);
 
-    try { localStorage.setItem('autosync_vehicle', JSON.stringify({ makeName: vehicle.make, modelName: vehicle.model, year: String(vehicle.yearOfManufacture), source: 'plate-lookup' })); } catch(e) {}
+    try { localStorage.setItem('autosync_vehicle', JSON.stringify({ makeName: v.make, modelName: v.model, year: String(v.yearOfManufacture), source: 'plate-lookup' })); } catch(e) {}
 
-    
-    if (root.dataset.showMot !== 'false' && motHistory && motHistory.motTests && motHistory.motTests.length > 0) {
-      var motSection = el('div', 'apl-mot-section');
-      var motHeader = el('div', 'apl-mot-header');
-      var motTitle = el('h3', 'apl-mot-title');
-      motTitle.appendChild(svgIcon(ICONS.shield));
-      motTitle.appendChild(document.createTextNode('MOT History'));
-      motHeader.appendChild(motTitle);
-      motHeader.appendChild(el('span', 'apl-mot-count', motHistory.motTests.length + ' test' + (motHistory.motTests.length !== 1 ? 's' : '')));
-      motSection.appendChild(motHeader);
+    /* Find Parts Button */
+    if (v.make) {
+      var fpw = el('div', 'apl-find-parts-wrap');
+      var fpb = el('button', 'apl-find-parts');
+      fpb.appendChild(document.createTextNode('Find Parts for This Vehicle '));
+      fpb.appendChild(svgIcon(IC.arrow));
+      fpb.addEventListener('click', function() {
+        var mk = v.make, md = v.model || '';
+        fetch(proxyUrl + '?path=collection-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ make: mk, model: md })
+        }).then(function(r) { return r.json(); }).then(function(d) {
+          if (d.data && d.data.found && d.data.url) window.location.href = d.data.url;
+          else window.location.href = '/collections/' + mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
+        }).catch(function() {
+          window.location.href = '/collections/' + mk.toLowerCase().replace(/\s+/g, '-') + '-' + (md || '').toLowerCase().replace(/\s+/g, '-') + '-parts';
+        });
+      });
+      fpw.appendChild(fpb);
+      resultsEl.appendChild(fpw);
+    }
 
-      var timeline = el('ul', 'apl-mot-timeline');
-      var tests = motHistory.motTests.slice(0, 10);
+    /* MOT History Accordion */
+    var tests = (motHist && motHist.motTests) ? motHist.motTests : [];
+    if (root.dataset.showMot !== 'false' && tests.length > 0) {
+      var ms = el('div', 'apl-mot-section');
+
+      /* Toggle bar */
+      var tog = el('button', 'apl-mot-toggle');
+      tog.appendChild(svgIcon(IC.shield));
+      tog.appendChild(el('span', 'apl-mot-toggle__title', 'MOT History'));
+      tog.appendChild(el('span', 'apl-mot-toggle__count', tests.length + ' test' + (tests.length !== 1 ? 's' : '')));
+      var chev = el('span', 'apl-mot-toggle__chevron');
+      chev.appendChild(svgIcon(IC.chevDown));
+      tog.appendChild(chev);
+      ms.appendChild(tog);
+
+      /* Test list */
+      var list = el('ul', 'apl-mot-list');
+      var show5 = tests.length > 5;
+      var visible = show5 ? 5 : tests.length;
+
       for (var ti = 0; ti < tests.length; ti++) {
-        var test = tests[ti];
-        var passed = test.testResult === 'PASSED';
-        var item = el('li', 'apl-mot-item');
-        item.appendChild(el('span', 'apl-mot-dot ' + (passed ? 'apl-mot-dot--pass' : 'apl-mot-dot--fail')));
+        var t = tests[ti];
+        var passed = t.testResult === 'PASSED';
+        var li = el('li', '');
+        if (ti >= visible) li.style.display = 'none';
+        li.dataset.motIdx = ti;
 
-        var motCard = el('div', 'apl-mot-card');
-        var motTop = el('div', 'apl-mot-card__top');
-        var dateAndStatus = el('div');
-        dateAndStatus.appendChild(el('span', 'apl-mot-card__date', formatDate(test.completedDate)));
-        var sBadge = el('span', 'apl-status ' + (passed ? 'apl-status--pass' : 'apl-status--fail'));
-        sBadge.appendChild(el('span', 'apl-status__dot'));
-        sBadge.appendChild(document.createTextNode(passed ? 'Passed' : 'Failed'));
-        sBadge.style.marginLeft = '10px';
-        dateAndStatus.appendChild(sBadge);
-        motTop.appendChild(dateAndStatus);
-
-        if (test.odometerValue && test.odometerValue !== '0') {
-          var mileage = el('span', 'apl-mot-card__mileage');
-          mileage.appendChild(svgIcon(ICONS.speed));
-          mileage.appendChild(document.createTextNode(Number(test.odometerValue).toLocaleString() + ' ' + (test.odometerUnit || 'mi')));
-          motTop.appendChild(mileage);
+        var hasDef = t.defects && t.defects.length > 0;
+        var row = el('div', 'apl-mot-row' + (hasDef ? ' apl-mot-row--has-defects' : ''));
+        var badge = el('span', 'apl-status ' + (passed ? 'apl-status--pass' : 'apl-status--fail'));
+        badge.appendChild(el('span', 'apl-status__dot'));
+        badge.appendChild(document.createTextNode(passed ? 'Pass' : 'Fail'));
+        row.appendChild(el('span', 'apl-mot-row__date', fmtDate(t.completedDate)));
+        row.appendChild(badge);
+        if (t.odometerValue && t.odometerValue !== '0') {
+          row.appendChild(el('span', 'apl-mot-row__mileage', Number(t.odometerValue).toLocaleString() + ' ' + (t.odometerUnit || 'mi')));
         }
-        motCard.appendChild(motTop);
-        if (test.expiryDate) motCard.appendChild(el('p', 'apl-mot-card__expiry', 'Expires: ' + formatDate(test.expiryDate)));
+        if (hasDef) {
+          var rc = el('span', 'apl-mot-row__chevron');
+          rc.appendChild(svgIcon(IC.chevSm));
+          row.appendChild(rc);
+        }
+        li.appendChild(row);
 
-        if (test.defects && test.defects.length > 0) {
-          var defectsDiv = el('div', 'apl-defects');
-          for (var di = 0; di < test.defects.length; di++) {
-            var defect = test.defects[di];
-            var dtype = (defect.type || 'advisory').toLowerCase();
-            var defEl = el('div', 'apl-defect apl-defect--' + dtype);
-            var dIconEl = el('span', 'apl-defect__icon');
-            dIconEl.appendChild(svgIcon(dtype === 'advisory' ? ICONS.warn : ICONS.cross));
-            defEl.appendChild(dIconEl);
-            var defText = el('div');
-            defText.appendChild(el('span', 'apl-defect__type', defect.type || 'Advisory'));
-            defText.appendChild(document.createTextNode(' ' + (defect.text || '')));
-            defEl.appendChild(defText);
-            defectsDiv.appendChild(defEl);
+        /* Nested defects */
+        if (hasDef) {
+          var dDiv = el('div', 'apl-mot-defects');
+          for (var di = 0; di < t.defects.length; di++) {
+            var df = t.defects[di];
+            var dt = (df.type || 'advisory').toLowerCase();
+            var de = el('div', 'apl-defect apl-defect--' + dt);
+            de.appendChild(el('span', 'apl-defect__type', df.type || 'Advisory'));
+            de.appendChild(document.createTextNode(df.text || ''));
+            dDiv.appendChild(de);
           }
-          motCard.appendChild(defectsDiv);
+          li.appendChild(dDiv);
+          (function(r, d) {
+            r.addEventListener('click', function() {
+              var open = d.classList.contains('apl-mot-defects--open');
+              d.classList.toggle('apl-mot-defects--open');
+              var ch = r.querySelector('.apl-mot-row__chevron');
+              if (ch) ch.classList.toggle('apl-mot-row__chevron--open');
+            });
+          })(row, dDiv);
         }
-        item.appendChild(motCard);
-        timeline.appendChild(item);
+        list.appendChild(li);
       }
-      motSection.appendChild(timeline);
-      resultsEl.appendChild(motSection);
+
+      /* Show all link */
+      if (show5) {
+        var sa = el('button', 'apl-mot-show-all', 'Show all ' + tests.length + ' tests');
+        sa.addEventListener('click', function() {
+          var items = list.querySelectorAll('li');
+          for (var j = 0; j < items.length; j++) items[j].style.display = '';
+          this.style.display = 'none';
+        });
+        list.appendChild(el('li', '')).appendChild(sa);
+      }
+      ms.appendChild(list);
+
+      tog.addEventListener('click', function() {
+        tog.classList.toggle('apl-mot-toggle--open');
+        list.classList.toggle('apl-mot-list--open');
+      });
+
+      resultsEl.appendChild(ms);
     }
 
-    
+    /* Compatible Products */
     if (root.dataset.showProducts !== 'false' && products.length > 0) {
-      var prodSection = el('div', 'apl-products-section');
-      prodSection.appendChild(el('h3', 'apl-products-title', products.length + ' Compatible Part' + (products.length !== 1 ? 's' : '')));
-      var prodGrid = el('div', 'apl-products-grid');
-      for (var pi = 0; pi < Math.min(products.length, 12); pi++) {
+      var ps = el('div', 'apl-products-section');
+      ps.appendChild(el('h3', 'apl-products-title', 'Compatible Parts'));
+      var pg = el('div', 'apl-products-grid');
+      for (var pi = 0; pi < Math.min(products.length, 6); pi++) {
         var p = products[pi];
-        var prodCard = document.createElement('a');
-        prodCard.href = '/products/' + p.handle;
-        prodCard.className = 'apl-product';
-        if (p.image_url) { var img = document.createElement('img'); img.className = 'apl-product__img'; img.src = p.image_url; img.alt = p.title; img.loading = 'lazy'; prodCard.appendChild(img); }
-        var body = el('div', 'apl-product__body');
-        body.appendChild(el('p', 'apl-product__title', p.title));
-        if (p.price) body.appendChild(el('p', 'apl-product__price', '\u00A3' + Number(p.price).toFixed(2)));
-        prodCard.appendChild(body);
-        prodGrid.appendChild(prodCard);
+        var pc = document.createElement('a');
+        pc.href = '/products/' + p.handle;
+        pc.className = 'apl-product';
+        if (p.image_url) { var im = document.createElement('img'); im.className = 'apl-product__img'; im.src = p.image_url; im.alt = p.title; im.loading = 'lazy'; pc.appendChild(im); }
+        var bd = el('div', 'apl-product__body');
+        bd.appendChild(el('p', 'apl-product__title', p.title));
+        if (p.price) bd.appendChild(el('p', 'apl-product__price', '\u00A3' + Number(p.price).toFixed(2)));
+        pc.appendChild(bd);
+        pg.appendChild(pc);
       }
-      prodSection.appendChild(prodGrid);
-      resultsEl.appendChild(prodSection);
+      ps.appendChild(pg);
+      resultsEl.appendChild(ps);
     }
 
-    
-    var footer = el('div', 'apl-footer');
-    footer.appendChild(svgIcon(ICONS.logo));
+    /* Footer */
+    var ft = el('div', 'apl-footer');
+    var logo = document.createElement('img');
+    logo.src = logoUrl;
+    logo.alt = 'AutoSync';
+    logo.width = 18;
+    logo.height = 18;
+    logo.style.opacity = '0.5';
+    ft.appendChild(logo);
     var pw = el('span');
     pw.textContent = 'Powered by ';
     pw.appendChild(el('strong', '', 'AutoSync'));
-    footer.appendChild(pw);
-    resultsEl.appendChild(footer);
+    ft.appendChild(pw);
+    resultsEl.appendChild(ft);
     resultsEl.style.display = 'block';
   }
 
-  function formatReg(reg) { reg = reg.replace(/\s/g, '').toUpperCase(); if (reg.length === 7) return reg.substring(0, 4) + ' ' + reg.substring(4); return reg; }
-  function formatDate(dateStr) { if (!dateStr) return '\u2014'; try { var d = new Date(dateStr); if (isNaN(d.getTime())) return dateStr; return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) { return dateStr; } }
+  function motBadge(status, expiry, label) {
+    var w = el('div');
+    var s = status || 'Unknown';
+    var cls = s === 'Valid' ? 'apl-status--pass' : s === 'Not valid' ? 'apl-status--fail' : 'apl-status--grey';
+    var b = el('span', 'apl-status ' + cls);
+    b.appendChild(el('span', 'apl-status__dot'));
+    b.appendChild(document.createTextNode(s));
+    w.appendChild(b);
+    if (expiry) { var e = el('p', 'apl-detail__sub', (label || 'Expires') + ': ' + fmtDate(expiry)); e.style.fontSize = '11px'; e.style.color = 'var(--apl-muted)'; e.style.margin = '4px 0 0'; w.appendChild(e); }
+    return w;
+  }
+
+  function taxBadge(status, due) {
+    var w = el('div');
+    var s = status || 'Unknown';
+    var cls = s === 'Taxed' ? 'apl-status--pass' : s === 'SORN' ? 'apl-status--warn' : 'apl-status--fail';
+    var b = el('span', 'apl-status ' + cls);
+    b.appendChild(el('span', 'apl-status__dot'));
+    b.appendChild(document.createTextNode(s));
+    w.appendChild(b);
+    if (due) { var e = el('p', '', 'Due: ' + fmtDate(due)); e.style.fontSize = '11px'; e.style.color = 'var(--apl-muted)'; e.style.margin = '4px 0 0'; w.appendChild(e); }
+    return w;
+  }
+
+  function fmtReg(r) { r = r.replace(/\s/g, '').toUpperCase(); return r.length === 7 ? r.substring(0, 4) + ' ' + r.substring(4) : r; }
+  function fmtDate(d) { if (!d) return '\u2014'; try { var dt = new Date(d); return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch(e) { return d; } }
 })();
 </script>
 
