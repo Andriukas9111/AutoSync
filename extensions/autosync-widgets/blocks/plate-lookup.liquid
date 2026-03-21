@@ -1,7 +1,3 @@
-{% comment %}
-  AutoSync Plate Lookup — Clean Light Design
-  Enterprise-only — DVLA VES + MOT History via App Proxy
-{% endcomment %}
 {% liquid
   assign proxy_url = shop.url | append: '/apps/autosync'
   assign logo_url = 'autosync-logo.svg' | asset_url
@@ -80,7 +76,7 @@ var it=el('div','apl-details__item');it.appendChild(el('span','apl-details__labe
 dt.appendChild(dg);card.appendChild(dt);
 /* MOT & Tax */
 if(R.dataset.showTax!=='false'){var st=el('div','apl-statuses');st.appendChild(mS('MOT',v.motStatus,v.motExpiryDate,'Expires'));st.appendChild(mS('Tax',v.taxStatus,v.taxDueDate,'Due'));card.appendChild(st);}
-RE.appendChild(card);sG(v);
+RE.appendChild(card);sG(v,rg);
 /* Find Parts */
 if(v.make){var fw=el('div','apl-find-wrap'),fb=el('button','apl-find-btn');fb.appendChild(document.createTextNode('Find Parts for This Vehicle '));fb.appendChild(si(IC.ar));
 fb.addEventListener('click',function(){fb.disabled=true;fb.textContent='Finding parts...';var mk=v.make,md=v.model||'';
@@ -118,11 +114,11 @@ if(lb==='MOT')c=s==='Valid'?'apl-st--valid':s==='Not valid'?'apl-st--invalid':'a
 else c=s==='Taxed'?'apl-st--valid':s==='SORN'?'apl-st--warn':'apl-st--invalid';
 var bg=el('div',c),bd=el('span','apl-st__badge');bd.appendChild(el('span','apl-st__dot'));bd.appendChild(document.createTextNode(s));bg.appendChild(bd);
 if(da)bg.appendChild(el('p','apl-st__sub',dl+': '+fD(da)));inn.appendChild(bg);w.appendChild(inn);return w;}
-function sG(v){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
-var e={makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',source:'plate-lookup'};
+function sG(v,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
+var e={makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
 var dup=false;for(var i=0;i<g.length;i++){if(g[i].makeName===e.makeName&&g[i].modelName===e.modelName&&g[i].year===e.year){dup=true;break;}}
 if(!dup){g.unshift(e);if(g.length>3)g=g.slice(0,3);localStorage.setItem(K,JSON.stringify(g));window.dispatchEvent(new CustomEvent('autosync:garage-changed',{detail:g}));}
-localStorage.setItem('autosync_vehicle',JSON.stringify({makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),source:'plate-lookup'}));
+localStorage.setItem('autosync_vehicle',JSON.stringify({makeName:v.make||'',modelName:v.model||'',year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'}));
 window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:{makeName:v.make,modelName:v.model,year:String(v.yearOfManufacture||'')}}));}catch(x){}}
 function fR(r){r=r.replace(/\s/g,'').toUpperCase();return r.length===7?r.substring(0,4)+' '+r.substring(4):r;}
 function fD(d){if(!d)return'\u2014';try{var x=new Date(d);return isNaN(x.getTime())?d:x.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
