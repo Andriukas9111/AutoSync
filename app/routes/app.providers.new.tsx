@@ -322,6 +322,7 @@ export default function ProvidersNew() {
     <Page
       title="Add Provider"
       subtitle="Connect a new data source to import products"
+      fullWidth
       backAction={{ onAction: () => navigate("/app/providers") }}
     >
       <BlockStack gap="600">

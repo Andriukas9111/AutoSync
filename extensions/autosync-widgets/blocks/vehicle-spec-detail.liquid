@@ -7,11 +7,8 @@
 
 {% liquid
   assign proxy_url = shop.url | append: '/apps/autosync'
+  assign logo_url = 'autosync-logo.svg' | asset_url
 %}
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <div
   class="avsd-root"
@@ -24,14 +21,13 @@
   data-show-products="{{ block.settings.show_products | default: true }}"
   id="avsd-{{ block.id }}"
   style="
-    --avsd-primary: {{ block.settings.primary_color | default: '#2563eb' }};
+    --avsd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
     --avsd-bg: {{ block.settings.background_color | default: '#ffffff' }};
     --avsd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
     --avsd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
     --avsd-border: {{ block.settings.border_color | default: '#e5e7eb' }};
     --avsd-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
     --avsd-radius: {{ block.settings.border_radius | default: 12 }}px;
-    --avsd-accent: {{ block.settings.accent_color | default: '#10b981' }};
     padding-top: {{ block.settings.padding_top | default: 0 }}px;
     padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
     max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
@@ -357,8 +353,13 @@
     }
     var footerWrap = el('div', 'avsd-footer-wrap');
     var footer = el('div', 'avsd-footer');
-    var logoSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>';
-    footer.appendChild(svgEl(logoSvg));
+    var logoImg = document.createElement('img');
+    logoImg.src = '{{ logo_url }}';
+    logoImg.alt = 'AutoSync';
+    logoImg.width = 18;
+    logoImg.height = 18;
+    logoImg.style.opacity = '0.5';
+    footer.appendChild(logoImg);
     var poweredText = el('span', 'avsd-footer__text');
     poweredText.textContent = 'Powered by ';
     var brandSpan = el('strong', '', 'AutoSync');
@@ -427,13 +428,7 @@
       "type": "color",
       "id": "primary_color",
       "label": "Primary Color",
-      "default": "#2563eb"
-    },
-    {
-      "type": "color",
-      "id": "accent_color",
-      "label": "Accent Color",
-      "default": "#10b981"
+      "default": "#005bd2"
     },
     {
       "type": "color",

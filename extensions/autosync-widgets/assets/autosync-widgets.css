@@ -745,34 +745,6 @@
   background: #f9fafb;
 }
 
-/* --------------- Floating Vehicle Bar --------------- */
-/* Vehicle Bar — "YOUR CURRENT VEHICLE" (Euro Car Parts-inspired) */
-.avb{position:fixed;left:0;right:0;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;pointer-events:none;transition:transform .3s ease;}
-.avb--top{top:0;transform:translateY(-100%);}
-.avb--bottom{bottom:0;transform:translateY(100%);}
-.avb--visible{transform:translateY(0);pointer-events:auto;}
-.avb__inner{display:flex;align-items:center;gap:16px;max-width:1400px;margin:0 auto;padding:8px 20px;background:var(--avb-bg,#1a1a2e);color:var(--avb-text,#fff);box-shadow:0 2px 12px rgba(0,0,0,0.2);}
-.avb__left{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-.avb__logo{opacity:0.7;}
-.avb__heading{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--avb-muted,rgba(255,255,255,0.6));white-space:nowrap;}
-.avb__details{display:flex;align-items:center;gap:0;flex:1;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-.avb__detail{display:flex;flex-direction:column;padding:0 14px;border-left:1px solid rgba(255,255,255,0.1);min-width:0;}
-.avb__detail:first-child{border-left:none;padding-left:0;}
-.avb__detail-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--avb-muted,rgba(255,255,255,0.6));line-height:1;margin-bottom:2px;white-space:nowrap;}
-.avb__detail-value{font-size:13px;font-weight:600;color:var(--avb-text,#fff);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
-.avb__reg{display:inline-flex;align-items:stretch;background:#FFD700;border-radius:3px;font-size:12px;font-weight:700;overflow:hidden;border:1.5px solid #333;margin-right:8px;flex-shrink:0;}
-.avb__reg-flag{background:#003399;color:#fff;font-size:7px;font-weight:700;padding:2px 4px;display:flex;align-items:center;}
-.avb__reg-text{padding:1px 6px;color:#1a1a1a;display:flex;align-items:center;letter-spacing:0.04em;}
-.avb__right{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;}
-.avb__btn{padding:4px 12px;font-size:11px;font-weight:600;border:1px solid rgba(255,255,255,0.25);border-radius:4px;background:transparent;color:var(--avb-text,#fff);cursor:pointer;transition:background .15s;font-family:inherit;white-space:nowrap;}
-.avb__btn:hover{background:rgba(255,255,255,0.12);}
-.avb__btn--close{border:none;font-size:18px;padding:2px 8px;opacity:0.6;}
-.avb__btn--close:hover{opacity:1;}
-.avb__tab{position:fixed;z-index:9998;display:flex;align-items:center;gap:5px;padding:6px 14px;background:var(--avb-bg,#1a1a2e);color:var(--avb-text,#fff);border:none;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.15);opacity:0;pointer-events:none;transition:opacity .2s;}
-.avb__tab--top{top:0;right:20px;border-radius:0 0 6px 6px;}
-.avb__tab--bottom{bottom:0;right:20px;border-radius:6px 6px 0 0;}
-.avb__tab--show{opacity:1;pointer-events:auto;}
-
 /* --------------- Plate Lookup --------------- */
 .autosync-plate-lookup {
   padding: 1.5rem;
@@ -1212,11 +1184,6 @@
     flex-direction: column;
   }
 
-  .avb__inner{padding:6px 12px;gap:8px;flex-wrap:nowrap;overflow-x:auto;}
-  .avb__heading{display:none;}
-  .avb__detail{padding:0 8px;}
-  .avb__detail-value{font-size:12px;max-width:100px;}
-  .avb__btn{padding:3px 8px;font-size:10px;}
 
   .autosync-wheel-finder__fields {
     flex-direction: column;
@@ -1244,3 +1211,19 @@
     justify-content: flex-end;
   }
 }
+
+/* --------------- Shared Widget Footer --------------- */
+.autosync-widget-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 0 0;
+  margin-top: 16px;
+  font-size: 10px;
+  color: #9ca3af;
+  opacity: 0.4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+.autosync-widget-footer img { display: block; }
+.autosync-widget-footer strong { font-weight: 700; color: #005bd2; }

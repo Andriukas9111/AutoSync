@@ -191,3 +191,45 @@ export async function loader({ request }: LoaderFunctionArgs) {
       );
   }
 }
+
+// ── Action: backfill logos for makes with null logo_url ──
+export async function action({ request }: LoaderFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent !== "backfill-logos") {
+    return data({ error: "Unknown intent" }, { status: 400 });
+  }
+
+  const GITHUB_LOGO_BASE =
+    "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized";
+
+  // Fetch all makes with null logo_url
+  const { data: makes, error } = await db
+    .from("ymme_makes")
+    .select("id, name, logo_url")
+    .is("logo_url", null);
+
+  if (error) return data({ error: error.message }, { status: 500 });
+
+  let updated = 0;
+  for (const make of makes ?? []) {
+    const slug = make.name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .trim();
+
+    const logoUrl = `${GITHUB_LOGO_BASE}/${slug}.png`;
+
+    const { error: updateError } = await db
+      .from("ymme_makes")
+      .update({ logo_url: logoUrl })
+      .eq("id", make.id);
+
+    if (!updateError) updated++;
+  }
+
+  return data({ success: true, updated, total: makes?.length ?? 0 });
+}

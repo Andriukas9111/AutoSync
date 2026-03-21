@@ -790,31 +790,31 @@ export default function AdminPanel() {
               value={totalTenants.toLocaleString()}
               label="Total Tenants"
               sublabel={`${activeTenants} active · ${paidTenants} paid`}
-              bg="var(--p-color-bg-fill-info-secondary)"
-              color="var(--p-color-icon-info)"
+              bg="var(--p-color-bg-surface-secondary)"
+              color="var(--p-color-icon-emphasis)"
             />
             <StatCard
               icon={ProductIcon}
               value={totalProducts.toLocaleString()}
               label="Total Products"
               sublabel="All tenants"
-              bg="var(--p-color-bg-fill-success-secondary)"
-              color="var(--p-color-icon-success)"
+              bg="var(--p-color-bg-surface-secondary)"
+              color="var(--p-color-icon-emphasis)"
             />
             <StatCard
               icon={LinkIcon}
               value={totalFitments.toLocaleString()}
               label="Total Fitments"
               sublabel={totalFitments > 0 ? "Active" : "Empty"}
-              bg="var(--p-color-bg-fill-warning-secondary)"
-              color="var(--p-color-icon-warning)"
+              bg="var(--p-color-bg-surface-secondary)"
+              color="var(--p-color-icon-emphasis)"
             />
             <StatCard
               icon={DatabaseIcon}
               value={ymmeTotal.toLocaleString()}
               label="YMME Database"
               sublabel={`${ymmeCounts.makes} makes · ${ymmeCounts.models} models`}
-              bg="var(--p-color-bg-fill-secondary)"
+              bg="var(--p-color-bg-surface-secondary)"
               color="var(--p-color-icon-emphasis)"
             />
           </InlineGrid>
@@ -965,7 +965,7 @@ export default function AdminPanel() {
                       }}>
                         <BlockStack gap="100">
                           <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={DatabaseIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                            <IconBadge icon={DatabaseIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" fontWeight="semibold">Database</Text>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">Supabase (PostgreSQL)</Text>
@@ -979,7 +979,7 @@ export default function AdminPanel() {
                       }}>
                         <BlockStack gap="100">
                           <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={ConnectIcon} size={22} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                            <IconBadge icon={ConnectIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" fontWeight="semibold">Framework</Text>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">React Router 7 + Polaris</Text>
@@ -993,7 +993,7 @@ export default function AdminPanel() {
                       }}>
                         <BlockStack gap="100">
                           <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={WandIcon} size={22} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
+                            <IconBadge icon={WandIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" fontWeight="semibold">Data Sources</Text>
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">NHTSA · auto-data.net · Manual</Text>
@@ -1169,12 +1169,12 @@ export default function AdminPanel() {
                     {/* YMME Stats — using StatCard pattern */}
                     <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="300">
                       {[
-                        { icon: DatabaseIcon, label: "Makes", value: ymmeCounts.makes, bg: "var(--p-color-bg-fill-info-secondary)", color: "var(--p-color-icon-info)" },
-                        { icon: DatabaseIcon, label: "Models", value: ymmeCounts.models, bg: "var(--p-color-bg-fill-success-secondary)", color: "var(--p-color-icon-success)" },
-                        { icon: DatabaseIcon, label: "Engines", value: ymmeCounts.engines, bg: "var(--p-color-bg-fill-warning-secondary)", color: "var(--p-color-icon-warning)" },
-                        { icon: DatabaseIcon, label: "Specs", value: ymmeCounts.specs, bg: "var(--p-color-bg-fill-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: DatabaseIcon, label: "Aliases", value: ymmeCounts.aliases, bg: "var(--p-color-bg-fill-info-secondary)", color: "var(--p-color-icon-info)" },
-                        { icon: LinkIcon, label: "Fitments", value: totalFitments, bg: "var(--p-color-bg-fill-success-secondary)", color: "var(--p-color-icon-success)" },
+                        { icon: DatabaseIcon, label: "Makes", value: ymmeCounts.makes, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: DatabaseIcon, label: "Models", value: ymmeCounts.models, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: DatabaseIcon, label: "Engines", value: ymmeCounts.engines, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: DatabaseIcon, label: "Specs", value: ymmeCounts.specs, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: DatabaseIcon, label: "Aliases", value: ymmeCounts.aliases, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
+                        { icon: LinkIcon, label: "Fitments", value: totalFitments, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
                       ].map((s) => (
                         <div key={s.label} style={{
                           display: "flex", alignItems: "center", gap: "10px",
@@ -1195,7 +1195,7 @@ export default function AdminPanel() {
                       <BlockStack gap="200">
                         <InlineStack align="space-between">
                           <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={GaugeIcon} size={22} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                            <IconBadge icon={GaugeIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="headingSm">Database Coverage</Text>
                           </InlineStack>
                           <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeTotal.toLocaleString()} / ~65,000 target`}</Text>
@@ -1217,7 +1217,7 @@ export default function AdminPanel() {
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
                             <InlineStack gap="200" blockAlign="center">
-                              <IconBadge icon={DatabaseIcon} size={28} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                              <IconBadge icon={DatabaseIcon} size={28} color="var(--p-color-icon-emphasis)" />
                               <Text as="h3" variant="headingSm">Auto-Data.net</Text>
                             </InlineStack>
                             <Badge tone="success">Primary Source</Badge>
@@ -1318,7 +1318,7 @@ export default function AdminPanel() {
                         <BlockStack gap="300">
                           <InlineStack align="space-between" blockAlign="center">
                             <InlineStack gap="200" blockAlign="center">
-                              <IconBadge icon={ImportIcon} size={28} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                              <IconBadge icon={ImportIcon} size={28} color="var(--p-color-icon-emphasis)" />
                               <Text as="h3" variant="headingSm">NHTSA vPIC (USA)</Text>
                             </InlineStack>
                             <Badge tone="info">Gap Filler</Badge>

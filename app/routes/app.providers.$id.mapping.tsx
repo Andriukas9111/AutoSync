@@ -354,6 +354,7 @@ export default function ProviderMappingEditor() {
     <Page
       title="Column Mapping"
       subtitle={provider.name}
+      fullWidth
       backAction={{
         content: "Provider",
         onAction: () => navigate(`/app/providers/${provider.id}`),

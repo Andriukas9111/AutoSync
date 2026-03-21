@@ -134,6 +134,14 @@
 .apl-footer { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 16px 0 0; margin-top: 24px; max-width: 560px; margin-left: auto; margin-right: auto; border-top: 1px solid var(--apl-border); font-size: 10px; color: var(--apl-muted); opacity: 0.4; }
 .apl-footer strong { font-weight: 700; color: var(--apl-primary); }
 
+/* Recent History */
+.apl-history { max-width: 480px; margin: -16px auto 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.apl-history__label { font-size: 10px; color: var(--apl-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 2px; }
+.apl-history__item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--apl-border); border-radius: 6px; background: var(--apl-bg); cursor: pointer; font-family: inherit; font-size: 12px; transition: border-color 0.2s, background 0.15s; }
+.apl-history__item:hover { border-color: var(--apl-primary); background: color-mix(in srgb, var(--apl-primary) 4%, var(--apl-bg)); }
+.apl-history__reg { font-weight: 700; color: var(--apl-text); letter-spacing: 0.03em; }
+.apl-history__vehicle { font-weight: 400; color: var(--apl-muted); font-size: 11px; }
+
 /* Responsive */
 @media (max-width: 600px) {
   .apl-heading { font-size: 20px; }

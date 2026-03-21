@@ -44,6 +44,7 @@ import {
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
+import { formatPrice } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
@@ -522,11 +523,8 @@ export default function ProductDetails() {
     }
   }, [actionData, isQueueMode, navigate]);
 
-  const fmtPrice = (price: string | null) => {
-    if (!price) return null;
-    const num = parseFloat(price);
-    return isNaN(num) ? null : `£${num.toFixed(2)}`;
-  };
+  // Use shared formatPrice from types.ts (returns "—" for null/invalid)
+  const fmtPrice = formatPrice;
 
   const statusBadge = STATUS_BADGES[product.fitment_status] ?? STATUS_BADGES.unmapped;
 
@@ -674,7 +672,7 @@ export default function ProductDetails() {
                         <Text as="span" variant="bodyMd" fontWeight="semibold">{fmtPrice(product.price)}</Text>
                         {product.compare_at_price && (
                           <Text as="span" variant="bodySm" tone="subdued" textDecorationLine="line-through">
-                            £{Number(product.compare_at_price).toFixed(2)}
+                            {formatPrice(product.compare_at_price)}
                           </Text>
                         )}
                       </InlineStack>
@@ -715,7 +713,7 @@ export default function ProductDetails() {
                       <InlineStack gap="200" wrap>
                         {variants.slice(0, 10).map((v: any, i: number) => (
                           <Badge key={i}>
-                            {`${v.title || v.option1 || `Variant ${i + 1}`}${v.price ? ` — £${Number(v.price).toFixed(2)}` : ""}`}
+                            {`${v.title || v.option1 || `Variant ${i + 1}`}${v.price ? ` — ${formatPrice(v.price)}` : ""}`}
                           </Badge>
                         ))}
                         {variants.length > 10 && (
@@ -751,7 +749,7 @@ export default function ProductDetails() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={AutomationIcon} color="var(--p-color-icon-magic)" bg="var(--p-color-bg-fill-magic-secondary)" />
+                    <IconBadge icon={AutomationIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd" fontWeight="semibold">Smart Suggestions</Text>
                     {suggestionsLoading && <Spinner size="small" />}
                     {!suggestionsLoading && suggestions.length > 0 && (

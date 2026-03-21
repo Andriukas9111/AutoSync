@@ -64,6 +64,7 @@ export default function FitmentManualRedirector() {
   return (
     <Page
       title="Manual Fitment Mapping"
+      fullWidth
       backAction={{ onAction: () => navigate("/app/fitment") }}
     >
       <Layout>

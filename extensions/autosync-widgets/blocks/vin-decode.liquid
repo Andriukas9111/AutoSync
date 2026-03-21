@@ -2,10 +2,6 @@
   assign proxy_url = shop.url | append: '/apps/autosync'
   assign logo_url = 'autosync-logo.svg' | asset_url
 %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
 <div
   class="avd-root"
   data-avd-root
@@ -15,8 +11,7 @@
   data-show-raw="{{ block.settings.show_raw_data | default: false }}"
   id="avd-{{ block.id }}"
   style="
-    --avd-primary: {{ block.settings.primary_color | default: '#2563eb' }};
-    --avd-accent: {{ block.settings.accent_color | default: '#8b5cf6' }};
+    --avd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
     --avd-bg: {{ block.settings.background_color | default: '#ffffff' }};
     --avd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
     --avd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
@@ -318,7 +313,10 @@
     logoImg.height = 18;
     logoImg.className = 'avd-footer__logo';
     footer.appendChild(logoImg);
-    footer.appendChild(el('span', 'avd-footer__text', 'Powered by AutoSync'));
+    var pw = el('span', 'avd-footer__text');
+    pw.textContent = 'Powered by ';
+    pw.appendChild(el('strong', '', 'AutoSync'));
+    footer.appendChild(pw);
     card.appendChild(footer);
 
     resultsEl.appendChild(card);
@@ -409,13 +407,7 @@
       "type": "color",
       "id": "primary_color",
       "label": "Primary Color",
-      "default": "#2563eb"
-    },
-    {
-      "type": "color",
-      "id": "accent_color",
-      "label": "Accent Color",
-      "default": "#8b5cf6"
+      "default": "#005bd2"
     },
     {
       "type": "color",

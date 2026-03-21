@@ -37,6 +37,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
+import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
@@ -354,11 +355,7 @@ export default function TenantDetail() {
     });
   };
 
-  const formatPrice = (price: string | null) => {
-    if (!price) return "—";
-    const num = parseFloat(price);
-    return isNaN(num) ? "—" : `£${num.toFixed(2)}`;
-  };
+  // Use shared formatPrice from types.ts
 
   return (
     <Page
