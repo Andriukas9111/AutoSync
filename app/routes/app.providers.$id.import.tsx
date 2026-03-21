@@ -34,6 +34,7 @@ import {
   CheckCircleIcon,
   DeleteIcon,
   RefreshIcon,
+  ConnectIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -162,6 +163,17 @@ export default function ProviderImportWizard() {
   } | null>(null);
   const [importProgress, setImportProgress] = useState(0);
 
+  // API fetch state
+  const [fetchingApi, setFetchingApi] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionResult, setConnectionResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+
+  const providerType = provider.type as string;
+  const cfg = (provider.config || {}) as Record<string, unknown>;
+
   // ---------------------------------------------------------------------------
   // Step 1: File Upload
   // ---------------------------------------------------------------------------
@@ -243,6 +255,101 @@ export default function ProviderImportWizard() {
       setLoading(false);
     }
   }, [file, provider.id]);
+
+  // ---------------------------------------------------------------------------
+  // API Fetch — fetch data directly from provider's configured API endpoint
+  // ---------------------------------------------------------------------------
+
+  const handleTestConnection = useCallback(async () => {
+    setTestingConnection(true);
+    setConnectionResult(null);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("provider_id", provider.id);
+      formData.set("_action", "test");
+
+      const response = await fetch("/app/api/provider-fetch", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      setConnectionResult({
+        success: result.success ?? false,
+        message: result.message || result.error || "Unknown result",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Connection test failed";
+      setConnectionResult({ success: false, message });
+    } finally {
+      setTestingConnection(false);
+    }
+  }, [provider.id]);
+
+  const handleFetchFromApi = useCallback(async () => {
+    setFetchingApi(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("provider_id", provider.id);
+      formData.set("_action", "fetch");
+
+      const response = await fetch("/app/api/provider-fetch", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Server error (${response.status})`;
+        try {
+          const result = await response.json();
+          errorMessage = result.error || errorMessage;
+        } catch {
+          if (response.status === 401 || response.status === 403) {
+            errorMessage = "Session expired — please reload the page";
+          }
+        }
+        setError(errorMessage);
+        setFetchingApi(false);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        setError(result.error);
+        setFetchingApi(false);
+        return;
+      }
+
+      setPreview(result.preview);
+
+      const enrichedMappings: ColumnMappingUI[] = (result.mappings || []).map(
+        (m: ColumnMappingUI) => ({
+          ...m,
+          sampleValue: result.preview.sampleRows[0]?.[m.sourceColumn] ?? "",
+        }),
+      );
+      setMappings(enrichedMappings);
+      setHasSavedMappings(result.hasSavedMappings ?? false);
+      setDuplicatePreview(
+        result.duplicatePreview ?? { duplicateCount: 0, duplicateSkus: [] },
+      );
+      if (result.duplicateStrategy) {
+        setDuplicateStrategy(result.duplicateStrategy);
+      }
+
+      setStep("preview");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setError(`Failed to fetch from API: ${message}`);
+    } finally {
+      setFetchingApi(false);
+    }
+  }, [provider.id]);
 
   // ---------------------------------------------------------------------------
   // Step 2: Column Mapping
@@ -379,65 +486,200 @@ export default function ProviderImportWizard() {
         )}
 
         {/* ============================================================ */}
-        {/* STEP 1: UPLOAD */}
+        {/* STEP 1: UPLOAD / FETCH */}
         {/* ============================================================ */}
         {step === "upload" && (
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">
-                Upload Data File
-              </Text>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
-              </Text>
+          <BlockStack gap="400">
+            {/* ── API Provider: Fetch from API ── */}
+            {providerType === "api" && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Fetch from API</Text>
+                    <Badge tone="info">API</Badge>
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    {cfg.endpoint
+                      ? `Connect to your configured API endpoint and fetch product data automatically.`
+                      : "No API endpoint configured. Go to Settings to add your endpoint URL."}
+                  </Text>
 
-              <DropZone
-                onDrop={handleDropFile}
-                accept={ACCEPTED_TYPES.join(",")}
-                variableHeight
-              >
-                {file ? (
-                  <Box padding="600">
-                    <BlockStack gap="200" inlineAlign="center">
-                      <Icon source={FileIcon} tone="info" />
-                      <Text as="p" variant="bodyMd" fontWeight="semibold">
-                        {file.name}
-                      </Text>
+                  {Boolean(cfg.endpoint) && (
+                    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
                       <Text as="p" variant="bodySm" tone="subdued">
-                        {(file.size / 1024).toFixed(1)} KB
+                        {`Endpoint: ${String(cfg.endpoint)}`}
                       </Text>
-                      <Button
-                        size="slim"
-                        onClick={() => setFile(null)}
-                        icon={DeleteIcon}
-                        tone="critical"
-                      >
-                        Remove
-                      </Button>
-                    </BlockStack>
-                  </Box>
-                ) : (
-                  <DropZone.FileUpload
-                    actionTitle="Choose file"
-                    actionHint="or drag and drop CSV, JSON, XML, Excel, or TSV"
-                  />
-                )}
-              </DropZone>
+                    </Box>
+                  )}
 
-              {file && (
-                <InlineStack align="end">
-                  <Button
-                    variant="primary"
-                    onClick={handlePreviewFile}
-                    loading={loading}
-                    icon={ImportIcon}
-                  >
-                    Parse & Preview
-                  </Button>
-                </InlineStack>
-              )}
-            </BlockStack>
-          </Card>
+                  {connectionResult && (
+                    <Banner
+                      tone={connectionResult.success ? "success" : "critical"}
+                      onDismiss={() => setConnectionResult(null)}
+                    >
+                      <p>{connectionResult.message}</p>
+                    </Banner>
+                  )}
+
+                  <InlineStack gap="300">
+                    <Button
+                      variant="primary"
+                      onClick={handleFetchFromApi}
+                      loading={fetchingApi}
+                      disabled={!cfg.endpoint || fetchingApi || testingConnection}
+                      icon={ImportIcon}
+                    >
+                      Fetch Products
+                    </Button>
+                    <Button
+                      onClick={handleTestConnection}
+                      loading={testingConnection}
+                      disabled={!cfg.endpoint || fetchingApi || testingConnection}
+                      icon={ConnectIcon}
+                    >
+                      Test Connection
+                    </Button>
+                    <Button
+                      variant="plain"
+                      onClick={() => navigate(`/app/providers/${provider.id}?tab=settings`)}
+                    >
+                      Edit Settings
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ── FTP Provider: Fetch from FTP ── */}
+            {providerType === "ftp" && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Fetch from FTP</Text>
+                    <Badge tone="info">FTP</Badge>
+                  </InlineStack>
+
+                  {cfg.host ? (
+                    <>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Connect to your FTP server and download the product file automatically.
+                      </Text>
+                      <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+                        <BlockStack gap="100">
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {`Host: ${String(cfg.host)}:${String(cfg.port || "21")}`}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {`Path: ${String(cfg.remotePath || "/")}`}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {`Protocol: ${String(cfg.protocol || "ftp").toUpperCase()}`}
+                          </Text>
+                        </BlockStack>
+                      </Box>
+                    </>
+                  ) : (
+                    <Banner tone="warning">
+                      <p>No FTP connection configured. Go to Settings to add your FTP server details.</p>
+                    </Banner>
+                  )}
+
+                  {connectionResult && (
+                    <Banner
+                      tone={connectionResult.success ? "success" : "critical"}
+                      onDismiss={() => setConnectionResult(null)}
+                    >
+                      <p>{connectionResult.message}</p>
+                    </Banner>
+                  )}
+
+                  <InlineStack gap="300">
+                    <Button
+                      variant="primary"
+                      onClick={handleFetchFromApi}
+                      loading={fetchingApi}
+                      disabled={!cfg.host || !cfg.remotePath || fetchingApi || testingConnection}
+                      icon={ImportIcon}
+                    >
+                      Fetch Products
+                    </Button>
+                    <Button
+                      onClick={handleTestConnection}
+                      loading={testingConnection}
+                      disabled={!cfg.host || fetchingApi || testingConnection}
+                      icon={ConnectIcon}
+                    >
+                      Test Connection
+                    </Button>
+                    <Button
+                      variant="plain"
+                      onClick={() => navigate(`/app/providers/${provider.id}?tab=settings`)}
+                    >
+                      Edit FTP Settings
+                    </Button>
+                  </InlineStack>
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ── File Upload (all provider types) ── */}
+            <Card>
+              <BlockStack gap="400">
+                <Text as="h2" variant="headingMd">
+                  {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
+                </Text>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
+                </Text>
+
+                <DropZone
+                  onDrop={handleDropFile}
+                  accept={ACCEPTED_TYPES.join(",")}
+                  variableHeight
+                >
+                  {file ? (
+                    <Box padding="600">
+                      <BlockStack gap="200" inlineAlign="center">
+                        <Icon source={FileIcon} tone="info" />
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          {file.name}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </Text>
+                        <Button
+                          size="slim"
+                          onClick={() => setFile(null)}
+                          icon={DeleteIcon}
+                          tone="critical"
+                        >
+                          Remove
+                        </Button>
+                      </BlockStack>
+                    </Box>
+                  ) : (
+                    <DropZone.FileUpload
+                      actionTitle="Choose file"
+                      actionHint="or drag and drop CSV, JSON, XML, Excel, or TSV"
+                    />
+                  )}
+                </DropZone>
+
+                {file && (
+                  <InlineStack align="end">
+                    <Button
+                      variant="primary"
+                      onClick={handlePreviewFile}
+                      loading={loading}
+                      icon={ImportIcon}
+                    >
+                      Parse & Preview
+                    </Button>
+                  </InlineStack>
+                )}
+              </BlockStack>
+            </Card>
+          </BlockStack>
         )}
 
         {/* ============================================================ */}

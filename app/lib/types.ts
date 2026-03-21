@@ -20,6 +20,33 @@ export interface PlanConfig {
 }
 
 /**
+ * Format a date string as a human-readable relative time (e.g. "5m ago", "2d ago").
+ * Returns "Never" for null/undefined dates.
+ */
+export function formatTimeAgo(date: string | null | undefined): string {
+  if (!date) return "Never";
+  const diffMs = Date.now() - new Date(date).getTime();
+  if (diffMs < 0) return "Just now";
+
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return "Just now";
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+/**
  * Format a numeric price for display using the browser's locale.
  * Defaults to USD — pass a Shopify `currency` code (ISO 4217) to override.
  */

@@ -19,6 +19,7 @@ import {
 import {
   ProductIcon, ImportIcon, ClockIcon, ChartVerticalFilledIcon,
   ViewIcon, EditIcon, PlusCircleIcon, DeleteIcon, GlobeIcon, EmailIcon,
+  ConnectIcon, SettingsIcon,
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
@@ -26,6 +27,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import type { ProviderType, PlanTier } from "../lib/types";
+import { formatTimeAgo } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Types & Constants
@@ -86,18 +88,7 @@ const TAB_LABELS: Record<TabId, string> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function relativeTime(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
+// relativeTime is now shared — imported as formatTimeAgo from ../lib/types
 
 function importStatusTone(s: string): "success" | "critical" | "attention" | "info" | undefined {
   if (s === "completed") return "success";
@@ -224,6 +215,11 @@ export default function ProviderDetail() {
   const fetcher = useFetcher();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionResult, setConnectionResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
 
   // Settings form state
   const [name, setName] = useState(provider.name);
@@ -252,6 +248,33 @@ export default function ProviderDetail() {
 
   const currentTab = TAB_IDS.includes(tab as TabId) ? tab : "overview";
   const selectedTabIndex = TAB_IDS.indexOf(currentTab as TabId);
+
+  const handleTestConnection = useCallback(async () => {
+    setTestingConnection(true);
+    setConnectionResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("provider_id", provider.id);
+      formData.set("_action", "test");
+
+      const response = await fetch("/app/api/provider-fetch", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      setConnectionResult({
+        success: result.success ?? false,
+        message: result.message || result.error || "Unknown result",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Connection test failed";
+      setConnectionResult({ success: false, message });
+    } finally {
+      setTestingConnection(false);
+    }
+  }, [provider.id]);
 
   const handleTabChange = useCallback((index: number) => {
     const tabId = TAB_IDS[index];
@@ -305,7 +328,7 @@ export default function ProviderDetail() {
                   const statItems = [
                     { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products" },
                     { icon: ImportIcon, count: (provider.import_count ?? 0).toLocaleString(), label: "Total Imports" },
-                    { icon: ClockIcon, count: relativeTime(provider.last_fetch_at), label: "Last Import" },
+                    { icon: ClockIcon, count: formatTimeAgo(provider.last_fetch_at), label: "Last Import" },
                     { icon: ChartVerticalFilledIcon, count: `${fitmentCoverage}%`, label: "Fitment Coverage" },
                   ];
                   return (
@@ -357,7 +380,7 @@ export default function ProviderDetail() {
                             <InlineStack align="space-between" blockAlign="center" wrap={false}>
                               <BlockStack gap="050">
                                 <Text as="span" variant="bodySm" fontWeight="semibold">{imp.file_name || "Untitled import"}</Text>
-                                <Text as="span" variant="bodySm" tone="subdued">{relativeTime(imp.created_at)}</Text>
+                                <Text as="span" variant="bodySm" tone="subdued">{formatTimeAgo(imp.created_at)}</Text>
                               </BlockStack>
                               <InlineStack gap="300" blockAlign="center">
                                 <Text as="span" variant="bodySm" tone="subdued">{`${imp.imported_rows}/${imp.total_rows}`}</Text>
@@ -373,14 +396,37 @@ export default function ProviderDetail() {
                   </BlockStack>
                 </Card>
 
+                {/* Connection Result Banner */}
+                {connectionResult && (
+                  <Banner
+                    tone={connectionResult.success ? "success" : "critical"}
+                    onDismiss={() => setConnectionResult(null)}
+                  >
+                    <p>{connectionResult.message}</p>
+                  </Banner>
+                )}
+
                 <Card>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">Quick Actions</Text>
                     <Divider />
-                    <InlineStack gap="300">
-                      <Button icon={PlusCircleIcon} onClick={() => navigate(`/app/providers/${provider.id}/import`)}>New Import</Button>
-                      <Button icon={ViewIcon} onClick={() => navigate(`/app/providers/${provider.id}/products`)}>View All Products</Button>
-                      <Button icon={EditIcon} onClick={() => navigate(`/app/providers/${provider.id}/mapping`)}>Edit Mapping</Button>
+                    <InlineStack gap="300" wrap>
+                      <Button variant="primary" icon={PlusCircleIcon} onClick={() => navigate(`/app/providers/${provider.id}/import`)}>
+                        {type === "api" ? "Fetch / Import" : "Import Data"}
+                      </Button>
+                      {(type === "api" || type === "ftp") && (
+                        <Button
+                          icon={ConnectIcon}
+                          onClick={handleTestConnection}
+                          loading={testingConnection}
+                          disabled={testingConnection}
+                        >
+                          Test Connection
+                        </Button>
+                      )}
+                      <Button icon={ViewIcon} onClick={() => navigate(`/app/providers/${provider.id}/products`)}>View Products</Button>
+                      <Button icon={EditIcon} onClick={() => navigate(`/app/providers/${provider.id}/mapping`)}>Column Mapping</Button>
+                      <Button icon={SettingsIcon} onClick={() => navigate(`/app/providers/${provider.id}?tab=settings`)}>Settings</Button>
                     </InlineStack>
                   </BlockStack>
                 </Card>

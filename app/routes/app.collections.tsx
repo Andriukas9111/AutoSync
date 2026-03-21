@@ -44,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run ALL queries in parallel — including tenant lookup
-  const [tenant, collectionsResult, appSettingsResult, fitmentMakesResult, fitmentMakeModelsResult] = await Promise.all([
+  const [tenant, collectionsResult, appSettingsResult, fitmentMakesResult, fitmentMakeModelsResult, fitmentMakeModelYearsResult] = await Promise.all([
     getTenant(shopId),
     db.from("collection_mappings")
       .select("*")
@@ -63,6 +63,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId)
       .not("make", "is", null)
       .not("model", "is", null),
+    db.from("vehicle_fitments")
+      .select("make, model, year_start")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .not("model", "is", null)
+      .not("year_start", "is", null),
   ]);
 
   const plan: PlanTier = tenant?.plan ?? "free";
@@ -72,7 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Deduplicate makes and make+model combos in JS
+  // Deduplicate makes, make+model combos, and make+model+year combos in JS
   const uniqueMakes = fitmentMakesResult.data
     ? [...new Set(fitmentMakesResult.data.map((f: any) => f.make).filter(Boolean))]
     : [];
@@ -80,6 +86,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const uniqueMakeModels = fitmentMakeModelsResult.data
     ? [...new Set(
         fitmentMakeModelsResult.data.map((f: any) => `${f.make}|${f.model}`)
+      )]
+    : [];
+
+  const uniqueMakeModelYears = fitmentMakeModelYearsResult.data
+    ? [...new Set(
+        fitmentMakeModelYearsResult.data.map((f: any) => `${f.make}|${f.model}|${f.year_start}`)
       )]
     : [];
 
@@ -91,6 +103,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     appSettings: appSettingsResult.data,
     uniqueMakes,
     uniqueMakeModelCount: uniqueMakeModels.length,
+    uniqueMakeModelYearCount: uniqueMakeModelYears.length,
     loaderError: collectionsResult.error?.message ?? null,
   };
 };
@@ -179,6 +192,7 @@ export default function Collections() {
     appSettings,
     uniqueMakes,
     uniqueMakeModelCount,
+    uniqueMakeModelYearCount,
     loaderError,
   } = useLoaderData<typeof loader>();
 
@@ -202,7 +216,7 @@ export default function Collections() {
       ? uniqueMakes.length
       : strategy === "make_model"
         ? uniqueMakeModelCount
-        : uniqueMakeModelCount; // make_model_year would be more, but we approximate
+        : uniqueMakeModelYearCount;
 
   return (
     <Page fullWidth title="Collections">
