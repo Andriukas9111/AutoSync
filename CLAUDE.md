@@ -35,6 +35,13 @@ This project uses **React Router 7** (formerly Remix). NOT Next.js. NOT standard
 - The UI only creates `sync_jobs` records and shows progress via polling — it NEVER processes data itself
 - Vercel API routes return INSTANTLY after creating a job — they NEVER do long-running work
 
+### Shopify API tokens:
+- **Tokens NEVER expire** — Shopify's new token exchange system provides permanent offline access tokens
+- The `shpat_` token stored in `tenants.shopify_access_token` is valid indefinitely
+- If an API call returns "Invalid API key", the issue is NOT token expiration — investigate the actual cause
+- Token is saved when merchant opens the app (in `app.tsx` layout wrapper)
+- NEVER assume a token has expired — ALWAYS investigate
+
 ### Architecture rules:
 - ALL styles → `app/lib/design.ts` (statMiniStyle, statGridStyle, cardRowStyle, barChartRowStyle, etc.)
 - ALL live data → `app/lib/use-app-data.ts` (useAppData hook with 5s polling)
