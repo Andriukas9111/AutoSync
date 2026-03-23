@@ -27,6 +27,7 @@ import {
   PersonIcon,
   DatabaseIcon,
   AlertDiamondIcon,
+  SearchIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -614,6 +615,136 @@ export default function Settings() {
               </InlineStack>
             </BlockStack>
           </Form>
+        </Layout.Section>
+
+        {/* ─── Storefront Filters ──────────────────────────────────── */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">
+                  Storefront Filters
+                </Text>
+              </InlineStack>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                When you push products to Shopify, AutoSync automatically creates vehicle
+                metafield definitions. You can then enable these as storefront filters in
+                Shopify's Search & Discovery app so customers can filter by vehicle on
+                your collection pages.
+              </Text>
+
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  How to enable vehicle filters
+                </Text>
+                <List type="number">
+                  <List.Item>
+                    Push your products to Shopify — this creates the vehicle metafield
+                    definitions automatically.
+                  </List.Item>
+                  <List.Item>
+                    Go to Shopify Admin &rarr; Apps &rarr; Search & Discovery.
+                  </List.Item>
+                  <List.Item>
+                    Click &quot;Filters&quot; &rarr; &quot;Add filter&quot;.
+                  </List.Item>
+                  <List.Item>
+                    Select the vehicle filters: Vehicle Make, Vehicle Model, Vehicle
+                    Year, etc.
+                  </List.Item>
+                  <List.Item>
+                    Save — the filters will appear on your collection pages using your
+                    theme&apos;s native filter UI.
+                  </List.Item>
+                </List>
+              </BlockStack>
+
+              <Banner tone="info">
+                <p>
+                  These filters use Shopify&apos;s native storefront filtering and work
+                  automatically with your theme&apos;s built-in filter sidebar — no
+                  custom code required.
+                </p>
+              </Banner>
+
+              <BlockStack gap="200">
+                <Text as="h3" variant="headingSm">
+                  Available filters by plan
+                </Text>
+                <div style={statGridStyle(2)}>
+                  <div style={statMiniStyle}>
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          Vehicle Make
+                        </Text>
+                        <Badge tone={
+                          plan === "free" ? undefined : "success"
+                        }>
+                          {plan === "free" ? "Starter+" : "Available"}
+                        </Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Filter products by make (e.g. BMW, Ford)
+                      </Text>
+                    </BlockStack>
+                  </div>
+                  <div style={statMiniStyle}>
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          Vehicle Model
+                        </Text>
+                        <Badge tone={
+                          ["free", "starter"].includes(plan) ? undefined : "success"
+                        }>
+                          {["free", "starter"].includes(plan) ? "Growth+" : "Available"}
+                        </Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Filter products by model (e.g. 3 Series, Focus)
+                      </Text>
+                    </BlockStack>
+                  </div>
+                  <div style={statMiniStyle}>
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          Vehicle Year
+                        </Text>
+                        <Badge tone={
+                          ["free", "starter"].includes(plan) ? undefined : "success"
+                        }>
+                          {["free", "starter"].includes(plan) ? "Growth+" : "Available"}
+                        </Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Filter products by year range
+                      </Text>
+                    </BlockStack>
+                  </div>
+                  <div style={statMiniStyle}>
+                    <BlockStack gap="100">
+                      <InlineStack gap="200" blockAlign="center">
+                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                          Engine / Generation
+                        </Text>
+                        <Badge tone={
+                          ["free", "starter", "growth"].includes(plan) ? undefined : "success"
+                        }>
+                          {["free", "starter", "growth"].includes(plan) ? "Professional+" : "Available"}
+                        </Badge>
+                      </InlineStack>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Filter by engine type or generation
+                      </Text>
+                    </BlockStack>
+                  </div>
+                </div>
+              </BlockStack>
+            </BlockStack>
+          </Card>
         </Layout.Section>
 
         {/* ─── Data Management ─────────────────────────────────────── */}
