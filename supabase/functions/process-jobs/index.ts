@@ -513,7 +513,33 @@ async function processCollectionsChunk(
   ));
 
   // Calculate and set total_items so progress bar works
-  const totalNeeded = strategy === "make" ? uniqueMakes.size : uniqueMakes.size + uniqueMakeModels.size;
+  // For make_model_year, we need to count year combos too
+  let yearComboCount = 0;
+  if (strategy === "make_model_year") {
+    // Paginated to avoid 1000-row limit
+    const yearSet = new Set<string>();
+    let ycOffset = 0;
+    while (true) {
+      const { data: batch } = await db.from("vehicle_fitments")
+        .select("make, model, year_from, year_to")
+        .eq("shop_id", shopId)
+        .not("make", "is", null).not("model", "is", null).not("year_from", "is", null)
+        .range(ycOffset, ycOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const f of batch) {
+        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+        yearSet.add(`${f.make}|||${f.model}|||${yr}`);
+      }
+      ycOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
+    yearComboCount = yearSet.size;
+  }
+  const totalNeeded = strategy === "make"
+    ? uniqueMakes.size
+    : strategy === "make_model_year"
+      ? uniqueMakes.size + uniqueMakeModels.size + yearComboCount
+      : uniqueMakes.size + uniqueMakeModels.size;
   if ((job.total_items as number) === 0 || !(job.total_items as number)) {
     await db.from("sync_jobs").update({ total_items: totalNeeded }).eq("id", job.id);
   }
@@ -719,21 +745,27 @@ async function processCollectionsChunk(
 
   // Create year-range collections if strategy is make_model_year
   if (strategy === "make_model_year" && created < 10) {
-    // Get year ranges from fitments
-    const { data: yearFitments } = await db
-      .from("vehicle_fitments")
-      .select("make, model, year_from, year_to")
-      .eq("shop_id", shopId)
-      .not("make", "is", null)
-      .not("model", "is", null)
-      .not("year_from", "is", null);
-
-    // Build unique year-range combos
+    // Get year ranges from fitments (paginated to avoid 1000-row limit)
     const yearCombos = new Set<string>();
-    for (const f of yearFitments ?? []) {
-      const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
-      yearCombos.add(`${f.make}|||${f.model}|||${yr}`);
+    let yrOffset = 0;
+    while (true) {
+      const { data: batch } = await db
+        .from("vehicle_fitments")
+        .select("make, model, year_from, year_to")
+        .eq("shop_id", shopId)
+        .not("make", "is", null)
+        .not("model", "is", null)
+        .not("year_from", "is", null)
+        .range(yrOffset, yrOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const f of batch) {
+        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+        yearCombos.add(`${f.make}|||${f.model}|||${yr}`);
+      }
+      yrOffset += batch.length;
+      if (batch.length < 1000) break;
     }
+    console.log(`[collections] Found ${yearCombos.size} unique year combos`);
 
     for (const combo of yearCombos) {
       if (created >= 10) break;
