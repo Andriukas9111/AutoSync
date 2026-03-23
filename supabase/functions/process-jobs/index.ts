@@ -16,7 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BATCH_SIZE = 20; // Products per invocation
+const BATCH_SIZE = 50; // Products per invocation (Supabase Pro: 150s timeout)
 
 // Cache publication IDs per shop (refreshed each Edge Function invocation)
 const pubCache = new Map<string, string[]>();
@@ -388,7 +388,7 @@ async function processPushChunk(
       processed++;
 
       // Small delay to respect Shopify rate limits
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 200));
     } catch (err) {
       console.error(`[push] Failed for ${product.shopify_product_id}:`, err);
       processed++;

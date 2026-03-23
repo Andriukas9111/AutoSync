@@ -91,27 +91,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     (activeResult.data ?? []).map((tam: { ymme_make_id: string }) => tam.ymme_make_id),
   );
 
-  // Count fitments per make name (paginated to avoid 1000-row limit!)
+  // Count fitments per make — use active makes as the source of truth
+  // (active makes are synced from fitments by the Edge Function)
   const productCountByMake: Record<string, number> = {};
-  let fitOffset = 0;
-  while (true) {
-    const { data: fitBatch } = await db.from("vehicle_fitments").select("make")
-      .eq("shop_id", shopId).not("make", "is", null).range(fitOffset, fitOffset + 999);
-    if (!fitBatch || fitBatch.length === 0) break;
-    for (const row of fitBatch) {
-      if (row.make) {
-        productCountByMake[row.make] = (productCountByMake[row.make] || 0) + 1;
-      }
-    }
-    fitOffset += fitBatch.length;
-    if (fitBatch.length < 1000) break;
-  }
-  // Legacy compat — keep the old block structure
-  if (false) {
-    for (const row of []) {
-      if (row) {
-        productCountByMake[""] = 0;
-      }
+  const activeMakeNames = allMakes
+    .filter((m: { id: string }) => activeMakeIds.has(m.id))
+    .map((m: { name: string }) => m.name);
+
+  // For each active make, get the fitment count efficiently (one query per active make)
+  // This is fast because there are only ~36 active makes, not 5000+ fitments
+  if (activeMakeNames.length > 0 && activeMakeNames.length <= 50) {
+    const countPromises = activeMakeNames.map(async (makeName: string) => {
+      const { count } = await db.from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("make", makeName);
+      return { make: makeName, count: count ?? 0 };
+    });
+    const counts = await Promise.all(countPromises);
+    for (const { make, count } of counts) {
+      productCountByMake[make] = count;
     }
   }
 
