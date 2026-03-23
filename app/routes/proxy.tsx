@@ -319,15 +319,15 @@ async function handleCollectionLookup(params: URLSearchParams) {
   const mfNs = `app--${appId}--vehicle_fitment`;
 
   const found = (row: { handle: string; title: string; type: string }) => {
-    // Build collection URL with ALL metafield filters (make, model, year, engine)
+    // Build collection URL — try metafield filters for precise matching
+    // These work when Search & Discovery is configured by the merchant
+    // Falls back gracefully to just the collection (tag-based filtering still works)
     let url = `/collections/${row.handle}`;
     const filters: string[] = [];
-    // Always include make and model so customer sees full vehicle context in filter chips
     if (make) filters.push(`filter.p.m.${mfNs}.make=${encodeURIComponent(make)}`);
     if (model) filters.push(`filter.p.m.${mfNs}.model=${encodeURIComponent(model)}`);
     if (year) filters.push(`filter.p.m.${mfNs}.year=${encodeURIComponent(year)}`);
     if (engine) {
-      // Clean engine name — remove displacement/fuel suffix for matching
       const cleanEngine = engine.replace(/\s*\d+cc\s*(Petrol|Diesel|Electric|Hybrid)?$/i, '').trim();
       filters.push(`filter.p.m.${mfNs}.engine=${encodeURIComponent(cleanEngine)}`);
     }
@@ -343,7 +343,34 @@ async function handleCollectionLookup(params: URLSearchParams) {
   };
 
   if (model) {
-    // 1. Prefer make_model collection (most specific non-year match)
+    // 1. If year provided, try year-range collection FIRST (most specific)
+    if (year) {
+      const yearNum = parseInt(year, 10);
+      if (!isNaN(yearNum)) {
+        // Find year-range collections for this make+model where year falls in range
+        const { data: yearCollections } = await db
+          .from("collection_mappings")
+          .select("handle, title, type, year_from, year_to")
+          .eq("shop_id", shop)
+          .ilike("make", make)
+          .ilike("model", model)
+          .eq("type", "make_model_year")
+          .lte("year_from", yearNum)
+          .or(`year_to.gte.${yearNum},year_to.is.null`);
+
+        if (yearCollections && yearCollections.length > 0) {
+          // Pick the tightest year range (smallest span)
+          const best = yearCollections.sort((a, b) => {
+            const spanA = (a.year_to ?? 2030) - (a.year_from ?? 0);
+            const spanB = (b.year_to ?? 2030) - (b.year_from ?? 0);
+            return spanA - spanB;
+          })[0];
+          return found(best);
+        }
+      }
+    }
+
+    // 2. Fall back to make_model collection
     const { data: modelMatch } = await db
       .from("collection_mappings")
       .select("handle, title, type")
@@ -356,7 +383,7 @@ async function handleCollectionLookup(params: URLSearchParams) {
 
     if (modelMatch) return found(modelMatch);
 
-    // 2. Fall back to any collection with this make+model (e.g. make_model_year)
+    // 3. Fall back to any collection with this make+model
     const { data: anyModelMatch } = await db
       .from("collection_mappings")
       .select("handle, title, type")
