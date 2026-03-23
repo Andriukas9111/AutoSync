@@ -257,15 +257,15 @@ async function processPushChunk(
 
   // On first batch, ensure metafield definitions exist (idempotent)
   if (alreadyProcessed === 0) {
+    // Only create definitions for the app-owned namespace (shown in Search & Discovery)
+    // Legacy autosync_fitment namespace metafields are still pushed for Liquid template
+    // compatibility but do NOT get definitions (to avoid duplicate filter entries)
     const defs = [
       { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json" },
       { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field" },
       { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field" },
       { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field" },
       { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field" },
-      { name: "Vehicle Fitment Data", namespace: "autosync_fitment", key: "vehicles", type: "json" },
-      { name: "Vehicle Makes", namespace: "autosync_fitment", key: "make_names", type: "list.single_line_text_field" },
-      { name: "Vehicle Models", namespace: "autosync_fitment", key: "model_names", type: "list.single_line_text_field" },
     ];
     for (const d of defs) {
       try {

@@ -175,7 +175,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     products: (products ?? []) as Product[],
     totalCount: totalCount ?? 0,
     currentPage: page,
-    filters: { search, status, source },
+    filters: { search, status, source, provider: providerId },
     statusBreakdown: breakdown,
     queryError: error?.message || null,
   };
@@ -441,7 +441,7 @@ export default function Products() {
 
   // ── Active filters ──────────────────────────────────────────────────────
 
-  const hasActiveFilters = !!(filters.search || filters.status || filters.source);
+  const hasActiveFilters = !!(filters.search || filters.status || filters.source || filters.provider);
   // When viewing fitment-related filters, link to mapping mode
   const isFitmentContext = ["unmapped", "flagged"].includes(filters.status ?? "");
 
