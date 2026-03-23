@@ -278,7 +278,7 @@ export default function ProvidersIndex() {
           const sourceTypeCount = new Set(providers.map(p => p.type)).size;
           const statItems = [
             { icon: DatabaseIcon, count: `${providerCount}`, label: "Total Providers" },
-            { icon: ProductIcon, count: (polledStats?.total ?? providerTotalProducts).toLocaleString(), label: "Total Products" },
+            { icon: ProductIcon, count: providerTotalProducts.toLocaleString(), label: "Provider Products" },
             { icon: ImportIcon, count: `${totalImports}`, label: "Total Imports" },
             { icon: CategoriesIcon, count: `${sourceTypeCount}`, label: "Source Types" },
           ];
