@@ -45,10 +45,21 @@ This project uses **React Router 7** (formerly Remix). NOT Next.js. NOT standard
 ### Architecture rules:
 - ALL styles → `app/lib/design.ts` (statMiniStyle, statGridStyle, cardRowStyle, barChartRowStyle, etc.)
 - ALL live data → `app/lib/use-app-data.ts` (useAppData hook with 5s polling)
+- ALL live data comes from ONE API → `app/routes/app.api.job-status.tsx` — NEVER create separate polling
 - ALL shared components → `app/components/` (HowItWorks, OperationProgress, IconBadge, SkeletonCard, DataTable)
 - ALL job processing → Supabase Edge Function (`supabase/functions/process-jobs/index.ts`)
+- ALL job status messages → `app/lib/design.ts` (getJobProgressLabel, getJobWaitingMessage, getJobCompletionMessage)
 - ALL tenant data → scoped by `shop_id` from `session.shop`
 - ALL publication IDs → from `tenants.online_store_publication_id` (NOT hardcoded)
+
+### Unified Data API (`app/routes/app.api.job-status.tsx`):
+This is the SINGLE source of truth for ALL live counts across the app.
+Returns: products (total/unmapped/auto/smart/manual/flagged), fitments, collections,
+vehiclePages (synced/pending/failed), providers, pushedProducts, activeMakes,
+uniqueMakes, uniqueModels, ymmeMakes/Models/Engines, plan, lastPushDate, jobs[], activeJobs[]
+
+**EVERY page that needs live data MUST use `useAppData()` hook — NEVER create separate useState+useEffect polling.**
+**If new data is needed, add it to job-status.tsx AND AppStats interface — NEVER create a new endpoint.**
 
 ---
 
