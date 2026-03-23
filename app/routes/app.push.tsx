@@ -588,21 +588,26 @@ export default function Push() {
                 <input type="hidden" name="strategy" value={strategy} />
                 <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
 
-                <InlineStack align="start" gap="300">
-                  <Button
-                    variant="primary"
-                    submit
-                    disabled={pushDisabled}
-                    loading={isSubmitting}
-                  >
-                    Push to Shopify
-                  </Button>
-                  {noProductsReady && (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      No products with fitments to push. Map fitments first.
-                    </Text>
-                  )}
-                </InlineStack>
+                <BlockStack gap="300">
+                  <InlineStack align="start" gap="300">
+                    <Button
+                      variant="primary"
+                      submit
+                      disabled={pushDisabled}
+                      loading={isSubmitting}
+                    >
+                      Push to Shopify
+                    </Button>
+                    {noProductsReady && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        No products with fitments to push. Map fitments first.
+                      </Text>
+                    )}
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    All processing happens in the background via our Edge Function. You can close this page — the push will continue automatically.
+                  </Text>
+                </BlockStack>
               </Form>
             </BlockStack>
           </Card>
