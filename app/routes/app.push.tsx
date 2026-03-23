@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Form, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -42,6 +42,7 @@ import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definition
 import { OperationProgress } from "../components/OperationProgress";
 import { getJobProgressLabel, getJobCompletionMessage } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
 import { SkeletonCard } from "../components/SkeletonCard";
 import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
@@ -330,58 +331,11 @@ export default function Push() {
   const showResults = actionData && "success" in actionData && actionData.success && !isJobCreated;
   const showError = actionData && "error" in actionData;
 
-  // Poll for job progress + live stats (Edge Function processes in background)
-  const [activeJob, setActiveJob] = useState<{
-    type: string; status: string; processed_items: number; total_items: number; started_at: string | null;
-  } | null>(null);
-  const [liveStats, setLiveStats] = useState<{
-    total: number; unmapped: number; autoMapped: number; smartMapped: number;
-    manualMapped: number; fitments: number; collections: number;
-  } | null>(null);
-  const [completedPush, setCompletedPush] = useState<{
-    processed_items: number; total_items: number; status: string;
-  } | null>(null);
+  // Unified data — ALL live stats from one source (useAppData)
+  const { stats: liveStats, activeJobs, jobs: allJobs } = useAppData(undefined, 3000);
+  const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "collections") ?? null;
+  const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
   const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const pollJobStatus = useCallback(async () => {
-    try {
-      const res = await fetch("/app/api/job-status?type=all");
-      if (res.ok) {
-        const result = await res.json();
-        const allJobs = result.jobs || [];
-        // Find running push or collections jobs
-        const pushRunning = allJobs.find((j: any) => j.type === "push" && j.status === "running");
-        const collectionsRunning = allJobs.find((j: any) => j.type === "collections" && j.status === "running");
-        // Also find recently completed push job (within last 5 minutes)
-        const pushCompleted = allJobs.find((j: any) => j.type === "push" && j.status === "completed");
-
-        // Show running job first, then recently completed
-        setActiveJob(pushRunning || collectionsRunning || null);
-
-        // Track completed push separately for stats display
-        if (pushCompleted) {
-          setCompletedPush(pushCompleted);
-        }
-
-        if (result.stats) setLiveStats(result.stats);
-      }
-    } catch { /* non-fatal */ }
-  }, []);
-
-  // Start polling on mount and when action succeeds
-  useEffect(() => {
-    pollJobStatus(); // Initial check
-    pollRef.current = setInterval(pollJobStatus, 3000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [pollJobStatus]);
-
-  // Also poll when action returns (job was just created)
-  useEffect(() => {
-    if (actionData && "jobCreated" in actionData) {
-      pollJobStatus();
-    }
-  }, [actionData, pollJobStatus]);
 
   const isJobRunning = !!activeJob;
 
