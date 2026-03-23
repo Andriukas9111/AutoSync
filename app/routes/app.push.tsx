@@ -221,6 +221,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Create collections job — Edge Function will process it
   if (createCollections) {
+    // Estimate total collections needed for the progress bar
+    const { count: existingCollections } = await db
+      .from("collection_mappings")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId);
+    // Rough estimate: existing + ~10% growth for new combos
+    const estimatedTotal = Math.max(existingCollections ?? 0, mappedCount ?? 100);
+
     const { error: jobError } = await db
       .from("sync_jobs")
       .insert({
@@ -228,7 +236,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         type: "collections",
         status: "running",
         progress: 0,
-        total_items: 0,
+        total_items: estimatedTotal,
         processed_items: 0,
         started_at: new Date().toISOString(),
         metadata: JSON.stringify({

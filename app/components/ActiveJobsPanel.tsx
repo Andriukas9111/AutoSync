@@ -89,7 +89,7 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
         </InlineStack>
 
         {jobs.map((job, i) => {
-          // For collection jobs, show actual created count from live stats instead of processed_items
+          // For collection jobs, show actual created count from live stats
           const isCollectionJob = job.type === "collections";
           const processed = isCollectionJob ? (liveStats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
           const total = job.total_items ?? 0;
@@ -137,9 +137,14 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
                   {isRunning && total > 0 && (
                     <ProgressBar progress={percent} size="small" />
                   )}
-                  {isRunning && total === 0 && (
+                  {isRunning && total === 0 && isCollectionJob && processed > 0 && (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {isCollectionJob ? "Waiting for push to complete before creating collections..." : "Preparing..."}
+                      {`${processed.toLocaleString()} collections created`}
+                    </Text>
+                  )}
+                  {isRunning && total === 0 && (isCollectionJob ? processed === 0 : true) && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {isCollectionJob ? "Waiting for push to complete..." : "Preparing..."}
                     </Text>
                   )}
                   {isComplete && (
