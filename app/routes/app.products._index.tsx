@@ -5,6 +5,7 @@ import {
   useSearchParams,
   useNavigate,
   useFetcher,
+  useNavigation,
 } from "react-router";
 import { data } from "react-router";
 import {
@@ -54,6 +55,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
+import { SkeletonCard } from "../components/SkeletonCard";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -227,6 +229,8 @@ export default function Products() {
   const fetcher = useFetcher();
   const bulkFetcher = useFetcher<{ ok: boolean; message: string }>();
 
+  const navigation = useNavigation();
+  const pageLoading = navigation.state === "loading";
   const [searchValue, setSearchValue] = useState(filters.search);
   const [dismissed, setDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -584,6 +588,7 @@ export default function Products() {
         )}
 
         {/* ── Status Overview ── */}
+        {pageLoading ? <SkeletonCard variant="stat" count={5} cols={5} /> : (
         <Card padding="0">
           <div style={{
             display: "grid",
@@ -629,6 +634,7 @@ export default function Products() {
             })}
           </div>
         </Card>
+        )}
 
         {/* ── Filters Row ── */}
         <Card padding="400">

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -37,6 +37,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
+import { SkeletonCard } from "../components/SkeletonCard";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -293,6 +294,8 @@ export default function Fitment() {
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const pageLoading = navigation.state === "loading";
   const extractFetcher = useFetcher();
   const [extractDismissed, setExtractDismissed] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
@@ -349,6 +352,7 @@ export default function Fitment() {
         />
 
         {/* Stats Overview — single card, consistent grid */}
+        {pageLoading ? <SkeletonCard variant="stat" count={6} cols={6} /> : (
         <Card padding="0">
           <div style={{
             display: "grid",
@@ -384,6 +388,7 @@ export default function Fitment() {
             ))}
           </div>
         </Card>
+        )}
 
         {/* Coverage Progress */}
         <Card>

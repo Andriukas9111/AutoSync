@@ -37,6 +37,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { OperationProgress } from "../components/OperationProgress";
+import { SkeletonCard } from "../components/SkeletonCard";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
@@ -199,6 +200,7 @@ export default function Collections() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const pageLoading = navigation.state === "loading";
 
   const [strategy, setStrategy] = useState<string>(
     appSettings?.collection_strategy ?? "make"
@@ -256,13 +258,13 @@ export default function Collections() {
   const showSuccess = actionData && "success" in actionData && actionData.success;
   const showError = actionData && "error" in actionData;
 
-  // Calculate preview count based on strategy
+  // Calculate TOTAL expected collections (all levels combined for the strategy)
   const previewCount =
     strategy === "make"
       ? uniqueMakes.length
       : strategy === "make_model"
-        ? uniqueMakeModelCount
-        : uniqueMakeModelYearCount;
+        ? uniqueMakes.length + uniqueMakeModelCount
+        : uniqueMakes.length + uniqueMakeModelCount + uniqueMakeModelYearCount;
 
   return (
     <Page fullWidth title="Collections">
@@ -284,12 +286,12 @@ export default function Collections() {
             <OperationProgress
               label="Creating collections"
               status="running"
-              processed={collectionJob.processed_items ?? 0}
-              total={collectionJob.total_items ?? 0}
+              processed={liveCollectionCount}
+              total={previewCount}
               startedAt={collectionJob.started_at}
               badges={{
                 "created": { count: liveCollectionCount, tone: "success" },
-                "expected": { count: previewCount, tone: "info" },
+                "target": { count: previewCount, tone: "info" },
               }}
             />
           </Layout.Section>
@@ -389,6 +391,7 @@ export default function Collections() {
 
         {/* Collection Preview stat bar */}
         <Layout.Section>
+          {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
           <Card padding="0">
             <div style={{
               display: "grid",
@@ -398,7 +401,7 @@ export default function Collections() {
               {[
                 { icon: HashtagIcon, count: `${uniqueMakes.length}`, label: "Unique makes in fitments" },
                 { icon: LinkIcon, count: `${uniqueMakeModelCount}`, label: "Unique make + model combos" },
-                { icon: TargetIcon, count: `~${previewCount}`, label: `Collections to create (${STRATEGY_LABELS[strategy]})` },
+                { icon: TargetIcon, count: String(previewCount), label: `Expected (${STRATEGY_LABELS[strategy]})` },
                 { icon: CollectionFilledIcon, count: `${liveCollectionCount}`, label: "Existing collections" },
               ].map((item, i) => (
                 <div key={item.label} style={{
@@ -419,7 +422,9 @@ export default function Collections() {
               ))}
             </div>
           </Card>
+          )}
         </Layout.Section>
+
 
         {/* Make badges preview */}
         {strategy === "make" && uniqueMakes.length > 0 && (

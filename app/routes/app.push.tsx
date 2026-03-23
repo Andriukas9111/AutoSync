@@ -40,6 +40,7 @@ import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
 import { OperationProgress } from "../components/OperationProgress";
 import { HowItWorks } from "../components/HowItWorks";
+import { SkeletonCard } from "../components/SkeletonCard";
 import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
@@ -287,6 +288,7 @@ export default function Push() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const pageLoading = navigation.state === "loading";
 
   // Form state — initialize ALL settings from saved app_settings
   const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? true);
@@ -421,6 +423,7 @@ export default function Push() {
 
         {/* Summary stats — comprehensive push dashboard */}
         <Layout.Section>
+          {pageLoading ? <SkeletonCard variant="stat" count={6} cols={3} /> : (
           <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
             {/* Products Status */}
             <Card>
@@ -478,6 +481,7 @@ export default function Push() {
               </BlockStack>
             </Card>
           </InlineGrid>
+          )}
         </Layout.Section>
 
         {/* Push Options card */}

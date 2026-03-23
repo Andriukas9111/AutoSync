@@ -37,11 +37,14 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
   const [jobs, setJobs] = useState<Job[]>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [liveStats, setLiveStats] = useState<Record<string, number>>({});
+
   const poll = useCallback(async () => {
     try {
       const res = await fetch("/app/api/job-status?type=all");
       if (res.ok) {
         const result = await res.json();
+        if (result.stats) setLiveStats(result.stats);
         // Show running jobs + recently completed (last 5 min)
         const allJobs = (result.jobs || []) as Job[];
         const relevant = allJobs.filter((j: Job) => {
@@ -86,7 +89,9 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
         </InlineStack>
 
         {jobs.map((job, i) => {
-          const processed = job.processed_items ?? 0;
+          // For collection jobs, show actual created count from live stats instead of processed_items
+          const isCollectionJob = job.type === "collections";
+          const processed = isCollectionJob ? (liveStats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
           const total = job.total_items ?? 0;
           const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
           const isRunning = job.status === "running";

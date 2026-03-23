@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -41,6 +41,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
+import { SkeletonCard } from "../components/SkeletonCard";
 import { statGridStyle, statMiniStyle } from "../lib/design";
 import type { PlanTier } from "../lib/types";
 
@@ -521,6 +522,8 @@ export default function AnalyticsPage() {
     topPlateMakes,
   } = useLoaderData<typeof loader>();
 
+  const navigation = useNavigation();
+  const pageLoading = navigation.state === "loading";
   const [showExport, setShowExport] = useState(false);
 
   // Live stats polling
@@ -640,6 +643,7 @@ export default function AnalyticsPage() {
         {/* ── Fitment Coverage ──────────────────────────────── */}
         <Layout>
           <Layout.Section>
+            {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
@@ -671,6 +675,7 @@ export default function AnalyticsPage() {
                 )}
               </BlockStack>
             </Card>
+            )}
           </Layout.Section>
 
           {/* ── Product Status Breakdown ───────────────────── */}
