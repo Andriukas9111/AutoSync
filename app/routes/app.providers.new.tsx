@@ -19,43 +19,16 @@ import {
   BlockStack,
   InlineStack,
   Text,
-  Box,
-  Divider,
-  InlineGrid,
   Badge,
-  Icon,
-  DropZone,
-  Thumbnail,
+  Tabs,
 } from "@shopify/polaris";
 import {
   ImportIcon,
   GlobeIcon,
   LockIcon,
-  CheckCircleIcon,
 } from "@shopify/polaris-icons";
-
-/** Numbered step circle badge */
-function StepBadge({ number }: { number: number }) {
-  return (
-    <div
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        background: "var(--p-color-bg-fill-info)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "var(--p-color-text-info-on-bg-fill)",
-        fontWeight: 600,
-        fontSize: "13px",
-        flexShrink: 0,
-      }}
-    >
-      {number}
-    </div>
-  );
-}
+import { HowItWorks } from "../components/HowItWorks";
+import { stepNumberStyle, infoCardStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
@@ -260,14 +233,12 @@ export default function ProvidersNew() {
   const navigate = useNavigate();
   const isSubmitting = navigation.state === "submitting";
 
+  // Tab index maps to TYPE_CARDS order: csv=0, xml=1, api=2, ftp=3
+  const [selectedTab, setSelectedTab] = useState(0);
+  const providerType = TYPE_CARDS[selectedTab].value;
+
   // Form state
-  const [providerType, setProviderType] = useState<ProviderType>("csv");
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [websiteUrl, setWebsiteUrl] = useState("");
-  const [contactEmail, setContactEmail] = useState("");
-  const [notes, setNotes] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
   const [duplicateStrategy, setDuplicateStrategy] = useState("skip");
 
   // CSV
@@ -289,26 +260,6 @@ export default function ProvidersNew() {
   const [ftpPath, setFtpPath] = useState("");
   const [ftpFilePattern, setFtpFilePattern] = useState("");
 
-  // Logo upload
-  const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [logoPreview, setLogoPreview] = useState("");
-
-  const handleLogoDrop = (_dropFiles: File[], acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const file = acceptedFiles[0];
-      setLogoFile(file);
-      setLogoPreview(URL.createObjectURL(file));
-      // For now, store as data URL — in production would upload to CDN
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setLogoUrl(reader.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const limitLabel =
     providerLimit === Infinity ? "Unlimited" : String(providerLimit);
 
@@ -318,14 +269,54 @@ export default function ProvidersNew() {
     return false;
   };
 
+  const tabs = TYPE_CARDS.map((card) => {
+    const disabled = isTypeDisabled(card.value);
+    return {
+      id: card.value,
+      content: disabled ? `${card.label} (upgrade)` : card.label,
+      badge: card.badge,
+      disabled,
+    };
+  });
+
+  const handleTabChange = (index: number) => {
+    if (!isTypeDisabled(TYPE_CARDS[index].value)) {
+      setSelectedTab(index);
+    }
+  };
+
   return (
     <Page
-      title="Add Provider"
-      subtitle="Connect a new data source to import products"
+      title="Import Products"
+      subtitle="Set up a new data source to import products"
       fullWidth
       backAction={{ onAction: () => navigate("/app/providers") }}
     >
       <BlockStack gap="600">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            {
+              number: 1,
+              title: "Choose Source",
+              description:
+                "Select your data source type — CSV, XML, REST API, or FTP. Upload files or connect to a remote server.",
+            },
+            {
+              number: 2,
+              title: "Configure",
+              description:
+                "Name your import source and set connection details. Our smart mapper will match columns to Shopify fields.",
+            },
+            {
+              number: 3,
+              title: "Import",
+              description:
+                "Preview products before importing. Choose how to handle duplicates, then review and approve.",
+            },
+          ]}
+        />
+
         {/* Plan limit warning */}
         {atLimit && (
           <Banner tone="critical">
@@ -345,221 +336,47 @@ export default function ProvidersNew() {
 
         <Form method="post">
           <BlockStack gap="500">
-            {/* Hidden fields for state not in visible inputs */}
+            {/* Hidden fields */}
             <input type="hidden" name="type" value={providerType} />
-            <input type="hidden" name="logo_url" value={logoUrl} />
 
-            {/* ─── STEP 1: Choose Data Source Type ─── */}
+            {/* ─── Source Type (Tabs) ─── */}
             <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <StepBadge number={1} />
-                    <Text variant="headingMd" as="h2">
-                      Choose data source type
-                    </Text>
-                  </InlineStack>
+                  <Text variant="headingMd" as="h2">
+                    Source type
+                  </Text>
                   <Badge tone="info">{`${providerCount} / ${limitLabel} used`}</Badge>
                 </InlineStack>
 
-                <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="300">
-                  {TYPE_CARDS.map((card) => {
-                    const disabled = isTypeDisabled(card.value);
-                    const selected = providerType === card.value;
-                    return (
-                      <div
-                        key={card.value}
-                        onClick={() => !disabled && setProviderType(card.value)}
-                        style={{
-                          border: `2px solid ${selected ? "var(--p-color-border-interactive)" : "var(--p-color-border-secondary)"}`,
-                          borderRadius: "var(--p-border-radius-300)",
-                          padding: "var(--p-space-400)",
-                          cursor: disabled ? "not-allowed" : "pointer",
-                          opacity: disabled ? 0.5 : 1,
-                          background: selected
-                            ? "var(--p-color-bg-surface-info)"
-                            : "var(--p-color-bg-surface)",
-                          transition: "all 0.15s ease",
-                          position: "relative",
-                        }}
-                      >
-                        <BlockStack gap="200">
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div
-                              style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: "var(--p-border-radius-200)",
-                                background: selected
-                                  ? "var(--p-color-bg-fill-info)"
-                                  : "var(--p-color-bg-fill-secondary)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <Icon
-                                source={card.icon}
-                                tone={selected ? "info" : "subdued"}
-                              />
-                            </div>
-                            {selected && (
-                              <div style={{ flexShrink: 0, width: 20, height: 20 }}>
-                                <Icon
-                                  source={CheckCircleIcon}
-                                  tone="interactive"
-                                />
-                              </div>
-                            )}
-                          </div>
-                          <Text
-                            variant="headingSm"
-                            as="h3"
-                            fontWeight="semibold"
-                          >
-                            {card.label}
-                          </Text>
-                          <Text variant="bodySm" as="p" tone="subdued">
-                            {card.description}
-                          </Text>
-                          {card.badge && (
-                            <Badge
-                              tone={disabled ? "critical" : "info"}
-                            >
-                              {disabled
-                                ? `${card.badge} (upgrade)`
-                                : card.badge}
-                            </Badge>
-                          )}
-                        </BlockStack>
-                      </div>
-                    );
-                  })}
-                </InlineGrid>
+                <Tabs
+                  tabs={tabs}
+                  selected={selectedTab}
+                  onSelect={handleTabChange}
+                  fitted
+                />
               </BlockStack>
             </Card>
 
-            {/* ─── STEP 2: Provider Identity ─── */}
+            {/* ─── Details + Connection ─── */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <StepBadge number={2} />
-                  <Text variant="headingMd" as="h2">
-                    Provider identity
-                  </Text>
-                </InlineStack>
-
-                <InlineGrid
-                  columns={{ xs: 1, md: "2fr 1fr" }}
-                  gap="400"
-                >
-                  {/* Left: Name + Description */}
-                  <BlockStack gap="300">
-                    <TextField
-                      label="Provider name"
-                      name="name"
-                      value={name}
-                      onChange={setName}
-                      autoComplete="off"
-                      placeholder="e.g. Parts Unlimited"
-                      helpText="A friendly name to identify this data source."
-                      requiredIndicator
-                    />
-                    <TextField
-                      label="Description"
-                      name="description"
-                      value={description}
-                      onChange={setDescription}
-                      autoComplete="off"
-                      placeholder="Automotive parts supplier — stock feed updated daily"
-                      multiline={3}
-                    />
-                  </BlockStack>
-
-                  {/* Right: Logo upload */}
-                  <BlockStack gap="200">
-                    <Text variant="bodyMd" as="p" fontWeight="semibold">
-                      Provider logo
-                    </Text>
-                    <DropZone
-                      accept="image/*"
-                      type="image"
-                      onDrop={handleLogoDrop}
-                      allowMultiple={false}
-                      variableHeight
-                    >
-                      {logoPreview ? (
-                        <Box padding="400">
-                          <InlineStack align="center">
-                            <Thumbnail
-                              source={logoPreview}
-                              alt="Provider logo"
-                              size="large"
-                            />
-                          </InlineStack>
-                        </Box>
-                      ) : (
-                        <DropZone.FileUpload
-                          actionHint="or drop image here"
-                        />
-                      )}
-                    </DropZone>
-                    <Text variant="bodySm" as="p" tone="subdued">
-                      Square image recommended. Max 2MB.
-                    </Text>
-                  </BlockStack>
-                </InlineGrid>
-
-                <Divider />
-
-                {/* Contact details */}
-                <Text variant="headingSm" as="h3">
-                  Contact details (optional)
+                <Text variant="headingMd" as="h2">
+                  Details
                 </Text>
+
                 <FormLayout>
-                  <FormLayout.Group>
-                    <TextField
-                      label="Website"
-                      name="website_url"
-                      value={websiteUrl}
-                      onChange={setWebsiteUrl}
-                      autoComplete="off"
-                      placeholder="https://www.supplier.com"
-                    />
-                    <TextField
-                      label="Contact email"
-                      name="contact_email"
-                      value={contactEmail}
-                      onChange={setContactEmail}
-                      autoComplete="off"
-                      placeholder="trade@supplier.com"
-                      type="email"
-                    />
-                  </FormLayout.Group>
                   <TextField
-                    label="Notes"
-                    name="notes"
-                    value={notes}
-                    onChange={setNotes}
+                    label="Name"
+                    name="name"
+                    value={name}
+                    onChange={setName}
                     autoComplete="off"
-                    placeholder="Account number, trade terms, data format notes..."
-                    multiline={2}
+                    placeholder="e.g. Parts Unlimited"
+                    helpText="A friendly name to identify this import source."
+                    requiredIndicator
                   />
                 </FormLayout>
-              </BlockStack>
-            </Card>
-
-            {/* ─── STEP 3: Connection Settings ─── */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <StepBadge number={3} />
-                  <Text variant="headingMd" as="h2">
-                    Connection settings
-                  </Text>
-                  <Badge>{providerType.toUpperCase()}</Badge>
-                </InlineStack>
 
                 {/* CSV Settings */}
                 {providerType === "csv" && (
@@ -577,20 +394,14 @@ export default function ProvidersNew() {
                       ]}
                       helpText="Column separator used in the file. Most CSV files use comma."
                     />
-                    <Banner tone="info">
-                      After creating this provider, you can upload files from the
-                      provider detail page. Our smart mapper will help you match
-                      columns to Shopify product fields.
-                    </Banner>
                   </FormLayout>
                 )}
 
-                {/* XML Settings */}
+                {/* XML — no extra config needed */}
                 {providerType === "xml" && (
                   <Banner tone="info">
-                    After creating this provider, you can upload XML files from
-                    the provider detail page. The parser will auto-detect the
-                    repeating item element and map fields to Shopify products.
+                    After creating, upload XML files from the detail page. The
+                    parser auto-detects the repeating item element.
                   </Banner>
                 )}
 
@@ -600,8 +411,8 @@ export default function ProvidersNew() {
                     {!canUseApi ? (
                       <Banner tone="warning">
                         API integration requires the{" "}
-                        <strong>Professional</strong> plan or higher. Your
-                        current plan: <strong>{plan}</strong>.
+                        <strong>Professional</strong> plan or higher. Current
+                        plan: <strong>{plan}</strong>.
                       </Banner>
                     ) : (
                       <FormLayout>
@@ -614,7 +425,7 @@ export default function ProvidersNew() {
                           placeholder="https://api.supplier.com/v1/products"
                           type="url"
                           helpText="The full URL that returns product data as JSON."
-                            />
+                        />
                         <FormLayout.Group>
                           <Select
                             label="Authentication method"
@@ -623,15 +434,9 @@ export default function ProvidersNew() {
                             onChange={setApiAuthType}
                             options={[
                               { label: "No authentication", value: "none" },
-                              {
-                                label: "API Key (header)",
-                                value: "api_key",
-                              },
+                              { label: "API Key (header)", value: "api_key" },
                               { label: "Bearer Token", value: "bearer" },
-                              {
-                                label: "Basic Auth (user:pass)",
-                                value: "basic",
-                              },
+                              { label: "Basic Auth (user:pass)", value: "basic" },
                             ]}
                           />
                           {apiAuthType !== "none" && (
@@ -658,7 +463,7 @@ export default function ProvidersNew() {
                             onChange={setApiItemsPath}
                             autoComplete="off"
                             placeholder="data.products"
-                            helpText="Dot path to the products array in the response. Leave blank for auto-detect."
+                            helpText="Dot path to the products array. Leave blank for auto-detect."
                           />
                           <Select
                             label="Auto-refresh"
@@ -686,7 +491,7 @@ export default function ProvidersNew() {
                     {!canUseFtp ? (
                       <Banner tone="warning">
                         FTP import requires the <strong>Business</strong> plan
-                        or higher. Your current plan: <strong>{plan}</strong>.
+                        or higher. Current plan: <strong>{plan}</strong>.
                       </Banner>
                     ) : (
                       <FormLayout>
@@ -699,7 +504,6 @@ export default function ProvidersNew() {
                             { label: "FTP (standard)", value: "ftp" },
                             { label: "SFTP (secure)", value: "sftp" },
                           ]}
-                          helpText="SFTP uses SSH encryption — recommended if your server supports it."
                         />
                         <FormLayout.Group>
                           <TextField
@@ -709,7 +513,7 @@ export default function ProvidersNew() {
                             onChange={setFtpHost}
                             autoComplete="off"
                             placeholder="ftp.supplier.com"
-                                />
+                          />
                           <TextField
                             label="Port"
                             name="ftp_port"
@@ -718,7 +522,6 @@ export default function ProvidersNew() {
                             autoComplete="off"
                             placeholder="21"
                             type="number"
-                            helpText="Default: 21 (FTP) or 22 (SFTP)"
                           />
                         </FormLayout.Group>
                         <FormLayout.Group>
@@ -728,7 +531,6 @@ export default function ProvidersNew() {
                             value={ftpUsername}
                             onChange={setFtpUsername}
                             autoComplete="off"
-                            placeholder="your-username"
                           />
                           <TextField
                             label="Password"
@@ -747,16 +549,15 @@ export default function ProvidersNew() {
                             onChange={setFtpPath}
                             autoComplete="off"
                             placeholder="/car"
-                            helpText="Directory or file path on the server."
                           />
                           <TextField
-                            label="File pattern (optional)"
+                            label="File pattern"
                             name="ftp_file_pattern"
                             value={ftpFilePattern}
                             onChange={setFtpFilePattern}
                             autoComplete="off"
                             placeholder="*.csv"
-                            helpText="Filter files by name pattern. Leave blank to list all."
+                            helpText="Filter by name pattern. Leave blank for all files."
                           />
                         </FormLayout.Group>
                       </FormLayout>
@@ -766,88 +567,41 @@ export default function ProvidersNew() {
               </BlockStack>
             </Card>
 
-            {/* ─── STEP 4: Import preferences ─── */}
+            {/* ─── Duplicate Handling + Submit ─── */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <StepBadge number={4} />
-                  <Text variant="headingMd" as="h2">
-                    Import preferences
-                  </Text>
+                <Text variant="headingMd" as="h2">
+                  Duplicate handling
+                </Text>
+
+                <Select
+                  label="When a product with the same SKU or title already exists"
+                  name="duplicate_strategy"
+                  value={duplicateStrategy}
+                  onChange={setDuplicateStrategy}
+                  options={[
+                    { label: "Skip — keep existing products unchanged", value: "skip" },
+                    { label: "Update — overwrite with new data", value: "update" },
+                    { label: "Create new — always import as new products", value: "create" },
+                  ]}
+                />
+
+                <InlineStack align="end" gap="300">
+                  <Button onClick={() => navigate("/app/providers")}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    submit
+                    loading={isSubmitting}
+                    disabled={atLimit || !name.trim()}
+                    size="large"
+                  >
+                    Create Import Source
+                  </Button>
                 </InlineStack>
-
-                <FormLayout>
-                  <Select
-                    label="Duplicate handling"
-                    name="duplicate_strategy"
-                    value={duplicateStrategy}
-                    onChange={setDuplicateStrategy}
-                    options={[
-                      {
-                        label: "Skip duplicates — keep existing products unchanged",
-                        value: "skip",
-                      },
-                      {
-                        label: "Update duplicates — overwrite with new data",
-                        value: "update",
-                      },
-                      {
-                        label: "Create new — always import as new products",
-                        value: "create",
-                      },
-                    ]}
-                    helpText="How to handle products with matching SKU or title when importing. This setting is remembered for future imports."
-                  />
-                </FormLayout>
-
-                <Box
-                  padding="400"
-                  background="bg-surface-secondary"
-                  borderRadius="200"
-                >
-                  <BlockStack gap="300">
-                    <Text variant="headingSm" as="h3">
-                      What happens next?
-                    </Text>
-                    <BlockStack gap="200">
-                      {[
-                        "Provider is created and ready to receive data",
-                        providerType === "csv" || providerType === "xml"
-                          ? "Upload your file from the provider detail page"
-                          : providerType === "api"
-                            ? "Test the API connection and fetch products"
-                            : "Connect to FTP server and browse available files",
-                        "Map columns to Shopify fields with our smart mapper",
-                        "Preview products before importing — review and approve",
-                      ].map((step, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                          <div style={{ flexShrink: 0, width: 20, height: 20, marginTop: 1 }}>
-                            <Icon source={CheckCircleIcon} tone="success" />
-                          </div>
-                          <Text variant="bodySm" as="p">
-                            {step}
-                          </Text>
-                        </div>
-                      ))}
-                    </BlockStack>
-                  </BlockStack>
-                </Box>
               </BlockStack>
             </Card>
-
-            {/* ─── Submit ─── */}
-            <InlineStack align="end" gap="300">
-              <Button onClick={() => navigate("/app/providers")}>Cancel</Button>
-              <Button
-                variant="primary"
-                submit
-                loading={isSubmitting}
-                disabled={atLimit || !name.trim()}
-                size="large"
-              >
-                Create Provider
-              </Button>
-            </InlineStack>
           </BlockStack>
         </Form>
       </BlockStack>

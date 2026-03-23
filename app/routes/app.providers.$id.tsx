@@ -1,10 +1,9 @@
 /**
  * Provider Detail/Dashboard Page
  *
- * Tabbed dashboard for a single provider: Overview, Products, Import,
- * Import History, Mapping, Pricing, Settings.
+ * Tabbed dashboard for a single provider: Overview, Import History, Settings.
  * URL param: ?tab=overview|settings (inline tabs)
- * Other tabs navigate to sub-routes.
+ * Import History tab navigates to sub-route.
  */
 
 import { useState, useCallback } from "react";
@@ -18,7 +17,7 @@ import {
 } from "@shopify/polaris";
 import {
   ProductIcon, ImportIcon, ClockIcon, ChartVerticalFilledIcon,
-  ViewIcon, EditIcon, PlusCircleIcon, DeleteIcon, GlobeIcon, EmailIcon,
+  ViewIcon, PlusCircleIcon, DeleteIcon, GlobeIcon, EmailIcon,
   ConnectIcon, SettingsIcon,
 } from "@shopify/polaris-icons";
 
@@ -78,11 +77,10 @@ const DUPLICATE_OPTIONS = [
   { label: "Overwrite duplicates", value: "overwrite" },
   { label: "Create new entries", value: "create" },
 ];
-const TAB_IDS = ["overview", "products", "import", "history", "mapping", "pricing", "settings"] as const;
+const TAB_IDS = ["overview", "history", "settings"] as const;
 type TabId = (typeof TAB_IDS)[number];
 const TAB_LABELS: Record<TabId, string> = {
-  overview: "Overview", products: "Products", import: "Import",
-  history: "Import History", mapping: "Mapping", pricing: "Pricing", settings: "Settings",
+  overview: "Overview", history: "Import History", settings: "Settings",
 };
 
 // ---------------------------------------------------------------------------
@@ -279,18 +277,11 @@ export default function ProviderDetail() {
 
   const handleTabChange = useCallback((index: number) => {
     const tabId = TAB_IDS[index];
-    if (tabId === "overview" || tabId === "settings") {
-      navigate(`/app/providers/${provider.id}?tab=${tabId}`);
+    if (tabId === "history") {
+      navigate(`/app/providers/${provider.id}/imports`);
       return;
     }
-    const routes: Record<string, string> = {
-      products: `/app/providers/${provider.id}/products`,
-      import: `/app/providers/${provider.id}/import`,
-      history: `/app/providers/${provider.id}/imports`,
-      mapping: `/app/providers/${provider.id}/mapping`,
-      pricing: `/app/providers/${provider.id}/pricing`,
-    };
-    if (routes[tabId]) navigate(routes[tabId]);
+    navigate(`/app/providers/${provider.id}?tab=${tabId}`);
   }, [navigate, provider.id]);
 
   const tabs = TAB_IDS.map((id) => ({ id, content: TAB_LABELS[id] }));
@@ -312,7 +303,7 @@ export default function ProviderDetail() {
           <Badge tone="info">{type.toUpperCase()}</Badge>
         </InlineStack>
       }
-      primaryAction={{ content: "Import Data", onAction: () => navigate(`/app/providers/${provider.id}/import`) }}
+      primaryAction={{ content: "Import Data", onAction: () => navigate(`/app/providers/new?from=${provider.id}`) }}
     >
       <BlockStack gap="400">
         <HowItWorks
@@ -327,14 +318,14 @@ export default function ProviderDetail() {
               title: "Fetch & Map Data",
               description: "Fetch products from your provider, then map columns to match AutoSync fields. The system remembers your mappings for next time.",
               linkText: "Import Data",
-              linkUrl: `/app/providers/${provider.id}/import`,
+              linkUrl: `/app/providers/new?from=${provider.id}`,
             },
             {
               number: 3,
               title: "Import Products",
               description: "Preview matched data, choose how to handle duplicates, then import. Products appear in your catalog ready for fitment mapping.",
               linkText: "View Products",
-              linkUrl: `/app/providers/${provider.id}/products`,
+              linkUrl: `/app/products?provider=${provider.id}`,
             },
           ]}
         />
@@ -436,7 +427,7 @@ export default function ProviderDetail() {
                     <Text as="h2" variant="headingMd">Quick Actions</Text>
                     <Divider />
                     <InlineStack gap="300" wrap>
-                      <Button variant="primary" icon={PlusCircleIcon} onClick={() => navigate(`/app/providers/${provider.id}/import`)}>
+                      <Button variant="primary" icon={PlusCircleIcon} onClick={() => navigate(`/app/providers/new?from=${provider.id}`)}>
                         {type === "api" ? "Fetch / Import" : "Import Data"}
                       </Button>
                       {(type === "api" || type === "ftp") && (
@@ -449,8 +440,7 @@ export default function ProviderDetail() {
                           Test Connection
                         </Button>
                       )}
-                      <Button icon={ViewIcon} onClick={() => navigate(`/app/providers/${provider.id}/products`)}>View Products</Button>
-                      <Button icon={EditIcon} onClick={() => navigate(`/app/providers/${provider.id}/mapping`)}>Column Mapping</Button>
+                      <Button icon={ViewIcon} onClick={() => navigate(`/app/products?provider=${provider.id}`)}>View Products</Button>
                       <Button icon={SettingsIcon} onClick={() => navigate(`/app/providers/${provider.id}?tab=settings`)}>Settings</Button>
                     </InlineStack>
                   </BlockStack>
