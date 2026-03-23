@@ -96,11 +96,12 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
           // For collection jobs, show actual created count from live stats
           const isCollectionJob = job.type === "collections";
           const processed = isCollectionJob ? (liveStats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
-          // For collection jobs, don't use total_items if it equals product count (wrong value)
-          // Instead show created / target where target comes from job or estimate
-          const total = isCollectionJob && job.total_items === liveStats.total
-            ? Math.max(processed + 50, job.total_items ?? 0) // estimate if total = product count (wrong)
-            : (job.total_items ?? 0);
+          // For collection jobs: total should never be product count
+          // If total > 2x processed, it's likely wrong (product count leaked in)
+          let total = job.total_items ?? 0;
+          if (isCollectionJob && total > 0 && processed > 0 && total > processed * 2.5) {
+            total = processed + 50; // use estimate instead of wrong total
+          }
           const percent = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
           const isRunning = job.status === "running";
           const isComplete = job.status === "completed";

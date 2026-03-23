@@ -227,8 +227,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .from("collection_mappings")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId);
-    // Rough estimate: existing + ~10% growth for new combos
-    const estimatedTotal = Math.max(existingCollections ?? 0, mappedCount ?? 100);
+    // Use existing count as starting estimate — Edge Function will set accurate total on first tick
+    // NEVER use mappedCount here — that's product count, not collection count
+    const estimatedTotal = (existingCollections ?? 0) + 50; // +50 for expected new ones
 
     const { error: jobError } = await db
       .from("sync_jobs")
