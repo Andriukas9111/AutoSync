@@ -72,6 +72,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId);
   }
 
+  // Auto-discover publication IDs for multi-tenant (runs once per tenant)
+  const currentTenant = tenant ?? (await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).single()).data;
+  if (currentTenant && !currentTenant.online_store_publication_id) {
+    try {
+      const pubRes = await admin.graphql(`{ publications(first: 10) { nodes { id name } } }`);
+      const pubJson = await pubRes.json();
+      const onlineStore = (pubJson?.data?.publications?.nodes || []).find(
+        (p: { name: string }) => p.name === "Online Store"
+      );
+      if (onlineStore?.id) {
+        await db.from("tenants").update({ online_store_publication_id: onlineStore.id }).eq("shop_id", shopId);
+        console.log(`[app.tsx] Publication ID discovered: ${onlineStore.id}`);
+      }
+    } catch (pubErr) {
+      console.error("[app.tsx] Publication discovery failed:", pubErr instanceof Error ? pubErr.message : pubErr);
+    }
+  }
+
   // Prime the plan config cache from DB (warm for all child loaders)
   await loadPlanConfigsFromDB();
 

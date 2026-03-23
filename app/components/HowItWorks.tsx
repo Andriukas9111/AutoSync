@@ -1,6 +1,7 @@
 /**
  * Unified "How It Works" collapsible info section.
- * Matches the Vehicle Pages design exactly — used on ALL pages.
+ * Shows a brief subtitle when collapsed so users know what's inside.
+ * Matches design system — used on ALL pages.
  */
 
 import { useState } from "react";
@@ -29,6 +30,8 @@ export interface HowItWorksStep {
 interface HowItWorksProps {
   /** Section title (default: "How It Works") */
   title?: string;
+  /** Brief description shown when collapsed — gives context without opening */
+  subtitle?: string;
   /** Steps to display (1-4 recommended) */
   steps: HowItWorksStep[];
   /** Default collapsed state */
@@ -37,20 +40,31 @@ interface HowItWorksProps {
 
 export function HowItWorks({
   title = "How It Works",
+  subtitle,
   steps,
   defaultCollapsed = true,
 }: HowItWorksProps) {
   const [open, setOpen] = useState(!defaultCollapsed);
 
+  // Auto-generate subtitle from step titles if not provided
+  const displaySubtitle = subtitle ?? steps.map((s) => s.title).join(" → ");
+
   return (
     <Card>
-      <BlockStack gap="300">
+      <BlockStack gap="200">
         <InlineStack align="space-between" blockAlign="center">
           <InlineStack gap="200" blockAlign="center">
             <IconBadge icon={InfoIcon} color="var(--p-color-icon-emphasis)" />
-            <Text as="h2" variant="headingMd">
-              {title}
-            </Text>
+            <BlockStack gap="0">
+              <Text as="h2" variant="headingMd">
+                {title}
+              </Text>
+              {!open && displaySubtitle && (
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {displaySubtitle}
+                </Text>
+              )}
+            </BlockStack>
           </InlineStack>
           <Button variant="plain" onClick={() => setOpen(!open)}>
             {open ? "Hide" : "Show"}

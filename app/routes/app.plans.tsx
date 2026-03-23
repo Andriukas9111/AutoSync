@@ -27,6 +27,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
+import { cardRowStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import {
   getTenant,
@@ -443,14 +444,14 @@ export default function Plans() {
                 <div style={{
                   textAlign: "center",
                   padding: "6px 0",
-                  fontSize: "11px",
-                  fontWeight: 600,
                   letterSpacing: "0.5px",
                   minHeight: "27px",
                   color: hasBadge ? "var(--p-color-text-emphasis)" : "transparent",
                   borderBottom: "1px solid var(--p-color-border)",
                 }}>
-                  {hasBadge ? config.badge : "\u00A0"}
+                  <Text as="span" variant="bodySm" fontWeight="semibold">
+                    {hasBadge ? config.badge : "\u00A0"}
+                  </Text>
                 </div>
 
                 {/* Card content */}
@@ -556,15 +557,13 @@ export default function Plans() {
                       textAlign: "left",
                       padding: "12px 8px",
                       borderBottom: "2px solid var(--p-color-border)",
-                      fontWeight: 600,
-                      fontSize: "13px",
                       position: "sticky",
                       left: 0,
                       background: "var(--p-color-bg-surface)",
                       zIndex: 1,
                       minWidth: "180px",
                     }}>
-                      Feature
+                      <Text as="span" variant="bodySm" fontWeight="semibold">Feature</Text>
                     </th>
                     {PLAN_ORDER.map((tier) => {
                       const c = configs[tier];
@@ -573,16 +572,14 @@ export default function Plans() {
                           textAlign: "center",
                           padding: "12px 6px",
                           borderBottom: "2px solid var(--p-color-border)",
-                          fontWeight: 600,
-                          fontSize: "13px",
                           backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
                           minWidth: "90px",
                         }}>
-                          {c.name}
+                          <Text as="span" variant="bodySm" fontWeight="semibold">{c.name}</Text>
                           <br />
-                          <span style={{ fontWeight: 400, fontSize: "12px", color: "var(--p-color-text-subdued)" }}>
+                          <Text as="span" variant="bodySm" tone="subdued">
                             {c.priceMonthly === 0 ? "Free" : `$${String(c.priceMonthly)}/mo`}
-                          </span>
+                          </Text>
                         </th>
                       );
                     })}
@@ -595,15 +592,12 @@ export default function Plans() {
                       <tr key={`cat-${category}`}>
                         <td colSpan={7} style={{
                           padding: "10px 8px 6px",
-                          fontWeight: 700,
-                          fontSize: "11px",
                           textTransform: "uppercase",
                           letterSpacing: "0.5px",
-                          color: "var(--p-color-text-subdued)",
                           borderBottom: "1px solid var(--p-color-border)",
                           background: "var(--p-color-bg-surface-secondary)",
                         }}>
-                          {category}
+                          <Text as="span" variant="bodySm" fontWeight="bold" tone="subdued">{category}</Text>
                         </td>
                       </tr>,
                       ...categoryRows.map((row) => (
@@ -611,17 +605,15 @@ export default function Plans() {
                           <td style={{
                             padding: "10px 8px",
                             borderBottom: "1px solid var(--p-color-border-secondary)",
-                            fontSize: "13px",
-                            fontWeight: 500,
                             position: "sticky",
                             left: 0,
                             background: "var(--p-color-bg-surface)",
                             zIndex: 1,
                           }}>
-                            {row.label}
+                            <Text as="span" variant="bodySm" fontWeight="medium">{row.label}</Text>
                             {row.comingSoon && (
-                              <span style={{ fontSize: "10px", color: "var(--p-color-text-info)", marginLeft: "6px", fontWeight: 400 }}>
-                                Coming Soon
+                              <span style={{ marginLeft: "6px" }}>
+                                <Text as="span" variant="bodySm" tone="info">Coming Soon</Text>
                               </span>
                             )}
                           </td>
@@ -632,13 +624,13 @@ export default function Plans() {
                                 textAlign: "center",
                                 padding: "10px 6px",
                                 borderBottom: "1px solid var(--p-color-border-secondary)",
-                                fontSize: "13px",
                                 backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
-                                color: value === "—" ? "var(--p-color-text-subdued)" : "var(--p-color-text)",
                               }}>
                                 {value === "✓" ? (
-                                  <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>✓</span>
-                                ) : value}
+                                  <Text as="span" variant="bodySm" fontWeight="semibold" tone="success">{"✓"}</Text>
+                                ) : (
+                                  <Text as="span" variant="bodySm" tone={value === "—" ? "subdued" : undefined}>{value}</Text>
+                                )}
                               </td>
                             );
                           })}
@@ -722,9 +714,7 @@ export default function Plans() {
                 { title: "Cancel Anytime", desc: "Cancel your subscription at any time. Downgrade to Free with no penalties." },
               ].map((item, i) => (
                 <div key={i} style={{
-                  padding: "12px 16px",
-                  borderRadius: "var(--p-border-radius-300)",
-                  background: "var(--p-color-bg-surface-secondary)",
+                  ...cardRowStyle,
                   border: "1px solid var(--p-color-border-secondary)",
                 }}>
                   <BlockStack gap="100">

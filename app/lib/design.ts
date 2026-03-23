@@ -94,6 +94,81 @@ export const tableContainerStyle: CSSProperties = {
   border: "1px solid var(--p-color-border-secondary)",
 };
 
+// ─── Card Row Style (used in stat sections, list items) ──────────
+// Replaces hardcoded `padding: "12px 16px", borderRadius: ...` pattern
+export const cardRowStyle: CSSProperties = {
+  padding: "12px 16px",
+  borderRadius: "var(--p-border-radius-300)",
+  background: "var(--p-color-bg-surface-secondary)",
+};
+
+// ─── Flex helpers ────────────────────────────────────────────────
+export const flexRowStyle = (gap = "12px"): CSSProperties => ({
+  display: "flex",
+  alignItems: "center",
+  gap,
+  flexWrap: "wrap" as const,
+});
+
+export const flexColumnStyle = (gap = 6): CSSProperties => ({
+  display: "flex",
+  flexDirection: "column",
+  gap: `${gap}px`,
+});
+
+export const flexWrapStyle = (gap = 16): CSSProperties => ({
+  display: "flex",
+  flexWrap: "wrap",
+  gap: `${gap}px`,
+});
+
+// ─── Horizontal Bar Chart (Analytics) ─────────────────────────────
+// Used in: Analytics page for Popular Makes, Popular Models, any bar visualization
+export const barChartRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+
+export const barChartLabelStyle = (width: number): CSSProperties => ({
+  width: `${width}px`,
+  flexShrink: 0,
+  textAlign: "right" as const,
+});
+
+export const barChartTrackStyle: CSSProperties = {
+  flex: 1,
+  background: "var(--p-color-bg-surface-secondary)",
+  borderRadius: "var(--p-border-radius-100)",
+  height: "24px",
+  overflow: "hidden",
+};
+
+export const barChartFillStyle = (percent: number): CSSProperties => ({
+  width: `${percent}%`,
+  height: "100%",
+  background: "var(--p-color-bg-fill-emphasis)",
+  borderRadius: "var(--p-border-radius-100)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  paddingRight: "8px",
+  minWidth: "40px",
+  transition: "width 0.3s ease",
+});
+
+export const barChartValueStyle: CSSProperties = {
+  color: "var(--p-color-text-inverse)",
+  fontSize: "12px",
+  fontWeight: 600,
+};
+
+export const barChartSuffixStyle: CSSProperties = {
+  width: "60px",
+  textAlign: "right" as const,
+  flexShrink: 0,
+};
+
 // ─── Badge Tone Mappings ───────────────────────────────────────────
 // Use these instead of hardcoding tone strings
 export const STATUS_TONES: Record<string, "success" | "warning" | "critical" | "info" | undefined> = {

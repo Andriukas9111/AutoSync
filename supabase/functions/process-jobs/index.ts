@@ -21,8 +21,31 @@ const BATCH_SIZE = 20; // Products per invocation
 // Cache publication IDs per shop (refreshed each Edge Function invocation)
 const pubCache = new Map<string, string[]>();
 
-async function getPublicationIds(shopId: string, accessToken: string): Promise<string[]> {
+async function getPublicationIds(
+  shopId: string,
+  accessToken: string,
+  db?: ReturnType<typeof createClient>,
+): Promise<string[]> {
   if (pubCache.has(shopId)) return pubCache.get(shopId)!;
+
+  // Try reading from tenant record first (fastest — no Shopify API call)
+  if (db) {
+    try {
+      const { data: tenant } = await db
+        .from("tenants")
+        .select("online_store_publication_id")
+        .eq("shop_id", shopId)
+        .maybeSingle();
+      if (tenant?.online_store_publication_id) {
+        const pubs = [tenant.online_store_publication_id];
+        pubCache.set(shopId, pubs);
+        console.log(`[publications] From DB: ${pubs.length} for ${shopId}`);
+        return pubs;
+      }
+    } catch (_e) { /* fall through to API */ }
+  }
+
+  // Fallback: query Shopify API
   try {
     const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
       method: "POST",
@@ -34,7 +57,18 @@ async function getPublicationIds(shopId: string, accessToken: string): Promise<s
       .filter((p: { name: string }) => p.name === "Online Store" || p.name === "Point of Sale")
       .map((p: { id: string }) => p.id);
     pubCache.set(shopId, pubs);
-    console.log(`[publications] Found ${pubs.length} for ${shopId}`);
+
+    // Save to tenant record for future use
+    if (db && pubs.length > 0) {
+      const onlineStore = (json?.data?.publications?.nodes || []).find(
+        (p: { name: string }) => p.name === "Online Store"
+      );
+      if (onlineStore?.id) {
+        await db.from("tenants").update({ online_store_publication_id: onlineStore.id }).eq("shop_id", shopId);
+      }
+    }
+
+    console.log(`[publications] From API: ${pubs.length} for ${shopId}`);
     return pubs;
   } catch (err) {
     console.error("[publications] Error:", err);
@@ -275,9 +309,12 @@ async function processPushChunk(
     const tags: string[] = [];
     const seenMakes = new Set<string>();
     const seenModels = new Set<string>();
+    const seenYearRanges = new Set<string>();
     for (const f of productFitments) {
       const make = f.make as string;
       const model = f.model as string;
+      const yearFrom = f.year_from as number | null;
+      const yearTo = f.year_to as number | null;
       if (make && !seenMakes.has(make)) {
         tags.push(`_autosync_${make}`);
         seenMakes.add(make);
@@ -286,6 +323,15 @@ async function processPushChunk(
       if (model && !seenModels.has(model)) {
         tags.push(`_autosync_${model}`);
         seenModels.add(model);
+      }
+      // Year-range tags for make_model_year collections
+      if (make && model && yearFrom) {
+        const yearRange = yearTo ? `${yearFrom}-${yearTo}` : `${yearFrom}+`;
+        const yearTag = `_autosync_${make}_${model}_${yearRange}`;
+        if (!seenYearRanges.has(yearTag)) {
+          tags.push(yearTag);
+          seenYearRanges.add(yearTag);
+        }
       }
     }
 
@@ -549,7 +595,7 @@ async function processCollectionsChunk(
             query: COLLECTION_PUBLISH_MUTATION,
             variables: {
               id: collection.id,
-              input: (await getPublicationIds(shopId, accessToken)).map(id => ({ publicationId: id })),
+              input: (await getPublicationIds(shopId, accessToken, db)).map(id => ({ publicationId: id })),
             },
           }),
         });
@@ -642,10 +688,7 @@ async function processCollectionsChunk(
               query: COLLECTION_PUBLISH_MUTATION,
               variables: {
                 id: collection.id,
-                input: [
-                  { publicationId: "gid://shopify/Publication/178272010453" },
-                  { publicationId: "gid://shopify/Publication/178272043221" },
-                ],
+                input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })),
               },
             }),
           });
@@ -670,6 +713,98 @@ async function processCollectionsChunk(
         await new Promise((r) => setTimeout(r, 500));
       } catch (err) {
         console.error(`[collections] Failed to create ${make} ${model}:`, err);
+      }
+    }
+  }
+
+  // Create year-range collections if strategy is make_model_year
+  if (strategy === "make_model_year" && created < 10) {
+    // Get year ranges from fitments
+    const { data: yearFitments } = await db
+      .from("vehicle_fitments")
+      .select("make, model, year_from, year_to")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .not("model", "is", null)
+      .not("year_from", "is", null);
+
+    // Build unique year-range combos
+    const yearCombos = new Set<string>();
+    for (const f of yearFitments ?? []) {
+      const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+      yearCombos.add(`${f.make}|||${f.model}|||${yr}`);
+    }
+
+    for (const combo of yearCombos) {
+      if (created >= 10) break;
+      const [make, model, yearRange] = combo.split("|||");
+      const yearKey = `${make}|||${model}|||${yearRange}`;
+      if (existingSet.has(yearKey)) continue;
+
+      const title = `${make} ${model} ${yearRange} Parts`;
+      const yearTag = `_autosync_${make}_${model}_${yearRange}`;
+      const input: Record<string, unknown> = {
+        title,
+        ruleSet: {
+          appliedDisjunctively: false,
+          rules: [
+            { column: "TAG", relation: "EQUALS", condition: yearTag },
+          ],
+        },
+      };
+
+      if (seoEnabled) {
+        input.seo = {
+          title: `${make} ${model} ${yearRange} Parts & Accessories`,
+          description: `Performance parts for ${make} ${model} ${yearRange}. All products fitment-verified.`,
+        };
+      }
+
+      try {
+        const { data: makeLogoRow } = await db.from("ymme_makes").select("logo_url").eq("name", make).maybeSingle();
+        if (makeLogoRow?.logo_url) {
+          input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} ${yearRange} parts` };
+        }
+
+        const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+          body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
+        });
+        const json = await res.json();
+        const collection = json?.data?.collectionCreate?.collection;
+
+        if (collection) {
+          await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+            body: JSON.stringify({
+              query: COLLECTION_PUBLISH_MUTATION,
+              variables: {
+                id: collection.id,
+                input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })),
+              },
+            }),
+          });
+
+          const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
+          await db.from("collection_mappings").insert({
+            shop_id: shopId, make, model,
+            type: "make_model_year",
+            title, handle: collection.handle,
+            shopify_collection_id: numId,
+            image_url: makeLogoRow?.logo_url ?? null,
+            seo_title: seoEnabled ? `${make} ${model} ${yearRange} Parts` : null,
+            seo_description: seoEnabled ? `Parts for ${make} ${model} ${yearRange}.` : null,
+            synced_at: new Date().toISOString(),
+          });
+          console.log(`[collections] Created year collection: ${title}`);
+          created++;
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`[collections] Failed year collection ${title}:`, err);
       }
     }
   }

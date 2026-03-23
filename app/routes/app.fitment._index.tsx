@@ -16,6 +16,7 @@ import {
   Box,
   Collapsible,
   Icon,
+  Pagination,
 } from "@shopify/polaris";
 import {
   ChevronDownIcon,
@@ -295,6 +296,8 @@ export default function Fitment() {
   const extractFetcher = useFetcher();
   const [extractDismissed, setExtractDismissed] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  const [activityPage, setActivityPage] = useState(1);
+  const ACTIVITY_PAGE_SIZE = 10;
 
   const isExtracting = extractFetcher.state !== "idle";
   const extractResult = extractFetcher.data as
@@ -431,7 +434,7 @@ export default function Fitment() {
                   </Banner>
                 )}
                 {autoExtractionAllowed ? (
-                  <Button variant="primary" onClick={handleRunExtract} loading={isExtracting}>
+                  <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
                     {isExtracting ? "Extracting..." : "Run Auto Extract"}
                   </Button>
                 ) : (
@@ -457,7 +460,7 @@ export default function Fitment() {
                   Manually assign vehicles to products with full control. Search
                   make, model, year, and engine — then link to products one by one.
                 </Text>
-                <Button variant="primary" onClick={() => navigate("/app/fitment/manual")}>
+                <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
                   Start Mapping
                 </Button>
               </BlockStack>
@@ -515,7 +518,9 @@ export default function Fitment() {
               </Text>
             ) : (
               <BlockStack gap="0">
-                {productFitmentGroups.map((group) => {
+                {productFitmentGroups
+                  .slice((activityPage - 1) * ACTIVITY_PAGE_SIZE, activityPage * ACTIVITY_PAGE_SIZE)
+                  .map((group) => {
                   const isExpanded = expandedProduct === group.product_id;
                   const uniqueMakes = [...new Set(group.fitments.map((f) => f.make).filter(Boolean))];
                   const uniqueModels = [...new Set(group.fitments.map((f) => f.model).filter(Boolean))];
@@ -603,7 +608,7 @@ export default function Fitment() {
                               </Button>
                             </InlineStack>
                             <div style={{ overflowX: "auto" }}>
-                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                                   {["Make","Model","Years","Engine","Fuel","Method"].map(h => (
                                     <th key={h} style={{ textAlign: "left", padding: "6px 8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
@@ -611,12 +616,12 @@ export default function Fitment() {
                                 </tr></thead>
                                 <tbody>{group.fitments.map((f, fi) => (
                                   <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                                    <td style={{ padding: "6px 8px" }}>{f.make || "-"}</td>
-                                    <td style={{ padding: "6px 8px" }}>{f.model || "-"}</td>
-                                    <td style={{ padding: "6px 8px" }}>{formatYearRange(f.year_from, f.year_to)}</td>
-                                    <td style={{ padding: "6px 8px" }}>{f.engine || f.engine_code || "-"}</td>
-                                    <td style={{ padding: "6px 8px" }}>{f.fuel_type || "-"}</td>
-                                    <td style={{ padding: "6px 8px" }}>{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
+                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
                                   </tr>
                                 ))}</tbody>
                               </table>
@@ -628,6 +633,18 @@ export default function Fitment() {
                   );
                 })}
               </BlockStack>
+            )}
+
+            {productFitmentGroups.length > ACTIVITY_PAGE_SIZE && (
+              <InlineStack align="center" blockAlign="center">
+                <Pagination
+                  hasPrevious={activityPage > 1}
+                  hasNext={activityPage * ACTIVITY_PAGE_SIZE < productFitmentGroups.length}
+                  onPrevious={() => setActivityPage((p) => p - 1)}
+                  onNext={() => setActivityPage((p) => p + 1)}
+                  label={`${activityPage} of ${Math.ceil(productFitmentGroups.length / ACTIVITY_PAGE_SIZE)}`}
+                />
+              </InlineStack>
             )}
           </BlockStack>
         </Card>

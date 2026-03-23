@@ -19,8 +19,6 @@ import {
   Badge,
   Banner,
   ProgressBar,
-  Box,
-  Divider,
   Button,
 } from "@shopify/polaris";
 import {
@@ -43,6 +41,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
+import { statGridStyle, statMiniStyle } from "../lib/design";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -138,6 +137,9 @@ interface AnalyticsData {
   conversionFunnel: ConversionFunnel;
   conversionBySource: ConversionBySource[];
   conversionByVehicle: ConversionByVehicle[];
+  recentPlateLookups: Array<{ plate: string; make: string | null; model: string | null; year: number | null; fuel_type: string | null; colour: string | null; created_at: string }>;
+  totalPlateLookups: number;
+  topPlateMakes: Array<{ make: string; count: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +173,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       conversionFunnel: { searches: 0, productViews: 0, addToCarts: 0, purchases: 0, searchToViewRate: 0, viewToCartRate: 0, cartToPurchaseRate: 0, overallRate: 0 },
       conversionBySource: [],
       conversionByVehicle: [],
+      recentPlateLookups: [],
+      totalPlateLookups: 0,
+      topPlateMakes: [],
     } satisfies AnalyticsData;
   }
 
@@ -243,6 +248,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
   ]);
+
+  // ── Plate lookup analytics ──────────────────────────────────
+  const [plateLookupRes, plateLookupCountRes] = await Promise.all([
+    db.from("plate_lookups")
+      .select("plate, make, model, year, fuel_type, colour, created_at")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+    db.from("plate_lookups")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId),
+  ]);
+
+  const recentPlateLookups = plateLookupRes.data ?? [];
+  const totalPlateLookups = plateLookupCountRes.count ?? 0;
+
+  // Top looked-up makes from plate lookups
+  const plateMakeCounts: Record<string, number> = {};
+  for (const pl of recentPlateLookups) {
+    if (pl.make) plateMakeCounts[pl.make] = (plateMakeCounts[pl.make] || 0) + 1;
+  }
+  const topPlateMakes = Object.entries(plateMakeCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([make, count]) => ({ make, count }));
 
   // ── Compute fitment coverage ───────────────────────────────
   const totalProducts = productsRes.count ?? 0;
@@ -449,6 +479,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     conversionFunnel,
     conversionBySource,
     conversionByVehicle,
+    recentPlateLookups,
+    totalPlateLookups,
+    topPlateMakes,
   } satisfies AnalyticsData;
 };
 
@@ -483,6 +516,9 @@ export default function AnalyticsPage() {
     conversionFunnel,
     conversionBySource,
     conversionByVehicle,
+    recentPlateLookups,
+    totalPlateLookups,
+    topPlateMakes,
   } = useLoaderData<typeof loader>();
 
   const [showExport, setShowExport] = useState(false);
@@ -604,176 +640,127 @@ export default function AnalyticsPage() {
         {/* ── Fitment Coverage ──────────────────────────────── */}
         <Layout>
           <Layout.Section>
-            <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingLg">
-                Fitment Coverage
-              </Text>
-            </InlineStack>
-          </Layout.Section>
-
-          <Layout.Section>
-            {(() => {
-              const statItems = [
-                { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Total Products" },
-                { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
-                { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
-                { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
-              ];
-              return (
-                <Card padding="0">
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                    borderBottom: "1px solid var(--p-color-border-secondary)",
-                  }}>
-                    {statItems.map((item, i) => (
-                      <div key={item.label} style={{
-                        padding: "var(--p-space-400)",
-                        borderRight: i < statItems.length - 1 ? "1px solid var(--p-color-border-secondary)" : "none",
-                        textAlign: "center",
-                      }}>
-                        <BlockStack gap="200" inlineAlign="center">
-                          <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
-                          <Text as="p" variant="headingLg" fontWeight="bold">
-                            {item.count}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {item.label}
-                          </Text>
-                        </BlockStack>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              );
-            })()}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={GaugeIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                  <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                </InlineStack>
+                <div style={statGridStyle(4)}>
+                  {[
+                    { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Total Products" },
+                    { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
+                    { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
+                    { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
+                  ].map((item) => (
+                    <div key={item.label} style={statMiniStyle}>
+                      <BlockStack gap="200" inlineAlign="center">
+                        <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {item.count}
+                        </Text>
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          {item.label}
+                        </Text>
+                      </BlockStack>
+                    </div>
+                  ))}
+                </div>
+                {fitmentCoverage.coveragePercent > 0 && (
+                  <ProgressBar progress={Math.min(fitmentCoverage.coveragePercent, 100)} size="small" />
+                )}
+              </BlockStack>
+            </Card>
           </Layout.Section>
 
           {/* ── Product Status Breakdown ───────────────────── */}
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
-                  <Text as="h2" variant="headingMd">
-                    Product Status Breakdown
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ProductIcon} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                    <Text as="h2" variant="headingMd">Product Status Breakdown</Text>
+                  </InlineStack>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {`${fitmentCoverage.total.toLocaleString()} total products`}
                   </Text>
                 </InlineStack>
-                <InlineStack gap="400" wrap>
-                  {statusBreakdown.map(({ status, count }) => (
-                    <InlineStack key={status} gap="200" blockAlign="center">
-                      <Badge tone={STATUS_TONE[status]}>
-                        {status.replace(/_/g, " ")}
-                      </Badge>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {count.toLocaleString()}
-                      </Text>
-                    </InlineStack>
-                  ))}
-                </InlineStack>
+                <div style={statGridStyle(statusBreakdown.length || 1)}>
+                  {statusBreakdown.map(({ status, count }) => {
+                    const pct = fitmentCoverage.total > 0
+                      ? Math.round((count / fitmentCoverage.total) * 100) : 0;
+                    const labels: Record<string, string> = {
+                      unmapped: "Unmapped", flagged: "Flagged", auto_mapped: "Auto Mapped",
+                      smart_mapped: "Smart Mapped", manual_mapped: "Manual", partial: "Partial",
+                    };
+                    return (
+                      <div key={status} style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="100" blockAlign="center">
+                            <Badge tone={STATUS_TONE[status]}>{labels[status] ?? status}</Badge>
+                          </InlineStack>
+                          <Text as="p" variant="headingMd" fontWeight="bold">
+                            {count.toLocaleString()}
+                          </Text>
+                          <Text as="p" variant="bodySm" tone="subdued">{`${pct}%`}</Text>
+                        </BlockStack>
+                      </div>
+                    );
+                  })}
+                </div>
               </BlockStack>
             </Card>
           </Layout.Section>
 
-          {/* ── Popular Makes ─────────────────────────────── */}
+          {/* ── Popular Makes & Models (side by side) ──── */}
           {!isBasic && (
             <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Popular Makes (Top 15)
-                      </Text>
+              <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                {/* Popular Makes */}
+                <Card>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">Popular Makes</Text>
+                      </InlineStack>
+                      <Badge>{`${popularMakes.length} makes`}</Badge>
                     </InlineStack>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      By fitment count
-                    </Text>
-                  </InlineStack>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {popularMakes.slice(0, 10).map((m) => {
-                      const maxFit = popularMakes[0]?.fitmentCount || 1;
-                      const pct = Math.round((m.fitmentCount / maxFit) * 100);
-                      return (
-                        <div key={m.make} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "120px", flexShrink: 0, textAlign: "right" }}>
-                            <Text as="span" variant="bodySm" fontWeight="medium">{m.make}</Text>
-                          </div>
-                          <div style={{ flex: 1, background: "var(--p-color-bg-surface-secondary)", borderRadius: "4px", height: "24px", overflow: "hidden" }}>
-                            <div style={{ width: `${pct}%`, height: "100%", background: "#2563eb", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "8px", minWidth: "40px" }}>
-                              <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600 }}>{m.fitmentCount}</span>
-                            </div>
-                          </div>
-                          <div style={{ width: "50px", textAlign: "right" }}>
-                            <Text as="span" variant="bodySm" tone="subdued">{`${m.productCount}p`}</Text>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <Divider />
-                  <DataTable
-                    columnContentTypes={["text", "numeric", "numeric"]}
-                    headings={["Make", "Fitments", "Products"]}
-                    rows={popularMakes.map((m) => [
-                      m.make,
-                      m.fitmentCount.toLocaleString(),
-                      m.productCount.toLocaleString(),
-                    ])}
-                  />
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
+                    <DataTable
+                      columnContentTypes={["text", "numeric", "numeric"]}
+                      headings={["Make", "Fitments", "Products"]}
+                      rows={popularMakes.map((m) => [
+                        m.make,
+                        m.fitmentCount.toLocaleString(),
+                        m.productCount.toLocaleString(),
+                      ])}
+                    />
+                  </BlockStack>
+                </Card>
 
-          {/* ── Popular Models ────────────────────────────── */}
-          {!isBasic && (
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Popular Models (Top 15)
-                      </Text>
+                {/* Popular Models */}
+                <Card>
+                  <BlockStack gap="400">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">Popular Models</Text>
+                      </InlineStack>
+                      <Badge>{`${popularModels.length} models`}</Badge>
                     </InlineStack>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      By fitment count
-                    </Text>
-                  </InlineStack>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {popularModels.slice(0, 10).map((m) => {
-                      const maxFit = popularModels[0]?.fitmentCount || 1;
-                      const pct = Math.round((m.fitmentCount / maxFit) * 100);
-                      return (
-                        <div key={`${m.make}-${m.model}`} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <div style={{ width: "160px", flexShrink: 0, textAlign: "right" }}>
-                            <Text as="span" variant="bodySm" fontWeight="medium">{`${m.make} ${m.model}`}</Text>
-                          </div>
-                          <div style={{ flex: 1, background: "var(--p-color-bg-surface-secondary)", borderRadius: "4px", height: "24px", overflow: "hidden" }}>
-                            <div style={{ width: `${pct}%`, height: "100%", background: "#2563eb", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "8px", minWidth: "40px" }}>
-                              <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600 }}>{m.fitmentCount}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <Divider />
-                  <DataTable
-                    columnContentTypes={["text", "text", "numeric"]}
-                    headings={["Make", "Model", "Fitments"]}
-                    rows={popularModels.map((m) => [
-                      m.make,
-                      m.model,
-                      m.fitmentCount.toLocaleString(),
-                    ])}
-                  />
-                </BlockStack>
-              </Card>
+                    <DataTable
+                      columnContentTypes={["text", "text", "numeric"]}
+                      headings={["Make", "Model", "Fitments"]}
+                      rows={popularModels.map((m) => [
+                        m.make,
+                        m.model,
+                        m.fitmentCount.toLocaleString(),
+                      ])}
+                    />
+                  </BlockStack>
+                </Card>
+              </InlineGrid>
             </Layout.Section>
           )}
 
@@ -891,13 +878,46 @@ export default function AnalyticsPage() {
             </Layout.Section>
           )}
 
+          {/* ── REG Plate Lookups ─────────────────────────── */}
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">REG Plate Lookups</Text>
+                  </InlineStack>
+                  <Badge>{`${totalPlateLookups} total`}</Badge>
+                </InlineStack>
+                {recentPlateLookups.length === 0 ? (
+                  <Banner tone="info">
+                    <p>No plate lookups recorded yet. Plate lookup tracking is now active — data will appear here as customers use the registration lookup widget on your storefront.</p>
+                  </Banner>
+                ) : (
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "numeric", "text", "text"]}
+                    headings={["Plate", "Make", "Model", "Year", "Fuel", "Date"]}
+                    rows={recentPlateLookups.map((pl) => [
+                      pl.plate,
+                      pl.make ?? "—",
+                      pl.model ?? "—",
+                      pl.year ? String(pl.year) : "—",
+                      pl.fuel_type ?? "—",
+                      new Date(pl.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+                    ])}
+                  />
+                )}
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+
           {/* ── Conversion Funnel ─────────────────────────── */}
           {!isBasic && (
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={CartIcon} color="var(--p-color-icon-emphasis)" />
+                    <IconBadge icon={CartIcon} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
                     <Text as="h2" variant="headingMd">
                       Conversion Funnel (Last 30 Days)
                     </Text>
@@ -914,66 +934,74 @@ export default function AnalyticsPage() {
                   ) : (
                     <BlockStack gap="400">
                       {/* Funnel stats row */}
-                      <InlineGrid columns={{ xs: 2, sm: 4 }} gap="400">
-                        <BlockStack gap="100">
-                          <InlineStack gap="100" blockAlign="center">
-                            <IconBadge icon={SearchIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" tone="subdued">Searches</Text>
-                          </InlineStack>
-                          <Text as="p" variant="headingLg">{conversionFunnel.searches.toLocaleString()}</Text>
-                        </BlockStack>
+                      <div style={statGridStyle(4)}>
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="100" blockAlign="center">
+                              <IconBadge icon={SearchIcon} size={20} color="var(--p-color-icon-emphasis)" />
+                              <Text as="p" variant="bodySm" tone="subdued">Searches</Text>
+                            </InlineStack>
+                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.searches.toLocaleString()}</Text>
+                          </BlockStack>
+                        </div>
 
-                        <BlockStack gap="100">
-                          <InlineStack gap="100" blockAlign="center">
-                            <IconBadge icon={ViewIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" tone="subdued">Product Views</Text>
-                          </InlineStack>
-                          <Text as="p" variant="headingLg">{conversionFunnel.productViews.toLocaleString()}</Text>
-                          {conversionFunnel.searchToViewRate > 0 && (
-                            <Badge tone="info">{`${conversionFunnel.searchToViewRate}% from search`}</Badge>
-                          )}
-                        </BlockStack>
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="100" blockAlign="center">
+                              <IconBadge icon={ViewIcon} size={20} color="var(--p-color-icon-emphasis)" />
+                              <Text as="p" variant="bodySm" tone="subdued">Product Views</Text>
+                            </InlineStack>
+                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.productViews.toLocaleString()}</Text>
+                            {conversionFunnel.searchToViewRate > 0 && (
+                              <Badge tone="info">{`${conversionFunnel.searchToViewRate}% from search`}</Badge>
+                            )}
+                          </BlockStack>
+                        </div>
 
-                        <BlockStack gap="100">
-                          <InlineStack gap="100" blockAlign="center">
-                            <IconBadge icon={CartIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" tone="subdued">Add to Cart</Text>
-                          </InlineStack>
-                          <Text as="p" variant="headingLg">{conversionFunnel.addToCarts.toLocaleString()}</Text>
-                          {conversionFunnel.viewToCartRate > 0 && (
-                            <Badge tone="success">{`${conversionFunnel.viewToCartRate}% of views`}</Badge>
-                          )}
-                        </BlockStack>
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="100" blockAlign="center">
+                              <IconBadge icon={CartIcon} size={20} color="var(--p-color-icon-emphasis)" />
+                              <Text as="p" variant="bodySm" tone="subdued">Add to Cart</Text>
+                            </InlineStack>
+                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.addToCarts.toLocaleString()}</Text>
+                            {conversionFunnel.viewToCartRate > 0 && (
+                              <Badge tone="success">{`${conversionFunnel.viewToCartRate}% of views`}</Badge>
+                            )}
+                          </BlockStack>
+                        </div>
 
-                        <BlockStack gap="100">
-                          <InlineStack gap="100" blockAlign="center">
-                            <IconBadge icon={OrderIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" tone="subdued">Purchases</Text>
-                          </InlineStack>
-                          <Text as="p" variant="headingLg">{conversionFunnel.purchases.toLocaleString()}</Text>
-                          {conversionFunnel.overallRate > 0 && (
-                            <Badge tone="success">{`${conversionFunnel.overallRate}% overall`}</Badge>
-                          )}
-                        </BlockStack>
-                      </InlineGrid>
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="100" blockAlign="center">
+                              <IconBadge icon={OrderIcon} size={20} color="var(--p-color-icon-emphasis)" />
+                              <Text as="p" variant="bodySm" tone="subdued">Purchases</Text>
+                            </InlineStack>
+                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.purchases.toLocaleString()}</Text>
+                            {conversionFunnel.overallRate > 0 && (
+                              <Badge tone="success">{`${conversionFunnel.overallRate}% overall`}</Badge>
+                            )}
+                          </BlockStack>
+                        </div>
+                      </div>
 
                       {/* Funnel progress bars */}
                       <BlockStack gap="200">
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">Search → View</Text>
-                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.searchToViewRate}%</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Search to View</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{`${conversionFunnel.searchToViewRate}%`}</Text>
                         </InlineStack>
                         <ProgressBar progress={Math.min(conversionFunnel.searchToViewRate, 100)} size="small" />
 
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">View → Cart</Text>
-                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.viewToCartRate}%</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">View to Cart</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{`${conversionFunnel.viewToCartRate}%`}</Text>
                         </InlineStack>
                         <ProgressBar progress={Math.min(conversionFunnel.viewToCartRate, 100)} size="small" />
 
                         <InlineStack align="space-between">
-                          <Text as="p" variant="bodySm" tone="subdued">Cart → Purchase</Text>
-                          <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.cartToPurchaseRate}%</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">Cart to Purchase</Text>
+                          <Text as="p" variant="bodySm" fontWeight="semibold">{`${conversionFunnel.cartToPurchaseRate}%`}</Text>
                         </InlineStack>
                         <ProgressBar progress={Math.min(conversionFunnel.cartToPurchaseRate, 100)} size="small" />
                       </BlockStack>
@@ -1048,55 +1076,81 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={AlertTriangleIcon} color="var(--p-color-icon-emphasis)" />
+                    <IconBadge icon={AlertTriangleIcon} bg="var(--p-color-bg-fill-caution-secondary)" color="var(--p-color-icon-caution)" />
                     <Text as="h2" variant="headingMd">
                       Inventory Gap Analysis
                     </Text>
                   </InlineStack>
-                  <Divider />
-                  <InlineGrid columns={{ xs: 1, sm: 2, md: 4 }} gap="400">
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Total Makes in DB
-                      </Text>
-                      <Text as="p" variant="headingLg">
-                        {totalMakes.toLocaleString()}
-                      </Text>
-                    </BlockStack>
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Total Models in DB
-                      </Text>
-                      <Text as="p" variant="headingLg">
-                        {totalModels.toLocaleString()}
-                      </Text>
-                    </BlockStack>
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Makes Without Your Products
-                      </Text>
-                      <Text as="p" variant="headingLg">
-                        {inventoryGaps.makesWithoutProducts.toLocaleString()}
-                      </Text>
-                      {inventoryGaps.makesWithoutProducts > 0 && (
+                  <div style={statGridStyle(4)}>
+                    <div style={statMiniStyle}>
+                      <BlockStack gap="100" inlineAlign="center">
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Opportunity to expand catalogue
+                          Total Makes in DB
                         </Text>
-                      )}
-                    </BlockStack>
-                    <BlockStack gap="100">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Avg Products per Make
-                      </Text>
-                      <Text as="p" variant="headingLg">
-                        {inventoryGaps.productsPerMakeAvg.toLocaleString()}
-                      </Text>
-                    </BlockStack>
-                  </InlineGrid>
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {totalMakes.toLocaleString()}
+                        </Text>
+                      </BlockStack>
+                    </div>
+                    <div style={statMiniStyle}>
+                      <BlockStack gap="100" inlineAlign="center">
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Total Models in DB
+                        </Text>
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {totalModels.toLocaleString()}
+                        </Text>
+                      </BlockStack>
+                    </div>
+                    <div style={statMiniStyle}>
+                      <BlockStack gap="100" inlineAlign="center">
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Makes Without Products
+                        </Text>
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {inventoryGaps.makesWithoutProducts.toLocaleString()}
+                        </Text>
+                        {inventoryGaps.makesWithoutProducts > 0 && (
+                          <Badge tone="warning">Opportunity</Badge>
+                        )}
+                      </BlockStack>
+                    </div>
+                    <div style={statMiniStyle}>
+                      <BlockStack gap="100" inlineAlign="center">
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Avg Products per Make
+                        </Text>
+                        <Text as="p" variant="headingLg" fontWeight="bold">
+                          {inventoryGaps.productsPerMakeAvg.toLocaleString()}
+                        </Text>
+                      </BlockStack>
+                    </div>
+                  </div>
                 </BlockStack>
               </Card>
             </Layout.Section>
           )}
+
+          {/* ── YMME Search Analytics ─────────────────────── */}
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                  <Text as="h2" variant="headingMd">
+                    YMME Search Analytics
+                  </Text>
+                </InlineStack>
+                <Banner tone="info">
+                  <p>
+                    Coming soon — widget search tracking will be available when search
+                    event tracking is enabled. This will show which Year/Make/Model/Engine
+                    combinations your customers search for most.
+                  </p>
+                </Banner>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
 
           {/* ── Basic plan upsell ─────────────────────────── */}
           {isBasic && (

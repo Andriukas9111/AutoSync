@@ -20,8 +20,8 @@ export default function TermsOfService() {
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body {
             font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f6f6f7;
-            color: #303030;
+            background: var(--p-color-bg-surface-secondary);
+            color: var(--p-color-text);
             line-height: 1.6;
           }
           .legal-container {
@@ -36,37 +36,37 @@ export default function TermsOfService() {
           .legal-header h1 {
             font-size: 28px;
             font-weight: 700;
-            color: #303030;
+            color: var(--p-color-text);
             margin-bottom: 8px;
           }
           .legal-header p {
-            color: #616161;
+            color: var(--p-color-text-subdued);
             font-size: 14px;
           }
           .legal-card {
-            background: #fff;
+            background: var(--p-color-bg-surface);
             border-radius: 12px;
-            border: 1px solid #e3e3e3;
+            border: 1px solid var(--p-color-border-secondary);
             padding: 32px;
             margin-bottom: 24px;
           }
           .legal-card h2 {
             font-size: 18px;
             font-weight: 650;
-            color: #303030;
+            color: var(--p-color-text);
             margin-bottom: 16px;
             padding-bottom: 12px;
-            border-bottom: 1px solid #e3e3e3;
+            border-bottom: 1px solid var(--p-color-border-secondary);
           }
           .legal-card h3 {
             font-size: 15px;
             font-weight: 600;
-            color: #303030;
+            color: var(--p-color-text);
             margin: 16px 0 8px;
           }
           .legal-card p {
             font-size: 14px;
-            color: #303030;
+            color: var(--p-color-text);
             margin-bottom: 12px;
           }
           .legal-card ul, .legal-card ol {
@@ -75,14 +75,14 @@ export default function TermsOfService() {
           }
           .legal-card li {
             font-size: 14px;
-            color: #303030;
+            color: var(--p-color-text);
             margin-bottom: 6px;
           }
           .legal-back {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            color: #005bd3;
+            color: var(--p-color-text-interactive);
             text-decoration: none;
             font-size: 14px;
             font-weight: 500;
@@ -97,12 +97,12 @@ export default function TermsOfService() {
           .legal-table th, .legal-table td {
             padding: 10px 16px;
             text-align: left;
-            border-bottom: 1px solid #e3e3e3;
+            border-bottom: 1px solid var(--p-color-border-secondary);
             font-size: 14px;
           }
           .legal-table th {
             font-weight: 600;
-            background: #f6f6f7;
+            background: var(--p-color-bg-surface-secondary);
           }
         `}</style>
       </head>

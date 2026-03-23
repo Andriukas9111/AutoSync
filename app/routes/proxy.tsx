@@ -795,6 +795,23 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       debugInfo.searchError = errMsg;
     }
 
+    // Track plate lookup for analytics (non-blocking)
+    if (shop) {
+      db.from("plate_lookups").insert({
+        shop_id: shop,
+        plate: registration.toUpperCase(),
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,
+        fuel_type: vehicle.fuelType,
+        colour: vehicle.colour,
+        source: "dvla",
+        resolved_make_id: resolved?.makeId || null,
+        resolved_model_id: resolved?.modelId || null,
+        resolved_engine_id: resolved?.engineId || null,
+      }).then(() => {}).catch(() => {});
+    }
+
     return json({
       vehicle,
       motHistory: motHistory

@@ -18,6 +18,7 @@ import {
   Divider,
   IndexTable,
   EmptyState,
+  Pagination,
 } from "@shopify/polaris";
 import {
   CollectionIcon,
@@ -67,11 +68,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .not("make", "is", null)
       .not("model", "is", null),
     db.from("vehicle_fitments")
-      .select("make, model, year_start")
+      .select("make, model, year_from")
       .eq("shop_id", shopId)
       .not("make", "is", null)
       .not("model", "is", null)
-      .not("year_start", "is", null),
+      .not("year_from", "is", null),
   ]);
 
   const plan: PlanTier = tenant?.plan ?? "free";
@@ -94,7 +95,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const uniqueMakeModelYears = fitmentMakeModelYearsResult.data
     ? [...new Set(
-        fitmentMakeModelYearsResult.data.map((f: any) => `${f.make}|${f.model}|${f.year_start}`)
+        fitmentMakeModelYearsResult.data.map((f: any) => `${f.make}|${f.model}|${f.year_from}`)
       )]
     : [];
 
@@ -463,8 +464,8 @@ export default function Collections() {
                           </Text>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
-                          <Badge>
-                            {STRATEGY_LABELS[col.strategy] || col.strategy || "—"}
+                          <Badge tone={col.type === "make" ? "info" : col.type === "make_model_year" ? "warning" : "success"}>
+                            {col.type === "make" ? "Make" : col.type === "make_model" ? "Make + Model" : col.type === "make_model_year" ? "Make + Model + Year" : col.type || "—"}
                           </Badge>
                         </IndexTable.Cell>
                         <IndexTable.Cell>

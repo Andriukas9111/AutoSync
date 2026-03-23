@@ -744,14 +744,11 @@ export default function AdminPlans() {
                                 textAlign: h === "Plan" ? "left" : "center",
                                 padding: "12px 10px",
                                 borderBottom: "2px solid var(--p-color-border)",
-                                fontSize: "12px",
-                                fontWeight: 600,
-                                color: "var(--p-color-text-subdued)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.5px",
                               }}
                             >
-                              {h}
+                              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">{h}</Text>
                             </th>
                           ))}
                         </tr>

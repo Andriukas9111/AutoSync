@@ -475,9 +475,9 @@ export default function Settings() {
         <Layout.Section>
           <HowItWorks
             steps={[
-              { number: 1, title: "Widget Settings", description: "Configure how the YMME search widget, fitment badges, and compatibility tables appear on your storefront. Customize labels, colors, and behavior." },
-              { number: 2, title: "Data Management", description: "View your product count, fitment data, and collection stats. Reset or re-sync data when needed." },
-              { number: 3, title: "Plan & Billing", description: "View your current plan, usage limits, and upgrade options. Higher plans unlock more products, providers, and advanced features.", linkText: "View Plans", linkUrl: "/app/plans" },
+              { number: 1, title: "Configure Store", description: "Set up your store connection, plan, and billing preferences" },
+              { number: 2, title: "Customize Widgets", description: "Configure YMME search, plate lookup, and compatibility display settings" },
+              { number: 3, title: "Manage Data", description: "Import, export, and clean your product and fitment data" },
             ]}
           />
         </Layout.Section>

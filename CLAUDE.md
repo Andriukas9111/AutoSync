@@ -13,14 +13,43 @@ This project uses **React Router 7** (formerly Remix). NOT Next.js. NOT standard
 
 ---
 
+## ⚠️ MANDATORY WORKFLOW — READ BEFORE EVERY CHANGE
+
+### Before writing ANY code:
+1. **Read `app/lib/design.ts`** — ALL styles, colors, spacing, grid layouts, bar charts, status tones live here. NEVER hardcode styles inline. Import from design.ts.
+2. **Read `app/lib/use-app-data.ts`** — ALL live data comes from this hook. NEVER create scattered useState+useEffect polling. Use `useAppData()`.
+3. **Read `app/components/HowItWorks.tsx`** — Every page MUST have this component. Same design everywhere.
+4. **Read `app/components/OperationProgress.tsx`** — Every operation with progress MUST use this. No custom progress bars.
+5. **Read `app/routes/app.api.job-status.tsx`** — ALL stats flow through this single endpoint. NEVER query stats separately in loaders when live data is needed.
+
+### When checking pages:
+- **NEVER ASSUME anything works** — always verify via browser extension
+- **Check EVERY element** for inconsistencies: wrong labels, missing data, broken badges, null values showing as "—"
+- **Compare with other pages** — if Dashboard shows "Needs Review", ALL pages must show "Needs Review" (not "Unmapped" or "Flagged" separately)
+- **Check database column names** — don't guess. Query the DB first to verify column names match your code
+- **If you see a problem, FIX IT** — don't skip it, don't note it for later. Fix it now.
+
+### Architecture rules:
+- ALL styles → `app/lib/design.ts` (statMiniStyle, statGridStyle, cardRowStyle, barChartRowStyle, etc.)
+- ALL live data → `app/lib/use-app-data.ts` (useAppData hook with 5s polling)
+- ALL shared components → `app/components/` (HowItWorks, OperationProgress, IconBadge, SkeletonCard, DataTable)
+- ALL job processing → Supabase Edge Function (`supabase/functions/process-jobs/index.ts`)
+- ALL tenant data → scoped by `shop_id` from `session.shop`
+- ALL publication IDs → from `tenants.online_store_publication_id` (NOT hardcoded)
+
+---
+
 ## Session Rules
 
-1. Read this file before starting any work
+1. Read this file AND the mandatory workflow section before starting any work
 2. Never ask "what's next" — check the plan and keep working
 3. Quality over speed — no shortcuts, no placeholder code
 4. Never stop working until the current phase is complete
 5. Use relative imports (`../lib/...`) — no `~/` aliases configured
 6. Always run `npx react-router build` to verify before committing
+7. **NEVER ASSUME** — always verify via browser, database, and Vercel logs
+8. **NEVER hardcode styles** — always use design.ts constants
+9. **NEVER create new polling** — always use useAppData hook
 
 ---
 
