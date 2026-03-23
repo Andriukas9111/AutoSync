@@ -867,6 +867,18 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       }).then(() => {}).catch(() => {});
     }
 
+    // Count compatible products for the "Find X Parts" button
+    let compatibleCount = 0;
+    if (resolved.makeName && shop) {
+      const { count } = await db
+        .from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shop)
+        .ilike("make", resolved.makeName)
+        .ilike("model", resolved.modelName || "%");
+      compatibleCount = count ?? 0;
+    }
+
     return json({
       vehicle,
       motHistory: motHistory
@@ -880,6 +892,8 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
           }
         : null,
       resolved,
+      resolvedEngine: resolved.engineName || "",
+      compatibleCount,
       _debug: debugInfo,
     });
   } catch (err) {
