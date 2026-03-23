@@ -40,6 +40,7 @@ import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
+import { getJobProgressLabel, getJobCompletionMessage } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
 import { SkeletonCard } from "../components/SkeletonCard";
 import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
@@ -407,9 +408,7 @@ export default function Push() {
         {(isSubmitting || isJobRunning) && (
           <Layout.Section>
             <OperationProgress
-              label={activeJob?.type === "collections"
-                ? "Creating collections — processing in background"
-                : "Pushing tags & metafields — processing in background"}
+              label={getJobProgressLabel({ type: activeJob?.type ?? "push", status: activeJob?.status ?? "running", processed: activeJob?.processed_items ?? 0, total: activeJob?.total_items ?? 0 })}
               status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
               processed={activeJob?.processed_items ?? 0}
               total={activeJob?.total_items ?? productsWithFitments}
@@ -425,7 +424,7 @@ export default function Push() {
         {completedPush && !isJobRunning && !isSubmitting && (
           <Layout.Section>
             <Banner tone="success" title="Push completed" onDismiss={() => setCompletedPush(null)}>
-              <p>{`${completedPush.processed_items.toLocaleString()} products pushed successfully.`}</p>
+              <p>{getJobCompletionMessage({ type: "push", status: "completed", processed: completedPush.processed_items, total: completedPush.total_items })}</p>
             </Banner>
           </Layout.Section>
         )}

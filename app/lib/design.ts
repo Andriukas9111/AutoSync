@@ -263,3 +263,66 @@ export function formatElapsed(startedAt: string | null | undefined): string {
   if (minutes === 0) return `${seconds}s`;
   return `${minutes}m ${seconds}s`;
 }
+
+// ── Unified Job Status Messages ─────────────────────────────────
+// ALL job status messages come from here — never hardcode in components
+
+export interface JobContext {
+  type: string;
+  status: string;
+  processed: number;
+  total: number;
+  otherRunningJobs?: Array<{ type: string; status: string }>;
+}
+
+/** Get the progress label for a running job (shown next to progress bar) */
+export function getJobProgressLabel(ctx: JobContext): string {
+  const { type, processed, total } = ctx;
+  switch (type) {
+    case "push": return "Pushing tags & metafields — processing in background";
+    case "collections": return "Creating smart collections — processing in background";
+    case "extract": return "Auto-extracting vehicle fitments";
+    case "vehicle_pages": return "Creating vehicle specification pages";
+    case "bulk_push": return "Bulk pushing via Shopify Operations API";
+    case "provider_import": return "Importing products from provider";
+    default: return `Processing ${formatJobType(type)}`;
+  }
+}
+
+/** Get explanation text when a job has no progress (total=0 or waiting) */
+export function getJobWaitingMessage(ctx: JobContext): string {
+  const { type, processed, otherRunningJobs } = ctx;
+  const pushRunning = otherRunningJobs?.some(j => j.type === "push" && j.status === "running");
+
+  if (type === "collections") {
+    if (pushRunning) {
+      return `${processed > 0 ? processed.toLocaleString() + " collections exist · " : ""}Waiting for "Push to Shopify" to finish — collections are created from product tags, so all tags must be pushed first`;
+    }
+    return processed > 0
+      ? `${processed.toLocaleString()} collections created · Scanning for new make/model combinations...`
+      : "Calculating collections to create...";
+  }
+
+  if (type === "vehicle_pages") {
+    if (pushRunning) {
+      return "Waiting for push to complete before creating vehicle pages...";
+    }
+    return "Preparing vehicle specification pages...";
+  }
+
+  return "Preparing...";
+}
+
+/** Get completion message for a finished job */
+export function getJobCompletionMessage(ctx: JobContext): string {
+  const { type, processed } = ctx;
+  switch (type) {
+    case "push": return `${processed.toLocaleString()} products pushed to Shopify`;
+    case "collections": return `${processed.toLocaleString()} collections created`;
+    case "extract": return `${processed.toLocaleString()} products analyzed`;
+    case "vehicle_pages": return `${processed.toLocaleString()} vehicle pages created`;
+    case "bulk_push": return `${processed.toLocaleString()} products pushed via bulk operations`;
+    case "provider_import": return `${processed.toLocaleString()} products imported`;
+    default: return `${processed.toLocaleString()} items processed`;
+  }
+}

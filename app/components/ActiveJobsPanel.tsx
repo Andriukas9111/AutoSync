@@ -18,7 +18,7 @@ import {
 } from "@shopify/polaris";
 import { ClockIcon, CheckCircleIcon } from "@shopify/polaris-icons";
 import { IconBadge } from "./IconBadge";
-import { formatJobType, formatElapsed, STATUS_TONES } from "../lib/design";
+import { formatJobType, formatElapsed, STATUS_TONES, getJobWaitingMessage, getJobCompletionMessage } from "../lib/design";
 
 interface Job {
   id: string;
@@ -137,21 +137,16 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
                   {isRunning && total > 0 && (
                     <ProgressBar progress={percent} size="small" />
                   )}
-                  {isRunning && total === 0 && isCollectionJob && (
+                  {isRunning && total === 0 && (
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {(() => {
-                        const pushRunning = jobs.some((j: any) => j.type === "push" && j.status === "running");
-                        if (pushRunning) {
-                          return `${processed.toLocaleString()} collections exist · Waiting for "Push to Shopify" to finish first — new collections will be created automatically after all product tags are pushed`;
-                        }
-                        return processed > 0
-                          ? `${processed.toLocaleString()} collections created · Checking for new collections to create...`
-                          : "Preparing to create collections...";
-                      })()}
+                      {getJobWaitingMessage({
+                        type: job.type,
+                        status: job.status,
+                        processed,
+                        total,
+                        otherRunningJobs: jobs.filter((j: any) => j.id !== job.id),
+                      })}
                     </Text>
-                  )}
-                  {isRunning && total === 0 && !isCollectionJob && (
-                    <Text as="p" variant="bodySm" tone="subdued">Preparing...</Text>
                   )}
                   {isComplete && (
                     <ProgressBar progress={100} size="small" tone="success" />
