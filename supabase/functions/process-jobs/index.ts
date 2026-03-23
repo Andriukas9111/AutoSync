@@ -125,6 +125,19 @@ Deno.serve(async (req) => {
         processed_items: newProcessed,
         completed_at: new Date().toISOString(),
       }).eq("id", job.id);
+
+      // Update tenant counts on job completion (keeps Dashboard accurate)
+      try {
+        const shopId = job.shop_id as string;
+        const [productRes, fitmentRes] = await Promise.all([
+          db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+          db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+        ]);
+        await db.from("tenants").update({
+          product_count: productRes.count ?? 0,
+          fitment_count: fitmentRes.count ?? 0,
+        }).eq("shop_id", shopId);
+      } catch (_e) { /* non-critical */ }
     } else {
       await db.from("sync_jobs").update({
         processed_items: newProcessed,
