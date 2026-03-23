@@ -319,9 +319,12 @@ async function handleCollectionLookup(params: URLSearchParams) {
   const mfNs = `app--${appId}--vehicle_fitment`;
 
   const found = (row: { handle: string; title: string; type: string }) => {
-    // Build collection URL with metafield filters for year + engine
+    // Build collection URL with ALL metafield filters (make, model, year, engine)
     let url = `/collections/${row.handle}`;
     const filters: string[] = [];
+    // Always include make and model so customer sees full vehicle context in filter chips
+    if (make) filters.push(`filter.p.m.${mfNs}.make=${encodeURIComponent(make)}`);
+    if (model) filters.push(`filter.p.m.${mfNs}.model=${encodeURIComponent(model)}`);
     if (year) filters.push(`filter.p.m.${mfNs}.year=${encodeURIComponent(year)}`);
     if (engine) {
       // Clean engine name — remove displacement/fuel suffix for matching
