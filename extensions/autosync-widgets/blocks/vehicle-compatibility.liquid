@@ -7,7 +7,7 @@
   class="autosync-compat-table"
   data-autosync-compat-table
   data-product-id="{{ product.id }}"
-  data-metafield-vehicles='{{ product.metafields.autosync_fitment.vehicles.value }}'
+  data-metafield-vehicles='{{ product.metafields.autosync_fitment.vehicles.value | json }}'
   id="autosync-compat-{{ block.id }}"
   style="padding-top: {{ block.settings.padding_top }}px; padding-bottom: {{ block.settings.padding_bottom }}px;"
 >
