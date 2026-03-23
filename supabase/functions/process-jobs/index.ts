@@ -251,6 +251,33 @@ async function processPushChunk(
     return { processed: 0, hasMore: false, error: "No Shopify access token found. Open the app first to save the token." };
   }
 
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/2026-01/graphql.json`;
+  const gqlHeaders = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // On first batch, ensure metafield definitions exist (idempotent)
+  if (alreadyProcessed === 0) {
+    const defs = [
+      { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json" },
+      { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field" },
+      { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field" },
+      { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field" },
+      { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field" },
+      { name: "Vehicle Fitment Data", namespace: "autosync_fitment", key: "vehicles", type: "json" },
+      { name: "Vehicle Makes", namespace: "autosync_fitment", key: "make_names", type: "list.single_line_text_field" },
+      { name: "Vehicle Models", namespace: "autosync_fitment", key: "model_names", type: "list.single_line_text_field" },
+    ];
+    for (const d of defs) {
+      try {
+        await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+          query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message } } }`,
+          variables: { def: { ...d, ownerType: "PRODUCT", access: { storefront: "PUBLIC_READ" } } },
+        })});
+      } catch (_e) { /* ignore — definition may already exist */ }
+    }
+    console.log(`[push] Ensured metafield definitions exist for ${shopId}`);
+  }
+
   // Get products with fitments — use OFFSET to skip already-processed ones
   const { data: products } = await db
     .from("products")
@@ -280,8 +307,6 @@ async function processPushChunk(
     fitmentsByProduct.set(f.product_id as string, list);
   }
 
-  const shopDomain = shopId;
-  const accessToken = tenant.shopify_access_token;
   let processed = 0;
   const activeMakes = new Set<string>();
 
@@ -327,7 +352,7 @@ async function processPushChunk(
     try {
       // Push tags
       if (pushTags && tags.length > 0) {
-        const tagRes = await fetch(`https://${shopDomain}/admin/api/2026-01/graphql.json`, {
+        const tagRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -387,7 +412,7 @@ async function processPushChunk(
           metafields.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engineSet].sort()), ownerId: gid });
         }
 
-        const mfRes = await fetch(`https://${shopDomain}/admin/api/2026-01/graphql.json`, {
+        const mfRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
