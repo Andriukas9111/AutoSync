@@ -338,18 +338,46 @@ async function processPushChunk(
         }
       }
 
-      // Push metafields
+      // Push metafields (JSON data blob + list metafields for Search & Discovery filters)
       if (pushMetafields) {
         const fitmentData = productFitments.map((f) => ({
           make: f.make, model: f.model,
           year_from: f.year_from, year_to: f.year_to,
           engine: f.engine, engine_code: f.engine_code, fuel_type: f.fuel_type,
         }));
+
+        // Build year list (expand ranges into individual years)
+        const yearSet = new Set<string>();
+        const engineSet = new Set<string>();
+        for (const f of productFitments) {
+          if (f.year_from) {
+            const endYear = (f.year_to as number) || new Date().getFullYear();
+            for (let y = f.year_from as number; y <= Math.min(endYear, (f.year_from as number) + 50); y++) {
+              yearSet.add(String(y));
+            }
+          }
+          if (f.engine) engineSet.add(f.engine as string);
+          if (f.engine_code) engineSet.add(f.engine_code as string);
+        }
+
         const metafields = [
+          // JSON data blob (for display widgets)
           { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fitmentData), ownerId: gid },
-          { namespace: "$app:vehicle_fitment", key: "make", type: "single_line_text_field", value: [...seenMakes].join(", "), ownerId: gid },
-          { namespace: "$app:vehicle_fitment", key: "model", type: "single_line_text_field", value: [...seenModels].join(", "), ownerId: gid },
+          // List metafields (for Search & Discovery filters)
+          { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...seenMakes].sort()), ownerId: gid },
+          { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...seenModels].sort()), ownerId: gid },
         ];
+
+        // Add year metafield if we have year data
+        if (yearSet.size > 0) {
+          const sortedYears = [...yearSet].sort((a, b) => Number(a) - Number(b)).slice(0, 128);
+          metafields.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify(sortedYears), ownerId: gid });
+        }
+
+        // Add engine metafield if we have engine data
+        if (engineSet.size > 0) {
+          metafields.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engineSet].sort()), ownerId: gid });
+        }
 
         const mfRes = await fetch(`https://${shopDomain}/admin/api/2026-01/graphql.json`, {
           method: "POST",

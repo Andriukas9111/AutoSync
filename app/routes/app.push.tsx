@@ -38,6 +38,7 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
+import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
 import { HowItWorks } from "../components/HowItWorks";
 import { SkeletonCard } from "../components/SkeletonCard";
@@ -171,6 +172,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
     throw err;
+  }
+
+  // ── Ensure metafield definitions exist (once per tenant) ──
+  try {
+    await ensureMetafieldDefinitions(shopId, admin);
+  } catch (err) {
+    console.error("[push] Metafield definitions error:", err instanceof Error ? err.message : err);
+    // Non-fatal — continue with push even if definitions fail
   }
 
   // ── Job-based approach: create jobs and return instantly ──

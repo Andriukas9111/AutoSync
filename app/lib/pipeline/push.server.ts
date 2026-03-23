@@ -94,32 +94,44 @@ function buildMetafieldInputs(
     fuel_type: f.fuel_type,
   }));
 
-  const makeNames = [...new Set(fitments.map((f) => f.make).filter(Boolean))];
-  const modelNames = [...new Set(fitments.map((f) => f.model).filter(Boolean))];
+  const makeNames = [...new Set(fitments.map((f) => f.make).filter(Boolean))].sort();
+  const modelNames = [...new Set(fitments.map((f) => f.model).filter(Boolean))].sort();
 
-  return [
-    {
-      ownerId: gid,
-      namespace: "autosync_fitment",
-      key: "vehicles",
-      type: "json",
-      value: JSON.stringify(vehicles),
-    },
-    {
-      ownerId: gid,
-      namespace: "autosync_fitment",
-      key: "make_names",
-      type: "list.single_line_text_field",
-      value: JSON.stringify(makeNames),
-    },
-    {
-      ownerId: gid,
-      namespace: "autosync_fitment",
-      key: "model_names",
-      type: "list.single_line_text_field",
-      value: JSON.stringify(modelNames),
-    },
+  // Expand year ranges into individual years for Search & Discovery filters
+  const yearSet = new Set<string>();
+  const engineSet = new Set<string>();
+  for (const f of fitments) {
+    if (f.year_from) {
+      const endYear = f.year_to ?? new Date().getFullYear();
+      for (let y = f.year_from; y <= Math.min(endYear, f.year_from + 50); y++) {
+        yearSet.add(String(y));
+      }
+    }
+    if (f.engine) engineSet.add(f.engine);
+    if (f.engine_code) engineSet.add(f.engine_code);
+  }
+
+  const ns = "$app:vehicle_fitment";
+  const listType = "list.single_line_text_field";
+
+  const result = [
+    // JSON data blob (for display widgets)
+    { ownerId: gid, namespace: ns, key: "data", type: "json", value: JSON.stringify(vehicles) },
+    // List metafields (for Search & Discovery filters)
+    { ownerId: gid, namespace: ns, key: "make", type: listType, value: JSON.stringify(makeNames) },
+    { ownerId: gid, namespace: ns, key: "model", type: listType, value: JSON.stringify(modelNames) },
   ];
+
+  if (yearSet.size > 0) {
+    const sortedYears = [...yearSet].sort((a, b) => Number(a) - Number(b)).slice(0, 128);
+    result.push({ ownerId: gid, namespace: ns, key: "year", type: listType, value: JSON.stringify(sortedYears) });
+  }
+
+  if (engineSet.size > 0) {
+    result.push({ ownerId: gid, namespace: ns, key: "engine", type: listType, value: JSON.stringify([...engineSet].sort()) });
+  }
+
+  return result;
 }
 
 /**
