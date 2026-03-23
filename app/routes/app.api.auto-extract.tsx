@@ -391,8 +391,23 @@ export async function action({ request }: ActionFunctionArgs) {
         const confidence = best?.confidence ?? 0;
 
         // Route by confidence
+        // Only auto-map Strong Match engines that match the detected model
+        // Medium/Good matches from other models are flagged for manual review
         if (confidence >= 0.8 && unique.length > 0) {
-          const top = unique.filter((s) => s.confidence >= 0.7).slice(0, 5);
+          const detectedModel = profile.model || profile.chassisCode;
+          const top = unique.filter((s) => {
+            if (s.confidence < 0.7) return false;
+            // If we detected a specific model, only auto-map engines from that model
+            if (detectedModel && s.model?.name) {
+              const modelUpper = s.model.name.toUpperCase();
+              const detectedUpper = detectedModel.toUpperCase();
+              // Model must match — e.g. "Golf" must match "Golf", not "Passat CC"
+              if (!modelUpper.includes(detectedUpper) && !detectedUpper.includes(modelUpper)) {
+                return false; // Skip engines from non-matching models
+              }
+            }
+            return true;
+          }).slice(0, 5);
           const inserts = top.map((s) => ({
             product_id: product.id, shop_id: shopId,
             make: s.make.name, model: s.model?.name ?? null,
