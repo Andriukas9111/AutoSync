@@ -774,7 +774,17 @@ async function processCollectionsChunk(
       const yearKey = `${make}|||${model}|||${yearRange}`;
       if (existingSet.has(yearKey)) continue;
 
+      // Double-check DB right before creating (prevents concurrent dupes)
       const title = `${make} ${model} ${yearRange} Parts`;
+      const { count: existsInDb } = await db.from("collection_mappings")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("title", title);
+      if ((existsInDb ?? 0) > 0) {
+        existingSet.add(yearKey); // Cache for this invocation
+        continue;
+      }
+
+      // title already defined above in the DB check
       const yearTag = `_autosync_${make}_${model}_${yearRange}`;
       const input: Record<string, unknown> = {
         title,
