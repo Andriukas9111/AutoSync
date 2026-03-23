@@ -934,7 +934,10 @@ async function processCollectionsChunk(
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId);
 
-  const hasMore = (existingCount ?? 0) < totalNeeded;
+  // If we created 0 in this tick, nothing more to do — avoid infinite loop
+  // This handles the case where existingCount < totalNeeded due to title mismatches
+  // but all actual combos already exist in the DB
+  const hasMore = created > 0 && (existingCount ?? 0) < totalNeeded;
 
   console.log(`[collections] Created ${created}, total ${existingCount}/${totalNeeded}, hasMore=${hasMore}`);
 
