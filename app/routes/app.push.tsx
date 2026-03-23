@@ -340,6 +340,7 @@ export default function Push() {
   const [completedPush, setCompletedPush] = useState<{
     processed_items: number; total_items: number; status: string;
   } | null>(null);
+  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pollJobStatus = useCallback(async () => {
@@ -421,9 +422,9 @@ export default function Push() {
         )}
 
         {/* Show completion when job just finished */}
-        {completedPush && !isJobRunning && !isSubmitting && (
+        {completedPush && !isJobRunning && !isSubmitting && !dismissedCompletionBanner && (
           <Layout.Section>
-            <Banner tone="success" title="Push completed" onDismiss={() => setCompletedPush(null)}>
+            <Banner tone="success" title="Push completed" onDismiss={() => setDismissedCompletionBanner(true)}>
               <p>{getJobCompletionMessage({ type: "push", status: "completed", processed: completedPush.processed_items, total: completedPush.total_items })}</p>
             </Banner>
           </Layout.Section>
