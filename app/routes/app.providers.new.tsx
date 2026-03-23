@@ -176,8 +176,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Redirect to the new provider's detail page
-  return redirect(`/app/providers/${provider.id}`);
+  // Redirect to the import wizard so merchant can immediately start importing
+  return redirect(`/app/providers/${provider.id}/import?step=upload`);
 };
 
 // ---------------------------------------------------------------------------

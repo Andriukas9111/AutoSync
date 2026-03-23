@@ -450,6 +450,15 @@ export default function ProviderImportWizard() {
       }}
     >
       <BlockStack gap="600">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Upload or Fetch", description: "Drop a CSV/XML file or click Fetch to download from your provider's FTP/API. System auto-detects the file format." },
+            { number: 2, title: "Map Columns", description: "Review auto-detected column mappings. Adjust if needed — the system remembers your choices for future imports." },
+            { number: 3, title: "Validate & Import", description: "Check for duplicates, choose how to handle them, then import. Products appear in your catalog ready for fitment mapping." },
+          ]}
+        />
+
         {/* Step Indicator */}
         <Card>
           <InlineStack gap="400" align="center" blockAlign="center">
