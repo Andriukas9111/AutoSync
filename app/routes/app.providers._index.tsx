@@ -208,7 +208,7 @@ export default function ProvidersIndex() {
         fullWidth
         title="Providers"
         primaryAction={{
-          content: "Add Provider",
+          content: "Import Products",
           onAction: () => navigate("/app/providers/new"),
           disabled: atLimit,
         }}
@@ -225,7 +225,7 @@ export default function ProvidersIndex() {
           )}
           <Card>
             <EmptyState
-              heading="Add your first provider"
+              heading="Import your first products"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
             >
               <p>
@@ -256,7 +256,7 @@ export default function ProvidersIndex() {
       fullWidth
       title="Providers"
       primaryAction={{
-        content: "Add Provider",
+        content: "Import Products",
         onAction: () => navigate("/app/providers/new"),
         disabled: atLimit,
       }}
@@ -265,9 +265,9 @@ export default function ProvidersIndex() {
         {/* How It Works */}
         <HowItWorks
           steps={[
-            { number: 1, title: "Add a Provider", description: "Connect a data source — upload CSV/XML files, connect via API, or set up FTP. Each provider represents one supplier or data feed." },
-            { number: 2, title: "Import Products", description: "Preview the data, map columns to AutoSync fields, then import. Smart mapping remembers your column choices for future imports." },
-            { number: 3, title: "Map & Push", description: "Imported products appear in your catalog with vehicle data ready for fitment mapping. Push to Shopify to make them live.", linkText: "View Products", linkUrl: "/app/products" },
+            { number: 1, title: "Choose Source", description: "Upload a CSV/XML file, connect via FTP, or use an API endpoint. AutoSync auto-detects the file format and maps columns for you." },
+            { number: 2, title: "Preview & Import", description: "Review the data preview, adjust column mappings if needed, then import. Smart mapping remembers your choices for future imports." },
+            { number: 3, title: "Map & Push", description: "Imported products appear in your catalog ready for fitment mapping and push to Shopify.", linkText: "View Products", linkUrl: "/app/products" },
           ]}
         />
 
