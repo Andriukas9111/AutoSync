@@ -49,6 +49,7 @@ import {
 import { DataTable } from "../components/DataTable";
 
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -786,6 +787,30 @@ export default function AdminPanel() {
       ]}
     >
       <Layout>
+        <Layout.Section>
+          <HowItWorks
+            steps={[
+              {
+                number: 1,
+                title: "Monitor Tenants",
+                description: "View all installed merchants, their plan tiers, product counts, and fitment usage. Drill into any tenant for detailed stats.",
+              },
+              {
+                number: 2,
+                title: "Manage Data",
+                description: "Sync NHTSA vehicle data, run the auto-data scraper, clean up tags/metafields/collections across tenants as needed.",
+              },
+              {
+                number: 3,
+                title: "System Health",
+                description: "Track active jobs, scrape progress, and YMME database coverage. Manage plan configurations and billing overrides.",
+                linkText: "Manage Plans",
+                linkUrl: "/app/admin/plans",
+              },
+            ]}
+          />
+        </Layout.Section>
+
         {/* Banner */}
         {fetcher.data?.message && !dismissed && (
           <Layout.Section>

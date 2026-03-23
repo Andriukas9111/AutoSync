@@ -27,6 +27,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import { cardRowStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import {
@@ -374,6 +375,28 @@ export default function Plans() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
+        <HowItWorks
+          steps={[
+            {
+              number: 1,
+              title: "Compare Plans",
+              description: "Review the feature comparison table below to find the plan that fits your store size, product count, and integration needs.",
+            },
+            {
+              number: 2,
+              title: "Choose & Subscribe",
+              description: "Click your desired plan to subscribe via Shopify billing. You can upgrade or downgrade at any time — changes take effect immediately.",
+            },
+            {
+              number: 3,
+              title: "Unlock Features",
+              description: "Once subscribed, all plan features activate instantly — widgets, collections, providers, and extraction tools are ready to use.",
+              linkText: "View Dashboard",
+              linkUrl: "/app",
+            },
+          ]}
+        />
+
         {/* Banners */}
         {billingSuccess && (
           <Banner title="Plan activated successfully" tone="success" onDismiss={() => {}}>

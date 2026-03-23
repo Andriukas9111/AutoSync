@@ -585,10 +585,10 @@ async function processCollectionsChunk(
 
     if (seoEnabled) {
       input.seo = {
-        title: `${make} Performance Parts & Accessories | Buy ${make} Aftermarket Parts Online`,
-        description: `Shop ${make} performance parts, upgrades & accessories. Exhaust systems, suspension, intake kits, brake upgrades & more. All products verified for ${make} vehicle fitment. Free shipping on qualifying orders.`,
+        title: `${make} Parts & Accessories | Shop ${make} Compatible Products`,
+        description: `Browse ${make} compatible parts and accessories. Filter by model and year to find products verified for your ${make} vehicle. Guaranteed fitment compatibility.`,
       };
-      input.descriptionHtml = `<h2>${make} Performance Parts & Accessories</h2><p>Browse our range of aftermarket performance parts and accessories for <strong>${make}</strong> vehicles. Every product is fitment-verified for your specific ${make} model and year.</p>`;
+      input.descriptionHtml = `<h2>${make} Parts & Accessories</h2><p>Browse our selection of parts and accessories compatible with <strong>${make}</strong> vehicles. Every product has been verified for fitment with your specific ${make} model, year, and engine.</p><p>Use the vehicle selector to filter by your exact ${make} model and year for guaranteed compatibility.</p>`;
     }
 
     try {
@@ -690,10 +690,10 @@ async function processCollectionsChunk(
 
       if (seoEnabled) {
         input.seo = {
-          title: `${make} ${model} Parts & Accessories | ${make} ${model} Performance Upgrades`,
-          description: `Shop ${make} ${model} performance parts & accessories. Exhaust, suspension, intake, brakes & styling upgrades. All parts verified for ${make} ${model} fitment compatibility. Fast delivery available.`,
+          title: `${make} ${model} Parts & Accessories | ${make} ${model} Compatible Products`,
+          description: `Find parts and accessories for the ${make} ${model}. Browse products verified for ${make} ${model} fitment. Filter by year and engine for guaranteed compatibility.`,
         };
-        input.descriptionHtml = `<h2>${make} ${model} Performance Parts & Accessories</h2><p>Explore our collection of performance parts and accessories for the <strong>${make} ${model}</strong>. Each product has been verified for fitment compatibility with your vehicle.</p>`;
+        input.descriptionHtml = `<h2>${make} ${model} Parts & Accessories</h2><p>Browse parts and accessories for the <strong>${make} ${model}</strong>. Every product in this collection has been verified for fitment with your ${make} ${model}.</p><p>Use the vehicle selector to filter by year and engine specification for guaranteed compatibility.</p>`;
       }
 
       try {
@@ -813,9 +813,9 @@ async function processCollectionsChunk(
       if (seoEnabled) {
         input.seo = {
           title: `${make} ${model} ${yearRange} Parts & Accessories`,
-          description: `Performance parts for ${make} ${model} ${yearRange}. All products fitment-verified.`,
+          description: `Find parts and accessories for the ${make} ${model} ${yearRange}. All products verified for fitment with your ${make} ${model} (${yearRange}).`,
         };
-        input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Performance Parts</h2><p>Browse performance parts and accessories for the <strong>${make} ${model} (${yearRange})</strong>. All products verified for fitment compatibility.</p>`;
+        input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Parts & Accessories</h2><p>Browse parts and accessories for the <strong>${make} ${model} (${yearRange})</strong>. Every product verified for fitment compatibility with your vehicle.</p>`;
       }
 
       try {

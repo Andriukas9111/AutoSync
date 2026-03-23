@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useRevalidator, Form } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -216,15 +216,24 @@ export default function Collections() {
   const collectionJob = (activeJobs || []).find((j: any) => j.type === "collections");
   const isCreating = !!collectionJob;
 
-  // Auto-refresh the page when collection job completes (to update the list)
+  // Revalidate loader data periodically while a collections job is active
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    if (!isCreating) return;
+    const interval = setInterval(() => {
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isCreating, revalidator]);
+
+  // Also revalidate once when a collection job completes
   const prevCreating = useRef(isCreating);
   useEffect(() => {
     if (prevCreating.current && !isCreating) {
-      // Job just completed — reload the page to get fresh collection list
-      window.location.reload();
+      if (revalidator.state === "idle") revalidator.revalidate();
     }
     prevCreating.current = isCreating;
-  }, [isCreating]);
+  }, [isCreating, revalidator]);
 
   // Detect duplicates in the collection list
   const duplicateTitles = new Set<string>();

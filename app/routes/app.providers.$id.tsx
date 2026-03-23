@@ -23,6 +23,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
@@ -314,6 +315,30 @@ export default function ProviderDetail() {
       primaryAction={{ content: "Import Data", onAction: () => navigate(`/app/providers/${provider.id}/import`) }}
     >
       <BlockStack gap="400">
+        <HowItWorks
+          steps={[
+            {
+              number: 1,
+              title: "Configure Provider",
+              description: "Set up your data source connection — CSV upload, API endpoint, or FTP credentials. Test the connection to verify it works.",
+            },
+            {
+              number: 2,
+              title: "Fetch & Map Data",
+              description: "Fetch products from your provider, then map columns to match AutoSync fields. The system remembers your mappings for next time.",
+              linkText: "Import Data",
+              linkUrl: `/app/providers/${provider.id}/import`,
+            },
+            {
+              number: 3,
+              title: "Import Products",
+              description: "Preview matched data, choose how to handle duplicates, then import. Products appear in your catalog ready for fitment mapping.",
+              linkText: "View Products",
+              linkUrl: `/app/providers/${provider.id}/products`,
+            },
+          ]}
+        />
+
         {fetcherData && "success" in fetcherData && <Banner title={fetcherData.message} tone="success" />}
         {fetcherData && "error" in fetcherData && (
           <Banner title="Error" tone="critical"><p>{fetcherData.error}</p></Banner>
