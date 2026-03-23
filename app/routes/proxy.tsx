@@ -302,17 +302,42 @@ async function handleCollectionLookup(params: URLSearchParams) {
   const shop = params.get("shop") ?? "";
   const make = params.get("make");
   const model = params.get("model");
+  const year = params.get("year");
+  const engine = params.get("engine");
 
   if (!make) return json({ error: "Missing make parameter" }, 400);
 
-  const found = (row: { handle: string; title: string; type: string }) =>
-    json({
+  // Get the app's metafield namespace for filter URLs
+  // Look up the tenant's app installation to get the resolved namespace
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("shopify_app_id")
+    .eq("shop_id", shop)
+    .maybeSingle();
+  // Default app ID — will be overridden per-tenant when we store it
+  const appId = tenant?.shopify_app_id ?? "334692253697";
+  const mfNs = `app--${appId}--vehicle_fitment`;
+
+  const found = (row: { handle: string; title: string; type: string }) => {
+    // Build collection URL with metafield filters for year + engine
+    let url = `/collections/${row.handle}`;
+    const filters: string[] = [];
+    if (year) filters.push(`filter.p.m.${mfNs}.year=${encodeURIComponent(year)}`);
+    if (engine) {
+      // Clean engine name — remove displacement/fuel suffix for matching
+      const cleanEngine = engine.replace(/\s*\d+cc\s*(Petrol|Diesel|Electric|Hybrid)?$/i, '').trim();
+      filters.push(`filter.p.m.${mfNs}.engine=${encodeURIComponent(cleanEngine)}`);
+    }
+    if (filters.length > 0) url += '?' + filters.join('&');
+
+    return json({
       found: true,
       handle: row.handle,
       title: row.title,
       type: row.type,
-      url: `/collections/${row.handle}`,
+      url,
     });
+  };
 
   if (model) {
     // 1. Prefer make_model collection (most specific non-year match)

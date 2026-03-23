@@ -142,7 +142,7 @@
    * Redirect to collection page if a matching collection exists,
    * otherwise fall back to Shopify search.
    */
-  function redirectToCollection(proxyUrl, makeName, modelName) {
+  function redirectToCollection(proxyUrl, makeName, modelName, yearValue, engineName) {
     // Build a conventional collection handle as fallback
     function buildFallbackHandle(make, model) {
       var slug = (make + (model ? ' ' + model : '') + ' parts')
@@ -152,24 +152,39 @@
       return '/collections/' + slug;
     }
 
+    // Append metafield filters for year + engine (Shopify Search & Discovery)
+    function appendFilters(baseUrl) {
+      var params = [];
+      if (yearValue) {
+        params.push('filter.p.m.autosync_fitment.make_names=' + encodeURIComponent(makeName));
+        if (modelName) params.push('filter.p.m.autosync_fitment.model_names=' + encodeURIComponent(modelName));
+        params.push('filter.p.m.autosync_fitment.make_names=' + encodeURIComponent(makeName));
+      }
+      // Year and engine filters need the app-owned namespace — get from proxy
+      // For now, use tag-based filtering via collection URL which already filters by make+model
+      return params.length > 0 ? baseUrl + (baseUrl.includes('?') ? '&' : '?') + params.join('&') : baseUrl;
+    }
+
     if (!proxyUrl || !makeName) {
-      // No proxy URL — try conventional collection handle
       window.location.href = buildFallbackHandle(makeName || '', modelName);
       return;
     }
 
-    // Call collection-lookup endpoint
-    proxyFetch(proxyUrl, 'collection-lookup', { make: makeName, model: modelName || '' })
+    // Call collection-lookup endpoint — now includes year/engine for potential year-specific collections
+    proxyFetch(proxyUrl, 'collection-lookup', {
+      make: makeName,
+      model: modelName || '',
+      year: yearValue || '',
+      engine: engineName || '',
+    })
       .then(function (data) {
         if (data && data.found && data.url) {
           window.location.href = data.url;
         } else {
-          // No collection in DB — try conventional handle (e.g. /collections/audi-a3-parts)
           window.location.href = buildFallbackHandle(makeName, modelName);
         }
       })
       .catch(function () {
-        // API error — try conventional handle
         window.location.href = buildFallbackHandle(makeName, modelName);
       });
   }
@@ -498,7 +513,7 @@
         var proxyUrl = container.closest('[data-proxy-url]')
           ? container.closest('[data-proxy-url]').dataset.proxyUrl
           : container.dataset.proxyUrl;
-        redirectToCollection(proxyUrl, v.makeName, v.modelName);
+        redirectToCollection(proxyUrl, v.makeName, v.modelName, v.year, v.engineName);
       });
       actions.appendChild(selectBtn);
 
@@ -1004,7 +1019,8 @@
         }
 
         // Try collection redirect first, fall back to search
-        redirectToCollection(proxyUrl, state.makeName, state.modelName);
+        // Pass year and engine for precise metafield filtering
+        redirectToCollection(proxyUrl, state.makeName, state.modelName, state.year, state.engineName);
       });
     }
 
@@ -1279,7 +1295,7 @@
             if (partsBtn && data.compatibleCount > 0) {
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.onclick = function () {
-                redirectToCollection(proxyUrl, v.make, v.model);
+                redirectToCollection(proxyUrl, v.make, v.model, v.year, v.engine);
               };
             }
           }
@@ -1474,7 +1490,7 @@
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.classList.remove('autosync-vin-decode--hidden');
               partsBtn.onclick = function () {
-                redirectToCollection(proxyUrl, v.make, v.model);
+                redirectToCollection(proxyUrl, v.make, v.model, v.year, v.engine);
               };
             }
           }
