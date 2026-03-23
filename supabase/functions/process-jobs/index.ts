@@ -588,6 +588,7 @@ async function processCollectionsChunk(
         title: `${make} Performance Parts & Accessories | Buy ${make} Aftermarket Parts Online`,
         description: `Shop ${make} performance parts, upgrades & accessories. Exhaust systems, suspension, intake kits, brake upgrades & more. All products verified for ${make} vehicle fitment. Free shipping on qualifying orders.`,
       };
+      input.descriptionHtml = `<h2>${make} Performance Parts & Accessories</h2><p>Browse our range of aftermarket performance parts and accessories for <strong>${make}</strong> vehicles. Every product is fitment-verified for your specific ${make} model and year.</p>`;
     }
 
     try {
@@ -692,6 +693,7 @@ async function processCollectionsChunk(
           title: `${make} ${model} Parts & Accessories | ${make} ${model} Performance Upgrades`,
           description: `Shop ${make} ${model} performance parts & accessories. Exhaust, suspension, intake, brakes & styling upgrades. All parts verified for ${make} ${model} fitment compatibility. Fast delivery available.`,
         };
+        input.descriptionHtml = `<h2>${make} ${model} Performance Parts & Accessories</h2><p>Explore our collection of performance parts and accessories for the <strong>${make} ${model}</strong>. Each product has been verified for fitment compatibility with your vehicle.</p>`;
       }
 
       try {
@@ -813,6 +815,7 @@ async function processCollectionsChunk(
           title: `${make} ${model} ${yearRange} Parts & Accessories`,
           description: `Performance parts for ${make} ${model} ${yearRange}. All products fitment-verified.`,
         };
+        input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Performance Parts</h2><p>Browse performance parts and accessories for the <strong>${make} ${model} (${yearRange})</strong>. All products verified for fitment compatibility.</p>`;
       }
 
       try {
