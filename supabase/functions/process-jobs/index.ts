@@ -569,6 +569,12 @@ async function processCollectionsChunk(
     if (existingSet.has(make)) continue;
 
     const title = `${make} Parts`;
+
+    // DB-level dedup check (prevents concurrent duplicates)
+    const { count: makeExists } = await db.from("collection_mappings")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("title", title);
+    if ((makeExists ?? 0) > 0) { existingSet.add(make); continue; }
     const input: Record<string, unknown> = {
       title,
       ruleSet: {
@@ -664,6 +670,12 @@ async function processCollectionsChunk(
 
       const [make, model] = key.split("|||");
       const title = `${make} ${model} Parts`;
+
+      // DB-level dedup check (prevents concurrent duplicates)
+      const { count: mmExists } = await db.from("collection_mappings")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("title", title);
+      if ((mmExists ?? 0) > 0) { existingSet.add(key); continue; }
       const input: Record<string, unknown> = {
         title,
         ruleSet: {

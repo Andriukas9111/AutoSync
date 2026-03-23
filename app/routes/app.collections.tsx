@@ -36,6 +36,7 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
+import { OperationProgress } from "../components/OperationProgress";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
@@ -211,10 +212,33 @@ export default function Collections() {
     appSettings?.auto_create_collections ?? false
   );
 
-  // Live stats polling — updates collection counts every 5 seconds
-  const { stats: polledStats } = useAppData();
+  // Live stats + active jobs polling
+  const { stats: polledStats, activeJobs, refresh: refreshData } = useAppData();
   const liveCollectionCount = polledStats.collections ?? collections.length;
   const liveFitmentCount = polledStats.fitments ?? 0;
+
+  // Find active collection job for progress bar
+  const collectionJob = (activeJobs || []).find((j: any) => j.type === "collections");
+  const isCreating = !!collectionJob;
+
+  // Auto-refresh the page when collection job completes (to update the list)
+  const prevCreating = useRef(isCreating);
+  useEffect(() => {
+    if (prevCreating.current && !isCreating) {
+      // Job just completed — reload the page to get fresh collection list
+      window.location.reload();
+    }
+    prevCreating.current = isCreating;
+  }, [isCreating]);
+
+  // Detect duplicates in the collection list
+  const duplicateTitles = new Set<string>();
+  const seenTitles = new Set<string>();
+  for (const c of collections) {
+    if (seenTitles.has(c.title)) duplicateTitles.add(c.title);
+    else seenTitles.add(c.title);
+  }
+  const hasDuplicates = duplicateTitles.size > 0;
 
   // Pagination for existing collections
   const COLLECTIONS_PER_PAGE = 25;
@@ -249,6 +273,32 @@ export default function Collections() {
             ]}
           />
         </Layout.Section>
+
+        {/* Active collection creation progress */}
+        {isCreating && collectionJob && (
+          <Layout.Section>
+            <OperationProgress
+              label="Creating collections"
+              status="running"
+              processed={collectionJob.processed_items ?? 0}
+              total={collectionJob.total_items ?? 0}
+              startedAt={collectionJob.started_at}
+              badges={{
+                "created": { count: liveCollectionCount, tone: "success" },
+                "expected": { count: previewCount, tone: "info" },
+              }}
+            />
+          </Layout.Section>
+        )}
+
+        {/* Duplicate warning */}
+        {hasDuplicates && (
+          <Layout.Section>
+            <Banner tone="warning" title={`${duplicateTitles.size} duplicate collections detected`}>
+              <p>The following collections have duplicates: {[...duplicateTitles].slice(0, 5).join(", ")}{duplicateTitles.size > 5 ? ` and ${duplicateTitles.size - 5} more` : ""}. Delete duplicates from Shopify admin to clean up.</p>
+            </Banner>
+          </Layout.Section>
+        )}
 
         {/* Banners */}
         {showError && (
