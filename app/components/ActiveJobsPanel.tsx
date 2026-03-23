@@ -137,6 +137,11 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
                   {isRunning && total > 0 && (
                     <ProgressBar progress={percent} size="small" />
                   )}
+                  {isRunning && total === 0 && (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {isCollectionJob ? "Waiting for push to complete before creating collections..." : "Preparing..."}
+                    </Text>
+                  )}
                   {isComplete && (
                     <ProgressBar progress={100} size="small" tone="success" />
                   )}
