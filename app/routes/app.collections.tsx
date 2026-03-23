@@ -49,7 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run ALL queries in parallel — including tenant lookup
-  const [tenant, collectionsResult, appSettingsResult, fitmentMakesResult, fitmentMakeModelsResult, fitmentMakeModelYearsResult] = await Promise.all([
+  const [tenant, collectionsResult, appSettingsResult] = await Promise.all([
     getTenant(shopId),
     db.from("collection_mappings")
       .select("*")
@@ -59,21 +59,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("*")
       .eq("shop_id", shopId)
       .maybeSingle(),
-    db.from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
-    db.from("vehicle_fitments")
-      .select("make, model")
-      .eq("shop_id", shopId)
-      .not("make", "is", null)
-      .not("model", "is", null),
-    db.from("vehicle_fitments")
-      .select("make, model, year_from")
-      .eq("shop_id", shopId)
-      .not("make", "is", null)
-      .not("model", "is", null)
-      .not("year_from", "is", null),
   ]);
 
   const plan: PlanTier = tenant?.plan ?? "free";
@@ -83,22 +68,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Deduplicate makes, make+model combos, and make+model+year combos in JS
-  const uniqueMakes = fitmentMakesResult.data
-    ? [...new Set(fitmentMakesResult.data.map((f: any) => f.make).filter(Boolean))]
-    : [];
+  // Count unique combos by querying DB with pagination (avoids 1000-row limit)
+  const allFitments: Array<{ make: string; model: string; year_from: number | null; year_to: number | null }> = [];
+  let fitOffset = 0;
+  while (true) {
+    const { data: batch } = await db.from("vehicle_fitments")
+      .select("make, model, year_from, year_to")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .not("model", "is", null)
+      .range(fitOffset, fitOffset + 999);
+    if (!batch || batch.length === 0) break;
+    allFitments.push(...(batch as typeof allFitments));
+    fitOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
 
-  const uniqueMakeModels = fitmentMakeModelsResult.data
-    ? [...new Set(
-        fitmentMakeModelsResult.data.map((f: any) => `${f.make}|${f.model}`)
-      )]
-    : [];
-
-  const uniqueMakeModelYears = fitmentMakeModelYearsResult.data
-    ? [...new Set(
-        fitmentMakeModelYearsResult.data.map((f: any) => `${f.make}|${f.model}|${f.year_from}`)
-      )]
-    : [];
+  const uniqueMakes = [...new Set(allFitments.map(f => f.make))];
+  const uniqueMakeModels = [...new Set(allFitments.map(f => `${f.make}|${f.model}`))];
+  const uniqueMakeModelYears = [...new Set(
+    allFitments
+      .filter(f => f.year_from)
+      .map(f => {
+        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+        return `${f.make}|${f.model}|${yr}`;
+      })
+  )];
 
   return {
     plan,
