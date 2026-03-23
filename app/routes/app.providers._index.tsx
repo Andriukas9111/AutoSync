@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate } from "react-router";
 import {
@@ -24,6 +25,9 @@ import {
   CategoriesIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
+import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
@@ -169,9 +173,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export default function ProvidersIndex() {
-  const { providers, providerCount, providerLimit, plan } =
+  const { providers, providerCount: loaderProviderCount, providerLimit, plan } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+
+  // Live stats polling — updates provider/product counts every 5 seconds
+  const { stats: polledStats } = useAppData();
+  const providerCount = polledStats?.providers ?? loaderProviderCount;
 
   const atLimit =
     providerLimit !== Infinity && providerCount >= providerLimit;
@@ -254,14 +262,23 @@ export default function ProvidersIndex() {
       }}
     >
       <BlockStack gap="400">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Add a Provider", description: "Connect a data source — upload CSV/XML files, connect via API, or set up FTP. Each provider represents one supplier or data feed." },
+            { number: 2, title: "Import Products", description: "Preview the data, map columns to AutoSync fields, then import. Smart mapping remembers your column choices for future imports." },
+            { number: 3, title: "Map & Push", description: "Imported products appear in your catalog with vehicle data ready for fitment mapping. Push to Shopify to make them live.", linkText: "View Products", linkUrl: "/app/products" },
+          ]}
+        />
+
         {/* Stats Dashboard */}
         {(() => {
-          const totalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
+          const providerTotalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
           const totalImports = providers.reduce((sum, p) => sum + (p.import_count || 0), 0);
           const sourceTypeCount = new Set(providers.map(p => p.type)).size;
           const statItems = [
             { icon: DatabaseIcon, count: `${providerCount}`, label: "Total Providers" },
-            { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Total Products" },
+            { icon: ProductIcon, count: (polledStats?.total ?? providerTotalProducts).toLocaleString(), label: "Total Products" },
             { icon: ImportIcon, count: `${totalImports}`, label: "Total Imports" },
             { icon: CategoriesIcon, count: `${sourceTypeCount}`, label: "Source Types" },
           ];

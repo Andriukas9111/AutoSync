@@ -22,7 +22,6 @@ import {
   Button,
   DropZone,
   Select,
-  DataTable,
   ProgressBar,
   Spinner,
   Box,
@@ -36,6 +35,7 @@ import {
   RefreshIcon,
   ConnectIcon,
 } from "@shopify/polaris-icons";
+import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -903,7 +903,7 @@ export default function ProviderImportWizard() {
                 Importing Products...
               </Text>
               <Box paddingInline="1200" width="100%">
-                <ProgressBar progress={importProgress} tone="primary" size="small" />
+                <ProgressBar progress={importProgress} size="small" />
               </Box>
               <Text as="p" variant="bodySm" tone="subdued">
                 Processing {preview?.totalRows.toLocaleString() ?? "?"} rows. This may take a moment for large files.

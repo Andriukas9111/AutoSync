@@ -727,14 +727,17 @@ export async function getVehiclesForPages(
 
         // Build a better variant name from raw_specs or engine fields
         const rawModification = (vehicleSpecs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? null;
-        const variantName = engine.name ?? rawModification ?? (
+        const rawVariant = engine.name ?? rawModification ?? (
           engine.displacement_cc
             ? `${(engine.displacement_cc / 1000).toFixed(1)}L ${engine.fuel_type ?? ""}${powerHp ? ` (${powerHp} HP)` : ""}`.trim()
             : `${engine.fuel_type ?? "Unknown"}`
         );
+        // Strip dedup suffixes like " [92efc5dd]" from variant names
+        const variantName = rawVariant.replace(/\s*\[[0-9a-f]{8}\]$/, "");
 
-        // Pull generation from raw_specs if model lacks it
-        const generation = model.generation ?? (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Generation ?? null;
+        // Pull generation from raw_specs if model lacks it — but never use pipe-separated lists
+        const rawGeneration = model.generation ?? (vehicleSpecs?.raw_specs as Record<string, string> | null)?.Generation ?? null;
+        const generation = rawGeneration && rawGeneration.includes(" | ") ? null : rawGeneration;
 
         result.push({
           engineId: engine.id,
@@ -828,24 +831,26 @@ export async function getVehiclesForPages(
 export async function pushVehiclePages(
   admin: any,
   shopId: string,
-  options?: { dryRun?: boolean },
-): Promise<PushResult> {
-  const result: PushResult = {
+  options?: { dryRun?: boolean; batchSize?: number },
+): Promise<PushResult & { hasMore: boolean }> {
+  const BATCH_LIMIT = options?.batchSize ?? 15; // Process max 15 per call to stay under Vercel timeout
+  const result: PushResult & { hasMore: boolean } = {
     total: 0,
     created: 0,
     updated: 0,
     failed: 0,
     errors: [],
+    hasMore: false,
   };
 
   // 1. Ensure metaobject definition exists (for admin structured data)
   await ensureMetaobjectDefinition(admin, shopId);
 
   // 2. Get vehicles with fitment data
-  const vehicles = await getVehiclesForPages(shopId);
-  result.total = vehicles.length;
+  const allVehicles = await getVehiclesForPages(shopId);
+  result.total = allVehicles.length;
 
-  if (vehicles.length === 0) {
+  if (allVehicles.length === 0) {
     return result;
   }
 
@@ -872,7 +877,14 @@ export async function pushVehiclePages(
     });
   }
 
-  // 4. Process each vehicle
+  // 4. Filter to unsynced vehicles only, limit to batch size
+  const unsyncedVehicles = allVehicles.filter((v) => !existingByEngine.has(v.engineId));
+  const vehicles = unsyncedVehicles.slice(0, BATCH_LIMIT);
+  result.hasMore = unsyncedVehicles.length > BATCH_LIMIT;
+
+  console.log(`[vehicle-pages] Processing ${vehicles.length} of ${unsyncedVehicles.length} unsynced (${allVehicles.length} total)`);
+
+  // 4b. Process each vehicle in this batch
   for (const vehicle of vehicles) {
     const moHandle = buildMetaobjectHandle(
       vehicle.make,
@@ -895,10 +907,13 @@ export async function pushVehiclePages(
     const finalPowerHp = vehicle.powerHp ?? specs?.system_combined_hp ?? null;
     const finalPowerKw = vehicle.powerKw ?? (finalPowerHp ? Math.round(finalPowerHp * 0.7457) : null);
     const finalTorqueNm = vehicle.torqueNm ?? specs?.system_combined_torque_nm ?? null;
-    const finalGeneration = vehicle.generation ?? (specs?.raw_specs as Record<string, string> | null)?.Generation ?? "";
-    const finalVariant = vehicle.variant !== `${vehicle.displacementCc ?? ""}cc ${vehicle.fuelType ?? ""}`.trim()
+    const rawFinalGen = vehicle.generation ?? (specs?.raw_specs as Record<string, string> | null)?.Generation ?? "";
+    const finalGeneration = rawFinalGen.includes(" | ") ? "" : rawFinalGen;
+    const rawFinalVariant = vehicle.variant !== `${vehicle.displacementCc ?? ""}cc ${vehicle.fuelType ?? ""}`.trim()
       ? vehicle.variant
       : (specs?.raw_specs as Record<string, string> | null)?.["Modification (Engine)"] ?? vehicle.variant;
+    // Strip dedup suffixes from variant names
+    const finalVariant = rawFinalVariant.replace(/\s*\[[0-9a-f]{8}\]$/, "");
 
     const fields: Array<{ key: string; value: string }> = [
       { key: "make", value: vehicle.make },

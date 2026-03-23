@@ -30,26 +30,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return redirect(`/app/products/${specificProductId}?from=fitment`);
   }
 
-  // Find the next unmapped product + stats in parallel
-  const [totalResult, unmappedResult, nextResult] = await Promise.all([
+  // Find the next product needing review (unmapped OR flagged) + stats
+  const [totalResult, needsReviewResult, nextUnmappedResult, nextFlaggedResult] = await Promise.all([
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]),
     db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
-  const nextProduct = nextResult.data;
+  // Prioritize unmapped, then flagged
+  const nextProduct = nextUnmappedResult.data ?? nextFlaggedResult.data;
 
-  // If there's an unmapped product, redirect to it in queue mode
+  // If there's a product needing review, redirect to it in queue mode
   if (nextProduct) {
     return redirect(`/app/products/${nextProduct.id}?from=fitment`);
   }
 
   // All mapped — show completion state
   const total = totalResult.count ?? 0;
-  const unmapped = unmappedResult.count ?? 0;
+  const needsReview = needsReviewResult.count ?? 0;
   return {
     totalProducts: total,
-    mappedCount: total - unmapped,
+    mappedCount: total - needsReview,
   };
 };
 

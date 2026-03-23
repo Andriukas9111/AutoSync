@@ -17,7 +17,6 @@ import {
   Divider,
   Box,
   Select,
-  DataTable,
   ProgressBar,
   Tabs,
   EmptyState,
@@ -32,6 +31,7 @@ import {
   ConnectIcon,
   RefreshIcon,
 } from "@shopify/polaris-icons";
+import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";

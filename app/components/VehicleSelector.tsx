@@ -149,7 +149,7 @@ export function VehicleSelector({
             : m.year_from
               ? ` (${m.year_from}+)`
               : "";
-        const gen = m.generation ? ` ${m.generation}` : "";
+        const gen = m.generation && !m.generation.includes(" | ") && !m.generation.startsWith(m.name) ? ` (${m.generation})` : "";
         return { label: `${m.name}${gen}${yearRange}`, value: m.id };
       }),
     ],
@@ -189,7 +189,8 @@ export function VehicleSelector({
     (id: string) => {
       const m = models.find((mod) => mod.id === id);
       if (!m) return "";
-      return m.generation ? `${m.name} ${m.generation}` : m.name;
+      const showGen = m.generation && !m.generation.includes(" | ") && !m.generation.startsWith(m.name);
+      return showGen ? `${m.name} (${m.generation})` : m.name;
     },
     [models],
   );

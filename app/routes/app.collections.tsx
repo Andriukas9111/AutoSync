@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
 import { data } from "react-router";
@@ -33,6 +33,9 @@ import db from "../lib/db.server";
 import { getPlanLimits, getTenant, PLAN_LIMITS } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
+import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -207,6 +210,11 @@ export default function Collections() {
     appSettings?.auto_create_collections ?? false
   );
 
+  // Live stats polling — updates collection counts every 5 seconds
+  const { stats: polledStats } = useAppData();
+  const liveCollectionCount = polledStats.collections ?? collections.length;
+  const liveFitmentCount = polledStats.fitments ?? 0;
+
   const showSuccess = actionData && "success" in actionData && actionData.success;
   const showError = actionData && "error" in actionData;
 
@@ -221,6 +229,17 @@ export default function Collections() {
   return (
     <Page fullWidth title="Collections">
       <Layout>
+        {/* How It Works */}
+        <Layout.Section>
+          <HowItWorks
+            steps={[
+              { number: 1, title: "Map Products First", description: "Collections are auto-generated from your fitment data. Map products to vehicles using auto-extraction or manual mapping before creating collections.", linkText: "Go to Fitment", linkUrl: "/app/fitment" },
+              { number: 2, title: "Choose Strategy", description: "Select how collections are organized: by Make only (e.g. 'BMW Parts'), by Make & Model (e.g. 'BMW 3 Series Parts'), or by Make, Model & Year range." },
+              { number: 3, title: "Auto-Create", description: "Collections are created with brand logos, SEO titles and descriptions, smart tag-based rules, and published to your Online Store automatically." },
+            ]}
+          />
+        </Layout.Section>
+
         {/* Banners */}
         {showError && (
           <Layout.Section>
@@ -316,10 +335,11 @@ export default function Collections() {
                 { icon: HashtagIcon, count: `${uniqueMakes.length}`, label: "Unique makes in fitments" },
                 { icon: LinkIcon, count: `${uniqueMakeModelCount}`, label: "Unique make + model combos" },
                 { icon: TargetIcon, count: `~${previewCount}`, label: `Collections to create (${STRATEGY_LABELS[strategy]})` },
+                { icon: CollectionFilledIcon, count: `${liveCollectionCount}`, label: "Existing collections" },
               ].map((item, i) => (
                 <div key={item.label} style={{
                   padding: "var(--p-space-400)",
-                  borderRight: i < 2 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
                   textAlign: "center",
                 }}>
                   <BlockStack gap="200" inlineAlign="center">

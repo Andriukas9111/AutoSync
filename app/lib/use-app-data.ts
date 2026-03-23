@@ -1,0 +1,137 @@
+/**
+ * Unified App Data Hook — Single source of truth for ALL live data.
+ *
+ * Replaces 9 different useState+useEffect polling implementations.
+ * Every page imports from this ONE hook.
+ * Returns isLoading for skeleton states until first poll succeeds.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+export interface AppStats {
+  total: number;
+  unmapped: number;
+  autoMapped: number;
+  smartMapped: number;
+  manualMapped: number;
+  flagged: number;
+  fitments: number;
+  collections: number;
+  vehiclePages: number;
+  vehiclePagesSynced: number;
+  vehiclePagesPending: number;
+  vehiclePagesFailed: number;
+  providers: number;
+  pushedProducts: number;
+  activeMakes: number;
+  uniqueMakes: number;
+  uniqueModels: number;
+}
+
+export interface AppJob {
+  id: string;
+  type: string;
+  status: string;
+  processed_items: number | null;
+  total_items: number | null;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface AppData {
+  stats: AppStats;
+  jobs: AppJob[];
+  activeJobs: AppJob[];
+  isLoading: boolean;
+}
+
+const DEFAULT_STATS: AppStats = {
+  total: 0,
+  unmapped: 0,
+  autoMapped: 0,
+  smartMapped: 0,
+  manualMapped: 0,
+  flagged: 0,
+  fitments: 0,
+  collections: 0,
+  vehiclePages: 0,
+  vehiclePagesSynced: 0,
+  vehiclePagesPending: 0,
+  vehiclePagesFailed: 0,
+  providers: 0,
+  pushedProducts: 0,
+  activeMakes: 0,
+  uniqueMakes: 0,
+  uniqueModels: 0,
+};
+
+/**
+ * @param loaderStats — Initial stats from the page loader (avoids 0-flash)
+ * @param pollInterval — Polling interval in ms (default 5000)
+ */
+export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000): AppData {
+  const [stats, setStats] = useState<AppStats>({ ...DEFAULT_STATS, ...loaderStats });
+  const [jobs, setJobs] = useState<AppJob[]>([]);
+  const [activeJobs, setActiveJobs] = useState<AppJob[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const poll = useCallback(async () => {
+    try {
+      const res = await fetch("/app/api/job-status?type=all");
+      if (res.ok) {
+        const result = await res.json();
+        if (result.stats) {
+          setStats(result.stats);
+        }
+        if (result.jobs) {
+          setJobs(result.jobs);
+        }
+        if (result.activeJobs) {
+          setActiveJobs(result.activeJobs);
+        }
+        setIsLoading(false);
+      }
+    } catch {
+      // Non-fatal — polling continues
+    }
+  }, []);
+
+  useEffect(() => {
+    poll(); // Initial poll
+    intervalRef.current = setInterval(poll, pollInterval);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [poll, pollInterval]);
+
+  // Computed values
+  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
+  const needsReview = stats.unmapped + stats.flagged;
+  const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
+  const pendingPush = Math.max(0, mapped - stats.pushedProducts);
+
+  return {
+    stats: {
+      ...stats,
+      // Add computed fields for convenience
+    },
+    jobs,
+    activeJobs,
+    isLoading,
+  };
+}
+
+/**
+ * Computed helpers — use these instead of calculating in every page
+ */
+export function computeFromStats(stats: AppStats) {
+  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
+  const needsReview = stats.unmapped + stats.flagged;
+  const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
+  const pendingPush = Math.max(0, mapped - stats.pushedProducts);
+
+  return { mapped, needsReview, coverage, pendingPush };
+}

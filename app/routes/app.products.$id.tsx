@@ -159,10 +159,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId)
     : null;
   const unmappedQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped")
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
     : null;
+  // Get next product needing review AFTER the current one (by ID sort order)
+  // Includes both unmapped and flagged products
   const nextQuery = isQueueMode
-    ? db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").neq("id", productId).order("created_at", { ascending: true }).limit(1).maybeSingle()
+    ? db.from("products").select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
     : null;
 
   const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
@@ -274,10 +276,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    // Find next unmapped product for queue mode
+    // Find next unmapped product AFTER the current one
     const { data: nextAfterAdd } = await db.from("products")
-      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
-      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
   }
@@ -318,16 +320,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .from("products").select("fitment_status")
       .eq("id", productId).eq("shop_id", shopId).single();
 
-    if (currentProduct?.fitment_status === "unmapped") {
+    if (currentProduct?.fitment_status === "unmapped" || currentProduct?.fitment_status === "flagged") {
       await db.from("products")
         .update({ fitment_status: "smart_mapped", updated_at: new Date().toISOString() })
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    // Find next unmapped product for queue mode
+    // Find next unmapped product AFTER the current one
     const { data: nextAfterSuggest } = await db.from("products")
-      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
-      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
   }
@@ -362,8 +364,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .eq("id", productId).eq("shop_id", shopId);
 
     const { data: nextProduct } = await db.from("products")
-      .select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped")
-      .neq("id", productId as string).order("created_at", { ascending: true }).limit(1).maybeSingle();
+      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
   }
@@ -472,7 +474,9 @@ export default function ProductDetails() {
         if (suggestion.engine.code) formData.set("engine_code", suggestion.engine.code);
         if (suggestion.engine.fuelType) formData.set("fuel_type", suggestion.engine.fuelType);
       }
-      if (suggestion.model?.generation) formData.set("variant", suggestion.model.generation);
+      if (suggestion.model?.generation && !suggestion.model.generation.includes(" | ")) {
+        formData.set("variant", suggestion.model.generation);
+      }
       if (suggestion.yearFrom) formData.set("year_from", String(suggestion.yearFrom));
       if (suggestion.yearTo) formData.set("year_to", String(suggestion.yearTo));
       formData.set("confidence", String(suggestion.confidence));

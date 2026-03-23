@@ -14,7 +14,6 @@ import {
   Banner,
   Divider,
   Box,
-  DataTable,
   Collapsible,
   Icon,
 } from "@shopify/polaris";
@@ -36,6 +35,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -336,6 +336,15 @@ export default function Fitment() {
       ]}
     >
       <BlockStack gap="600">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Auto Extract", description: "Scan product titles and descriptions to detect vehicle makes, models, engine codes, and platforms. Products are matched to our YMME database." },
+            { number: 2, title: "Review Flagged", description: "Products matched with moderate confidence are flagged for review. Accept, reject, or adjust the suggested fitments for accuracy." },
+            { number: 3, title: "Manual Mapping", description: "For products without detectable vehicle data, manually search and assign make, model, year, and engine.", linkText: "Start Mapping", linkUrl: "/app/fitment/manual" },
+          ]}
+        />
+
         {/* Stats Overview — single card, consistent grid */}
         <Card padding="0">
           <div style={{
@@ -346,11 +355,10 @@ export default function Fitment() {
             {([
               { icon: ProductIcon, label: "Total", count: totalProducts },
               { icon: ConnectIcon, label: "Fitments", count: totalFitments },
-              { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, critical: true as boolean },
+              { icon: AlertCircleIcon, label: "Needs Review", count: unmapped + flagged + partial, critical: true as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },
               { icon: WandIcon, label: "Smart", count: smartMapped },
               { icon: TargetIcon, label: "Manual", count: manualMapped },
-              { icon: AlertTriangleIcon, label: "Flagged", count: flagged + partial },
             ]).map((item, i) => (
               <div
                 key={item.label}
@@ -465,15 +473,22 @@ export default function Fitment() {
                 <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Top Makes by Fitment Count</Text>
               </InlineStack>
-              <DataTable
-                columnContentTypes={["text", "numeric", "numeric"]}
-                headings={["Make", "Fitments", "Models"]}
-                rows={topMakes.map((m) => [
-                  m.make,
-                  m.count.toLocaleString(),
-                  m.models.toLocaleString(),
-                ])}
-              />
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                    <th style={{ textAlign: "left", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Make</Text></th>
+                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
+                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
+                  </tr></thead>
+                  <tbody>{topMakes.map((m) => (
+                    <tr key={m.make} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                      <td style={{ padding: "8px" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
+                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
+                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.models.toLocaleString()}</Text></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
             </BlockStack>
           </Card>
         )}
@@ -587,21 +602,25 @@ export default function Fitment() {
                                 View Product
                               </Button>
                             </InlineStack>
-                            <DataTable
-                              columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                              headings={["Make", "Model", "Years", "Engine", "Fuel", "Method"]}
-                              rows={group.fitments.map((f) => [
-                                f.make || "-",
-                                f.model || "-",
-                                formatYearRange(f.year_from, f.year_to),
-                                f.engine || f.engine_code || "-",
-                                f.fuel_type || "-",
-                                f.extraction_method === "smart" ? "Smart" :
-                                f.extraction_method === "manual" ? "Manual" :
-                                f.extraction_method === "auto" ? "Auto" :
-                                f.extraction_method || "-",
-                              ])}
-                            />
+                            <div style={{ overflowX: "auto" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+                                <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                  {["Make","Model","Years","Engine","Fuel","Method"].map(h => (
+                                    <th key={h} style={{ textAlign: "left", padding: "6px 8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
+                                  ))}
+                                </tr></thead>
+                                <tbody>{group.fitments.map((f, fi) => (
+                                  <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                    <td style={{ padding: "6px 8px" }}>{f.make || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>{f.model || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>{formatYearRange(f.year_from, f.year_to)}</td>
+                                    <td style={{ padding: "6px 8px" }}>{f.engine || f.engine_code || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>{f.fuel_type || "-"}</td>
+                                    <td style={{ padding: "6px 8px" }}>{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</td>
+                                  </tr>
+                                ))}</tbody>
+                              </table>
+                            </div>
                           </BlockStack>
                         </Box>
                       </Collapsible>

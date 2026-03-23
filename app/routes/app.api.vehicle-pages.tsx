@@ -22,11 +22,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (intent) {
     case "push": {
       try {
-        const result = await pushVehiclePages(admin, shopId);
+        const result = await pushVehiclePages(admin, shopId, { batchSize: 15 });
         return data({
           success: true,
-          message: `Published ${result.created} vehicle pages, updated ${result.updated}. All entries published to sales channels.`,
+          message: `Published ${result.created} vehicle pages, updated ${result.updated}.${result.hasMore ? " More pages pending..." : " All done!"}`,
           stats: result,
+          hasMore: result.hasMore,
         });
       } catch (e) {
         return data({ error: (e as Error).message }, { status: 500 });

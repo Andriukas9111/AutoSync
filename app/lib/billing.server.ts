@@ -559,7 +559,7 @@ export async function createBillingSubscription(
       variables: {
         name,
         returnUrl,
-        test: true, // Always test mode in development — remove for production
+        test: process.env.NODE_ENV !== "production",
         lineItems: [
           {
             plan: {

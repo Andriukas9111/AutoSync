@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
   useLoaderData,
@@ -50,6 +50,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
@@ -230,6 +231,34 @@ export default function Products() {
   const [dismissed, setDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Live stats polling for status breakdown
+  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/app/api/job-status?type=all");
+        if (res.ok) {
+          const result = await res.json();
+          if (result.stats) {
+            setLiveBreakdown({
+              unmapped: result.stats.unmapped,
+              auto_mapped: result.stats.autoMapped,
+              smart_mapped: result.stats.smartMapped,
+              manual_mapped: result.stats.manualMapped,
+              flagged: result.stats.flagged,
+            });
+          }
+        }
+      } catch { /* non-fatal */ }
+    };
+    pollRef.current = setInterval(poll, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Use live breakdown when available
+  const activeBreakdown = liveBreakdown ?? statusBreakdown;
+
   const isFetching = fetcher.state !== "idle";
   const isBulkAction = bulkFetcher.state !== "idle";
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
@@ -366,12 +395,12 @@ export default function Products() {
             tabIndex={0}
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/app/products/${product.id}`);
+              navigate(`/app/products/${product.id}${isFitmentContext ? "?from=fitment" : ""}`);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.stopPropagation();
-                navigate(`/app/products/${product.id}`);
+                navigate(`/app/products/${product.id}${isFitmentContext ? "?from=fitment" : ""}`);
               }
             }}
             style={{ cursor: "pointer", color: "var(--p-color-text-emphasis)" }}
@@ -405,6 +434,8 @@ export default function Products() {
   // ── Active filters ──────────────────────────────────────────────────────
 
   const hasActiveFilters = !!(filters.search || filters.status || filters.source);
+  // When viewing fitment-related filters, link to mapping mode
+  const isFitmentContext = ["unmapped", "flagged", "auto_mapped", "smart_mapped", "manual_mapped"].includes(filters.status ?? "");
 
   // ── Empty state (no products at all) ────────────────────────────────────
 
@@ -485,6 +516,15 @@ export default function Products() {
       ]}
     >
       <BlockStack gap="400">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Import Products", description: "Fetch your Shopify products or upload from CSV/XML providers. Products sync automatically with your store catalog." },
+            { number: 2, title: "Map Fitments", description: "Use auto-extraction or manual mapping to assign vehicle compatibility. Click any product to view and edit its fitment data.", linkText: "Go to Fitment", linkUrl: "/app/fitment" },
+            { number: 3, title: "Push & Publish", description: "Push mapped products to Shopify with tags and metafields, then create vehicle-based collections for your storefront.", linkText: "Push to Shopify", linkUrl: "/app/push" },
+          ]}
+        />
+
         {/* ── Banners ── */}
         {queryError && (
           <Banner tone="critical" title="Failed to load products">
@@ -552,11 +592,10 @@ export default function Products() {
           }}>
             {([
               { key: "total", icon: ProductIcon, label: "Total", count: totalCount, critical: false },
-              { key: "unmapped", icon: AlertCircleIcon, label: "Unmapped", count: statusBreakdown["unmapped"] ?? 0, critical: true },
-              { key: "auto_mapped", icon: WandIcon, label: "Auto", count: statusBreakdown["auto_mapped"] ?? 0, critical: false },
-              { key: "smart_mapped", icon: WandIcon, label: "Smart", count: statusBreakdown["smart_mapped"] ?? 0, critical: false },
-              { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: statusBreakdown["manual_mapped"] ?? 0, critical: false },
-              { key: "flagged", icon: FlagIcon, label: "Flagged", count: (statusBreakdown["flagged"] ?? 0) + (statusBreakdown["partial"] ?? 0), critical: false },
+              { key: "unmapped", icon: AlertCircleIcon, label: "Needs Review", count: (activeBreakdown["unmapped"] ?? 0) + (activeBreakdown["flagged"] ?? 0) + (activeBreakdown["partial"] ?? 0), critical: true },
+              { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
+              { key: "smart_mapped", icon: WandIcon, label: "Smart", count: activeBreakdown["smart_mapped"] ?? 0, critical: false },
+              { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },
             ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
               const isFilter = item.key !== "total";
               const isActive = isFilter && filters.status === item.key;

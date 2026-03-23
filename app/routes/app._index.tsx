@@ -14,8 +14,8 @@ import {
   ProgressBar,
   Banner,
   Divider,
-  Icon,
   Box,
+  Icon,
 } from "@shopify/polaris";
 import {
   ProductIcon,
@@ -44,6 +44,10 @@ import { getPlanLimits, getPlanConfigs } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
+import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
+import { SkeletonCard } from "../components/SkeletonCard";
+import { useAppData, computeFromStats } from "../lib/use-app-data";
+import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Loader — aggregate ALL system stats for the dashboard
@@ -79,6 +83,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeModelsResult,
     ymmeEnginesResult,
     ymmeSpecsResult,
+    pushedProductsResult,
+    activeMakesResult,
+    vehiclePagesResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     db.from("sync_jobs")
@@ -116,6 +123,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
+    // Push + active makes + vehicle pages
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
+    db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
   ]);
 
   const tenant = tenantResult.data;
@@ -187,6 +198,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeModels: ymmeModelsResult.count ?? 0,
     ymmeEngines: ymmeEnginesResult.count ?? 0,
     ymmeSpecs: ymmeSpecsResult.count ?? 0,
+    // Push + sync stats
+    pushedProducts: pushedProductsResult.count ?? 0,
+    activeMakes: activeMakesResult.count ?? 0,
+    vehiclePagesSynced: vehiclePagesResult.count ?? 0,
+    // Unique makes/models from fitments (topMakes already has all makes)
+    uniqueMakes: topMakes.length,
+    uniqueModels: 0, // Will be filled by live polling
   };
 };
 
@@ -334,12 +352,11 @@ function StatusChip({
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === "Enter") onClick(); } : undefined}
       style={{
+        ...statMiniStyle,
         display: "flex",
         alignItems: "center",
         gap: "10px",
         padding: "12px 16px",
-        borderRadius: "var(--p-border-radius-300)",
-        background: "var(--p-color-bg-surface-secondary)",
         border: "1px solid var(--p-color-border-secondary)",
         cursor: onClick ? "pointer" : "default",
         flex: "1 1 0",
@@ -368,31 +385,7 @@ function StatusChip({
 // Coverage Progress Bar — custom thick bar with gradient
 // ---------------------------------------------------------------------------
 
-function CoverageBar({ percent }: { percent: number }) {
-  const barColor = percent >= 80
-    ? "var(--p-color-bg-fill-success)"
-    : percent >= 40
-      ? "var(--p-color-bg-fill-info)"
-      : "var(--p-color-bg-fill-caution)";
-
-  return (
-    <div style={{
-      width: "100%",
-      height: "10px",
-      borderRadius: "5px",
-      background: "var(--p-color-bg-surface-secondary)",
-      overflow: "hidden",
-    }}>
-      <div style={{
-        width: `${Math.max(percent, 1)}%`,
-        height: "100%",
-        borderRadius: "5px",
-        background: barColor,
-        transition: "width 600ms ease",
-      }} />
-    </div>
-  );
-}
+// CoverageBar removed — replaced with Polaris ProgressBar for consistency
 
 // ---------------------------------------------------------------------------
 // Component
@@ -423,19 +416,56 @@ export default function Dashboard() {
     ymmeModels,
     ymmeEngines,
     ymmeSpecs,
+    pushedProducts: loaderPushedProducts,
+    activeMakes: loaderActiveMakes,
+    vehiclePagesSynced: loaderVehiclePages,
+    uniqueMakes: loaderUniqueMakes,
+    uniqueModels: loaderUniqueModels,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
   const [showWelcome, setShowWelcome] = useState(true);
 
-  const coverage = totalProducts > 0 ? Math.round((mapped / totalProducts) * 100) : 0;
+  // Unified live data — replaces 9 scattered polling implementations
+  const { stats: liveData, isLoading: dataLoading } = useAppData({
+    total: totalProducts,
+    unmapped,
+    autoMapped,
+    smartMapped,
+    manualMapped,
+    flagged,
+    fitments: fitmentCount,
+    collections: collectionCount,
+    pushedProducts: loaderPushedProducts,
+    activeMakes: loaderActiveMakes,
+    vehiclePagesSynced: loaderVehiclePages,
+    uniqueMakes: loaderUniqueMakes,
+    uniqueModels: loaderUniqueModels,
+  });
+
+  // All live values from unified hook
+  const s = liveData; // Short alias
+  const { mapped: liveMapped, needsReview, coverage, pendingPush } = computeFromStats(s);
+  const liveTotalProducts = s.total;
+  const liveUnmapped = s.unmapped;
+  const liveAutoMapped = s.autoMapped;
+  const liveSmartMapped = s.smartMapped;
+  const liveFlagged = s.flagged;
+  const liveFitmentCount = s.fitments;
+  const liveCollectionCount = s.collections;
+  const livePushedProducts = s.pushedProducts;
+  const liveActiveMakes = s.activeMakes;
+  const liveVehiclePages = s.vehiclePagesSynced;
+  const liveUniqueMakes = s.uniqueMakes;
+  const liveUniqueModels = s.uniqueModels;
+
   const planLabel = planName;
-  const showOnboarding = totalProducts < 1 || fitmentCount < 1;
+  const showOnboarding = liveTotalProducts < 1 || liveFitmentCount < 1;
 
   const productUsagePercent =
-    limits.products === Infinity ? 0 : Math.min(100, Math.round((totalProducts / limits.products) * 100));
+    limits.products === Infinity ? 0 : Math.min(100, Math.round((liveTotalProducts / limits.products) * 100));
   const fitmentUsagePercent =
-    limits.fitments === Infinity ? 0 : Math.min(100, Math.round((fitmentCount / limits.fitments) * 100));
+    limits.fitments === Infinity ? 0 : Math.min(100, Math.round((liveFitmentCount / limits.fitments) * 100));
 
   return (
     <Page title="Dashboard" fullWidth>
@@ -463,9 +493,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">
                     Quick Actions
                   </Text>
-                  {unmapped > 0 && (
+                  {(liveUnmapped + liveFlagged) > 0 && (
                     <Badge tone="warning">
-                      {`${unmapped.toLocaleString()} unmapped`}
+                      {`${(liveUnmapped + liveFlagged).toLocaleString()} need review`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -482,7 +512,7 @@ export default function Dashboard() {
                     label="Auto Extract"
                     description="Automatically detect vehicle fitments"
                     onClick={() => navigate("/app/fitment")}
-                    badge={unmapped > 0 ? { content: `${unmapped.toLocaleString()} pending`, tone: "warning" } : undefined}
+                    badge={(liveUnmapped + liveFlagged) > 0 ? { content: `${(liveUnmapped + liveFlagged).toLocaleString()} pending`, tone: "warning" } : undefined}
                   />
                   <QuickActionCard
                     icon={TargetIcon}
@@ -505,7 +535,7 @@ export default function Dashboard() {
                     label="Collections"
                     description="Auto-create smart collections"
                     onClick={() => navigate("/app/collections")}
-                    badge={collectionCount > 0 ? { content: `${collectionCount}`, tone: "info" } : undefined}
+                    badge={collectionCount > 0 ? { content: `${liveCollectionCount}`, tone: "info" } : undefined}
                   />
                   <QuickActionCard
                     icon={ChartVerticalIcon}
@@ -529,61 +559,103 @@ export default function Dashboard() {
               </BlockStack>
             </Card>
 
+            {/* ─── Active Jobs — Live Progress ─── */}
+            <ActiveJobsPanel navigate={navigate} />
+
             {/* Onboarding checklist */}
             {showOnboarding && (
               <OnboardingChecklist
-                productCount={totalProducts}
-                fitmentCount={fitmentCount}
+                productCount={liveTotalProducts}
+                fitmentCount={liveFitmentCount}
                 hasPushed={hasPushed}
-                collectionCount={collectionCount}
+                collectionCount={liveCollectionCount}
               />
             )}
 
-            {/* ─── KPI Metrics Row ─── */}
-            {(() => {
-              const statItems = [
-                { icon: ProductIcon, count: totalProducts.toLocaleString(), label: "Products", link: "/app/products", linkLabel: "View all" },
-                { icon: ConnectIcon, count: fitmentCount.toLocaleString(), label: "Fitments", link: "/app/fitment", linkLabel: "View fitments" },
-                { icon: GaugeIcon, count: `${coverage}%`, label: "Coverage", link: "/app/products", linkLabel: "View products" },
-                { icon: CollectionIcon, count: collectionCount.toLocaleString(), label: "Collections", link: "/app/collections", linkLabel: "Manage" },
-                { icon: PackageIcon, count: String(providerCount), label: "Providers", link: "/app/providers", linkLabel: "Manage" },
-                { icon: StarFilledIcon, count: planPrice, label: "Plan", link: "/app/plans", linkLabel: plan === "enterprise" ? "View plan" : "Upgrade" },
-              ];
-              const lastIndex = statItems.length - 1;
-              return (
-                <Card padding="0">
-                  <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                  }}>
-                    {statItems.map((item, i) => (
-                      <div key={item.label} style={{
-                        padding: "var(--p-space-400)",
-                        borderRight: i < lastIndex ? "1px solid var(--p-color-border-secondary)" : "none",
-                        textAlign: "center",
-                      }}>
-                        <BlockStack gap="200" inlineAlign="center">
-                          <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
-                          <Text as="p" variant="headingLg" fontWeight="bold">
-                            {item.count}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {item.label}
-                          </Text>
-                          <Button
-                            onClick={() => navigate(item.link)}
-                            variant="plain"
-                            size="slim"
-                          >
-                            {item.linkLabel}
-                          </Button>
-                        </BlockStack>
+            {/* ─── System Overview — 3-column status cards ─── */}
+            <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
+              {/* Products & Fitments */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingSm">Products & Fitments</Text>
+                    </InlineStack>
+                    <Button onClick={() => navigate("/app/products")} variant="plain" size="slim">View all</Button>
+                  </InlineStack>
+                  <div style={statGridStyle(2)}>
+                    {[
+                      { label: "Total Products", value: liveTotalProducts },
+                      { label: "Vehicle Links", value: liveFitmentCount },
+                      { label: "Mapped", value: liveMapped },
+                      { label: "Needs Review", value: liveUnmapped + liveFlagged },
+                      { label: "Makes with Parts", value: liveUniqueMakes },
+                      { label: "Models with Parts", value: liveUniqueModels },
+                    ].map((s) => (
+                      <div key={s.label} style={statMiniStyle}>
+                        <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
                       </div>
                     ))}
                   </div>
-                </Card>
-              );
-            })()}
+                </BlockStack>
+              </Card>
+
+              {/* Shopify Sync Status */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingSm">Shopify Sync</Text>
+                    </InlineStack>
+                    <Button onClick={() => navigate("/app/push")} variant="plain" size="slim">Push page</Button>
+                  </InlineStack>
+                  <div style={statGridStyle(2)}>
+                    {[
+                      { label: "Products Pushed", value: livePushedProducts },
+                      { label: "Pending Push", value: Math.max(0, liveMapped - livePushedProducts) },
+                      { label: "Collections", value: liveCollectionCount },
+                      { label: "Active Makes", value: liveActiveMakes },
+                      { label: "Vehicle Pages", value: liveVehiclePages },
+                      { label: "Coverage", value: `${coverage}%` as unknown as number },
+                    ].map((s) => (
+                      <div key={s.label} style={statMiniStyle}>
+                        <Text as="p" variant="headingMd" fontWeight="bold">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                      </div>
+                    ))}
+                  </div>
+                </BlockStack>
+              </Card>
+
+              {/* Plan & Resources */}
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingSm">{`${planName} Plan`}</Text>
+                    </InlineStack>
+                    <Button onClick={() => navigate("/app/plans")} variant="plain" size="slim">{plan === "enterprise" ? "View plan" : "Upgrade"}</Button>
+                  </InlineStack>
+                  <div style={statGridStyle(2)}>
+                    {[
+                      { label: "Price", value: planPrice },
+                      { label: "Providers", value: String(providerCount) },
+                      { label: "Product Limit", value: limits.products === Infinity ? "Unlimited" : limits.products.toLocaleString() },
+                      { label: "Fitment Limit", value: limits.fitments === Infinity ? "Unlimited" : limits.fitments.toLocaleString() },
+                    ].map((s) => (
+                      <div key={s.label} style={statMiniStyle}>
+                        <Text as="p" variant="headingMd" fontWeight="bold">{s.value}</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                      </div>
+                    ))}
+                  </div>
+                </BlockStack>
+              </Card>
+            </InlineGrid>
 
             {/* ─── Fitment Coverage — Hero Card ─── */}
             <Card>
@@ -598,21 +670,20 @@ export default function Dashboard() {
                       {`${coverage}%`}
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      {`${mapped.toLocaleString()} of ${totalProducts.toLocaleString()} products mapped`}
+                      {`${liveMapped.toLocaleString()} of ${liveTotalProducts.toLocaleString()} products mapped`}
                     </Text>
                   </InlineStack>
                 </InlineStack>
 
-                <CoverageBar percent={coverage} />
+                <ProgressBar progress={coverage} size="small" />
 
                 {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   {([
-                    { icon: AlertCircleIcon, label: "Unmapped", count: unmapped, status: "unmapped" },
-                    { icon: CheckCircleIcon, label: "Auto Mapped", count: autoMapped, status: "auto_mapped" },
-                    { icon: WandIcon, label: "Smart Mapped", count: smartMapped, status: "smart_mapped" },
-                    { icon: TargetIcon, label: "Manual Mapped", count: manualMapped, status: "manual_mapped" },
-                    { icon: AlertTriangleIcon, label: "Flagged", count: flagged, status: "flagged" },
+                    { icon: AlertCircleIcon, label: "Needs Review", count: liveUnmapped + liveFlagged, status: "unmapped" },
+                    { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
+                    { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
+                    { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },
                   ] as const).map((item) => (
                     <StatusChip
                       key={item.status}
@@ -626,7 +697,7 @@ export default function Dashboard() {
                   ))}
                 </div>
 
-                {unmapped > 0 && (
+                {(liveUnmapped > 0 || liveFlagged > 0) && (
                   <>
                     <Divider />
                     <InlineStack gap="200">
@@ -695,8 +766,7 @@ export default function Dashboard() {
                   <Divider />
 
                   <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
+                    ...statGridStyle(2),
                     gap: "12px",
                   }}>
                     {[
@@ -705,11 +775,7 @@ export default function Dashboard() {
                       { label: "Engines", value: ymmeEngines },
                       { label: "Vehicle Specs", value: ymmeSpecs },
                     ].map((stat) => (
-                      <div key={stat.label} style={{
-                        padding: "8px 12px",
-                        borderRadius: "var(--p-border-radius-200)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                      }}>
+                      <div key={stat.label} style={statMiniStyle}>
                         <BlockStack gap="050">
                           <Text as="p" variant="headingMd" fontWeight="bold">
                             {stat.value.toLocaleString()}
@@ -756,14 +822,7 @@ export default function Dashboard() {
                       {providers.map((p: any) => (
                         <div
                           key={p.id}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "8px 12px",
-                            borderRadius: "var(--p-border-radius-200)",
-                            background: "var(--p-color-bg-surface-secondary)",
-                          }}
+                          style={{ ...statMiniStyle, display: "flex", alignItems: "center", justifyContent: "space-between" }}
                         >
                           <BlockStack gap="050">
                             <Text as="span" variant="bodyMd" fontWeight="medium">
@@ -808,45 +867,14 @@ export default function Dashboard() {
                     No activity yet. Run your first pipeline to see results here.
                   </Text>
                 ) : (
-                  <div style={{
-                    maxHeight: "320px",
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "1px",
-                    background: "var(--p-color-border-secondary)",
-                    borderRadius: "var(--p-border-radius-200)",
-                    border: "1px solid var(--p-color-border-secondary)",
-                  }}>
+                  <div style={tableContainerStyle}>
                     {recentJobs.map((job: any) => (
                       <div
                         key={job.id}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "12px",
-                          padding: "10px 16px",
-                          background: "var(--p-color-bg-surface)",
-                        }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 16px", background: "var(--p-color-bg-surface)" }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
-                          <div
-                            style={{
-                              width: "8px",
-                              height: "8px",
-                              borderRadius: "50%",
-                              flexShrink: 0,
-                              background:
-                                job.status === "completed"
-                                  ? "var(--p-color-bg-fill-success)"
-                                  : job.status === "failed"
-                                    ? "var(--p-color-bg-fill-critical)"
-                                    : job.status === "running"
-                                      ? "var(--p-color-bg-fill-info)"
-                                      : "var(--p-color-bg-fill-secondary)",
-                            }}
-                          />
+                          <div style={statusDotStyle(job.status)} />
                           <BlockStack gap="050">
                             <Text as="span" variant="bodySm" fontWeight="medium">
                               {formatJobType(job.type)}
@@ -859,13 +887,8 @@ export default function Dashboard() {
                             </Text>
                           </BlockStack>
                         </InlineStack>
-                        <Badge tone={
-                          job.status === "completed" ? "success" :
-                          job.status === "failed" ? "critical" :
-                          job.status === "running" ? "info" : undefined
-                        }>
-                          {job.status === "completed" ? "Done" :
-                           job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                        <Badge tone={STATUS_TONES[job.status]}>
+                          {job.status === "completed" ? "Done" : job.status.charAt(0).toUpperCase() + job.status.slice(1)}
                         </Badge>
                       </div>
                     ))}
@@ -905,7 +928,7 @@ export default function Dashboard() {
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodyMd">Products</Text>
                       <Text as="span" variant="bodyMd" tone="subdued">
-                        {`${totalProducts.toLocaleString()} / ${limits.products === Infinity ? "\u221E" : limits.products.toLocaleString()}`}
+                        {`${liveTotalProducts.toLocaleString()} / ${limits.products === Infinity ? "\u221E" : limits.products.toLocaleString()}`}
                       </Text>
                     </InlineStack>
                     {limits.products !== Infinity && (
@@ -920,7 +943,7 @@ export default function Dashboard() {
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodyMd">Fitments</Text>
                       <Text as="span" variant="bodyMd" tone="subdued">
-                        {`${fitmentCount.toLocaleString()} / ${limits.fitments === Infinity ? "\u221E" : limits.fitments.toLocaleString()}`}
+                        {`${liveFitmentCount.toLocaleString()} / ${limits.fitments === Infinity ? "\u221E" : limits.fitments.toLocaleString()}`}
                       </Text>
                     </InlineStack>
                     {limits.fitments !== Infinity && (
@@ -950,7 +973,7 @@ export default function Dashboard() {
                     <InlineStack align="space-between">
                       <Text as="span" variant="bodyMd">Collections</Text>
                       <Text as="span" variant="bodyMd" tone="subdued">
-                        {collectionCount.toLocaleString()}
+                        {liveCollectionCount.toLocaleString()}
                       </Text>
                     </InlineStack>
                   </BlockStack>

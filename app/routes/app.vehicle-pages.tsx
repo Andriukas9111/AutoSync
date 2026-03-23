@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useFetcher, useNavigate } from "react-router";
 import { data } from "react-router";
@@ -23,6 +23,7 @@ import {
   Collapsible,
   TextField,
   Select,
+  Pagination,
 } from "@shopify/polaris";
 import {
   PageIcon,
@@ -51,6 +52,9 @@ import {
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
+import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -199,7 +203,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       `,
       )
       .eq("shop_id", shopId)
-      .limit(500),
+      .limit(5000),
 
     // 4. Fetch synced engine IDs
     db
@@ -292,7 +296,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         engineId: row.ymme_engine_id || key,
         makeName: ymmeMake?.name ?? row.make ?? "Unknown",
         modelName: ymmeModel?.name ?? row.model ?? "Unknown",
-        generation: ymmeModel?.generation ?? row.variant ?? null,
+        generation: (() => { const g = ymmeModel?.generation ?? row.variant ?? null; return g && !g.includes(" | ") && !g.startsWith(ymmeModel?.name ?? "___") ? g : null; })(),
         engineName: ymme?.name ?? row.engine ?? null,
         engineCode: ymme?.code ?? row.engine_code ?? null,
         displacementCc: ymme?.displacement_cc ?? null,
@@ -322,7 +326,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       if (modelCompare !== 0) return modelCompare;
       return (a.engineName ?? "").localeCompare(b.engineName ?? "");
     })
-    .slice(0, 50);
+;
 
   // Synced engine IDs
   const syncedEngineIds = (syncedResult.data ?? []).map(
@@ -370,28 +374,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "push_all") {
-    try {
-      const { pushVehiclePages } = await import(
-        "../lib/pipeline/vehicle-pages.server"
-      );
-
-      const result = await pushVehiclePages(admin, shopId);
-
-      if (result.total === 0) {
-        return data({
-          error: "No vehicles found to push. Map fitments to your products first, then try again.",
-        }, { status: 400 });
-      }
-
-      return data({
-        success: true,
-        message: `Successfully pushed ${result.created + result.updated} vehicle pages (${result.created} created, ${result.updated} updated${result.failed > 0 ? `, ${result.failed} failed` : ""}). All entries published to sales channels.`,
+    // Job-based: create job and return instantly — Edge Function does the work
+    const { error: jobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "vehicle_pages",
+        status: "running",
+        progress: 0,
+        total_items: 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
       });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to push vehicle pages";
-      return data({ error: message }, { status: 500 });
+
+    if (jobError) {
+      return data({ error: "Failed to create vehicle pages job" }, { status: 500 });
     }
+
+    return data({
+      success: true,
+      jobCreated: true,
+      message: "Vehicle pages push started. Processing in background...",
+    });
   }
 
   if (intent === "delete_all") {
@@ -457,7 +461,7 @@ export default function VehiclePages() {
   const navigate = useNavigate();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  // howItWorksOpen state moved to shared HowItWorks component
   const [searchValue, setSearchValue] = useState("");
   const [filterValue, setFilterValue] = useState("all");
 
@@ -505,12 +509,23 @@ export default function VehiclePages() {
   }
 
   const {
-    syncStats,
+    syncStats: loaderSyncStats,
     availableVehicles,
     vehicles,
     syncedEngineIds,
-    totalLinkedProducts,
+    totalLinkedProducts: loaderLinkedProducts,
   } = loaderData;
+
+  // Live stats polling — updates vehicle page counts every 5 seconds
+  const { stats: polledStats } = useAppData();
+
+  // Use polled stats when available, fall back to loader data
+  const syncStats = {
+    synced: polledStats?.vehiclePagesSynced ?? loaderSyncStats.synced,
+    pending: polledStats?.vehiclePagesPending ?? loaderSyncStats.pending,
+    failed: polledStats?.vehiclePagesFailed ?? loaderSyncStats.failed,
+  };
+  const totalLinkedProducts = loaderLinkedProducts;
 
   const syncedSet = useMemo(
     () => new Set(syncedEngineIds),
@@ -552,9 +567,43 @@ export default function VehiclePages() {
     return result;
   }, [vehicles, searchValue, filterValue, syncedSet]);
 
+  // Pagination
+  const PAGE_SIZE = 24;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.ceil(filteredVehicles.length / PAGE_SIZE);
+  const paginatedVehicles = filteredVehicles.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  const [pushProgress, setPushProgress] = useState({ running: false, created: 0, failed: 0 });
+
   const handlePushAll = useCallback(() => {
+    setPushProgress({ running: true, created: 0, failed: 0 });
     fetcher.submit({ intent: "push_all" }, { method: "post" });
   }, [fetcher]);
+
+  // Auto-continue pushing when there are more pages
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data) {
+      const d = fetcher.data as any;
+      if (d.hasMore && d.success) {
+        setPushProgress((prev) => ({
+          running: true,
+          created: prev.created + (d.created || 0),
+          failed: prev.failed + (d.failed || 0),
+        }));
+        // Auto-trigger next batch after a short delay
+        setTimeout(() => {
+          fetcher.submit({ intent: "push_all" }, { method: "post" });
+        }, 500);
+      } else if (d.success && !d.hasMore) {
+        setPushProgress((prev) => ({ ...prev, running: false }));
+      } else {
+        setPushProgress((prev) => ({ ...prev, running: false }));
+      }
+    }
+  }, [fetcher.state, fetcher.data, fetcher]);
 
   const handleDeleteAll = useCallback(() => {
     fetcher.submit({ intent: "delete_all" }, { method: "post" });
@@ -671,113 +720,14 @@ export default function VehiclePages() {
         )}
 
         {/* ── Section 1: How It Works (Collapsible) ── */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={PageIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">
-                  How Vehicle Pages Work
-                </Text>
-              </InlineStack>
-              <Button
-                variant="plain"
-                onClick={() => setHowItWorksOpen(!howItWorksOpen)}
-              >
-                {howItWorksOpen ? "Hide" : "Show"}
-              </Button>
-            </InlineStack>
-
-            <Collapsible
-              open={howItWorksOpen}
-              id="how-it-works-collapsible"
-              transition={{
-                duration: "var(--p-motion-duration-200)",
-                timingFunction: "var(--p-motion-ease-in-out)",
-              }}
-            >
-              <Box paddingBlockStart="300">
-                <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
-                  {/* Step 1 */}
-                  <div
-                    style={{
-                      padding: "var(--p-space-400)",
-                      borderRadius: "var(--p-border-radius-300)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                    }}
-                  >
-                    <BlockStack gap="300">
-                      <InlineStack gap="200" blockAlign="center">
-                        <div style={stepNumberStyle(true)}>1</div>
-                        <Text as="h3" variant="headingSm">
-                          Map Fitments
-                        </Text>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Link your products to specific vehicles using the
-                        fitment mapping tool. Each product-vehicle link becomes a
-                        potential vehicle page.
-                      </Text>
-                      <Button
-                        variant="plain"
-                        onClick={() => navigate("/app/fitment/manual")}
-                        icon={ArrowRightIcon}
-                      >
-                        Go to Fitment Mapping
-                      </Button>
-                    </BlockStack>
-                  </div>
-
-                  {/* Step 2 */}
-                  <div
-                    style={{
-                      padding: "var(--p-space-400)",
-                      borderRadius: "var(--p-border-radius-300)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                    }}
-                  >
-                    <BlockStack gap="300">
-                      <InlineStack gap="200" blockAlign="center">
-                        <div style={stepNumberStyle(true)}>2</div>
-                        <Text as="h3" variant="headingSm">
-                          Push Vehicle Pages
-                        </Text>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Click "Push All Vehicle Pages" to create Shopify
-                        metaobjects for every unique vehicle in your fitments.
-                        Pages include full engine specs and linked products.
-                      </Text>
-                    </BlockStack>
-                  </div>
-
-                  {/* Step 3 */}
-                  <div
-                    style={{
-                      padding: "var(--p-space-400)",
-                      borderRadius: "var(--p-border-radius-300)",
-                      background: "var(--p-color-bg-surface-secondary)",
-                    }}
-                  >
-                    <BlockStack gap="300">
-                      <InlineStack gap="200" blockAlign="center">
-                        <div style={stepNumberStyle(true)}>3</div>
-                        <Text as="h3" variant="headingSm">
-                          SEO Pages Go Live
-                        </Text>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Auto-generated URLs appear on your storefront with rich
-                        vehicle data, helping you rank for long-tail automotive
-                        search terms.
-                      </Text>
-                    </BlockStack>
-                  </div>
-                </InlineGrid>
-              </Box>
-            </Collapsible>
-          </BlockStack>
-        </Card>
+        <HowItWorks
+          title="How Vehicle Pages Work"
+          steps={[
+            { number: 1, title: "Map Fitments", description: "Link your products to specific vehicles using the fitment mapping tool. Each product-vehicle link becomes a potential vehicle page.", linkText: "Go to Fitment Mapping", linkUrl: "/app/fitment/manual" },
+            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs and linked products." },
+            { number: 3, title: "SEO Pages Go Live", description: "Auto-generated URLs appear on your storefront with rich vehicle data, helping you rank for long-tail automotive search terms." },
+          ]}
+        />
 
         {/* ── Section 2: Stats Dashboard ── */}
         <Card padding="0">
@@ -831,7 +781,7 @@ export default function VehiclePages() {
                 labelHidden
                 placeholder="Search by make, model, engine..."
                 value={searchValue}
-                onChange={setSearchValue}
+                onChange={(v) => { setSearchValue(v); setCurrentPage(1); }}
                 prefix={<Icon source={SearchIcon} />}
                 clearButton
                 onClearButtonClick={() => setSearchValue("")}
@@ -872,12 +822,13 @@ export default function VehiclePages() {
               </Box>
             ) : (
               <InlineGrid columns={{ xs: 1, sm: 2, lg: 3 }} gap="300">
-                {filteredVehicles.map((vehicle: VehicleRow) => {
+                {paginatedVehicles.map((vehicle: VehicleRow) => {
                   const isSynced = syncedSet.has(vehicle.engineId);
+                  const gen = vehicle.generation && !vehicle.generation.includes(" | ") && !vehicle.generation.startsWith(vehicle.modelName) ? vehicle.generation : null;
                   const heading = [
                     vehicle.makeName,
                     vehicle.modelName,
-                    vehicle.generation ? `(${vehicle.generation})` : "",
+                    gen ? `(${gen})` : "",
                   ]
                     .filter(Boolean)
                     .join(" ");
@@ -975,11 +926,19 @@ export default function VehiclePages() {
               </InlineGrid>
             )}
 
-            {vehicles.length >= 50 && (
-              <Box paddingBlockStart="200">
-                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                  {`Showing first 50 of ${availableVehicles} vehicles. Use search to find specific vehicles.`}
-                </Text>
+            {totalPages > 1 && (
+              <Box paddingBlockStart="400">
+                <InlineStack align="center" gap="300" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {`${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, filteredVehicles.length)} of ${filteredVehicles.length} vehicles`}
+                  </Text>
+                  <Pagination
+                    hasPrevious={currentPage > 1}
+                    hasNext={currentPage < totalPages}
+                    onPrevious={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  />
+                </InlineStack>
               </Box>
             )}
           </BlockStack>

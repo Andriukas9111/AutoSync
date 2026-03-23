@@ -5,7 +5,7 @@
  * and inventory gap analysis. Gated by dashboardAnalytics plan feature.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import {
@@ -19,7 +19,6 @@ import {
   Badge,
   Banner,
   ProgressBar,
-  DataTable,
   Box,
   Divider,
   Button,
@@ -37,11 +36,13 @@ import {
   ViewIcon,
   OrderIcon,
 } from "@shopify/polaris-icons";
+import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -486,6 +487,29 @@ export default function AnalyticsPage() {
 
   const [showExport, setShowExport] = useState(false);
 
+  // Live stats polling
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveCoverage, setLiveCoverage] = useState<{ total: number; mapped: number; fitments: number } | null>(null);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/app/api/job-status?type=all");
+        if (res.ok) {
+          const r = await res.json();
+          if (r.stats) {
+            setLiveCoverage({
+              total: r.stats.total,
+              mapped: r.stats.autoMapped + r.stats.smartMapped + r.stats.manualMapped,
+              fitments: r.stats.fitments,
+            });
+          }
+        }
+      } catch {}
+    };
+    pollRef.current = setInterval(poll, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
   // ── Plan gate ──────────────────────────────────────────────
   if (analyticsLevel === "none") {
     return (
@@ -558,6 +582,15 @@ export default function AnalyticsPage() {
       }
     >
       <BlockStack gap="600">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Fitment Coverage", description: "Track how many of your products have vehicle compatibility data mapped. Higher coverage means better search results for customers." },
+            { number: 2, title: "Popular Vehicles", description: "See which makes and models appear most in your product catalog. Use this to prioritize vehicle data sourcing and collection creation." },
+            { number: 3, title: "Supplier Performance", description: "Monitor import quality from each provider — how many products have usable vehicle data, error rates, and mapping success." },
+          ]}
+        />
+
         {/* Export buttons */}
         {showExport && canExport && (
           <Banner title="Export Analytics" tone="info" onDismiss={() => setShowExport(false)}>
@@ -889,19 +922,19 @@ export default function AnalyticsPage() {
                           <Text as="p" variant="bodySm" tone="subdued">Search → View</Text>
                           <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.searchToViewRate}%</Text>
                         </InlineStack>
-                        <ProgressBar progress={Math.min(conversionFunnel.searchToViewRate, 100)} tone="primary" size="small" />
+                        <ProgressBar progress={Math.min(conversionFunnel.searchToViewRate, 100)} size="small" />
 
                         <InlineStack align="space-between">
                           <Text as="p" variant="bodySm" tone="subdued">View → Cart</Text>
                           <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.viewToCartRate}%</Text>
                         </InlineStack>
-                        <ProgressBar progress={Math.min(conversionFunnel.viewToCartRate, 100)} tone="primary" size="small" />
+                        <ProgressBar progress={Math.min(conversionFunnel.viewToCartRate, 100)} size="small" />
 
                         <InlineStack align="space-between">
                           <Text as="p" variant="bodySm" tone="subdued">Cart → Purchase</Text>
                           <Text as="p" variant="bodySm" fontWeight="semibold">{conversionFunnel.cartToPurchaseRate}%</Text>
                         </InlineStack>
-                        <ProgressBar progress={Math.min(conversionFunnel.cartToPurchaseRate, 100)} tone="primary" size="small" />
+                        <ProgressBar progress={Math.min(conversionFunnel.cartToPurchaseRate, 100)} size="small" />
                       </BlockStack>
                     </BlockStack>
                   )}

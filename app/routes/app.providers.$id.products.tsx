@@ -5,7 +5,7 @@
  * Same pattern as app.products._index.tsx but filtered by provider_id.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -236,6 +236,20 @@ export default function ProviderProducts() {
   const [searchValue, setSearchValue] = useState(initialSearch);
   const [statusValue, setStatusValue] = useState(initialStatus);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  // Live stats polling
+  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/app/api/job-status?type=all");
+        if (res.ok) { const r = await res.json(); if (r.stats) setLiveBreakdown({ unmapped: r.stats.unmapped, auto_mapped: r.stats.autoMapped, smart_mapped: r.stats.smartMapped, manual_mapped: r.stats.manualMapped, flagged: r.stats.flagged }); }
+      } catch {}
+    };
+    pollRef.current = setInterval(poll, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
 

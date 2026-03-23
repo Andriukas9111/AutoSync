@@ -121,6 +121,10 @@ export async function createSmartCollections(
     `[collections] Building ${targets.length} collections (strategy: ${strategy})`,
   );
 
+  // ── Step 1b: Pre-fetch all sales channel publication IDs ────
+  const publicationIds = await getAllPublicationIds(admin);
+  console.log(`[collections] Will publish to ${publicationIds.length} sales channels`);
+
   // ── Step 2: Process each collection target ──────────────────
   for (const target of targets) {
     try {
@@ -131,6 +135,7 @@ export async function createSmartCollections(
         strategy,
         options,
         result,
+        publicationIds,
       );
 
       // Rate limiting: small delay between API calls to avoid throttling
@@ -362,6 +367,7 @@ async function processCollectionTarget(
   strategy: string,
   options: { seoEnabled?: boolean; imagesEnabled?: boolean } | undefined,
   result: CollectionResult,
+  publicationIds: string[] = [],
 ): Promise<void> {
   const title = buildCollectionTitle(target);
   const handle = slugify(title);
@@ -416,8 +422,8 @@ async function processCollectionTarget(
       if (logoUrl) {
         await setCollectionImage(admin, collection.id, logoUrl);
       }
-      // Always publish to all sales channels (ensures visibility even on update)
-      await publishToAllChannels(admin, collection.id);
+      // Always publish to all sales channels (uses pre-cached IDs — fast)
+      if (publicationIds.length > 0) await publishResourceFast(admin, collection.id, publicationIds);
       await upsertCollectionMapping(shopId, collection, target, strategy);
       result.updated++;
     }
@@ -441,8 +447,8 @@ async function processCollectionTarget(
 
     const collection = data?.collectionCreate?.collection;
     if (collection) {
-      // Publish to all sales channels so products are visible
-      await publishToAllChannels(admin, collection.id);
+      // Publish to all sales channels (uses pre-cached IDs — fast, no extra query)
+      if (publicationIds.length > 0) await publishResourceFast(admin, collection.id, publicationIds);
       await upsertCollectionMapping(shopId, collection, target, strategy);
       result.created++;
     }
@@ -452,8 +458,94 @@ async function processCollectionTarget(
 // ── Publish to Sales Channels ───────────────────────────────
 
 /**
- * Publishes a resource (collection, product, etc.) to all active sales channels.
- * Without this, newly created collections are invisible on the Online Store.
+ * Query all publication IDs once — used to publish collections on create/update.
+ */
+async function getAllPublicationIds(admin: any): Promise<string[]> {
+  try {
+    const resp = await admin.graphql(`query { publications(first: 20) { nodes { id name } } }`);
+    const json = await resp.json();
+    const pubs = json?.data?.publications?.nodes ?? [];
+    return pubs.map((p: any) => p.id);
+  } catch (err) {
+    console.error("[collections] Failed to fetch publications:", err instanceof Error ? err.message : err);
+    return [];
+  }
+}
+
+/**
+ * Publish a collection to pre-fetched publication IDs.
+ * Uses collectionPublish mutation (more reliable than generic publishablePublish).
+ */
+async function publishResourceFast(admin: any, resourceId: string, publicationIds: string[]) {
+  if (publicationIds.length === 0) {
+    console.warn("[collections] No publication IDs provided — skipping publish");
+    return;
+  }
+  try {
+    // Use collectionPublish which is specifically designed for collections
+    const resp = await admin.graphql(`
+      mutation collectionPublish($id: ID!, $input: CollectionPublishInput!) {
+        collectionPublish(collectionId: $id, input: $input) {
+          collectionPublications {
+            publishDate
+            publication { id name }
+          }
+          userErrors { field message }
+        }
+      }
+    `, {
+      variables: {
+        id: resourceId,
+        input: {
+          collectionPublications: publicationIds.map((pid) => ({ publicationId: pid })),
+        },
+      },
+    });
+    const json = await resp.json();
+    const errors = json?.data?.collectionPublish?.userErrors;
+    if (errors?.length) {
+      console.error(`[collections] Publish errors for ${resourceId}:`, errors.map((e: any) => e.message).join(", "));
+      // Fallback: try generic publishablePublish
+      await publishablePublishFallback(admin, resourceId, publicationIds);
+    } else {
+      const pubCount = json?.data?.collectionPublish?.collectionPublications?.length ?? 0;
+      console.log(`[collections] Published ${resourceId} to ${pubCount} channels`);
+    }
+  } catch (err) {
+    console.error("[collections] collectionPublish error:", err instanceof Error ? err.message : err);
+    // Fallback
+    await publishablePublishFallback(admin, resourceId, publicationIds);
+  }
+}
+
+async function publishablePublishFallback(admin: any, resourceId: string, publicationIds: string[]) {
+  try {
+    const resp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+      publishablePublish(id: $id, input: $input) {
+        publishable { availablePublicationsCount { count } }
+        userErrors { field message }
+      }
+    }`, {
+      variables: {
+        id: resourceId,
+        input: publicationIds.map((pid) => ({ publicationId: pid })),
+      },
+    });
+    const json = await resp.json();
+    const errors = json?.data?.publishablePublish?.userErrors;
+    if (errors?.length) {
+      console.error(`[collections] Fallback publish errors:`, errors.map((e: any) => e.message).join(", "));
+    } else {
+      console.log(`[collections] Fallback publish succeeded for ${resourceId}`);
+    }
+  } catch (err) {
+    console.error("[collections] Fallback publish error:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Legacy: Publishes a resource to all active sales channels (queries each time).
+ * Kept as fallback. Prefer publishResourceFast with pre-cached IDs.
  */
 async function publishToAllChannels(admin: any, resourceId: string) {
   try {
@@ -466,7 +558,12 @@ async function publishToAllChannels(admin: any, resourceId: string) {
     const pubJson = await pubResp.json();
     const publications = pubJson?.data?.publications?.nodes ?? [];
 
-    if (publications.length === 0) return;
+    console.log(`[collections] Found ${publications.length} sales channels:`, publications.map((p: any) => p.name).join(", "));
+
+    if (publications.length === 0) {
+      console.warn("[collections] No sales channels found — collection will not be visible");
+      return;
+    }
 
     // Publish to each channel
     const publishResp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
@@ -485,6 +582,9 @@ async function publishToAllChannels(admin: any, resourceId: string) {
     const publishErrors = publishJson?.data?.publishablePublish?.userErrors;
     if (publishErrors?.length) {
       console.error(`[collections] Publish errors for ${resourceId}:`, publishErrors.map((e: any) => e.message).join(", "));
+    } else {
+      const pubCount = publishJson?.data?.publishablePublish?.publishable?.availablePublicationsCount?.count;
+      console.log(`[collections] Published ${resourceId} to ${pubCount ?? "?"} channels`);
     }
   } catch (err) {
     console.error("[collections] publishToAllChannels error:", err instanceof Error ? err.message : err);

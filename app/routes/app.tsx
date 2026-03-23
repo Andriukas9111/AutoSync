@@ -18,6 +18,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
 
+  // Get the offline Shopify access token for background API calls (Edge Functions)
+  // authenticate.admin() returns online session — we need the offline token from Prisma
+  let offlineToken: string | null = null;
+  try {
+    const prisma = (await import("../db.server")).default;
+    const offlineSession = await prisma.session.findFirst({
+      where: { shop: shopId, isOnline: false },
+      select: { accessToken: true },
+    });
+    offlineToken = offlineSession?.accessToken ?? null;
+    if (!offlineToken) {
+      // Fallback: try online session token
+      offlineToken = session.accessToken ?? null;
+    }
+    console.log("[app.tsx] Token:", offlineToken ? `found (${offlineToken.length} chars)` : "not found");
+  } catch (tokenErr) {
+    console.error("[app.tsx] Token fetch error:", tokenErr instanceof Error ? tokenErr.message : tokenErr);
+    offlineToken = session.accessToken ?? null;
+  }
+
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db
     .from("tenants")
@@ -33,15 +53,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       plan: (isAdmin ? "enterprise" : "free") as PlanTier,
       plan_status: "active",
       installed_at: new Date().toISOString(),
+      shopify_access_token: offlineToken,
     });
     if (upsertError) {
       console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
-  } else if (isAdmin && tenant.plan !== "enterprise") {
-    // Auto-promote existing admin shops to enterprise if not already
+  } else {
+    // Always update the access token (it can change on re-auth)
+    const updates: Record<string, unknown> = {
+      shopify_access_token: offlineToken,
+    };
+    if (isAdmin && tenant.plan !== "enterprise") {
+      updates.plan = "enterprise" as PlanTier;
+    }
     await db
       .from("tenants")
-      .update({ plan: "enterprise" as PlanTier })
+      .update(updates)
       .eq("shop_id", shopId);
   }
 

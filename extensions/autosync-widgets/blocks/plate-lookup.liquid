@@ -114,16 +114,80 @@ else c=s==='Taxed'?'apl-st--valid':s==='SORN'?'apl-st--warn':'apl-st--invalid';
 var bg=el('div',c),bd=el('span','apl-st__badge');bd.appendChild(el('span','apl-st__dot'));bd.appendChild(document.createTextNode(s));bg.appendChild(bd);
 if(da)bg.appendChild(el('p','apl-st__sub',dl+': '+fD(da)));inn.appendChild(bg);w.appendChild(inn);return w;}
 function sG(v,rv,rg){try{var K='autosync_garage',g=[];var rw=localStorage.getItem(K);if(rw)g=JSON.parse(rw);if(!Array.isArray(g))g=[];
+var ymmeMake=(rv&&rv.makeName)?rv.makeName:(v.make||'');
 var ymmeModel=(rv&&rv.modelName)?rv.modelName:(v.model||'');
-var e={makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
+var e={makeName:ymmeMake,modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
 if(rv&&rv.makeId)e.makeId=rv.makeId;if(rv&&rv.modelId)e.modelId=rv.modelId;if(rv&&rv.engineId)e.engineId=rv.engineId;if(rv&&rv.engineName)e.engineName=rv.engineName;
 var dup=false;for(var i=0;i<g.length;i++){if(g[i].makeName===e.makeName&&g[i].modelName===e.modelName&&g[i].year===e.year){dup=true;break;}}
 if(!dup){g.unshift(e);if(g.length>3)g=g.slice(0,3);localStorage.setItem(K,JSON.stringify(g));window.dispatchEvent(new CustomEvent('autosync:garage-changed',{detail:g}));}
-aH(rg,{make:v.make,model:ymmeModel});
-var sv={makeName:v.make||'',modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
+aH(rg,{make:ymmeMake,model:ymmeModel});
+var sv={makeName:ymmeMake,modelName:ymmeModel,year:String(v.yearOfManufacture||''),colour:v.colour||'',fuelType:v.fuelType||'',engineCapacity:v.engineCapacity?v.engineCapacity+'cc':'',reg:rg||'',source:'plate-lookup'};
 if(rv&&rv.makeId){sv.makeId=rv.makeId;sv.modelId=rv.modelId||'';sv.engineId=rv.engineId||'';sv.engineName=rv.engineName||'';}
 localStorage.setItem('autosync_vehicle',JSON.stringify(sv));
-window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:sv}));}catch(x){}}
+window.dispatchEvent(new CustomEvent('autosync:vehicle-changed',{detail:sv}));
+/* Direct YMME widget population — bypasses event-based restore for reliability */
+if(rv&&rv.makeId&&rv.modelId){directPopulateYMME(P,rv,String(v.yearOfManufacture||''));}
+}catch(x){console.error('[plate-lookup] sG error:',x);}}
+function directPopulateYMME(proxyUrl,rv,year){
+try{
+var ymmeC=document.querySelector('[data-autosync-ymme]');if(!ymmeC)return;
+var makeS=ymmeC.querySelector('[data-autosync-level="make"]');
+var modelS=ymmeC.querySelector('[data-autosync-level="model"]');
+var yearS=ymmeC.querySelector('[data-autosync-level="year"]');
+var engineS=ymmeC.querySelector('[data-autosync-level="engine"]');
+var searchBtn=ymmeC.querySelector('[data-autosync-search]');
+/* Set make — update the custom dropdown display */
+var selectDisplay=ymmeC.querySelector('[data-autosync-select-display]');
+if(selectDisplay){selectDisplay.innerHTML='';
+var logoUrl=null;
+var selOpts=ymmeC.querySelectorAll('[data-autosync-select-options] li');
+for(var si2=0;si2<selOpts.length;si2++){var lid=selOpts[si2].getAttribute('data-value');if(String(lid)===String(rv.makeId)){selOpts[si2].setAttribute('aria-selected','true');selOpts[si2].classList.add('autosync-ymme__select-option--selected');var lImg=selOpts[si2].querySelector('img');if(lImg)logoUrl=lImg.src;}else{selOpts[si2].removeAttribute('aria-selected');selOpts[si2].classList.remove('autosync-ymme__select-option--selected');}}
+if(logoUrl){var lEl=document.createElement('img');lEl.src=logoUrl;lEl.alt=rv.makeName||'';lEl.width=20;lEl.height=20;lEl.style.marginRight='6px';selectDisplay.appendChild(lEl);}
+selectDisplay.appendChild(document.createTextNode(rv.makeName||''));
+var trigger=ymmeC.querySelector('[data-autosync-select-trigger]');if(trigger)trigger.disabled=false;
+}
+if(makeS){
+var mOpts=makeS.querySelectorAll('option');var mFound=false;
+for(var i=0;i<mOpts.length;i++){if(String(mOpts[i].value)===String(rv.makeId)){makeS.value=String(rv.makeId);mFound=true;break;}}
+if(!mFound){var nOpt=document.createElement('option');nOpt.value=rv.makeId;nOpt.textContent=rv.makeName||'';makeS.appendChild(nOpt);makeS.value=String(rv.makeId);}
+}
+/* Fetch and set models */
+if(!modelS)return;
+fetch(proxyUrl+'?path=models&make_id='+encodeURIComponent(rv.makeId))
+.then(function(r){return r.json();}).then(function(d){
+var models=d.models||[];
+while(modelS.firstChild)modelS.removeChild(modelS.firstChild);
+var defOpt=document.createElement('option');defOpt.value='';defOpt.textContent='Select Model';modelS.appendChild(defOpt);
+models.forEach(function(m){var o=document.createElement('option');o.value=m.id;var lb=m.name;if(m.generation&&m.generation.indexOf(' | ')===-1&&!m.generation.startsWith(m.name))lb+=' ('+m.generation+')';if(m.year_from)lb+=' '+m.year_from+'-'+(m.year_to||'present');o.textContent=lb;o.dataset.name=m.name;modelS.appendChild(o);});
+modelS.disabled=false;modelS.value=String(rv.modelId);
+/* Fetch and set years */
+if(!yearS||!year)return fetch(proxyUrl+'?path=years&model_id='+encodeURIComponent(rv.modelId));
+return fetch(proxyUrl+'?path=years&model_id='+encodeURIComponent(rv.modelId));
+}).then(function(r){if(!r)return null;return r.json();}).then(function(d){
+if(!d||!yearS)return null;
+var years=d.years||[];
+while(yearS.firstChild)yearS.removeChild(yearS.firstChild);
+var defY=document.createElement('option');defY.value='';defY.textContent='Select Year';yearS.appendChild(defY);
+years.forEach(function(y){var o=document.createElement('option');o.value=y;o.textContent=String(y);yearS.appendChild(o);});
+yearS.disabled=false;
+if(year)yearS.value=String(year);
+if(searchBtn)searchBtn.disabled=false;
+/* Fetch and set engines */
+if(!engineS)return null;
+var ep=proxyUrl+'?path=engines&model_id='+encodeURIComponent(rv.modelId);
+if(year)ep+='&year='+encodeURIComponent(year);
+return fetch(ep);
+}).then(function(r){if(!r)return null;return r.json();}).then(function(d){
+if(!d||!engineS)return;
+var engines=d.engines||[];
+while(engineS.firstChild)engineS.removeChild(engineS.firstChild);
+var defE=document.createElement('option');defE.value='';defE.textContent='Select Engine (optional)';engineS.appendChild(defE);
+engines.forEach(function(e2){var o=document.createElement('option');o.value=e2.id;var lb=(e2.name||'').replace(/\s*\[[0-9a-f]{8}\]$/,'');if(e2.displacement_cc)lb+=' '+e2.displacement_cc+'cc';if(e2.fuel_type)lb+=' '+e2.fuel_type;o.textContent=lb;engineS.appendChild(o);});
+engineS.disabled=false;
+if(rv.engineId)engineS.value=String(rv.engineId);
+}).catch(function(err){console.warn('[plate-lookup] directPopulateYMME error:',err);});
+}catch(ex){console.warn('[plate-lookup] directPopulateYMME outer error:',ex);}
+}
 function fR(r){r=r.replace(/\s/g,'').toUpperCase();return r.length===7?r.substring(0,4)+' '+r.substring(4):r;}
 function fD(d){if(!d)return'\u2014';try{var x=new Date(d);return isNaN(x.getTime())?d:x.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});}catch(e){return d;}}
 sHist();

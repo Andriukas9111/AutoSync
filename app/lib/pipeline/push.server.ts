@@ -145,13 +145,15 @@ export async function pushToShopify(
   shopId: string,
   jobId: string,
   admin: any,
-  options: { pushTags: boolean; pushMetafields: boolean },
-): Promise<PushResult> {
-  const result: PushResult = {
+  options: { pushTags: boolean; pushMetafields: boolean; maxProducts?: number },
+): Promise<PushResult & { hasMore: boolean }> {
+  const MAX_PRODUCTS = options.maxProducts ?? 50; // Limit per call to stay under Vercel timeout
+  const result: PushResult & { hasMore: boolean } = {
     processed: 0,
     tagsPushed: 0,
     metafieldsPushed: 0,
     errors: 0,
+    hasMore: false,
   };
 
   // Update job status to running
@@ -186,22 +188,28 @@ export async function pushToShopify(
       return result;
     }
 
-    // Update total items
+    // Update total items with REAL product count (not capped by maxProducts)
+    const totalMappedProducts = products.length;
     await db
       .from("sync_jobs")
-      .update({ total_items: products.length })
+      .update({ total_items: totalMappedProducts })
       .eq("id", jobId);
 
-    // 2. For each product, fetch its fitments
-    const productIds = products.map((p: any) => p.id);
-    const { data: allFitments, error: fitmentsError } = await db
-      .from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
-      .eq("shop_id", shopId)
-      .in("product_id", productIds);
-
-    if (fitmentsError) {
-      throw new Error(`Failed to query fitments: ${fitmentsError.message}`);
+    // 2. Fetch ALL fitments for this shop (no .in() filter — avoids URL length limit with 7000+ IDs)
+    const allFitments: any[] = [];
+    let fitmentOffset = 0;
+    const FIT_BATCH = 1000;
+    while (true) {
+      const { data: batch, error: batchErr } = await db
+        .from("vehicle_fitments")
+        .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
+        .eq("shop_id", shopId)
+        .range(fitmentOffset, fitmentOffset + FIT_BATCH - 1);
+      if (batchErr) throw new Error(`Failed to query fitments: ${batchErr.message}`);
+      if (!batch || batch.length === 0) break;
+      allFitments.push(...batch);
+      fitmentOffset += batch.length;
+      if (batch.length < FIT_BATCH) break;
     }
 
     // Group fitments by product_id
@@ -213,13 +221,20 @@ export async function pushToShopify(
     }
 
     // Filter to products that actually have fitments
-    const productsWithFitments: ProductWithFitments[] = products
+    let productsWithFitments: ProductWithFitments[] = products
       .filter((p: any) => fitmentsByProduct.has(p.id))
       .map((p: any) => ({
         id: p.id,
         shopify_product_id: String(p.shopify_product_id),
         fitments: fitmentsByProduct.get(p.id)!,
       }));
+
+    // Limit to MAX_PRODUCTS per call to stay under Vercel timeout
+    const totalAvailable = productsWithFitments.length;
+    if (totalAvailable > MAX_PRODUCTS) {
+      result.hasMore = true;
+      productsWithFitments = productsWithFitments.slice(0, MAX_PRODUCTS);
+    }
 
     if (productsWithFitments.length === 0) {
       await db
@@ -315,16 +330,54 @@ export async function pushToShopify(
         .eq("id", jobId);
     }
 
+    // Auto-activate makes that appear in pushed fitments
+    try {
+      const pushedMakeNames = new Set<string>();
+      for (const p of productsWithFitments) {
+        for (const f of p.fitments) {
+          if (f.make) pushedMakeNames.add(f.make);
+        }
+      }
+      if (pushedMakeNames.size > 0) {
+        // Get YMME make IDs for these names
+        const { data: ymmeMakes } = await db
+          .from("ymme_makes")
+          .select("id, name")
+          .in("name", [...pushedMakeNames])
+          .eq("active", true);
+
+        if (ymmeMakes && ymmeMakes.length > 0) {
+          // Get already-activated makes for this shop
+          const { data: existingActive } = await db
+            .from("tenant_active_makes")
+            .select("ymme_make_id")
+            .eq("shop_id", shopId);
+          const existingIds = new Set((existingActive ?? []).map((r: any) => r.ymme_make_id));
+
+          // Insert only new ones
+          const newMakes = ymmeMakes.filter((m: any) => !existingIds.has(m.id));
+          if (newMakes.length > 0) {
+            await db.from("tenant_active_makes").insert(
+              newMakes.map((m: any) => ({ shop_id: shopId, ymme_make_id: m.id }))
+            );
+            console.log(`[push] Auto-activated ${newMakes.length} makes: ${newMakes.map((m: any) => m.name).join(", ")}`);
+          }
+        }
+      }
+    } catch (activateErr) {
+      console.error("[push] Auto-activate makes failed:", activateErr instanceof Error ? activateErr.message : activateErr);
+    }
+
     // Mark job as completed
     await db
       .from("sync_jobs")
       .update({
-        status: "completed",
-        progress: 100,
+        status: result.hasMore ? "running" : "completed",
+        progress: result.hasMore ? Math.round((result.processed / productsWithFitments.length) * 100) : 100,
         processed_items: result.processed,
         total_items: productsWithFitments.length,
         metadata: { failed_items: result.errors },
-        completed_at: new Date().toISOString(),
+        ...(result.hasMore ? {} : { completed_at: new Date().toISOString() }),
       })
       .eq("id", jobId);
 

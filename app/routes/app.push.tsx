@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useNavigation, Form } from "react-router";
+import { useLoaderData, useActionData, useNavigation, Form, useFetcher } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -19,6 +19,7 @@ import {
   Box,
   Divider,
   IndexTable,
+  InlineGrid,
 } from "@shopify/polaris";
 import {
   ExportIcon,
@@ -37,6 +38,9 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
+import { OperationProgress } from "../components/OperationProgress";
+import { HowItWorks } from "../components/HowItWorks";
+import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
-      .like("tags::text", "%_autosync_%"),
+      .not("synced_at", "is", null),
     db.from("sync_jobs")
       .select("*")
       .eq("shop_id", shopId)
@@ -168,85 +172,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
 
-  let pushResult = null;
-  let collectionsResult = null;
+  // ── Job-based approach: create jobs and return instantly ──
+  // The Supabase Edge Function (pg_cron every 30s) picks up and processes them.
+  // No more Vercel timeouts!
 
-  // Push tags and/or metafields
+  const autoActivateMakes = formData.get("autoActivateMakes") === "true";
+
+  // Count mapped products for total_items
+  const { count: mappedCount } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .not("fitment_status", "eq", "unmapped");
+
+  // Create push job — Edge Function will process it
   if (pushTags || pushMetafields) {
-    const { data: job, error: jobError } = await db
+    const { error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "push",
-        status: "pending",
+        status: "running",
         progress: 0,
-      })
-      .select("id")
-      .single();
-
-    if (jobError || !job) {
-      return data({ error: "Failed to create push job" }, { status: 500 });
-    }
-
-    try {
-      pushResult = await pushToShopify(shopId, job.id, admin, {
-        pushTags,
-        pushMetafields,
+        total_items: mappedCount ?? 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
+        metadata: JSON.stringify({
+          pushTags,
+          pushMetafields,
+          autoActivateMakes,
+        }),
       });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Push failed";
-      return data({ error: message }, { status: 500 });
+
+    if (jobError) {
+      return data({ error: "Failed to create push job" }, { status: 500 });
     }
   }
 
-  // Create collections
+  // Create collections job — Edge Function will process it
   if (createCollections) {
-    const { data: job, error: jobError } = await db
+    const { error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "collections",
-        status: "pending",
+        status: "running",
         progress: 0,
-      })
-      .select("id")
-      .single();
-
-    if (jobError || !job) {
-      return data({ error: "Failed to create collections job" }, { status: 500 });
-    }
-
-    try {
-      collectionsResult = await createSmartCollections(shopId, admin, strategy, {
-        seoEnabled,
+        total_items: 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
+        metadata: JSON.stringify({
+          strategy,
+          seoEnabled,
+        }),
       });
 
-      // Update the job as completed
-      await db
-        .from("sync_jobs")
-        .update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Collections creation failed";
-      await db
-        .from("sync_jobs")
-        .update({
-          status: "failed",
-          error: message,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-      return data({ error: message }, { status: 500 });
+    if (jobError) {
+      return data({ error: "Failed to create collections job" }, { status: 500 });
     }
   }
 
+  // Return immediately — Edge Function does the work
   return data({
     success: true,
-    pushResult,
-    collectionsResult,
+    jobCreated: true,
   });
 };
 
@@ -274,16 +263,7 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
-function formatJobType(type: string): string {
-  switch (type) {
-    case "push":
-      return "Push";
-    case "collections":
-      return "Collections";
-    default:
-      return type;
-  }
-}
+// formatJobType imported from ../lib/design
 
 
 // ---------------------------------------------------------------------------
@@ -316,6 +296,7 @@ export default function Push() {
   );
   const [strategy, setStrategy] = useState<string>(appSettings?.collection_strategy ?? "make");
   const [seoEnabled, setSeoEnabled] = useState(appSettings?.push_collections ?? false);
+  const [autoActivateMakes, setAutoActivateMakes] = useState(true);
 
   const nothingSelected = !pushTags && !pushMetafields && !createCollectionsChecked;
   const noProductsReady = productsWithFitments === 0;
@@ -327,6 +308,60 @@ export default function Push() {
   const showResults = actionData && "success" in actionData && actionData.success;
   const showError = actionData && "error" in actionData;
 
+  // Poll for job progress + live stats (Edge Function processes in background)
+  const [activeJob, setActiveJob] = useState<{
+    type: string; status: string; processed_items: number; total_items: number; started_at: string | null;
+  } | null>(null);
+  const [liveStats, setLiveStats] = useState<{
+    total: number; unmapped: number; autoMapped: number; smartMapped: number;
+    manualMapped: number; fitments: number; collections: number;
+  } | null>(null);
+  const [completedPush, setCompletedPush] = useState<{
+    processed_items: number; total_items: number; status: string;
+  } | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const pollJobStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/app/api/job-status?type=all");
+      if (res.ok) {
+        const result = await res.json();
+        const allJobs = result.jobs || [];
+        // Find running push or collections jobs
+        const pushRunning = allJobs.find((j: any) => j.type === "push" && j.status === "running");
+        const collectionsRunning = allJobs.find((j: any) => j.type === "collections" && j.status === "running");
+        // Also find recently completed push job (within last 5 minutes)
+        const pushCompleted = allJobs.find((j: any) => j.type === "push" && j.status === "completed");
+
+        // Show running job first, then recently completed
+        setActiveJob(pushRunning || collectionsRunning || null);
+
+        // Track completed push separately for stats display
+        if (pushCompleted) {
+          setCompletedPush(pushCompleted);
+        }
+
+        if (result.stats) setLiveStats(result.stats);
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
+  // Start polling on mount and when action succeeds
+  useEffect(() => {
+    pollJobStatus(); // Initial check
+    pollRef.current = setInterval(pollJobStatus, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [pollJobStatus]);
+
+  // Also poll when action returns (job was just created)
+  useEffect(() => {
+    if (actionData && "jobCreated" in actionData) {
+      pollJobStatus();
+    }
+  }, [actionData, pollJobStatus]);
+
+  const isJobRunning = !!activeJob;
+
   const strategyOptions = [
     { label: "By Make", value: "make" },
     { label: "By Make & Model", value: "make_model" },
@@ -336,6 +371,18 @@ export default function Push() {
   return (
     <Page fullWidth title="Push to Shopify">
       <Layout>
+        {/* How It Works */}
+        <Layout.Section>
+          <HowItWorks
+            steps={[
+              { number: 1, title: "Map Fitments", description: "Use auto-extraction or manual mapping to assign vehicle compatibility to your products. Each mapped product gets make, model, year, and engine data.", linkText: "Go to Fitment", linkUrl: "/app/fitment" },
+              { number: 2, title: "Push Tags & Metafields", description: "Send vehicle fitment data to Shopify as app-prefixed tags and metafields. Tags power smart collections, metafields display on your storefront." },
+              { number: 3, title: "Create Collections", description: "Auto-generate smart collections by make, model, and year. Each collection gets a logo, SEO description, and is published to your Online Store." },
+              { number: 4, title: "Go Live", description: "Makes with products are automatically activated in the YMME widget. Customers can immediately search and filter parts by their vehicle." },
+            ]}
+          />
+        </Layout.Section>
+
         {/* Error banner */}
         {showError && (
           <Layout.Section>
@@ -372,38 +419,65 @@ export default function Push() {
           </Layout.Section>
         )}
 
-        {/* Summary stat bar */}
+        {/* Summary stats — comprehensive push dashboard */}
         <Layout.Section>
-          <Card padding="0">
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-              borderBottom: "1px solid var(--p-color-border-secondary)",
-            }}>
-              {[
-                { icon: ProductIcon, count: `${productsWithFitments}`, label: "Products ready to push" },
-                { icon: CheckIcon, count: `${pushedCount}`, label: "Products already pushed" },
-                { icon: CollectionIcon, count: `${collectionCount}`, label: "Collections created" },
-                { icon: ClockIcon, count: formatDate(lastPushTime), label: "Last push" },
-              ].map((item, i) => (
-                <div key={item.label} style={{
-                  padding: "var(--p-space-400)",
-                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
-                  textAlign: "center",
-                }}>
-                  <BlockStack gap="200" inlineAlign="center">
-                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="p" variant="headingLg" fontWeight="bold">
-                      {item.count}
-                    </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      {item.label}
-                    </Text>
-                  </BlockStack>
+          <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
+            {/* Products Status */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingSm">Products</Text>
+                </InlineStack>
+                <div style={statGridStyle(2)}>
+                  <div style={statMiniStyle}>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats ? (liveStats.autoMapped + liveStats.smartMapped + liveStats.manualMapped) : productsWithFitments)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">With Fitments</Text>
+                  </div>
+                  <div style={statMiniStyle}>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats?.pushedProducts ?? pushedCount)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Pushed</Text>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </Card>
+              </BlockStack>
+            </Card>
+
+            {/* Shopify Status */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={CollectionIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingSm">Shopify</Text>
+                </InlineStack>
+                <div style={statGridStyle(2)}>
+                  <div style={statMiniStyle}>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats?.collections ?? collectionCount)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Collections</Text>
+                  </div>
+                  <div style={statMiniStyle}>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats?.activeMakes ?? 0)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Active Makes</Text>
+                  </div>
+                </div>
+              </BlockStack>
+            </Card>
+
+            {/* Timing */}
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingSm">History</Text>
+                </InlineStack>
+                <div style={statGridStyle(1)}>
+                  <div style={statMiniStyle}>
+                    <Text as="p" variant="headingMd" fontWeight="bold">{formatDate(lastPushTime)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Last Push</Text>
+                  </div>
+                </div>
+              </BlockStack>
+            </Card>
+          </InlineGrid>
         </Layout.Section>
 
         {/* Push Options card */}
@@ -522,21 +596,18 @@ export default function Push() {
         </Layout.Section>
 
         {/* Progress section (during push) */}
-        {isSubmitting && (
+        {(isSubmitting || isJobRunning) && (
           <Layout.Section>
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" align="start" blockAlign="center">
-                  <Spinner size="small" />
-                  <Text as="p" variant="bodyMd">
-                    {createCollectionsChecked
-                      ? "Pushing data and creating collections..."
-                      : "Pushing tags and metafields to Shopify..."}
-                  </Text>
-                </InlineStack>
-                <ProgressBar progress={50} size="small" />
-              </BlockStack>
-            </Card>
+            <OperationProgress
+              label={activeJob?.type === "collections" ? "Creating collections" : "Pushing tags and metafields to Shopify"}
+              status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
+              processed={activeJob?.processed_items ?? 0}
+              total={activeJob?.total_items ?? productsWithFitments}
+              startedAt={activeJob?.started_at}
+              badges={{
+                "pushed": { count: activeJob?.processed_items ?? 0, tone: "success" },
+              }}
+            />
           </Layout.Section>
         )}
 

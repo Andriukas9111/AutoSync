@@ -18,6 +18,7 @@ import {
 import { BookOpenIcon } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
 import { authenticate } from "../shopify.server";
 
 // ---------------------------------------------------------------------------
@@ -729,6 +730,17 @@ export default function Help() {
       backAction={{ content: "Dashboard", onAction: () => navigate("/app") }}
     >
       <BlockStack gap="600">
+        {/* How It Works */}
+        <HowItWorks
+          title="Getting Started"
+          steps={[
+            { number: 1, title: "Import Products", description: "Fetch your Shopify products or upload from providers. All products sync automatically.", linkText: "Products", linkUrl: "/app/products" },
+            { number: 2, title: "Map Fitments", description: "Use auto-extraction or manual mapping to assign vehicle compatibility to products.", linkText: "Fitment", linkUrl: "/app/fitment" },
+            { number: 3, title: "Push to Shopify", description: "Send tags, metafields, and collections to your store. Activate the YMME widget.", linkText: "Push", linkUrl: "/app/push" },
+            { number: 4, title: "Go Live", description: "Customers can now search parts by vehicle. Check analytics to monitor performance.", linkText: "Analytics", linkUrl: "/app/analytics" },
+          ]}
+        />
+
         {/* Search and controls */}
         <Card>
           <BlockStack gap="400">

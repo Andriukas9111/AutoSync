@@ -37,7 +37,8 @@
 
   function escapeText(str) {
     if (!str) return '';
-    return String(str);
+    // Strip dedup suffixes like " [92efc5dd]" from engine names
+    return String(str).replace(/\s*\[[0-9a-f]{8}\]$/, '');
   }
 
   function clearChildren(el) {
@@ -618,13 +619,16 @@
       var saved = getStoredVehicle();
       if (!saved) return;
 
-      // If we have IDs (from YMME or garage), use fast ID-based restore
-      if (saved.makeId) {
+      // If we have FULL IDs (makeId + modelId), use fast ID-based restore
+      if (saved.makeId && saved.modelId) {
         restoreById(saved);
         return;
       }
 
-      // If we only have names (from plate lookup / VIN decode), match by name
+      // Otherwise use name-based matching — works for:
+      // - Plate lookup that resolved make but not model
+      // - VIN decode with partial data
+      // - Any case where we have names but incomplete IDs
       if (saved.makeName) {
         restoreByName(saved);
       }
@@ -650,7 +654,7 @@
         modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
         (data.models || []).forEach(function (m) {
           var label = escapeText(m.name);
-          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
+          if (m.generation && m.generation.indexOf(' | ') === -1 && !m.generation.startsWith(m.name)) label += ' (' + escapeText(m.generation) + ')';
           if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
           var opt = addOption(modelSelect, m.id, label);
           opt.dataset.name = m.name;
@@ -751,7 +755,7 @@
 
       if (!tModel) return;
 
-      // Fetch models and match by name
+      // Fetch models and match by name — supports exact match, prefix match, and substring match
       setSelectLoading(modelSelect);
       showFieldSpinner(container, 'model');
       proxyFetch(proxyUrl, 'models', { make_id: fMake.id }).then(function (data) {
@@ -759,14 +763,27 @@
         modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
         var models = data.models || [];
         var fModel = null;
+        var bestSubLen = 0;
         models.forEach(function (m) {
           var label = escapeText(m.name);
-          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
+          if (m.generation && m.generation.indexOf(' | ') === -1 && !m.generation.startsWith(m.name)) label += ' (' + escapeText(m.generation) + ')';
           if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
           var opt = addOption(modelSelect, m.id, label);
           opt.dataset.name = m.name;
           modelSelect.appendChild(opt);
-          if (m.name.toUpperCase() === tModel) fModel = m;
+          var mn = m.name.toUpperCase();
+          // 1. Exact match (highest priority)
+          if (mn === tModel) { fModel = m; bestSubLen = 9999; }
+          // 2. DVLA model starts with YMME model name (e.g. "XC40 RECHARGE..." starts with "XC40")
+          if (!fModel && mn.length >= 2 && tModel.indexOf(mn) === 0 && (tModel.length === mn.length || tModel.charAt(mn.length) === ' ') && mn.length > bestSubLen) {
+            fModel = m; bestSubLen = mn.length;
+          }
+          // 3. YMME model name appears in DVLA model string (longest match wins, avoids "C40" before "XC40")
+          if (!fModel || (bestSubLen < 9999 && mn.length > bestSubLen)) {
+            if (mn.length >= 3 && tModel.indexOf(mn) !== -1 && mn.length > bestSubLen) {
+              fModel = m; bestSubLen = mn.length;
+            }
+          }
         });
         modelSelect.disabled = false;
         hideFieldSpinner(container, 'model');
@@ -874,7 +891,7 @@
         modelSelect.appendChild(addOption(modelSelect, '', 'Select Model'));
         (data.models || []).forEach(function (m) {
           var label = escapeText(m.name);
-          if (m.generation) label += ' (' + escapeText(m.generation) + ')';
+          if (m.generation && m.generation.indexOf(' | ') === -1 && !m.generation.startsWith(m.name)) label += ' (' + escapeText(m.generation) + ')';
           if (m.year_from) label += ' ' + m.year_from + '-' + (m.year_to || 'present');
           var opt = addOption(modelSelect, m.id, label);
           opt.dataset.name = m.name;

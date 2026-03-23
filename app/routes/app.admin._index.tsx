@@ -17,7 +17,6 @@ import {
   Divider,
   Box,
   Select,
-  DataTable,
   ProgressBar,
   Spinner,
   TextField,
@@ -47,8 +46,10 @@ import {
   WandIcon,
   GaugeIcon,
 } from "@shopify/polaris-icons";
+import { DataTable } from "../components/DataTable";
 
 import { IconBadge } from "../components/IconBadge";
+import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
@@ -641,6 +642,20 @@ export default function AdminPanel() {
   const isRefreshing = revalidator.state === "loading";
   const [dismissed, setDismissed] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
+
+  // Live stats polling for admin dashboard
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [liveAdminStats, setLiveAdminStats] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/app/api/job-status?type=all");
+        if (res.ok) { const r = await res.json(); if (r.stats) setLiveAdminStats(r.stats); }
+      } catch {}
+    };
+    pollRef.current = setInterval(poll, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
   const [search, setSearch] = useState("");
   const [planOverrides, setPlanOverrides] = useState<Record<string, string>>({});
   const [autodataDelay, setAutodataDelay] = useState("500");
@@ -1136,7 +1151,7 @@ export default function AdminPanel() {
                                 {`ETA: ${etaStr} · Elapsed: ${elapsedStr}`}
                               </Text>
                             </InlineStack>
-                            <ProgressBar progress={runningJob.progress ?? 0} size="medium" tone="primary" />
+                            <ProgressBar progress={runningJob.progress ?? 0} size="medium" />
                             <InlineStack gap="600" wrap>
                               <BlockStack gap="050">
                                 <Text as="p" variant="headingSm">{`${(runningJob.processedItems ?? 0).toLocaleString()} / ${(runningJob.totalItems ?? 0).toLocaleString()}`}</Text>
@@ -1200,7 +1215,7 @@ export default function AdminPanel() {
                           </InlineStack>
                           <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeTotal.toLocaleString()} / ~65,000 target`}</Text>
                         </InlineStack>
-                        <ProgressBar progress={ymmePct} size="medium" tone="primary" />
+                        <ProgressBar progress={ymmePct} size="medium" />
                         <Text as="p" variant="bodySm" tone="subdued">
                           Target: 387 brands with all models, engines, and full vehicle specs from auto-data.net
                         </Text>
@@ -1280,7 +1295,7 @@ export default function AdminPanel() {
                                     <ProgressBar
                                       progress={Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}
                                       size="small"
-                                      tone="primary"
+                                     
                                     />
                                     <Text as="p" variant="bodySm" tone="subdued">
                                       {`Brand ${scrapeState.brandsProcessed} of ${scrapeState.totalBrands} (${Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}%)`}
@@ -1294,8 +1309,7 @@ export default function AdminPanel() {
                                     { label: "Specs", value: scrapeState.specsProcessed },
                                   ].map((s) => (
                                     <div key={s.label} style={{
-                                      padding: "8px 12px", borderRadius: "var(--p-border-radius-200)",
-                                      background: "var(--p-color-bg-surface-secondary)", textAlign: "center",
+                                      ...statMiniStyle, textAlign: "center",
                                     }}>
                                       <Text as="p" variant="headingSm" fontWeight="bold">{s.value.toLocaleString()}</Text>
                                       <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>

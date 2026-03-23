@@ -33,6 +33,9 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
+import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import {
   removeAllTags,
   removeAllMetafields,
@@ -425,7 +428,17 @@ function DangerAction({
 }
 
 export default function Settings() {
-  const { plan, shopId, appSettings, counts } = useLoaderData<typeof loader>();
+  const { plan, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
+
+  // Live stats polling — updates data counts every 5 seconds
+  const { stats: polledStats } = useAppData();
+
+  const counts = {
+    products: polledStats?.total ?? loaderCounts.products,
+    fitments: polledStats?.fitments ?? loaderCounts.fitments,
+    collections: polledStats?.collections ?? loaderCounts.collections,
+    providers: polledStats?.providers ?? loaderCounts.providers,
+  };
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -458,6 +471,17 @@ export default function Settings() {
   return (
     <Page fullWidth title="Settings">
       <Layout>
+        {/* How It Works */}
+        <Layout.Section>
+          <HowItWorks
+            steps={[
+              { number: 1, title: "Widget Settings", description: "Configure how the YMME search widget, fitment badges, and compatibility tables appear on your storefront. Customize labels, colors, and behavior." },
+              { number: 2, title: "Data Management", description: "View your product count, fitment data, and collection stats. Reset or re-sync data when needed." },
+              { number: 3, title: "Plan & Billing", description: "View your current plan, usage limits, and upgrade options. Higher plans unlock more products, providers, and advanced features.", linkText: "View Plans", linkUrl: "/app/plans" },
+            ]}
+          />
+        </Layout.Section>
+
         {/* Global Banners from save_settings action */}
         {showError && (
           <Layout.Section>

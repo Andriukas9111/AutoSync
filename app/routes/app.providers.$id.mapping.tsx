@@ -12,9 +12,10 @@ import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data } from "react-router";
 import {
   Page, Card, BlockStack, InlineStack, Text, Badge, Button,
-  Select, TextField, DataTable, Banner, EmptyState, Icon, Box,
+  Select, TextField, Banner, EmptyState, Icon, Box,
 } from "@shopify/polaris";
 import { DeleteIcon, ImportIcon } from "@shopify/polaris-icons";
+import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";

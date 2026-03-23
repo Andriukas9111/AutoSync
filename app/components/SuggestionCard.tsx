@@ -92,10 +92,13 @@ export function SuggestionCard({
     s.engine?.displayName || s.engine?.name || null;
 
   // Vehicle display name: Make + Model (Generation)
+  // Only show generation if it's a single value and doesn't repeat the model name
+  const gen = s.model?.generation || "";
+  const showGen = gen && !gen.includes(" | ") && !gen.startsWith(s.model?.name || "___") && gen !== s.model?.name;
   const vehicleName = [
     s.make.name,
     s.model?.name || "",
-    s.model?.generation ? `(${s.model.generation})` : "",
+    showGen ? `(${gen})` : "",
   ]
     .filter(Boolean)
     .join(" ");
