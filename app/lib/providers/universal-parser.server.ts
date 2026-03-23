@@ -9,6 +9,23 @@ import { parseCsv } from "./csv-parser.server";
 import { parseXml, extractXmlStructure } from "./xml-parser.server";
 import { parseJson, detectJsonPaths } from "./json-parser.server";
 
+/**
+ * Auto-detect CSV delimiter from content (comma, semicolon, tab, pipe)
+ */
+export function detectDelimiter(content: string): "," | "\t" | ";" | "|" {
+  const lines = content.split("\n").slice(0, 10);
+  const sample = lines.join("\n");
+  const counts: Record<string, number> = {
+    ",": (sample.match(/,/g) || []).length,
+    "\t": (sample.match(/\t/g) || []).length,
+    ";": (sample.match(/;/g) || []).length,
+    "|": (sample.match(/\|/g) || []).length,
+  };
+  // Return the delimiter with highest count
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return (sorted[0][1] > 0 ? sorted[0][0] : ",") as "," | "\t" | ";" | "|";
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -90,12 +107,14 @@ function detectFromContent(text: string): FileFormat {
     return "jsonl";
   }
 
-  // Check tab frequency vs comma frequency in first 5 lines
+  // Check delimiter frequency in first 5 lines
   const sample = firstLines.slice(0, 5).join("\n");
   const tabCount = (sample.match(/\t/g) || []).length;
   const commaCount = (sample.match(/,/g) || []).length;
+  const semicolonCount = (sample.match(/;/g) || []).length;
 
-  if (tabCount > commaCount && tabCount > 3) return "tsv";
+  if (tabCount > commaCount && tabCount > semicolonCount && tabCount > 3) return "tsv";
+  // Semicolons still detected as "csv" format — delimiter handled separately
   return "csv"; // Default to CSV
 }
 
@@ -116,7 +135,8 @@ export async function parseFile(
     case "csv":
     case "tsv": {
       const text = typeof content === "string" ? content : content.toString("utf-8");
-      const delimiter = (options.delimiter ?? (format === "tsv" ? "\t" : ",")) as "," | "\t" | ";";
+      // Auto-detect delimiter if not explicitly provided
+      const delimiter = (options.delimiter ?? (format === "tsv" ? "\t" : detectDelimiter(text))) as "," | "\t" | ";";
       const result = parseCsv(text, { delimiter });
       return {
         headers: result.headers,
