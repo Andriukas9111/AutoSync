@@ -131,8 +131,7 @@
 .apl-product__price { font-size: 13px; font-weight: 700; color: var(--apl-primary); margin: 0; }
 
 /* Footer */
-.apl-footer { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 16px 0 0; margin-top: 24px; max-width: 560px; margin-left: auto; margin-right: auto; border-top: 1px solid var(--apl-border); font-size: 10px; color: var(--apl-muted); opacity: 0.4; }
-.apl-footer strong { font-weight: 700; color: var(--apl-primary); }
+/* .apl-footer styles unified in autosync-widgets.css */
 
 /* Recent History */
 .apl-history { max-width: 480px; margin: -16px auto 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

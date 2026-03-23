@@ -1247,24 +1247,42 @@
   }
 }
 
-/* --------------- Shared Widget Footer --------------- */
-.autosync-widget-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 12px 0 0;
-  margin-top: 16px;
-  font-size: 10px;
-  color: #9ca3af;
-  opacity: 0.4;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+/* Old individual footer styles removed — all unified below */
+
+/* ===== UNIFIED "Powered by AutoSync" footer — ALL widgets ===== */
+/* Covers ALL footer class names across all widgets:
+   .autosync-widget-footer (YMME, compatibility, wheel-finder)
+   .apl-footer (plate lookup)
+   .avs-footer (vehicle specs gallery)
+   .avsd-footer (vehicle spec detail)
+*/
+.autosync-widget-footer,
+.apl-footer,
+.avs-footer,
+.avsd-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  flex-wrap: nowrap !important;
+  padding: 12px 0 0 !important;
+  margin-top: 16px !important;
+  font-size: 11px !important;
+  color: #9ca3af !important;
+  opacity: 0.5 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  line-height: 1 !important;
 }
-/* Universal logo fix — works on ALL themes regardless of their img CSS */
+/* Logo icon — exactly 14px on ALL themes */
 .autosync-widget-footer img,
+.autosync-widget-footer svg,
+.apl-footer img,
+.apl-footer svg,
 .avs-footer img,
-[class*="autosync"] .autosync-widget-footer img,
-[class*="avs-"] img[alt="AutoSync"] {
+.avs-footer svg,
+.avsd-footer img,
+.avsd-footer svg,
+img[alt="AutoSync"] {
   display: inline-block !important;
   width: 14px !important;
   height: 14px !important;
@@ -1276,15 +1294,15 @@
   vertical-align: middle !important;
   flex-shrink: 0 !important;
   flex-grow: 0 !important;
+  opacity: 0.7 !important;
 }
+/* "AutoSync" brand text */
 .autosync-widget-footer strong,
-.avs-footer strong { font-weight: 700; color: #005bd2; }
-/* Ensure footer layout is always inline, never stacked */
-.autosync-widget-footer,
-.avs-footer {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 5px !important;
-  flex-wrap: nowrap !important;
+.apl-footer strong,
+.avs-footer strong,
+.avsd-footer strong,
+.avs-footer__text strong,
+.avsd-footer__text strong {
+  font-weight: 600 !important;
+  color: #005bd2 !important;
 }

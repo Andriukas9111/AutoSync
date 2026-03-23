@@ -369,14 +369,7 @@
   }
 
   /* ── Footer ───────────────────────────────────── */
-  .avs-footer {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 24px 0 0; margin-top: 32px;
-    border-top: 1px solid var(--avs-border);
-    color: var(--avs-muted); font-size: 12px; opacity: 0.5;
-  }
-  .avs-footer__logo { color: var(--avs-primary); }
-  .avs-footer__text strong { font-weight: 700; color: var(--avs-primary); }
+  /* .avs-footer styles unified in autosync-widgets.css */
 
   /* ── Card entrance animation ────────────────────── */
   @keyframes avs-fadeUp {
