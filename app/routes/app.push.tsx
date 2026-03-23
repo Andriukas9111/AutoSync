@@ -315,8 +315,9 @@ export default function Push() {
 
   const lastPushTime = latestPushJob?.completed_at ?? latestPushJob?.created_at;
 
-  // Determine if a push just completed
-  const showResults = actionData && "success" in actionData && actionData.success;
+  // Don't show "completed" banner when job was just created — the progress bar shows status
+  const isJobCreated = actionData && "jobCreated" in actionData;
+  const showResults = actionData && "success" in actionData && actionData.success && !isJobCreated;
   const showError = actionData && "error" in actionData;
 
   // Poll for job progress + live stats (Edge Function processes in background)
@@ -398,7 +399,9 @@ export default function Push() {
         {(isSubmitting || isJobRunning) && (
           <Layout.Section>
             <OperationProgress
-              label={activeJob?.type === "collections" ? "Creating collections" : "Pushing tags and metafields to Shopify"}
+              label={activeJob?.type === "collections"
+                ? "Creating collections — processing in background"
+                : "Pushing tags & metafields — processing in background"}
               status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
               processed={activeJob?.processed_items ?? 0}
               total={activeJob?.total_items ?? productsWithFitments}
@@ -407,6 +410,15 @@ export default function Push() {
                 "pushed": { count: activeJob?.processed_items ?? 0, tone: "success" },
               }}
             />
+          </Layout.Section>
+        )}
+
+        {/* Show completion when job just finished */}
+        {completedPush && !isJobRunning && !isSubmitting && (
+          <Layout.Section>
+            <Banner tone="success" title="Push completed" onDismiss={() => setCompletedPush(null)}>
+              <p>{`${completedPush.processed_items.toLocaleString()} products pushed successfully.`}</p>
+            </Banner>
           </Layout.Section>
         )}
 
