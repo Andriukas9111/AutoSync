@@ -36,6 +36,7 @@ import {
   ConnectIcon,
 } from "@shopify/polaris-icons";
 import { DataTable } from "../components/DataTable";
+import { HowItWorks } from "../components/HowItWorks";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -121,9 +122,13 @@ const FORMAT_LABELS: Record<string, string> = {
 export default function ProviderImportWizard() {
   const { provider, targetFields } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Step state
-  const [step, setStep] = useState<ImportStep>("upload");
+  // Step from URL — bookmarkable, browser back/forward works
+  const step = (searchParams.get("step") || "upload") as ImportStep;
+  const setStep = (newStep: ImportStep) => {
+    setSearchParams({ step: newStep }, { replace: true });
+  };
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
