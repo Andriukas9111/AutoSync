@@ -90,14 +90,75 @@ export async function fetchFromApi(
     );
   }
 
-  const json = await response.json();
-  const items = extractItems(json, itemsPath);
+  // Auto-detect response format from content or config
+  const responseFormat = config.responseFormat;
+  const rawText = await response.text();
+  const trimmed = rawText.trim();
+
+  let items: Record<string, unknown>[];
+
+  if (responseFormat === "csv" || (!responseFormat && detectFormat(trimmed) === "csv")) {
+    // Parse CSV/TSV/semicolon-delimited
+    items = parseCSVText(trimmed);
+  } else if (responseFormat === "xml" || (!responseFormat && detectFormat(trimmed) === "xml")) {
+    // Parse XML — convert to array of objects
+    const { parseXml } = await import("./xml-parser.server");
+    const result = await parseXml(rawText);
+    items = result.rows as Record<string, unknown>[];
+  } else {
+    // Default: JSON
+    try {
+      const json = JSON.parse(rawText);
+      items = extractItems(json, itemsPath);
+    } catch {
+      // If JSON fails, try CSV as fallback
+      items = parseCSVText(trimmed);
+    }
+  }
 
   return {
     items,
     itemCount: items.length,
     statusCode: response.status,
   };
+}
+
+/**
+ * Auto-detect if text is CSV, XML, or JSON
+ */
+function detectFormat(text: string): "csv" | "xml" | "json" {
+  if (text.startsWith("<?xml") || text.startsWith("<")) return "xml";
+  if (text.startsWith("{") || text.startsWith("[")) return "json";
+  // Check for CSV patterns: header line with delimiters
+  const firstLine = text.split("\n")[0] || "";
+  if (firstLine.includes(";") || firstLine.includes(",") || firstLine.includes("\t")) return "csv";
+  return "json"; // default
+}
+
+/**
+ * Parse CSV/TSV/semicolon-delimited text into array of objects
+ */
+function parseCSVText(text: string): Record<string, unknown>[] {
+  const lines = text.split("\n").filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  // Detect delimiter from header line
+  const header = lines[0];
+  const delimiter = header.includes("\t") ? "\t" : header.includes(";") ? ";" : ",";
+
+  const columns = header.split(delimiter).map(c => c.trim().replace(/^"|"$/g, ""));
+  const rows: Record<string, unknown>[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
+    const row: Record<string, unknown> = {};
+    columns.forEach((col, j) => {
+      row[col] = values[j] ?? "";
+    });
+    rows.push(row);
+  }
+
+  return rows;
 }
 
 // ---------------------------------------------------------------------------
