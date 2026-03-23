@@ -88,12 +88,20 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
           <Badge tone="info">{`${jobs.filter(j => j.status === "running").length} running`}</Badge>
         </InlineStack>
 
-        {jobs.map((job, i) => {
+        {/* Sort jobs: push first, then collections (shows task flow order) */}
+        {[...jobs].sort((a, b) => {
+          const order: Record<string, number> = { push: 1, collections: 2, extract: 0, vehicle_pages: 3 };
+          return (order[a.type] ?? 5) - (order[b.type] ?? 5);
+        }).map((job, i) => {
           // For collection jobs, show actual created count from live stats
           const isCollectionJob = job.type === "collections";
           const processed = isCollectionJob ? (liveStats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
-          const total = job.total_items ?? 0;
-          const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+          // For collection jobs, don't use total_items if it equals product count (wrong value)
+          // Instead show created / target where target comes from job or estimate
+          const total = isCollectionJob && job.total_items === liveStats.total
+            ? Math.max(processed + 50, job.total_items ?? 0) // estimate if total = product count (wrong)
+            : (job.total_items ?? 0);
+          const percent = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
           const isRunning = job.status === "running";
           const isComplete = job.status === "completed";
           const isFailed = job.status === "failed";
@@ -108,7 +116,7 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
                       {isRunning && <Spinner size="small" />}
                       {isComplete && <IconBadge icon={CheckCircleIcon} color="var(--p-color-bg-fill-success)" />}
                       <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {formatJobType(job.type)}
+                        {jobs.length > 1 ? `Step ${i + 1}: ` : ""}{formatJobType(job.type)}
                       </Text>
                       {isComplete && <Badge tone="success">Complete</Badge>}
                       {isFailed && <Badge tone="critical">Failed</Badge>}
