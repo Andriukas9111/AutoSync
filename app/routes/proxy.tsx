@@ -347,25 +347,44 @@ async function handleCollectionLookup(params: URLSearchParams) {
     if (year) {
       const yearNum = parseInt(year, 10);
       if (!isNaN(yearNum)) {
-        // Find year-range collections for this make+model where year falls in range
+        // Get all year-range collections for this make+model
         const { data: yearCollections } = await db
           .from("collection_mappings")
-          .select("handle, title, type, year_from, year_to")
+          .select("handle, title, type")
           .eq("shop_id", shop)
           .ilike("make", make)
           .ilike("model", model)
-          .eq("type", "make_model_year")
-          .lte("year_from", yearNum)
-          .or(`year_to.gte.${yearNum},year_to.is.null`);
+          .eq("type", "make_model_year");
 
         if (yearCollections && yearCollections.length > 0) {
-          // Pick the tightest year range (smallest span)
-          const best = yearCollections.sort((a, b) => {
-            const spanA = (a.year_to ?? 2030) - (a.year_from ?? 0);
-            const spanB = (b.year_to ?? 2030) - (b.year_from ?? 0);
-            return spanA - spanB;
-          })[0];
-          return found(best);
+          // Parse year ranges from titles and find best match
+          const matches = yearCollections.filter(c => {
+            // Parse "BMW 3 Series 2019-2022 Parts" → yearFrom=2019, yearTo=2022
+            const yrMatch = c.title.match(/(\d{4})[-–](\d{4})\s+Parts$/);
+            if (yrMatch) {
+              const from = parseInt(yrMatch[1], 10);
+              const to = parseInt(yrMatch[2], 10);
+              return yearNum >= from && yearNum <= to;
+            }
+            // Parse "BMW 3 Series 2003+ Parts" → yearFrom=2003, yearTo=now
+            const yrPlus = c.title.match(/(\d{4})\+\s+Parts$/);
+            if (yrPlus) {
+              return yearNum >= parseInt(yrPlus[1], 10);
+            }
+            return false;
+          });
+
+          if (matches.length > 0) {
+            // Pick the tightest year range (smallest span)
+            const best = matches.sort((a, b) => {
+              const getSpan = (t: string) => {
+                const m = t.match(/(\d{4})[-–](\d{4})/);
+                return m ? parseInt(m[2], 10) - parseInt(m[1], 10) : 100;
+              };
+              return getSpan(a.title) - getSpan(b.title);
+            })[0];
+            return found(best);
+          }
         }
       }
     }
