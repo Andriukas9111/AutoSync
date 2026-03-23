@@ -1295,7 +1295,10 @@
             if (partsBtn && data.compatibleCount > 0) {
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.onclick = function () {
-                redirectToCollection(proxyUrl, v.make, v.model, v.year, v.engine);
+                // v is DVLA response: yearOfManufacture (not year), no engine name
+                var plateYear = v.yearOfManufacture ? String(v.yearOfManufacture) : '';
+                var plateEngine = data.resolvedEngine || ''; // from YMME resolution
+                redirectToCollection(proxyUrl, v.make, v.model, plateYear, plateEngine);
               };
             }
           }
@@ -1490,7 +1493,7 @@
               partsBtn.textContent = 'Find ' + data.compatibleCount + ' Compatible Part' + (data.compatibleCount !== 1 ? 's' : '');
               partsBtn.classList.remove('autosync-vin-decode--hidden');
               partsBtn.onclick = function () {
-                redirectToCollection(proxyUrl, v.make, v.model, v.year, v.engine);
+                redirectToCollection(proxyUrl, v.make, v.model, v.year || '', v.engine || '');
               };
             }
           }
