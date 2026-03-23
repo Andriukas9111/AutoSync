@@ -102,6 +102,9 @@ Deno.serve(async (req) => {
       case "vehicle_pages":
         result = await processVehiclePagesChunk(db, job);
         break;
+      case "bulk_push":
+        result = await processBulkPush(db, job);
+        break;
       default:
         result = { processed: 0, hasMore: false, error: `Unknown job type: ${job.type}` };
     }
@@ -1150,4 +1153,172 @@ async function processVehiclePagesChunk(
   console.log(`[vehicle_pages] Batch done: ${processed}, total ${totalProcessedNow}/${uniqueEngineIds.length}, hasMore=${hasMore}`);
 
   return { processed, hasMore };
+}
+
+// ── Bulk Push processor ───────────────────────────────────
+// Two-phase: Phase 1 generates JSONL + starts operations, Phase 2 polls completion
+
+async function processBulkPush(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata as string) : (job.metadata ?? {});
+
+  // Get access token
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No access token" };
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/2026-01/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // Phase 2: If we already have operation IDs, poll for completion
+  if (meta.metafieldsOperationId || meta.tagsOperationId) {
+    let allDone = true;
+    let totalObjects = 0;
+
+    for (const opId of [meta.metafieldsOperationId, meta.tagsOperationId].filter(Boolean)) {
+      const res = await fetch(apiUrl, {
+        method: "POST", headers,
+        body: JSON.stringify({ query: `{ node(id: "${opId}") { ... on BulkOperation { status objectCount url errorCode } } }` }),
+      });
+      const json = await res.json();
+      const op = json?.data?.node;
+      if (!op) continue;
+
+      totalObjects += op.objectCount ?? 0;
+      if (op.status === "RUNNING" || op.status === "CREATED") allDone = false;
+      if (op.status === "FAILED") return { processed: totalObjects, hasMore: false, error: `Bulk operation failed: ${op.errorCode}` };
+    }
+
+    if (allDone) {
+      // Mark all products as synced
+      await db.from("products").update({ synced_at: new Date().toISOString() })
+        .eq("shop_id", shopId).not("fitment_status", "eq", "unmapped");
+      console.log(`[bulk_push] Complete! ${totalObjects} objects processed`);
+      return { processed: totalObjects, hasMore: false };
+    }
+
+    // Still running — update progress and check again next tick
+    await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
+    console.log(`[bulk_push] Polling: ${totalObjects} objects so far`);
+    return { processed: 0, hasMore: true };
+  }
+
+  // Phase 1: Generate JSONL and start operations
+  console.log(`[bulk_push] Phase 1: Generating JSONL...`);
+
+  // Get all mapped products with fitments (paginated)
+  const allProducts: Array<{ id: string; shopify_product_id: string }> = [];
+  let pOffset = 0;
+  while (true) {
+    const { data: batch } = await db.from("products")
+      .select("id, shopify_product_id")
+      .eq("shop_id", shopId).not("fitment_status", "eq", "unmapped")
+      .range(pOffset, pOffset + 999);
+    if (!batch || batch.length === 0) break;
+    allProducts.push(...batch);
+    pOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  if (allProducts.length === 0) return { processed: 0, hasMore: false };
+
+  // Get all fitments (paginated)
+  const allFitments: Array<Record<string, unknown>> = [];
+  let fOffset = 0;
+  while (true) {
+    const { data: batch } = await db.from("vehicle_fitments")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
+      .eq("shop_id", shopId).range(fOffset, fOffset + 999);
+    if (!batch || batch.length === 0) break;
+    allFitments.push(...batch);
+    fOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  // Group fitments by product
+  const fitMap = new Map<string, Array<Record<string, unknown>>>();
+  for (const f of allFitments) { const list = fitMap.get(f.product_id as string) ?? []; list.push(f); fitMap.set(f.product_id as string, list); }
+
+  // Generate JSONL for metafields
+  const mfLines: string[] = [];
+  const tagLines: string[] = [];
+
+  for (const p of allProducts) {
+    const fits = fitMap.get(p.id) || [];
+    if (fits.length === 0) continue;
+    const gid = `gid://shopify/Product/${p.shopify_product_id}`;
+
+    // Metafields
+    const makes = new Set<string>(), models = new Set<string>(), years = new Set<string>(), engines = new Set<string>();
+    const tags = new Set<string>();
+    for (const f of fits) {
+      const make = f.make as string, model = f.model as string;
+      if (make) { makes.add(make); tags.add(`_autosync_${make}`); }
+      if (model) { models.add(model); tags.add(`_autosync_${model}`); }
+      if (f.engine) engines.add(f.engine as string);
+      if (f.engine_code) engines.add(f.engine_code as string);
+      if (f.year_from) {
+        const end = (f.year_to as number) || new Date().getFullYear();
+        for (let y = f.year_from as number; y <= Math.min(end, (f.year_from as number) + 50); y++) years.add(String(y));
+        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+        if (make && model) tags.add(`_autosync_${make}_${model}_${yr}`);
+      }
+    }
+
+    const mfs = [
+      { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fits.map(f => ({ make: f.make, model: f.model, year_from: f.year_from, year_to: f.year_to, engine: f.engine, engine_code: f.engine_code }))), ownerId: gid },
+      { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...makes].sort()), ownerId: gid },
+      { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...models].sort()), ownerId: gid },
+    ];
+    if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
+    if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort()), ownerId: gid });
+    mfLines.push(JSON.stringify({ metafields: mfs }));
+    tagLines.push(JSON.stringify({ id: gid, tags: [...tags] }));
+  }
+
+  console.log(`[bulk_push] Generated ${mfLines.length} metafield lines + ${tagLines.length} tag lines`);
+
+  // Upload and start both operations
+  const startOp = async (jsonl: string, mutation: string): Promise<string | null> => {
+    // Stage upload
+    const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "bulk.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+    })});
+    const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+    if (!target) return null;
+
+    // Upload JSONL
+    const form = new FormData();
+    for (const p of target.parameters) form.append(p.name, p.value);
+    form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
+    await fetch(target.url, { method: "POST", body: form });
+
+    // Start bulk operation
+    const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+      variables: { mutation, stagedUploadPath: target.resourceUrl },
+    })});
+    const bulkJson = await bulkRes.json();
+    return bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id ?? null;
+  };
+
+  const mfMutation = `mutation call($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { key } userErrors { message } } }`;
+  const tagMutation = `mutation call($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`;
+
+  const [mfOpId, tagOpId] = await Promise.all([
+    startOp(mfLines.join("\n"), mfMutation),
+    startOp(tagLines.join("\n"), tagMutation),
+  ]);
+
+  console.log(`[bulk_push] Started operations: metafields=${mfOpId}, tags=${tagOpId}`);
+
+  // Save operation IDs to job metadata for polling
+  await db.from("sync_jobs").update({
+    total_items: allProducts.length,
+    metadata: JSON.stringify({ ...meta, metafieldsOperationId: mfOpId, tagsOperationId: tagOpId }),
+  }).eq("id", job.id);
+
+  return { processed: 0, hasMore: true };
 }

@@ -29,6 +29,12 @@ This project uses **React Router 7** (formerly Remix). NOT Next.js. NOT standard
 - **Check database column names** — don't guess. Query the DB first to verify column names match your code
 - **If you see a problem, FIX IT** — don't skip it, don't note it for later. Fix it now.
 
+### Critical architecture decision:
+- **ALL processing MUST be server-side** (Edge Function via pg_cron) — NEVER client-side
+- Users can close the browser at any time — all operations must continue without the browser
+- The UI only creates `sync_jobs` records and shows progress via polling — it NEVER processes data itself
+- Vercel API routes return INSTANTLY after creating a job — they NEVER do long-running work
+
 ### Architecture rules:
 - ALL styles → `app/lib/design.ts` (statMiniStyle, statGridStyle, cardRowStyle, barChartRowStyle, etc.)
 - ALL live data → `app/lib/use-app-data.ts` (useAppData hook with 5s polling)
