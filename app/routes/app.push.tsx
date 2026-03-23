@@ -394,6 +394,22 @@ export default function Push() {
           />
         </Layout.Section>
 
+        {/* Progress section — RIGHT below HowItWorks for visibility */}
+        {(isSubmitting || isJobRunning) && (
+          <Layout.Section>
+            <OperationProgress
+              label={activeJob?.type === "collections" ? "Creating collections" : "Pushing tags and metafields to Shopify"}
+              status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
+              processed={activeJob?.processed_items ?? 0}
+              total={activeJob?.total_items ?? productsWithFitments}
+              startedAt={activeJob?.started_at}
+              badges={{
+                "pushed": { count: activeJob?.processed_items ?? 0, tone: "success" },
+              }}
+            />
+          </Layout.Section>
+        )}
+
         {/* Error banner */}
         {showError && (
           <Layout.Section>
@@ -612,22 +628,6 @@ export default function Push() {
             </BlockStack>
           </Card>
         </Layout.Section>
-
-        {/* Progress section (during push) */}
-        {(isSubmitting || isJobRunning) && (
-          <Layout.Section>
-            <OperationProgress
-              label={activeJob?.type === "collections" ? "Creating collections" : "Pushing tags and metafields to Shopify"}
-              status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
-              processed={activeJob?.processed_items ?? 0}
-              total={activeJob?.total_items ?? productsWithFitments}
-              startedAt={activeJob?.started_at}
-              badges={{
-                "pushed": { count: activeJob?.processed_items ?? 0, tone: "success" },
-              }}
-            />
-          </Layout.Section>
-        )}
 
         {/* Push History card */}
         {pushHistory.length > 0 && (

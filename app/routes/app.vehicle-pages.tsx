@@ -709,7 +709,17 @@ export default function VehiclePages() {
           </Banner>
         )}
 
-        {/* Loading overlay */}
+        {/* ── Section 1: How It Works (Collapsible) ── */}
+        <HowItWorks
+          title="How Vehicle Pages Work"
+          steps={[
+            { number: 1, title: "Map Fitments", description: "Link your products to specific vehicles using the fitment mapping tool. Each product-vehicle link becomes a potential vehicle page.", linkText: "Go to Fitment Mapping", linkUrl: "/app/fitment/manual" },
+            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs and linked products." },
+            { number: 3, title: "SEO Pages Go Live", description: "Auto-generated URLs appear on your storefront with rich vehicle data, helping you rank for long-tail automotive search terms." },
+          ]}
+        />
+
+        {/* Loading/progress overlay — right below HowItWorks */}
         {isLoading && (
           <Card>
             <InlineStack gap="300" blockAlign="center">
@@ -725,16 +735,6 @@ export default function VehiclePages() {
             </InlineStack>
           </Card>
         )}
-
-        {/* ── Section 1: How It Works (Collapsible) ── */}
-        <HowItWorks
-          title="How Vehicle Pages Work"
-          steps={[
-            { number: 1, title: "Map Fitments", description: "Link your products to specific vehicles using the fitment mapping tool. Each product-vehicle link becomes a potential vehicle page.", linkText: "Go to Fitment Mapping", linkUrl: "/app/fitment/manual" },
-            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs and linked products." },
-            { number: 3, title: "SEO Pages Go Live", description: "Auto-generated URLs appear on your storefront with rich vehicle data, helping you rank for long-tail automotive search terms." },
-          ]}
-        />
 
         {/* ── Section 2: Stats Dashboard ── */}
         {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
