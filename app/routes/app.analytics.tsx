@@ -692,6 +692,28 @@ export default function AnalyticsPage() {
                       By fitment count
                     </Text>
                   </InlineStack>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {popularMakes.slice(0, 10).map((m) => {
+                      const maxFit = popularMakes[0]?.fitmentCount || 1;
+                      const pct = Math.round((m.fitmentCount / maxFit) * 100);
+                      return (
+                        <div key={m.make} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <div style={{ width: "120px", flexShrink: 0, textAlign: "right" }}>
+                            <Text as="span" variant="bodySm" fontWeight="medium">{m.make}</Text>
+                          </div>
+                          <div style={{ flex: 1, background: "var(--p-color-bg-surface-secondary)", borderRadius: "4px", height: "24px", overflow: "hidden" }}>
+                            <div style={{ width: `${pct}%`, height: "100%", background: "#2563eb", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: "8px", minWidth: "40px" }}>
+                              <span style={{ color: "#fff", fontSize: "12px", fontWeight: 600 }}>{m.fitmentCount}</span>
+                            </div>
+                          </div>
+                          <div style={{ width: "50px", textAlign: "right" }}>
+                            <Text as="span" variant="bodySm" tone="subdued">{`${m.productCount}p`}</Text>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <Divider />
                   <DataTable
                     columnContentTypes={["text", "numeric", "numeric"]}
                     headings={["Make", "Fitments", "Products"]}
