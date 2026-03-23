@@ -435,7 +435,7 @@ export default function Products() {
 
   const hasActiveFilters = !!(filters.search || filters.status || filters.source);
   // When viewing fitment-related filters, link to mapping mode
-  const isFitmentContext = ["unmapped", "flagged", "auto_mapped", "smart_mapped", "manual_mapped"].includes(filters.status ?? "");
+  const isFitmentContext = ["unmapped", "flagged"].includes(filters.status ?? "");
 
   // ── Empty state (no products at all) ────────────────────────────────────
 

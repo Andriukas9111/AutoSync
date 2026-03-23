@@ -215,6 +215,15 @@ export default function Collections() {
   const liveCollectionCount = polledStats.collections ?? collections.length;
   const liveFitmentCount = polledStats.fitments ?? 0;
 
+  // Pagination for existing collections
+  const COLLECTIONS_PER_PAGE = 25;
+  const [collPage, setCollPage] = useState(1);
+  const totalCollPages = Math.max(1, Math.ceil(collections.length / COLLECTIONS_PER_PAGE));
+  const pagedCollections = collections.slice(
+    (collPage - 1) * COLLECTIONS_PER_PAGE,
+    collPage * COLLECTIONS_PER_PAGE,
+  );
+
   const showSuccess = actionData && "success" in actionData && actionData.success;
   const showError = actionData && "error" in actionData;
 
@@ -418,55 +427,71 @@ export default function Collections() {
                   </p>
                 </EmptyState>
               ) : (
-                <IndexTable
-                  resourceName={{
-                    singular: "collection",
-                    plural: "collections",
-                  }}
-                  itemCount={collections.length}
-                  headings={[
-                    { title: "Title" },
-                    { title: "Handle" },
-                    { title: "Strategy" },
-                    { title: "Make" },
-                    { title: "Model" },
-                  ]}
-                  selectable={false}
-                >
-                  {collections.map((col: any, index: number) => (
-                    <IndexTable.Row
-                      id={col.id}
-                      key={col.id}
-                      position={index}
-                    >
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">
-                          {col.title || "—"}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {col.handle || "—"}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge>
-                          {STRATEGY_LABELS[col.strategy] || col.strategy || "—"}
-                        </Badge>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {col.make || "—"}
-                        </Text>
-                      </IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Text as="span" variant="bodyMd">
-                          {col.model || "—"}
-                        </Text>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  ))}
-                </IndexTable>
+                <BlockStack gap="300">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {`Showing ${(collPage - 1) * COLLECTIONS_PER_PAGE + 1}–${Math.min(collPage * COLLECTIONS_PER_PAGE, collections.length)} of ${collections.length} collections`}
+                  </Text>
+                  <IndexTable
+                    resourceName={{
+                      singular: "collection",
+                      plural: "collections",
+                    }}
+                    itemCount={pagedCollections.length}
+                    headings={[
+                      { title: "Title" },
+                      { title: "Handle" },
+                      { title: "Strategy" },
+                      { title: "Make" },
+                      { title: "Model" },
+                    ]}
+                    selectable={false}
+                  >
+                    {pagedCollections.map((col: any, index: number) => (
+                      <IndexTable.Row
+                        id={col.id}
+                        key={col.id}
+                        position={index}
+                      >
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {col.title || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.handle || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Badge>
+                            {STRATEGY_LABELS[col.strategy] || col.strategy || "—"}
+                          </Badge>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.make || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.model || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                      </IndexTable.Row>
+                    ))}
+                  </IndexTable>
+                  {totalCollPages > 1 && (
+                    <InlineStack align="center">
+                      <Pagination
+                        hasPrevious={collPage > 1}
+                        hasNext={collPage < totalCollPages}
+                        onPrevious={() => setCollPage((p) => Math.max(1, p - 1))}
+                        onNext={() => setCollPage((p) => Math.min(totalCollPages, p + 1))}
+                        label={`Page ${collPage} of ${totalCollPages}`}
+                      />
+                    </InlineStack>
+                  )}
+                </BlockStack>
               )}
             </BlockStack>
           </Card>

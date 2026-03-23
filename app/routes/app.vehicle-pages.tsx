@@ -333,11 +333,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     (r: any) => r.engine_id as string,
   );
 
-  // Total linked products across synced pages
-  const totalLinkedProducts = (syncedResult.data ?? []).reduce(
-    (sum: number, r: any) => sum + (r.linked_product_count ?? 0),
-    0,
-  );
+  // Total linked products: count distinct products with fitments linked to synced vehicle pages
+  const syncedEngineIdSet = new Set(syncedEngineIds);
+  const linkedProductIds = new Set<string>();
+  for (const f of (vehiclesResult.data ?? []) as any[]) {
+    if (f.product_id && f.ymme_engine_id && syncedEngineIdSet.has(f.ymme_engine_id)) {
+      linkedProductIds.add(f.product_id);
+    }
+  }
+  const totalLinkedProducts = linkedProductIds.size;
 
   return {
     gated: false as const,
