@@ -1259,7 +1259,8 @@
 .autosync-widget-footer,
 .apl-footer,
 .avs-footer,
-.avsd-footer {
+.avsd-footer,
+.avd-footer {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -1282,6 +1283,8 @@
 .avs-footer svg,
 .avsd-footer img,
 .avsd-footer svg,
+.avd-footer img,
+.avd-footer svg,
 img[alt="AutoSync"] {
   display: inline-block !important;
   width: 14px !important;
@@ -1301,8 +1304,10 @@ img[alt="AutoSync"] {
 .apl-footer strong,
 .avs-footer strong,
 .avsd-footer strong,
+.avd-footer strong,
 .avs-footer__text strong,
-.avsd-footer__text strong {
+.avsd-footer__text strong,
+.avd-footer__text strong {
   font-weight: 600 !important;
   color: #005bd2 !important;
 }
