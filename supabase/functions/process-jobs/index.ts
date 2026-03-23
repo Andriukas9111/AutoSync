@@ -635,7 +635,7 @@ async function processCollectionsChunk(
 
         // Save mapping — extract numeric ID from GID
         const numericId = parseInt(collection.id.replace(/\D/g, ""), 10);
-        const { error: insertErr } = await db.from("collection_mappings").insert({
+        const { error: insertErr } = await db.from("collection_mappings").upsert({
           shop_id: shopId,
           make,
           model: null,
@@ -647,7 +647,7 @@ async function processCollectionsChunk(
           seo_title: seoEnabled ? `${make} Performance Parts & Accessories` : null,
           seo_description: seoEnabled ? `Browse our range of performance parts and accessories for ${make} vehicles.` : null,
           synced_at: new Date().toISOString(),
-        });
+        }, { onConflict: "shop_id,title", ignoreDuplicates: true });
         if (insertErr) console.error(`[collections] DB insert error for ${make}:`, insertErr.message);
         else console.log(`[collections] Created make collection: ${make} (${collection.handle})`);
         created++;
@@ -733,7 +733,7 @@ async function processCollectionsChunk(
           });
 
           const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
-          const { error: mmInsertErr } = await db.from("collection_mappings").insert({
+          const { error: mmInsertErr } = await db.from("collection_mappings").upsert({
             shop_id: shopId, make, model,
             type: "make_model",
             title: `${make} ${model} Parts`,
@@ -743,7 +743,7 @@ async function processCollectionsChunk(
             seo_title: seoEnabled ? `${make} ${model} Performance Parts & Accessories` : null,
             seo_description: seoEnabled ? `Browse parts and accessories for the ${make} ${model}.` : null,
             synced_at: new Date().toISOString(),
-          });
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           if (mmInsertErr) console.error(`[collections] DB insert error for ${make} ${model}:`, mmInsertErr.message);
           else console.log(`[collections] Created model collection: ${make} ${model} (${collection.handle})`);
           created++;
@@ -843,7 +843,7 @@ async function processCollectionsChunk(
           });
 
           const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
-          await db.from("collection_mappings").insert({
+          await db.from("collection_mappings").upsert({
             shop_id: shopId, make, model,
             type: "make_model_year",
             title, handle: collection.handle,
@@ -852,7 +852,7 @@ async function processCollectionsChunk(
             seo_title: seoEnabled ? `${make} ${model} ${yearRange} Parts` : null,
             seo_description: seoEnabled ? `Parts for ${make} ${model} ${yearRange}.` : null,
             synced_at: new Date().toISOString(),
-          });
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           console.log(`[collections] Created year collection: ${title}`);
           created++;
         }
