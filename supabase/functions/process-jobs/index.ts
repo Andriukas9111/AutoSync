@@ -28,22 +28,8 @@ async function getPublicationIds(
 ): Promise<string[]> {
   if (pubCache.has(shopId)) return pubCache.get(shopId)!;
 
-  // Try reading from tenant record first (fastest — no Shopify API call)
-  if (db) {
-    try {
-      const { data: tenant } = await db
-        .from("tenants")
-        .select("online_store_publication_id")
-        .eq("shop_id", shopId)
-        .maybeSingle();
-      if (tenant?.online_store_publication_id) {
-        const pubs = [tenant.online_store_publication_id];
-        pubCache.set(shopId, pubs);
-        console.log(`[publications] From DB: ${pubs.length} for ${shopId}`);
-        return pubs;
-      }
-    } catch (_e) { /* fall through to API */ }
-  }
+  // Always query Shopify API for ALL publication channels
+  // Don't use DB cache (it only stores Online Store, not Shop/POS)
 
   // Fallback: query Shopify API
   try {
@@ -53,8 +39,8 @@ async function getPublicationIds(
       body: JSON.stringify({ query: "{ publications(first: 10) { nodes { id name } } }" }),
     });
     const json = await res.json();
+    // Publish to ALL sales channels (Online Store, Shop, Point of Sale, etc.)
     const pubs = (json?.data?.publications?.nodes || [])
-      .filter((p: { name: string }) => p.name === "Online Store" || p.name === "Point of Sale")
       .map((p: { id: string }) => p.id);
     pubCache.set(shopId, pubs);
 
@@ -502,15 +488,30 @@ async function processCollectionsChunk(
     return { processed: 0, hasMore: false };
   }
 
-  // Check existing collections to avoid duplicates
-  const { data: existing } = await db
-    .from("collection_mappings")
-    .select("make, model")
-    .eq("shop_id", shopId);
-
-  const existingSet = new Set((existing ?? []).map((e: { make: string; model: string | null }) =>
-    e.model ? `${e.make}|||${e.model}` : e.make
-  ));
+  // Check existing collections to avoid duplicates (paginated for 1000-row limit)
+  const existingSet = new Set<string>();
+  let exOffset = 0;
+  while (true) {
+    const { data: batch } = await db
+      .from("collection_mappings")
+      .select("make, model, title, type")
+      .eq("shop_id", shopId)
+      .range(exOffset, exOffset + 999);
+    if (!batch || batch.length === 0) break;
+    for (const e of batch) {
+      // Add make key
+      if (e.make && !e.model) existingSet.add(e.make);
+      // Add make|||model key
+      if (e.make && e.model) existingSet.add(`${e.make}|||${e.model}`);
+      // Add year key from title (e.g., "BMW 3 Series 2019-2022 Parts" → extract year range)
+      if (e.type === "make_model_year" && e.title) {
+        const yrMatch = e.title.match(/(\d{4}[-+]\d{0,4})\s+Parts$/);
+        if (yrMatch) existingSet.add(`${e.make}|||${e.model}|||${yrMatch[1]}`);
+      }
+    }
+    exOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
 
   // Calculate and set total_items so progress bar works
   // For make_model_year, we need to count year combos too
