@@ -7,6 +7,7 @@
 import {
   Badge,
   BlockStack,
+  Card,
   InlineStack,
   ProgressBar,
   Text,
@@ -62,17 +63,8 @@ export function OperationProgress({
   const elapsed = formatElapsed(startedAt);
 
   return (
-    <Box
-      padding="400"
-      borderRadius="200"
-      background={
-        isFailed
-          ? "bg-surface-critical"
-          : isDone
-            ? "bg-surface-success"
-            : "bg-surface-secondary"
-      }
-    >
+    <Card>
+      <Box>
       <BlockStack gap="300">
         {/* Header row: label + status + elapsed */}
         <InlineStack align="space-between" blockAlign="center">
@@ -141,5 +133,6 @@ export function OperationProgress({
         )}
       </BlockStack>
     </Box>
+    </Card>
   );
 }

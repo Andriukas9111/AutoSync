@@ -402,7 +402,7 @@ export default function Fitment() {
                 {coveragePercent}%
               </Text>
             </InlineStack>
-            <ProgressBar progress={coveragePercent} size="medium" tone="primary" />
+            <ProgressBar progress={coveragePercent} size="medium" />
             <Text as="p" variant="bodySm" tone="subdued">
               {totalMapped.toLocaleString()} of {totalProducts.toLocaleString()} products have
               fitment data · Average {totalMapped > 0 ? (totalFitments / totalMapped).toFixed(1) : "0"} fitments per product
