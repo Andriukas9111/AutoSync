@@ -18,6 +18,30 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BATCH_SIZE = 20; // Products per invocation
 
+// Cache publication IDs per shop (refreshed each Edge Function invocation)
+const pubCache = new Map<string, string[]>();
+
+async function getPublicationIds(shopId: string, accessToken: string): Promise<string[]> {
+  if (pubCache.has(shopId)) return pubCache.get(shopId)!;
+  try {
+    const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+      body: JSON.stringify({ query: "{ publications(first: 10) { nodes { id name } } }" }),
+    });
+    const json = await res.json();
+    const pubs = (json?.data?.publications?.nodes || [])
+      .filter((p: { name: string }) => p.name === "Online Store" || p.name === "Point of Sale")
+      .map((p: { id: string }) => p.id);
+    pubCache.set(shopId, pubs);
+    console.log(`[publications] Found ${pubs.length} for ${shopId}`);
+    return pubs;
+  } catch (err) {
+    console.error("[publications] Error:", err);
+    return [];
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -525,10 +549,7 @@ async function processCollectionsChunk(
             query: COLLECTION_PUBLISH_MUTATION,
             variables: {
               id: collection.id,
-              input: [
-                { publicationId: "gid://shopify/Publication/178272010453" },
-                { publicationId: "gid://shopify/Publication/178272043221" },
-              ],
+              input: (await getPublicationIds(shopId, accessToken)).map(id => ({ publicationId: id })),
             },
           }),
         });
