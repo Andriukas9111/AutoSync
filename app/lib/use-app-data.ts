@@ -101,11 +101,16 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
 
   useEffect(() => {
     poll(); // Initial poll
-    intervalRef.current = setInterval(poll, pollInterval);
+
+    // Use slower polling interval — Realtime handles instant updates
+    // Polling is just a safety net in case WebSocket disconnects
+    const safeInterval = activeJobs.length > 0 ? pollInterval : pollInterval * 3;
+    intervalRef.current = setInterval(poll, safeInterval);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [poll, pollInterval]);
+  }, [poll, pollInterval, activeJobs.length]);
 
   // Computed values
   const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
