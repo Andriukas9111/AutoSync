@@ -125,6 +125,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const search = url.searchParams.get("search") || "";
   const status = url.searchParams.get("status") || "";
   const source = url.searchParams.get("source") || "";
+  const providerId = url.searchParams.get("provider") || "";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -141,6 +142,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
   if (source) {
     query = query.eq("source", source);
+  }
+  if (providerId) {
+    query = query.eq("provider_id", providerId);
   }
 
   query = query
