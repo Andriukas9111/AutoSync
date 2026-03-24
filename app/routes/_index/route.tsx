@@ -23,7 +23,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ─── SVG Icons ───
 const I = {
   logo: (s = 24) => <svg width={s} height={s} viewBox="0 0 1200 1200" fill="none"><path fill="currentColor" d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z" /><path fill="currentColor" d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z" /></svg>,
-  chk: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  chk: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>,
   x: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" /></svg>,
   arr: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 4l4 4-4 4" /></svg>,
   chev: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6l4 4 4-4" /></svg>,
@@ -171,7 +171,7 @@ function YMMEDemo() {
               <div key={i} className="demo-garage-item" style={i > 0 && step >= 8 ? { animation: "ymme-fade-in 0.4s ease" } : undefined}>
                 <div><div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{v.year} {v.make} {v.model}</div><div style={{ fontSize: 12, color: "#6b7280" }}>{v.engine}</div></div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <button style={{ padding: "4px 12px", borderRadius: 6, background: "#6366f1", color: "#fff", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer" }}>Select</button>
+                  <button style={{ padding: "4px 12px", borderRadius: 6, background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer" }}>Select</button>
                   <button style={{ padding: "4px 6px", borderRadius: 6, background: "#f3f4f6", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" /></svg>
                   </button>
@@ -300,7 +300,7 @@ function BadgeDemo() {
         <div className="demo-subtitle">Real-time compatibility check on every product page</div>
         <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
           {["Fits", "Doesn't Fit", "No Vehicle"].map((t, i) =>
-            <button key={i} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid", background: s === i ? "#6366f1" : "#fff", color: s === i ? "#fff" : "#374151", borderColor: s === i ? "#6366f1" : "#e5e7eb" }} onClick={() => setS(i as 0 | 1 | 2)}>{t}</button>
+            <button key={i} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid", background: s === i ? "#2563eb" : "#fff", color: s === i ? "#fff" : "#374151", borderColor: s === i ? "#2563eb" : "#e5e7eb" }} onClick={() => setS(i as 0 | 1 | 2)}>{t}</button>
           )}
         </div>
         <div className={`demo-badge-light ${s === 0 ? "fits" : s === 1 ? "nofit" : "none"}`}>
@@ -327,7 +327,7 @@ function VehicleSpecsDemo() {
     <>
       <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
       <div className="lp-demo-light">
-        <div style={{ width: 40, height: 3, background: "#6366f1", borderRadius: 2, marginBottom: 10 }} />
+        <div style={{ width: 40, height: 3, background: "#2563eb", borderRadius: 2, marginBottom: 10 }} />
         <div className="demo-title" style={{ fontSize: 18 }}>Vehicle Specifications</div>
         <div className="demo-subtitle">Browse detailed specs for all supported vehicles</div>
         <div className="demo-specs-search">
@@ -455,7 +455,7 @@ function IDashDashboard() {
     <div className="idash-title">Dashboard</div>
     <div className="idash-label">Quick Actions</div>
     <div className="idash-actions">
-      <div className="idash-action"><span className="idash-dot" style={{ background: "#6366f1" }} /> Fetch Products</div>
+      <div className="idash-action"><span className="idash-dot" style={{ background: "#2563eb" }} /> Fetch Products</div>
       <div className="idash-action"><span className="idash-dot" style={{ background: "#f59e0b" }} /> Auto Extract <span className="idash-badge-orange">1,593 pending</span></div>
       <div className="idash-action"><span className="idash-dot" style={{ background: "#22c55e" }} /> Manual Map</div>
       <div className="idash-action idash-action-blue"><span className="idash-dot" style={{ background: "rgba(255,255,255,0.4)" }} /> Push to Shopify</div>
