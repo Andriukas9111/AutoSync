@@ -167,7 +167,7 @@ function YMMEDemo() {
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
       <div className="lp-demo-light" style={{ padding: 28 }}>
         <div className="demo-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find Parts for Your Vehicle</div>
-        <div className="demo-grid" style={{ marginBottom: 14 }}>
+        <div className="demo-grid-ymme" style={{ marginBottom: 14 }}>
           {/* Make */}
           <div style={{ position: "relative" }}>
             <div className="demo-label">Make</div>
@@ -208,20 +208,22 @@ function YMMEDemo() {
               <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>
             )}
           </div>
-        </div>
-
-        {/* Find Parts + Garage button row */}
-        {showButton && (
-          <div className="ymme-btn-row" style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button className="demo-btn-blue" style={{ flex: 1, height: 48, fontSize: 16 }}>
-              {SearchIcon} Find Parts
-            </button>
-            <button className="demo-garage-btn" style={{ width: 48, height: 48 }}>
+          {/* Find Parts button - inline */}
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            {step >= 5 ? (
+              <button className="ymme-find-btn ymme-anim-fill">{SearchIcon} Find Parts</button>
+            ) : (
+              <button className="ymme-find-btn" style={{ opacity: 0.4 }}>{SearchIcon} Find Parts</button>
+            )}
+          </div>
+          {/* Garage button - inline */}
+          <div style={{ display: "flex", alignItems: "flex-end" }}>
+            <button className="demo-garage-btn" style={{ width: 44, height: 44 }}>
               {GarageIcon}
-              <span className="demo-garage-badge">{garageCount}</span>
+              {garageCount > 0 && <span className="demo-garage-badge">{garageCount}</span>}
             </button>
           </div>
-        )}
+        </div>
 
         {/* Garage popover */}
         {showGarage && (
@@ -293,9 +295,9 @@ function PlateDemo() {
         <div style={{ display:"flex", gap:8, marginBottom:8 }}>
           <div className="demo-plate-wrap" style={{ flex:1 }}>
             <div className="demo-plate-gb"><UKFlag /></div>
-            <input className="demo-plate-input" placeholder="AB12 CDE" value={plate} onChange={e => setPlate(e.target.value.toUpperCase())} />
+            <input className={`demo-plate-input${!typed ? " plate-typing" : ""}`} placeholder="AB12 CDE" value={plate} readOnly />
           </div>
-          <button className="demo-btn-blue" onClick={() => setShow(true)}>
+          <button className="demo-plate-btn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             Look Up
           </button>
@@ -453,38 +455,64 @@ function VehicleSpecsDemo() {
 }
 
 function VehicleSpecDetailDemo() {
+  const StatIcon = {
+    hp: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+    torque: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/><path d="M21 3v5h-5"/></svg>,
+    displacement: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="12" height="16" rx="2"/><line x1="6" y1="8" x2="18" y2="8"/><line x1="6" y1="16" x2="18" y2="16"/><line x1="12" y1="8" x2="12" y2="16"/></svg>,
+    speed: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 00-6.88 17.23"/><path d="M12 2a10 10 0 016.88 17.23"/><path d="M12 12l3.5-6.06"/><circle cx="12" cy="12" r="1"/></svg>,
+    stopwatch: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M10 2h4"/><path d="M12 2v2"/></svg>,
+    fuel: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 22V6a2 2 0 012-2h8a2 2 0 012 2v16"/><path d="M3 22h12"/><path d="M15 13h2a2 2 0 012 2v3a2 2 0 002 0V9l-3-3"/><rect x="6" y="7" width="6" height="5"/></svg>,
+  };
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="demo-spec-hero demo-spec-hero-tall">
-        <div className="demo-spec-hero-make">
-          <img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" />
-          <span>BMW</span>
+      <div className="demo-spec-hero demo-spec-hero-tall" style={{ display: "flex", gap: 24, alignItems: "center" }}>
+        <div style={{ flex: 1 }}>
+          <div className="demo-spec-hero-make">
+            <img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" />
+            <span>BMW</span>
+          </div>
+          <h2>3 Series</h2>
+          <div className="sub">316i (102 Hp)</div>
+          <div className="demo-spec-hero-tags">
+            <span className="demo-spec-hero-tag">1987</span>
+            <span className="demo-spec-hero-tag">M10B18</span>
+            <span className="demo-spec-hero-tag">Petrol</span>
+            <span className="demo-spec-hero-tag">Sedan</span>
+            <span className="demo-spec-hero-tag">Rear wheel drive</span>
+          </div>
+          <p>The BMW 316i is a compact executive sedan powered by the naturally aspirated M10B18 inline-4 engine, producing 102 horsepower and 140 Nm of torque.</p>
         </div>
-        <h2>3 Series</h2>
-        <div className="sub">316i (102 Hp)</div>
-        <div className="demo-spec-hero-tags">
-          <span className="demo-spec-hero-tag">1987</span>
-          <span className="demo-spec-hero-tag">M10B18</span>
-          <span className="demo-spec-hero-tag">Petrol</span>
-          <span className="demo-spec-hero-tag">Sedan</span>
-          <span className="demo-spec-hero-tag">Rear wheel drive</span>
+        <div className="demo-spec-hero-car">
+          <svg width="180" height="100" viewBox="0 0 180 100" fill="none">
+            <path d="M30 70 L50 45 Q55 38 65 35 L115 30 Q125 28 135 35 L155 50 Q160 55 160 60 L160 70" stroke="rgba(255,255,255,0.5)" strokeWidth="2" fill="rgba(255,255,255,0.08)"/>
+            <line x1="70" y1="35" x2="70" y2="55" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
+            <line x1="115" y1="32" x2="120" y2="55" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
+            <rect x="20" y="70" width="140" height="6" rx="3" fill="rgba(255,255,255,0.15)"/>
+            <circle cx="50" cy="76" r="12" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="rgba(255,255,255,0.06)"/>
+            <circle cx="50" cy="76" r="6" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
+            <circle cx="135" cy="76" r="12" stroke="rgba(255,255,255,0.4)" strokeWidth="2" fill="rgba(255,255,255,0.06)"/>
+            <circle cx="135" cy="76" r="6" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" fill="none"/>
+            <rect x="25" y="60" width="12" height="6" rx="2" fill="rgba(255,255,255,0.25)"/>
+            <rect x="150" y="58" width="10" height="5" rx="2" fill="rgba(255,200,200,0.3)"/>
+          </svg>
         </div>
-        <p>The BMW 316i is a compact executive sedan powered by the naturally aspirated M10B18 inline-4 engine, producing 102 horsepower and 140 Nm of torque.</p>
       </div>
       <div className="demo-quick-stats">
-        <div className="demo-quick-stat"><div className="val">102</div><div className="label">HP</div></div>
-        <div className="demo-quick-stat"><div className="val">140</div><div className="label">Nm</div></div>
-        <div className="demo-quick-stat"><div className="val">1.6L</div><div className="label">Displ.</div></div>
-        <div className="demo-quick-stat"><div className="val">182</div><div className="label">km/h</div></div>
-        <div className="demo-quick-stat"><div className="val">12.1s</div><div className="label">0-100</div></div>
-        <div className="demo-quick-stat"><div className="val">Petrol</div><div className="label">Fuel</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.hp}</div><div className="val">102</div><div className="label">HP</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.torque}</div><div className="val">140</div><div className="label">Nm</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.displacement}</div><div className="val">1.6L</div><div className="label">Displ.</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.speed}</div><div className="val">182</div><div className="label">km/h</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.stopwatch}</div><div className="val">12.1s</div><div className="label">0-100</div></div>
+        <div className="demo-quick-stat"><div className="stat-icon">{StatIcon.fuel}</div><div className="val">Petrol</div><div className="label">Fuel</div></div>
       </div>
       <div className="demo-tab-bar">
         <button className="demo-tab active">Engine</button>
         <button className="demo-tab">Performance</button>
         <button className="demo-tab">Drivetrain</button>
         <button className="demo-tab">Dimensions</button>
+        <button className="demo-tab">Fuel &amp; Emissions</button>
+        <button className="demo-tab">Weight &amp; Capacity</button>
       </div>
       <div style={{ background:"#fff" }}>
         <table className="demo-spec-table">
@@ -496,18 +524,18 @@ function VehicleSpecDetailDemo() {
         </table>
       </div>
       {/* Compatible Parts section */}
-      <div style={{ background:"#fff", padding:"16px 24px", borderTop:"2px solid #f3f4f6" }}>
-        <div style={{ fontSize:14, fontWeight:700, color:"#111827", marginBottom:12 }}>Compatible Parts</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:10 }}>
+      <div style={{ background:"#fff", padding:"20px 24px", borderTop:"2px solid #f3f4f6" }}>
+        <div style={{ fontSize:14, fontWeight:700, color:"#111827", marginBottom:14 }}>Compatible Parts</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12 }}>
           {[
-            { name:"Brake Pads (Front)", price:"$45.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Brake" },
-            { name:"Oil Filter", price:"$12.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Filter" },
-            { name:"Spark Plugs (Set)", price:"$28.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Spark" },
+            { name:"Brake Pads (Front)", price:"$45.99", svg: <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="10" y="14" width="44" height="36" rx="4" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5"/><rect x="14" y="18" width="36" height="28" rx="2" fill="#f3f4f6"/><path d="M14 32h36" stroke="#d1d5db" strokeWidth="1"/><rect x="10" y="14" width="8" height="12" rx="2" fill="#d1d5db"/><circle cx="32" cy="32" r="4" fill="#9ca3af"/><circle cx="22" cy="25" r="2" fill="#d1d5db"/><circle cx="42" cy="25" r="2" fill="#d1d5db"/><circle cx="22" cy="39" r="2" fill="#d1d5db"/><circle cx="42" cy="39" r="2" fill="#d1d5db"/></svg> },
+            { name:"Oil Filter", price:"$12.99", svg: <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="20" y="8" width="24" height="48" rx="6" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5"/><rect x="22" y="12" width="20" height="8" rx="3" fill="#d1d5db"/><line x1="20" y1="24" x2="44" y2="24" stroke="#d1d5db" strokeWidth="1.5"/><line x1="20" y1="30" x2="44" y2="30" stroke="#f3f4f6" strokeWidth="1"/><line x1="20" y1="36" x2="44" y2="36" stroke="#f3f4f6" strokeWidth="1"/><line x1="20" y1="42" x2="44" y2="42" stroke="#f3f4f6" strokeWidth="1"/><circle cx="32" cy="16" r="3" fill="#9ca3af"/></svg> },
+            { name:"Spark Plugs (Set)", price:"$28.99", svg: <svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="28" y="6" width="8" height="14" rx="2" fill="#d1d5db" stroke="#9ca3af" strokeWidth="1"/><rect x="26" y="20" width="12" height="6" rx="1" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5"/><rect x="29" y="26" width="6" height="20" rx="1" fill="#e5e7eb" stroke="#9ca3af" strokeWidth="1.5"/><path d="M29 46l-3 12" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round"/><path d="M35 46l3 12" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round"/><path d="M26 46h12" stroke="#9ca3af" strokeWidth="1.5"/><circle cx="32" cy="33" r="1.5" fill="#9ca3af"/></svg> },
           ].map((p,i) => (
-            <div key={i} style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:10, textAlign:"center", background:"#fff" }}>
-              <img src={p.img} alt="" style={{ width:60, height:60, objectFit:"contain", margin:"0 auto 6px", borderRadius:6 }}/>
-              <div style={{ fontSize:12, fontWeight:600, color:"#111827", marginBottom:2 }}>{p.name}</div>
-              <div style={{ fontSize:13, fontWeight:700, color:"#2563eb" }}>{p.price}</div>
+            <div key={i} className="demo-part-card">
+              <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>{p.svg}</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#111827", marginBottom:3 }}>{p.name}</div>
+              <div style={{ fontSize:14, fontWeight:700, color:"#2563eb" }}>{p.price}</div>
             </div>
           ))}
         </div>
