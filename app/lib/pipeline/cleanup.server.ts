@@ -109,18 +109,28 @@ export async function removeAllTags(
   let processed = 0;
 
   // Only process products that have actually been pushed (have fitments)
-  // This avoids looping 1000+ products when nothing was pushed
-  const { data: products, error } = await db
-    .from("products")
-    .select("shopify_product_id")
-    .eq("shop_id", shopId)
-    .neq("fitment_status", "unmapped");
-
-  if (error) {
-    return { removed: 0, processed: 0, errors: [error.message] };
+  // Paginated to avoid Supabase 1000-row limit
+  const products: any[] = [];
+  let tagOffset = 0;
+  while (true) {
+    const { data: batch, error: batchErr } = await db
+      .from("products")
+      .select("shopify_product_id")
+      .eq("shop_id", shopId)
+      .neq("fitment_status", "unmapped")
+      .order("id", { ascending: true })
+      .range(tagOffset, tagOffset + 999);
+    if (batchErr) {
+      console.error("[cleanup] Batch query error:", batchErr.message);
+      return { removed: 0, processed: 0, errors: [batchErr.message] };
+    }
+    if (!batch || batch.length === 0) break;
+    products.push(...batch);
+    tagOffset += batch.length;
+    if (batch.length < 1000) break;
   }
 
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return { removed: 0, processed: 0, errors: [] };
   }
 
@@ -178,17 +188,28 @@ export async function removeAllMetafields(
   let processed = 0;
 
   // Only process products that have actually been pushed (have fitments)
-  const { data: products, error } = await db
-    .from("products")
-    .select("shopify_product_id")
-    .eq("shop_id", shopId)
-    .neq("fitment_status", "unmapped");
-
-  if (error) {
-    return { removed: 0, processed: 0, errors: [error.message] };
+  // Paginated to avoid Supabase 1000-row limit
+  const products: any[] = [];
+  let mfOffset = 0;
+  while (true) {
+    const { data: batch, error: batchErr } = await db
+      .from("products")
+      .select("shopify_product_id")
+      .eq("shop_id", shopId)
+      .neq("fitment_status", "unmapped")
+      .order("id", { ascending: true })
+      .range(mfOffset, mfOffset + 999);
+    if (batchErr) {
+      console.error("[cleanup] Metafield batch query error:", batchErr.message);
+      return { removed: 0, processed: 0, errors: [batchErr.message] };
+    }
+    if (!batch || batch.length === 0) break;
+    products.push(...batch);
+    mfOffset += batch.length;
+    if (batch.length < 1000) break;
   }
 
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return { removed: 0, processed: 0, errors: [] };
   }
 
@@ -196,34 +217,37 @@ export async function removeAllMetafields(
     const gid = `gid://shopify/Product/${product.shopify_product_id}`;
 
     try {
-      // Query metafields in the autosync_fitment namespace
-      const mfResponse = await admin.graphql(PRODUCT_METAFIELDS_QUERY, {
-        variables: { id: gid, namespace: "autosync_fitment" },
-      });
-      const mfJson = await mfResponse.json();
-      await handleRateLimit(mfJson);
-
-      const edges = mfJson?.data?.product?.metafields?.edges ?? [];
-      if (edges.length > 0) {
-        const metafields = edges.map((e: any) => ({
-          ownerId: gid,
-          namespace: e.node.namespace,
-          key: e.node.key,
-        }));
-
-        const delResponse = await admin.graphql(METAFIELDS_DELETE_MUTATION, {
-          variables: { metafields },
+      // Query metafields in both current ($app:vehicle_fitment) and legacy (autosync_fitment) namespaces
+      const namespacesToClean = ["$app:vehicle_fitment", "autosync_fitment"];
+      for (const ns of namespacesToClean) {
+        const mfResponse = await admin.graphql(PRODUCT_METAFIELDS_QUERY, {
+          variables: { id: gid, namespace: ns },
         });
-        const delJson = await delResponse.json();
-        await handleRateLimit(delJson);
+        const mfJson = await mfResponse.json();
+        await handleRateLimit(mfJson);
 
-        const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
-        if (userErrors?.length > 0) {
-          errors.push(
-            `Metafields for ${product.shopify_product_id}: ${userErrors[0].message}`,
-          );
-        } else {
-          removed += edges.length;
+        const edges = mfJson?.data?.product?.metafields?.edges ?? [];
+        if (edges.length > 0) {
+          const metafields = edges.map((e: any) => ({
+            ownerId: gid,
+            namespace: e.node.namespace,
+            key: e.node.key,
+          }));
+
+          const delResponse = await admin.graphql(METAFIELDS_DELETE_MUTATION, {
+            variables: { metafields },
+          });
+          const delJson = await delResponse.json();
+          await handleRateLimit(delJson);
+
+          const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
+          if (userErrors?.length > 0) {
+            errors.push(
+              `Metafields (${ns}) for ${product.shopify_product_id}: ${userErrors[0].message}`,
+            );
+          } else {
+            removed += edges.length;
+          }
         }
       }
       processed++;

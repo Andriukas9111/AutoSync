@@ -3,13 +3,16 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { assertFeature } from "../lib/billing.server";
-import { pushToShopify } from "../lib/pipeline/push.server";
 
 // ---------------------------------------------------------------------------
-// POST — Start a push job
+// POST — Create a push job (processed by Edge Function via pg_cron)
+//
+// This route returns INSTANTLY after creating the job record.
+// The Supabase Edge Function `process-jobs` picks it up within 30 seconds.
+// This avoids Vercel's serverless timeout (10s free / 60s pro).
 // ---------------------------------------------------------------------------
 export async function action({ request }: ActionFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
   // Parse options from request body
@@ -41,7 +44,15 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
-  // Create a sync job record
+  // Get the total count of pushable products (must match Edge Function worker predicate)
+  // Worker uses: .not("fitment_status", "eq", "unmapped") — so we use the same filter
+  const { count: mappedCount } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .not("fitment_status", "eq", "unmapped");
+
+  // Create a sync job record — Edge Function picks this up via pg_cron
   const { data: job, error: jobError } = await db
     .from("sync_jobs")
     .insert({
@@ -49,6 +60,10 @@ export async function action({ request }: ActionFunctionArgs) {
       type: "push",
       status: "pending",
       progress: 0,
+      total_items: mappedCount ?? 0,
+      processed_items: 0,
+      metadata: JSON.stringify({ pushTags, pushMetafields }),
+      started_at: new Date().toISOString(),
     })
     .select("id")
     .single();
@@ -57,36 +72,13 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "Failed to create sync job" }, { status: 500 });
   }
 
-  // Run the push
-  try {
-    const result = await pushToShopify(shopId, job.id, admin, {
-      pushTags,
-      pushMetafields,
-    });
-
-    return data({
-      success: true,
-      jobId: job.id,
-      processed: result.processed,
-      tagsPushed: result.tagsPushed,
-      metafieldsPushed: result.metafieldsPushed,
-      errors: result.errors,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Push failed";
-
-    // Mark job as failed
-    await db
-      .from("sync_jobs")
-      .update({
-        status: "failed",
-        error: message,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
-
-    return data({ error: message }, { status: 500 });
-  }
+  // Return immediately — Edge Function handles the actual push
+  return data({
+    success: true,
+    jobId: job.id,
+    totalItems: mappedCount ?? 0,
+    message: "Push job created. Processing will begin shortly.",
+  });
 }
 
 // ---------------------------------------------------------------------------

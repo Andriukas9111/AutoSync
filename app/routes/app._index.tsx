@@ -79,6 +79,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeModelsResult,
     ymmeEnginesResult,
     ymmeSpecsResult,
+    syncedProductsResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     // Product counts
@@ -107,6 +108,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
+    // Synced (pushed) products
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
   ]);
 
   const tenant = tenantResult.data;
@@ -170,7 +173,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeEngines: ymmeEnginesResult.count ?? 0,
     ymmeSpecs: ymmeSpecsResult.count ?? 0,
     // Push + sync stats
-    pushedProducts: totalProductsResult.count ?? 0,
+    pushedProducts: syncedProductsResult.count ?? 0,
     activeMakes: activeMakesResult.count ?? 0,
     vehiclePagesSynced: vehiclePagesResult.count ?? 0,
     // Unique makes/models from fitments (topMakes already has all makes)
@@ -400,7 +403,7 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
-  const { stats: liveData, isLoading: dataLoading } = useAppData({
+  const { stats: liveData, jobs: liveJobs } = useAppData({
     total: totalProducts,
     unmapped,
     autoMapped,
@@ -533,7 +536,7 @@ export default function Dashboard() {
             </Card>
 
             {/* ─── Active Jobs — Live Progress ─── */}
-            <ActiveJobsPanel navigate={navigate} />
+            <ActiveJobsPanel navigate={navigate} jobs={liveJobs} stats={s} />
 
             {/* Onboarding checklist */}
             {showOnboarding && (

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
   useLoaderData,
@@ -56,6 +56,7 @@ import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { SkeletonCard } from "../components/SkeletonCard";
+import { useAppData } from "../lib/use-app-data";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .eq("shop_id", shopId);
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%,handle.ilike.%${search}%`);
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,handle.ilike.%${sanitized}%`);
+    }
   }
   if (status) {
     query = query.eq("fitment_status", status);
@@ -239,33 +243,15 @@ export default function Products() {
   const [dismissed, setDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Live stats polling for status breakdown
-  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) {
-          const result = await res.json();
-          if (result.stats) {
-            setLiveBreakdown({
-              unmapped: result.stats.unmapped,
-              auto_mapped: result.stats.autoMapped,
-              smart_mapped: result.stats.smartMapped,
-              manual_mapped: result.stats.manualMapped,
-              flagged: result.stats.flagged,
-            });
-          }
-        }
-      } catch { /* non-fatal */ }
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  // Use live breakdown when available
-  const activeBreakdown = liveBreakdown ?? statusBreakdown;
+  // Live stats via unified polling hook
+  const { stats: polledStats } = useAppData();
+  const activeBreakdown: Record<string, number> = {
+    unmapped: polledStats?.unmapped ?? statusBreakdown.unmapped ?? 0,
+    auto_mapped: polledStats?.autoMapped ?? statusBreakdown.auto_mapped ?? 0,
+    smart_mapped: polledStats?.smartMapped ?? statusBreakdown.smart_mapped ?? 0,
+    manual_mapped: polledStats?.manualMapped ?? statusBreakdown.manual_mapped ?? 0,
+    flagged: polledStats?.flagged ?? statusBreakdown.flagged ?? 0,
+  };
 
   const isFetching = fetcher.state !== "idle";
   const isBulkAction = bulkFetcher.state !== "idle";

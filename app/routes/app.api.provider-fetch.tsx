@@ -207,6 +207,7 @@ async function buildPreviewResponse(
   const { mappings, warnings, hasSavedMappings } = await getSmartMappings(
     providerId,
     parsed.headers,
+    shopId,
   );
 
   // Duplicate preview

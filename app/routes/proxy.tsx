@@ -856,16 +856,10 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       }
 
       debugInfo.resolved = resolved;
-      console.log("[proxy] YMME resolution result:", JSON.stringify({
-        dvla: { make: dvlaMake, model: dvlaModel, year: dvlaYear, cc: dvlaCC, fuel: dvlaFuel },
-        resolved,
-        enginesCount: debugInfo.enginesCount,
-        modelsCount: debugInfo.ymmeModelsCount,
-        candidatesCount: (debugInfo.topCandidates as unknown[])?.length ?? 0,
-      }));
+      // Debug info saved to response — no console.log on every customer request
     } catch (searchErr) {
       const errMsg = searchErr instanceof Error ? searchErr.message : String(searchErr);
-      console.error("[proxy] YMME resolution FAILED:", errMsg, searchErr instanceof Error ? searchErr.stack : "");
+      if (process.env.NODE_ENV !== "production") console.error("[proxy] YMME resolution FAILED:", errMsg);
       debugInfo.searchError = errMsg;
     }
 
@@ -913,7 +907,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       resolved,
       resolvedEngine: resolved.engineName || "",
       compatibleCount,
-      _debug: debugInfo,
+      ...(process.env.NODE_ENV !== "production" ? { _debug: debugInfo } : {}),
     });
   } catch (err) {
     if (err instanceof VesError) {
@@ -1109,6 +1103,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
       const { data: fitments } = await db
         .from("vehicle_fitments")
         .select("product_id")
+        .eq("shop_id", shop)
         .ilike("make", decoded.make)
         .ilike("model", `%${decoded.model}%`)
         .lte("year_from", decoded.modelYear)
@@ -1120,6 +1115,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
           .from("products")
           .select("id, shopify_gid, title, handle, image_url, price")
           .in("id", productIds.slice(0, 50))
+          .eq("shop_id", shop)
           .eq("status", "approved");
         compatibleProducts = products ?? [];
       }

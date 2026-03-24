@@ -14,7 +14,7 @@ import { PageFooter } from "../components/PageFooter";
 import type { PlanTier } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
 
@@ -32,7 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       // Fallback: try online session token
       offlineToken = session.accessToken ?? null;
     }
-    console.log("[app.tsx] Token:", offlineToken ? `found (${offlineToken.length} chars)` : "not found");
+    if (process.env.NODE_ENV !== "production") console.log("[app.tsx] Token:", offlineToken ? `found (${offlineToken.length} chars)` : "not found");
   } catch (tokenErr) {
     console.error("[app.tsx] Token fetch error:", tokenErr instanceof Error ? tokenErr.message : tokenErr);
     offlineToken = session.accessToken ?? null;
@@ -83,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       );
       if (onlineStore?.id) {
         await db.from("tenants").update({ online_store_publication_id: onlineStore.id }).eq("shop_id", shopId);
-        console.log(`[app.tsx] Publication ID discovered: ${onlineStore.id}`);
+        if (process.env.NODE_ENV !== "production") console.log(`[app.tsx] Publication ID discovered: ${onlineStore.id}`);
       }
     } catch (pubErr) {
       console.error("[app.tsx] Publication discovery failed:", pubErr instanceof Error ? pubErr.message : pubErr);

@@ -559,7 +559,14 @@ export async function createBillingSubscription(
       variables: {
         name,
         returnUrl,
-        test: process.env.NODE_ENV !== "production",
+        // Billing test mode: explicit env var, fail-fast if accidentally set in production
+        test: (() => {
+          const testMode = process.env.BILLING_TEST_MODE === "true";
+          if (process.env.NODE_ENV === "production" && testMode) {
+            throw new Error("BILLING_TEST_MODE=true is set in production — real charges won't be created. Remove BILLING_TEST_MODE from production env vars.");
+          }
+          return testMode;
+        })(),
         lineItems: [
           {
             plan: {

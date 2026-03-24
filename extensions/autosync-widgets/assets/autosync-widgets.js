@@ -209,6 +209,10 @@
 
     if (!trigger || !dropdown || !optionsList) return;
 
+    // Accessibility: add ARIA attributes to make dropdown
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+
     var isOpen = false;
     var allMakes = makes || [];
     var selectedMake = null;
@@ -346,6 +350,7 @@
       if (trigger.disabled) return;
       isOpen = true;
       customSelect.classList.add('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'true');
       renderOptions('');
       if (searchInput) {
         searchInput.value = '';
@@ -356,6 +361,7 @@
     function closeDropdown() {
       isOpen = false;
       customSelect.classList.remove('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -542,17 +548,24 @@
     var popover = container.querySelector('[data-autosync-garage-popover]');
     if (!trigger || !popover) return;
 
+    // Accessibility
+    trigger.setAttribute('aria-label', 'Open saved vehicles garage');
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+
     var isOpen = false;
 
     function open() {
       isOpen = true;
       popover.style.display = '';
+      trigger.setAttribute('aria-expanded', 'true');
       renderGarageUI(container);
     }
 
     function close() {
       isOpen = false;
       popover.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -1319,6 +1332,9 @@
 
   function initWheelFinder(container) {
     var proxyUrl = container.dataset.proxyUrl;
+    var currencyCode = container.dataset.currencyCode || 'USD'; // From Liquid: {{ cart.currency.iso_code }}
+    var formatter;
+    try { formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode }); } catch (_e) { formatter = null; }
     var searchBtn = container.querySelector('[data-autosync-wheel-search]');
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
@@ -1381,7 +1397,8 @@
                 if (item.product.price) {
                   var price = document.createElement('span');
                   price.className = 'autosync-wheel-finder__price';
-                  price.textContent = '\u00A3' + Number(item.product.price).toFixed(2);
+                  var amount = Number(item.product.price);
+                  price.textContent = formatter ? formatter.format(amount) : ('$' + amount.toFixed(2));
                   card.appendChild(price);
                 }
 
@@ -1401,6 +1418,15 @@
         .catch(function () {
           searchBtn.disabled = false;
           searchBtn.textContent = 'Search Wheels';
+          // Show error message to user
+          if (resultsDiv) {
+            clearChildren(resultsDiv);
+            var errorMsg = document.createElement('p');
+            errorMsg.textContent = 'Unable to search wheels right now. Please try again.';
+            errorMsg.style.cssText = 'color: #c0392b; text-align: center; padding: 16px;';
+            resultsDiv.appendChild(errorMsg);
+            resultsDiv.classList.remove('autosync-wheel-finder--hidden');
+          }
         });
     });
   }

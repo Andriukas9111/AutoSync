@@ -114,12 +114,6 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
     };
   }, [poll, pollInterval, activeJobs.length]);
 
-  // Computed values
-  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  const needsReview = stats.unmapped + stats.flagged;
-  const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
-  const pendingPush = Math.max(0, mapped - stats.pushedProducts);
-
   return {
     stats: {
       ...stats,

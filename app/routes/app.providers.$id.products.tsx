@@ -5,7 +5,7 @@
  * Same pattern as app.products._index.tsx but filtered by provider_id.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -35,6 +35,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { useAppData } from "../lib/use-app-data";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -95,7 +96,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .eq("provider_id", providerId);
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%,sku.ilike.%${search}%,provider_sku.ilike.%${search}%`);
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,sku.ilike.%${sanitized}%,provider_sku.ilike.%${sanitized}%`);
+    }
   }
 
   if (statusFilter) {
@@ -237,19 +241,8 @@ export default function ProviderProducts() {
   const [statusValue, setStatusValue] = useState(initialStatus);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Live stats polling
-  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) { const r = await res.json(); if (r.stats) setLiveBreakdown({ unmapped: r.stats.unmapped, auto_mapped: r.stats.autoMapped, smart_mapped: r.stats.smartMapped, manual_mapped: r.stats.manualMapped, flagged: r.stats.flagged }); }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // Keep unified polling hook active for real-time updates
+  useAppData();
 
   const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
 

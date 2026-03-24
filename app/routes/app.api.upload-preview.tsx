@@ -69,6 +69,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const { mappings, warnings, hasSavedMappings } = await getSmartMappings(
     providerId,
     parsed.headers,
+    shopId,
   );
 
   // Duplicate detection preview

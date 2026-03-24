@@ -35,14 +35,8 @@ import {
   SettingsIcon,
   ChartVerticalIcon,
   ImportIcon,
-  ClockIcon,
-  AlertCircleIcon,
-  CheckCircleIcon,
   SearchIcon,
   ConnectIcon,
-  DeleteIcon,
-  ResetIcon,
-  CollectionIcon,
   WandIcon,
   GaugeIcon,
 } from "@shopify/polaris-icons";
@@ -50,19 +44,13 @@ import { DataTable } from "../components/DataTable";
 
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
 import { syncNHTSAToYMME } from "../lib/scrapers/nhtsa.server";
 import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
-import {
-  removeAllTags,
-  removeAllMetafields,
-  removeAllCollections,
-} from "../lib/pipeline/cleanup.server";
-import { createSmartCollections } from "../lib/pipeline/collections.server";
-import { ADMIN_SHOPS, isAdminShop } from "../lib/admin.server";
+import { isAdminShop } from "../lib/admin.server";
 
 // ---------------------------------------------------------------------------
 // Plan tier config
@@ -193,7 +181,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // Action
 // ---------------------------------------------------------------------------
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, admin } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
@@ -258,58 +246,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.from("collection_mappings").delete().eq("shop_id", targetShop);
       return data({ ok: true, intent: "admin-purge-collections", message: `All collection mappings purged for ${targetShop}.` });
     }
-    case "admin-shopify-cleanup": {
-      const targetShop = formData.get("shop_id") as string;
-      const cleanupType = formData.get("cleanup_type") as string || "all";
-      if (!targetShop) return data({ ok: false, intent: "admin-shopify-cleanup", message: "No shop specified" });
-      try {
-        const results: string[] = [];
-        if (cleanupType === "all" || cleanupType === "tags") {
-          const tagResult = await removeAllTags(targetShop, admin);
-          results.push(`${tagResult.removed} tags removed from ${tagResult.processed} products`);
-        }
-        if (cleanupType === "all" || cleanupType === "metafields") {
-          const mfResult = await removeAllMetafields(targetShop, admin);
-          results.push(`${mfResult.removed} metafields removed from ${mfResult.processed} products`);
-        }
-        if (cleanupType === "all" || cleanupType === "collections") {
-          const colResult = await removeAllCollections(targetShop, admin);
-          results.push(`${colResult.deleted} collections deleted`);
-        }
-        return data({ ok: true, intent: "admin-shopify-cleanup", message: `Shopify cleanup for ${targetShop}: ${results.join(", ")}` });
-      } catch (err) {
-        return data({ ok: false, intent: "admin-shopify-cleanup", message: err instanceof Error ? err.message : "Cleanup failed" });
-      }
-    }
-    case "admin-rebuild-collections": {
-      const targetShop = formData.get("shop_id") as string;
-      const strategy = (formData.get("strategy") as "make" | "make_model" | "make_model_year") || "make";
-      if (!targetShop) return data({ ok: false, intent: "admin-rebuild-collections", message: "No shop specified" });
-      try {
-        const removeResult = await removeAllCollections(targetShop, admin);
-        const createResult = await createSmartCollections(targetShop, admin, strategy, {
-          seoEnabled: true,
-          imagesEnabled: true,
-        });
-        return data({
-          ok: true, intent: "admin-rebuild-collections",
-          message: `Collections rebuilt for ${targetShop}: ${removeResult.deleted} removed, ${createResult.created} created, ${createResult.updated} updated.`,
-        });
-      } catch (err) {
-        return data({ ok: false, intent: "admin-rebuild-collections", message: err instanceof Error ? err.message : "Rebuild failed" });
-      }
-    }
     case "admin-reset-fitment-status": {
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-reset-fitment-status", message: "No shop specified" });
       const { data: updatedRows, error } = await db
         .from("products")
-        .update({ fitment_status: "pending" })
+        .update({ fitment_status: "unmapped" })
         .eq("shop_id", targetShop)
         .select("id");
       const count = updatedRows?.length ?? 0;
       if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
-      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to pending for re-extraction.` });
+      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to unmapped for re-extraction.` });
     }
     case "admin-update-tenant-counts": {
       const targetShop = formData.get("shop_id") as string;
@@ -477,37 +424,13 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
 
   const actions = [
     {
-      content: "Rebuild Collections (SEO + Logos)",
-      onAction: () => {
-        setPopoverActive(false);
-        setConfirmAction({
-          intent: "admin-rebuild-collections",
-          title: `Rebuild collections for ${shopName}?`,
-          message: "This will remove all existing AutoSync collections from Shopify and recreate them with optimized SEO titles, descriptions, and brand logos.",
-          extraFields: { strategy: "make" },
-        });
-      },
-    },
-    {
-      content: "Shopify Cleanup (Tags + Meta + Collections)",
-      onAction: () => {
-        setPopoverActive(false);
-        setConfirmAction({
-          intent: "admin-shopify-cleanup",
-          title: `Shopify cleanup for ${shopName}?`,
-          message: "This will remove ALL AutoSync tags, metafields, and collections from this tenant's Shopify store. Their database records remain intact.",
-          extraFields: { cleanup_type: "all" },
-        });
-      },
-    },
-    {
-      content: "Reset Products to Pending (Re-extract)",
+      content: "Reset Products to Unmapped (Re-extract)",
       onAction: () => {
         setPopoverActive(false);
         setConfirmAction({
           intent: "admin-reset-fitment-status",
           title: `Reset fitment status for ${shopName}?`,
-          message: "This will reset all product fitment statuses to 'pending', so they can be re-processed by the extraction engine on the next run.",
+          message: "This will reset all product fitment statuses to 'unmapped', so they can be re-processed by the extraction engine on the next run.",
         });
       },
     },
