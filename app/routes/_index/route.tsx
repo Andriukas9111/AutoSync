@@ -569,6 +569,180 @@ export default function LandingPage() {
           </div>
         </section>
 
+        {/* ─── WIDGET SHOWCASE ─── */}
+        <section style={{ padding: "100px 24px", background: "#f6f6f7" }}>
+          <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: "64px" }}>
+              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>See It In Action</p>
+              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
+                Powerful widgets for your storefront
+              </h2>
+              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "560px", margin: "0 auto", lineHeight: 1.7 }}>
+                Every widget works on any Shopify theme. Zero coding required.
+              </p>
+            </div>
+
+            {/* Widget previews in browser frames */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "32px" }}>
+
+              {/* YMME Search Widget Preview */}
+              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
+                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>your-store.myshopify.com</span>
+                </div>
+                <div style={{ padding: "24px" }}>
+                  <p style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px", color: "#0f172a" }}>Find Parts for Your Vehicle</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
+                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
+                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Make</span>BMW
+                    </div>
+                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
+                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Model</span>3 Series
+                    </div>
+                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
+                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Year</span>2022
+                    </div>
+                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
+                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Engine</span>M340i (382 Hp)
+                    </div>
+                  </div>
+                  <button style={{ width: "100%", padding: "10px", background: "#005bd2", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                    🔍 Find Parts
+                  </button>
+                </div>
+              </div>
+
+              {/* Plate Lookup Widget Preview */}
+              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
+                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>UK Plate Lookup</span>
+                </div>
+                <div style={{ padding: "24px", textAlign: "center" }}>
+                  <p style={{ fontSize: "15px", fontWeight: 700, marginBottom: "16px", color: "#0f172a" }}>Find Parts by Registration</p>
+                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginBottom: "16px" }}>
+                    <div style={{ display: "flex", alignItems: "center", background: "#f4c542", borderRadius: "6px", overflow: "hidden", border: "2px solid #0f172a" }}>
+                      <div style={{ background: "#003da5", color: "white", padding: "8px 6px", fontSize: "10px", fontWeight: 700 }}>GB</div>
+                      <input disabled value="BD18 JYC" style={{ padding: "8px 12px", fontSize: "16px", fontWeight: 700, border: "none", background: "#f4c542", width: "120px", color: "#0f172a" }} />
+                    </div>
+                    <button style={{ padding: "8px 16px", background: "#005bd2", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "13px" }}>
+                      🔍 Look Up
+                    </button>
+                  </div>
+                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px", padding: "12px", textAlign: "left", fontSize: "13px" }}>
+                    <div style={{ fontWeight: 600, color: "#166534", marginBottom: "4px" }}>✓ Vehicle Found</div>
+                    <div style={{ color: "#0f172a" }}>2018 Volvo XC40 • 2.0L Diesel • 150 HP</div>
+                    <div style={{ color: "#64748b", fontSize: "12px", marginTop: "4px" }}>23 compatible parts available</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vehicle Compatibility Table Preview */}
+              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
+                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>Product Page Widget</span>
+                </div>
+                <div style={{ padding: "24px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <p style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", margin: 0 }}>Vehicle Compatibility</p>
+                    <span style={{ background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: 600, padding: "4px 10px", borderRadius: "20px" }}>✓ Fits your vehicle</span>
+                  </div>
+                  <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Make</th>
+                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Model</th>
+                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Years</th>
+                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Engine</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ["BMW", "3 Series", "2019–2022", "M340i (382 Hp)"],
+                        ["BMW", "3 Series", "2019–2022", "330i (255 Hp)"],
+                        ["BMW", "4 Series", "2020–2023", "M440i (382 Hp)"],
+                      ].map(([make, model, years, engine], idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "8px", color: "#0f172a" }}>{make}</td>
+                          <td style={{ padding: "8px", color: "#0f172a" }}>{model}</td>
+                          <td style={{ padding: "8px", color: "#64748b" }}>{years}</td>
+                          <td style={{ padding: "8px", color: "#64748b" }}>{engine}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Additional widget previews row */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", marginTop: "32px" }}>
+              {/* Vehicle Spec Card Preview */}
+              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ background: "linear-gradient(135deg, #0f172a, #1e3a5f)", color: "white", padding: "24px" }}>
+                  <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", opacity: 0.7, marginBottom: "4px" }}>BMW</div>
+                  <div style={{ fontSize: "24px", fontWeight: 800 }}>M340i</div>
+                  <div style={{ fontSize: "14px", opacity: 0.8 }}>382 Hp • 3.0L Turbo • Petrol</div>
+                  <div style={{ display: "flex", gap: "6px", marginTop: "12px", flexWrap: "wrap" }}>
+                    {["2022", "B58", "Petrol", "AWD", "Steptronic"].map(tag => (
+                      <span key={tag} style={{ background: "rgba(255,255,255,0.15)", padding: "4px 10px", borderRadius: "20px", fontSize: "11px" }}>{tag}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", textAlign: "center", padding: "16px", gap: "8px", borderBottom: "1px solid #e2e8f0" }}>
+                  {[["382 HP", "Power"], ["500 Nm", "Torque"], ["3.0L", "Displ."], ["4.4s", "0-100"]].map(([v, l]) => (
+                    <div key={l}>
+                      <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{v}</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fitment Badge + Admin Dashboard Preview */}
+              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
+                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
+                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>Admin Dashboard</span>
+                </div>
+                <div style={{ padding: "24px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                    {[
+                      ["2,844", "Products"],
+                      ["5,827", "Vehicle Links"],
+                      ["44%", "Coverage"],
+                    ].map(([v, l]) => (
+                      <div key={l} style={{ background: "#f8fafc", borderRadius: "6px", padding: "12px", textAlign: "center" }}>
+                        <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>{v}</div>
+                        <div style={{ fontSize: "11px", color: "#64748b" }}>{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "12px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>Fitment Coverage</span>
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "#005bd2" }}>44%</span>
+                    </div>
+                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                      <div style={{ width: "44%", height: "100%", background: "#005bd2", borderRadius: "3px" }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ─── FEATURES ─── */}
         <section id="features" style={{ padding: "100px 24px", background: "white" }}>
           <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
