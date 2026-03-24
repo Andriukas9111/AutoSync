@@ -184,6 +184,8 @@ export async function pushToShopify(
         .select("id, shopify_product_id")
         .eq("shop_id", shopId)
         .not("fitment_status", "eq", "unmapped")
+        .not("shopify_product_id", "is", null)  // Skip products without Shopify ID (avoids gid://shopify/Product/null)
+        .order("id", { ascending: true })
         .range(pOffset, pOffset + 999);
       if (batchErr) {
         throw new Error(`Failed to query products: ${batchErr.message}`);
