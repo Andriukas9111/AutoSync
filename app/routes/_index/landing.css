@@ -898,118 +898,114 @@
   font-size: 13px; font-weight: 700; color: #111827;
 }
 
-/* ─── Dashboard Showcase ─── */
+/* ─── Dashboard Showcase / Interactive Dashboard ─── */
 .lp-hero-showcase {
   padding: 0 0 120px;
   position: relative;
 }
-.lp-dash-reveal {
-  opacity: 0;
-  transform: translateY(80px) perspective(1200px) rotateX(4deg);
-  transition: opacity 1s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-              transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-.lp-dash-reveal.visible {
-  opacity: 1;
-  transform: translateY(0) perspective(1200px) rotateX(2deg);
-}
-.lp-dash-wrapper {
+.lp-dash-glow-wrap {
   position: relative;
-  max-width: 1000px;
+  max-width: 1100px;
   margin: 0 auto;
 }
 .lp-dash-glow {
   position: absolute;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 900px; height: 500px;
+  width: 1000px; height: 600px;
   background: radial-gradient(ellipse, rgba(91,127,255,0.12) 0%, transparent 65%);
   pointer-events: none;
   filter: blur(60px);
   z-index: 0;
 }
-.lp-dash-browser {
+
+/* Interactive Dashboard */
+.lp-interactive-dash {
   position: relative;
   z-index: 1;
-  border-radius: 12px;
+  max-width: 1100px;
+  margin: 0 auto;
+  border-radius: 16px;
   overflow: hidden;
+  box-shadow: 0 60px 120px -30px rgba(0,0,0,0.5), 0 0 80px -20px rgba(91,127,255,0.1);
   border: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 0 60px 120px -30px rgba(0,0,0,0.5);
-}
-.lp-dash-chrome {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #e5e7eb;
-  border-bottom: 1px solid #d1d5db;
+  height: 600px;
+  background: #fff;
 }
-.lp-dash-chrome-dots {
-  display: flex; gap: 6px;
-}
-.lp-dash-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-}
-.lp-dash-dot.red { background: #ef4444; }
-.lp-dash-dot.yellow { background: #f59e0b; }
-.lp-dash-dot.green { background: #22c55e; }
-.lp-dash-chrome-title {
-  font-size: 12px; font-weight: 600; color: #6b7280;
-  letter-spacing: -0.01em;
-}
-.lp-dash-body {
-  display: flex;
-  min-height: 380px;
-}
-.lp-dash-sidebar {
-  width: 160px;
-  flex-shrink: 0;
+
+.lp-idash-sidebar {
+  width: 200px;
   background: #1a1a2e;
-  padding: 14px 0;
+  padding: 20px 0;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
 }
-.lp-dash-sidebar-logo {
+
+.lp-idash-logo {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 14px 14px;
-  font-size: 12px;
-  font-weight: 700;
+  gap: 8px;
+  padding: 0 16px 20px;
   color: #fff;
+  font-weight: 700;
+  font-size: 15px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   margin-bottom: 8px;
 }
-.lp-dash-sidebar-logo span { color: #fff; }
-.lp-dash-nav-item {
-  padding: 7px 14px;
-  font-size: 12px;
-  font-weight: 500;
+
+.lp-idash-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
   color: rgba(255,255,255,0.5);
-  cursor: default;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
   border-left: 3px solid transparent;
-  transition: color 0.15s;
+  transition: all 0.15s;
 }
-.lp-dash-nav-item.active {
+
+.lp-idash-nav-item:hover {
+  color: rgba(255,255,255,0.8);
+  background: rgba(255,255,255,0.03);
+}
+
+.lp-idash-nav-item.active {
   color: #fff;
-  background: rgba(91,127,255,0.1);
-  border-left-color: #5B7FFF;
-  font-weight: 600;
+  background: rgba(59,130,246,0.1);
+  border-left-color: #3b82f6;
 }
-.lp-dash-main {
+
+.lp-idash-nav-item svg {
+  flex-shrink: 0;
+}
+
+.lp-idash-main {
   flex: 1;
+  padding: 24px 28px;
+  overflow-y: auto;
   background: #f8f9fa;
-  padding: 20px 24px;
-  overflow: hidden;
+  color: #111;
 }
-.lp-dash-main-title {
+
+/* ─── Interactive Dashboard Internal Styles ─── */
+.idash-title {
   font-size: 16px;
   font-weight: 700;
   color: #111827;
   margin-bottom: 16px;
   letter-spacing: -0.02em;
 }
-.lp-dash-section-label {
+.idash-title-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: #9ca3af;
+  margin-left: 8px;
+}
+.idash-label {
   font-size: 10px;
   font-weight: 600;
   color: #9ca3af;
@@ -1017,35 +1013,34 @@
   letter-spacing: 0.08em;
   margin-bottom: 8px;
 }
-.lp-dash-actions {
+.idash-actions {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-bottom: 16px;
 }
-.lp-dash-action-card {
+.idash-action {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 10px;
+  padding: 12px 10px;
   text-align: center;
-  position: relative;
-}
-.lp-dash-action-icon {
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 6px;
-  font-size: 10px;
-}
-.lp-dash-action-name {
   font-size: 11px;
   font-weight: 600;
   color: #374151;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
-.lp-dash-action-badge {
+.idash-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
   display: inline-block;
-  margin-top: 4px;
+}
+.idash-badge-orange {
+  display: inline-block;
   padding: 1px 6px;
   border-radius: 100px;
   background: #fef3c7;
@@ -1053,42 +1048,40 @@
   font-size: 9px;
   font-weight: 600;
 }
-.lp-dash-action-highlight {
+.idash-action-blue {
   background: #2563eb;
   border-color: #2563eb;
-}
-.lp-dash-action-highlight .lp-dash-action-name {
   color: #fff;
 }
-.lp-dash-stats-row {
+.idash-stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-bottom: 16px;
 }
-.lp-dash-stat-card {
+.idash-stat-card {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
   text-align: center;
 }
-.lp-dash-stat-num {
+.idash-stat-num {
   font-size: 16px;
   font-weight: 800;
   color: #111827;
   letter-spacing: -0.02em;
 }
-.lp-dash-stat-lbl {
+.idash-stat-lbl {
   font-size: 10px;
   color: #9ca3af;
   font-weight: 500;
   margin-top: 2px;
 }
-.lp-dash-progress-wrap {
+.idash-progress-wrap {
   margin-bottom: 16px;
 }
-.lp-dash-progress-bar {
+.idash-progress-bar {
   width: 100%;
   height: 8px;
   background: #e5e7eb;
@@ -1096,40 +1089,181 @@
   overflow: hidden;
   margin-bottom: 6px;
 }
-.lp-dash-progress-fill {
+.idash-progress-fill {
   height: 100%;
   border-radius: 100px;
   background: linear-gradient(90deg, #3b82f6, #6366f1);
   transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.lp-dash-progress-labels {
+.idash-progress-labels {
   display: flex;
   justify-content: space-between;
   font-size: 10px;
   color: #9ca3af;
   font-weight: 500;
 }
-.lp-dash-bottom-row {
+.idash-bottom-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.lp-dash-bottom-card {
+.idash-bottom-card {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 10px 12px;
 }
-.lp-dash-make-row {
+.idash-kv {
   display: flex;
   justify-content: space-between;
   padding: 3px 0;
   font-size: 11px;
   color: #374151;
 }
-.lp-dash-make-count {
+.idash-kv strong {
   font-weight: 700;
   color: #111827;
+}
+
+/* Products table */
+.idash-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.idash-table th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 2px solid #e5e7eb;
+}
+.idash-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid #f3f4f6;
+  color: #374151;
+}
+.idash-td-name {
+  font-weight: 600;
+  color: #111827 !important;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.idash-td-num {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.idash-status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.idash-status-green {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+.idash-status-gray {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.idash-status-orange {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+/* Push to Shopify */
+.idash-push-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff !important;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: background 0.15s;
+}
+.idash-push-btn:hover {
+  background: #1d4ed8;
+}
+.idash-push-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.idash-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+  font-weight: 500;
+  cursor: default;
+}
+.idash-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+.idash-push-last {
+  font-size: 12px;
+  color: #9ca3af;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+/* Collections grid */
+.idash-col-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.idash-col-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.idash-col-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59,130,246,0.08);
+}
+.idash-col-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  margin: 0 auto 8px;
+}
+.idash-col-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 2px;
+}
+.idash-col-count {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Placeholder for non-implemented pages */
+.idash-placeholder {
+  font-size: 13px;
+  color: #9ca3af;
+  padding: 40px 0;
+  text-align: center;
 }
 
 /* ─── Push Flow Demo ─── */
@@ -1245,9 +1379,11 @@
   .lp-systems { grid-template-columns: repeat(2, 1fr); }
   .lp-pricing { grid-template-columns: repeat(2, 1fr); }
   .lp-push-flow-row { grid-template-columns: 1fr; gap: 40px; }
-  .lp-dash-sidebar { width: 120px; }
-  .lp-dash-actions { grid-template-columns: repeat(2, 1fr); }
-  .lp-dash-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .lp-idash-sidebar { width: 140px; }
+  .lp-idash-nav-item { font-size: 11px; padding: 8px 12px; gap: 6px; }
+  .idash-actions { grid-template-columns: repeat(2, 1fr); }
+  .idash-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .lp-interactive-dash { height: 500px; }
 }
 @media (max-width: 768px) {
   .lp-nav-links { display: none; }
@@ -1268,9 +1404,10 @@
   .lp-h2 { font-size: clamp(28px, 5vw, 36px); }
   .lp-cta-section { padding: 120px 0; }
   .demo-vin-specs-grid { grid-template-columns: repeat(3, 1fr); }
-  .lp-dash-sidebar { display: none; }
-  .lp-dash-actions { grid-template-columns: repeat(2, 1fr); }
-  .lp-dash-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .lp-idash-sidebar { display: none; }
+  .idash-actions { grid-template-columns: repeat(2, 1fr); }
+  .idash-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .lp-interactive-dash { height: auto; min-height: 400px; }
   .lp-push-flow-row { grid-template-columns: 1fr; gap: 30px; }
   .lp-push-results { grid-template-columns: repeat(3, 1fr); }
 }
@@ -1280,4 +1417,187 @@
   .lp-footer-grid { grid-template-columns: 1fr; }
   .lp-w { padding: 0 20px; }
   .demo-vin-specs-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════
+   SCROLL-DRIVEN ANIMATIONS (CSS Scroll Timeline)
+   Elements animate continuously as user scrolls.
+   Uses animation-timeline: view() — no JavaScript.
+   ═══════════════════════════════════════════════ */
+
+/* Base: all animated elements start hidden */
+.lp-scroll-fade {
+  opacity: 0;
+  transform: translateY(60px);
+  animation: scrollFadeUp 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 50%;
+}
+
+@keyframes scrollFadeUp {
+  from { opacity: 0; transform: translateY(60px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Scale up from 90% as it enters viewport */
+.lp-scroll-scale {
+  opacity: 0;
+  transform: scale(0.9);
+  animation: scrollScaleUp 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 60%;
+}
+
+@keyframes scrollScaleUp {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Slide in from left */
+.lp-scroll-left {
+  opacity: 0;
+  transform: translateX(-80px);
+  animation: scrollSlideLeft 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 50%;
+}
+
+@keyframes scrollSlideLeft {
+  from { opacity: 0; transform: translateX(-80px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Slide in from right */
+.lp-scroll-right {
+  opacity: 0;
+  transform: translateX(80px);
+  animation: scrollSlideRight 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 50%;
+}
+
+@keyframes scrollSlideRight {
+  from { opacity: 0; transform: translateX(80px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Dashboard 3D tilt reveal — starts tilted more, flattens as you scroll */
+.lp-scroll-tilt {
+  opacity: 0;
+  transform: perspective(1200px) rotateX(8deg) translateY(80px) scale(0.95);
+  animation: scrollTilt 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 70%;
+}
+
+@keyframes scrollTilt {
+  from { opacity: 0; transform: perspective(1200px) rotateX(8deg) translateY(80px) scale(0.95); }
+  to { opacity: 1; transform: perspective(1200px) rotateX(2deg) translateY(0) scale(1); }
+}
+
+/* Feature visual — slides in with slight rotation */
+.lp-scroll-visual {
+  opacity: 0;
+  transform: translateY(40px) rotate(1deg);
+  animation: scrollVisual 0.8s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 10% entry 50%;
+}
+
+@keyframes scrollVisual {
+  from { opacity: 0; transform: translateY(40px) rotate(1deg); }
+  to { opacity: 1; transform: translateY(0) rotate(0deg); }
+}
+
+/* Stagger delays for grid items */
+.lp-scroll-d1 { animation-delay: 0s; }
+.lp-scroll-d2 { animation-delay: 0.1s; }
+.lp-scroll-d3 { animation-delay: 0.15s; }
+.lp-scroll-d4 { animation-delay: 0.2s; }
+.lp-scroll-d5 { animation-delay: 0.25s; }
+.lp-scroll-d6 { animation-delay: 0.3s; }
+.lp-scroll-d7 { animation-delay: 0.35s; }
+.lp-scroll-d8 { animation-delay: 0.4s; }
+
+/* Progress bar that fills as you scroll */
+.lp-scroll-fill {
+  width: 0%;
+  animation: scrollFill 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 20% entry 80%;
+}
+
+@keyframes scrollFill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+/* Hero text — parallax effect (moves slower than scroll) */
+.lp-scroll-parallax {
+  animation: scrollParallax 1s linear both;
+  animation-timeline: view();
+  animation-range: exit 0% exit 100%;
+}
+
+@keyframes scrollParallax {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-100px); opacity: 0; }
+}
+
+/* Blur-in effect for text */
+.lp-scroll-blur {
+  opacity: 0;
+  filter: blur(10px);
+  animation: scrollBlurIn 0.8s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 40%;
+}
+
+@keyframes scrollBlurIn {
+  from { opacity: 0; filter: blur(10px); }
+  to { opacity: 1; filter: blur(0px); }
+}
+
+/* Counter number animation linked to scroll */
+.lp-scroll-counter {
+  animation: scrollCounter 1s ease-out both;
+  animation-timeline: view();
+  animation-range: entry 0% entry 50%;
+}
+
+/* Fallback for browsers without scroll-timeline support */
+@supports not (animation-timeline: view()) {
+  .lp-scroll-fade,
+  .lp-scroll-scale,
+  .lp-scroll-left,
+  .lp-scroll-right,
+  .lp-scroll-tilt,
+  .lp-scroll-visual,
+  .lp-scroll-blur {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    animation: none;
+  }
+  .lp-scroll-fill { width: 100%; animation: none; }
+  .lp-scroll-parallax { animation: none; }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .lp-scroll-fade,
+  .lp-scroll-scale,
+  .lp-scroll-left,
+  .lp-scroll-right,
+  .lp-scroll-tilt,
+  .lp-scroll-visual,
+  .lp-scroll-blur,
+  .lp-scroll-fill,
+  .lp-scroll-parallax {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .lp-scroll-fill { width: 100% !important; }
 }

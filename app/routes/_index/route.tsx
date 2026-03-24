@@ -3,6 +3,7 @@ import { redirect, Form, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import db from "../../lib/db.server";
 import { useState, useEffect, useRef } from "react";
+// No GSAP at module level — loaded dynamically in useEffect
 import "./landing.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -499,102 +500,131 @@ function VINDecodeDemo() {
   );
 }
 
-// ─── Dashboard Showcase ───
-function DashboardShowcase() {
+// ─── Interactive Dashboard (Linear-style hero) ───
+const IDASH_NAV = ["Dashboard", "Products", "Fitment", "Push to Shopify", "Collections", "YMME Database", "Settings"] as const;
+type IDashPage = typeof IDASH_NAV[number];
+
+const NAV_ICONS: Record<IDashPage, JSX.Element> = {
+  Dashboard: <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>,
+  Products: <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M2 4l6-2 6 2v8l-6 2-6-2z"/><path d="M8 6v8"/><path d="M2 4l6 2 6-2"/></svg>,
+  Fitment: <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6"/><path d="M5 8l2 2 4-4"/></svg>,
+  "Push to Shopify": <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M8 12V4"/><path d="M5 7l3-3 3 3"/><path d="M3 14h10"/></svg>,
+  Collections: <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="14" height="10" rx="1.5"/><path d="M4 4V3a1 1 0 011-1h6a1 1 0 011 1v1"/></svg>,
+  "YMME Database": <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="8" cy="4" rx="6" ry="2.5"/><path d="M2 4v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V4"/><path d="M2 8v4c0 1.38 2.69 2.5 6 2.5s6-1.12 6-2.5V8"/></svg>,
+  Settings: <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2.5"/><path d="M13.4 10a1.2 1.2 0 00.2 1.3l.04.04a1.44 1.44 0 11-2.04 2.04l-.04-.04a1.2 1.2 0 00-1.3-.2 1.2 1.2 0 00-.72 1.1v.12a1.44 1.44 0 11-2.88 0v-.06a1.2 1.2 0 00-.78-1.1 1.2 1.2 0 00-1.3.2l-.04.04A1.44 1.44 0 112.3 11.4l.04-.04a1.2 1.2 0 00.2-1.3 1.2 1.2 0 00-1.1-.72H1.32a1.44 1.44 0 010-2.88h.06a1.2 1.2 0 001.1-.78 1.2 1.2 0 00-.2-1.3l-.04-.04A1.44 1.44 0 114.3 2.3l.04.04a1.2 1.2 0 001.3.2h.06a1.2 1.2 0 00.72-1.1V1.32a1.44 1.44 0 012.88 0v.06a1.2 1.2 0 00.78 1.1 1.2 1.2 0 001.3-.2l.04-.04a1.44 1.44 0 012.04 2.04l-.04.04a1.2 1.2 0 00-.2 1.3v.06a1.2 1.2 0 001.1.72h.12a1.44 1.44 0 010 2.88h-.06a1.2 1.2 0 00-1.1.78z"/></svg>,
+};
+
+function IDashDashboard() {
+  return <>
+    <div className="idash-title">Dashboard</div>
+    <div className="idash-label">Quick Actions</div>
+    <div className="idash-actions">
+      <div className="idash-action"><span className="idash-dot" style={{ background:"#3b82f6" }}/> Fetch Products</div>
+      <div className="idash-action"><span className="idash-dot" style={{ background:"#f59e0b" }}/> Auto Extract <span className="idash-badge-orange">1,593 pending</span></div>
+      <div className="idash-action"><span className="idash-dot" style={{ background:"#22c55e" }}/> Manual Map</div>
+      <div className="idash-action idash-action-blue"><span className="idash-dot" style={{ background:"rgba(255,255,255,0.4)" }}/> Push to Shopify</div>
+    </div>
+    <div className="idash-stats-row">
+      <div className="idash-stat-card"><div className="idash-stat-num">2,844</div><div className="idash-stat-lbl">Total Products</div></div>
+      <div className="idash-stat-card"><div className="idash-stat-num">5,827</div><div className="idash-stat-lbl">Vehicle Links</div></div>
+      <div className="idash-stat-card"><div className="idash-stat-num">1,251</div><div className="idash-stat-lbl">Mapped</div></div>
+      <div className="idash-stat-card"><div className="idash-stat-num">44%</div><div className="idash-stat-lbl">Coverage</div></div>
+    </div>
+    <div className="idash-label">Fitment Coverage</div>
+    <div className="idash-progress-wrap">
+      <div className="idash-progress-bar"><div className="idash-progress-fill" style={{ width:"44%" }}/></div>
+      <div className="idash-progress-labels"><span>1,593 Needs Review</span><span>1,251 Mapped</span></div>
+    </div>
+    <div className="idash-bottom-row">
+      <div className="idash-bottom-card">
+        <div className="idash-label">Top Makes</div>
+        <div className="idash-kv"><span>Audi</span><strong>584</strong></div>
+        <div className="idash-kv"><span>Aria</span><strong>308</strong></div>
+        <div className="idash-kv"><span>Alfa Romeo</span><strong>103</strong></div>
+      </div>
+      <div className="idash-bottom-card">
+        <div className="idash-label">YMME Database</div>
+        <div className="idash-kv"><span>Makes</span><strong>374</strong></div>
+        <div className="idash-kv"><span>Models</span><strong>3,888</strong></div>
+        <div className="idash-kv"><span>Engines</span><strong>29,515</strong></div>
+      </div>
+    </div>
+  </>;
+}
+
+function IDashProducts() {
+  const rows = [
+    { name:"Eibach Pro-Kit Lowering Springs", status:"auto_mapped", tone:"green", fitments:12 },
+    { name:"MST Performance BMW Intake", status:"auto_mapped", tone:"green", fitments:8 },
+    { name:"Scorpion Exhaust System", status:"unmapped", tone:"gray", fitments:0 },
+    { name:"Bilstein B14 Coilover Kit", status:"flagged", tone:"orange", fitments:3 },
+    { name:"K&N Air Filter BMW E90", status:"auto_mapped", tone:"green", fitments:15 },
+  ];
+  return <>
+    <div className="idash-title">Products <span className="idash-title-sub">2,844 products</span></div>
+    <table className="idash-table">
+      <thead><tr><th>Product</th><th>Status</th><th>Fitments</th></tr></thead>
+      <tbody>{rows.map((r,i)=><tr key={i}>
+        <td className="idash-td-name">{r.name}</td>
+        <td><span className={`idash-status-badge idash-status-${r.tone}`}>{r.status}</span></td>
+        <td className="idash-td-num">{r.fitments}</td>
+      </tr>)}</tbody>
+    </table>
+  </>;
+}
+
+function IDashPush() {
+  return <>
+    <div className="idash-title">Push to Shopify</div>
+    <button className="idash-push-btn">Push All Mapped Products</button>
+    <div className="idash-push-checks">
+      <label className="idash-check"><input type="checkbox" defaultChecked readOnly/> Push Tags</label>
+      <label className="idash-check"><input type="checkbox" defaultChecked readOnly/> Push Metafields</label>
+      <label className="idash-check"><input type="checkbox" defaultChecked readOnly/> Create Collections</label>
+    </div>
+    <div className="idash-push-last">2,844 products pushed &middot; 1h ago</div>
+  </>;
+}
+
+function IDashCollections() {
+  const cols = [
+    { name:"BMW Parts", count:423, logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" },
+    { name:"Audi Parts", count:312, logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png" },
+    { name:"Mercedes Parts", count:189, logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mercedes-benz.png" },
+    { name:"Volkswagen Parts", count:156, logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/volkswagen.png" },
+  ];
+  return <>
+    <div className="idash-title">Collections <span className="idash-title-sub">1,125 collections</span></div>
+    <div className="idash-col-grid">
+      {cols.map((c,i)=><div key={i} className="idash-col-card">
+        <img src={c.logo} alt="" className="idash-col-logo"/>
+        <div className="idash-col-name">{c.name}</div>
+        <div className="idash-col-count">{c.count} products</div>
+      </div>)}
+    </div>
+  </>;
+}
+
+function InteractiveDashboard() {
+  const [page, setPage] = useState<IDashPage>("Dashboard");
   return (
-    <div className="lp-dash-wrapper">
-      <div className="lp-dash-glow" />
-      <div className="lp-dash-browser">
-        {/* Browser chrome */}
-        <div className="lp-dash-chrome">
-          <div className="lp-dash-chrome-dots">
-            <span className="lp-dash-dot red" />
-            <span className="lp-dash-dot yellow" />
-            <span className="lp-dash-dot green" />
+    <div className="lp-interactive-dash">
+      <div className="lp-idash-sidebar">
+        <div className="lp-idash-logo">{I.logo(16)} AutoSync</div>
+        {IDASH_NAV.map(n=>(
+          <div key={n} className={`lp-idash-nav-item ${page===n?"active":""}`} onClick={()=>setPage(n)}>
+            {NAV_ICONS[n]} {n}
           </div>
-          <div className="lp-dash-chrome-title">AutoSync Dashboard</div>
-        </div>
-        <div className="lp-dash-body">
-          {/* Sidebar */}
-          <div className="lp-dash-sidebar">
-            <div className="lp-dash-sidebar-logo">{I.logo(14)} <span>AutoSync</span></div>
-            <div className="lp-dash-nav-item active">Dashboard</div>
-            <div className="lp-dash-nav-item">Products</div>
-            <div className="lp-dash-nav-item">Fitment</div>
-            <div className="lp-dash-nav-item">Push to Shopify</div>
-            <div className="lp-dash-nav-item">Collections</div>
-            <div className="lp-dash-nav-item">Settings</div>
-          </div>
-          {/* Main content */}
-          <div className="lp-dash-main">
-            <div className="lp-dash-main-title">Dashboard</div>
-            {/* Quick Actions */}
-            <div className="lp-dash-section-label">Quick Actions</div>
-            <div className="lp-dash-actions">
-              <div className="lp-dash-action-card">
-                <div className="lp-dash-action-icon" style={{ background:"#eff6ff", color:"#2563eb" }}>&#9679;</div>
-                <div className="lp-dash-action-name">Fetch Products</div>
-              </div>
-              <div className="lp-dash-action-card">
-                <div className="lp-dash-action-icon" style={{ background:"#fef3c7", color:"#d97706" }}>&#9679;</div>
-                <div className="lp-dash-action-name">Auto Extract</div>
-                <span className="lp-dash-action-badge">1,593 pending</span>
-              </div>
-              <div className="lp-dash-action-card">
-                <div className="lp-dash-action-icon" style={{ background:"#f0fdf4", color:"#16a34a" }}>&#9679;</div>
-                <div className="lp-dash-action-name">Manual Map</div>
-              </div>
-              <div className="lp-dash-action-card lp-dash-action-highlight">
-                <div className="lp-dash-action-icon" style={{ background:"rgba(255,255,255,0.2)", color:"#fff" }}>&#9679;</div>
-                <div className="lp-dash-action-name">Push to Shopify</div>
-              </div>
-            </div>
-            {/* Stats row */}
-            <div className="lp-dash-stats-row">
-              <div className="lp-dash-stat-card">
-                <div className="lp-dash-stat-num">2,844</div>
-                <div className="lp-dash-stat-lbl">Total Products</div>
-              </div>
-              <div className="lp-dash-stat-card">
-                <div className="lp-dash-stat-num">5,827</div>
-                <div className="lp-dash-stat-lbl">Vehicle Links</div>
-              </div>
-              <div className="lp-dash-stat-card">
-                <div className="lp-dash-stat-num">1,251</div>
-                <div className="lp-dash-stat-lbl">Mapped</div>
-              </div>
-              <div className="lp-dash-stat-card">
-                <div className="lp-dash-stat-num">44%</div>
-                <div className="lp-dash-stat-lbl">Coverage</div>
-              </div>
-            </div>
-            {/* Progress bar */}
-            <div className="lp-dash-section-label">Fitment Coverage</div>
-            <div className="lp-dash-progress-wrap">
-              <div className="lp-dash-progress-bar">
-                <div className="lp-dash-progress-fill" style={{ width:"44%" }} />
-              </div>
-              <div className="lp-dash-progress-labels">
-                <span>1,593 Needs Review</span>
-                <span>1,251 Mapped</span>
-              </div>
-            </div>
-            {/* Bottom row */}
-            <div className="lp-dash-bottom-row">
-              <div className="lp-dash-bottom-card">
-                <div className="lp-dash-section-label">Top Makes</div>
-                <div className="lp-dash-make-row"><span>Audi</span><span className="lp-dash-make-count">584</span></div>
-                <div className="lp-dash-make-row"><span>Aria</span><span className="lp-dash-make-count">308</span></div>
-                <div className="lp-dash-make-row"><span>Alfa Romeo</span><span className="lp-dash-make-count">103</span></div>
-              </div>
-              <div className="lp-dash-bottom-card">
-                <div className="lp-dash-section-label">YMME Database</div>
-                <div className="lp-dash-make-row"><span>Makes</span><span className="lp-dash-make-count">374</span></div>
-                <div className="lp-dash-make-row"><span>Models</span><span className="lp-dash-make-count">3,888</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        ))}
+      </div>
+      <div className="lp-idash-main">
+        {page==="Dashboard" && <IDashDashboard/>}
+        {page==="Products" && <IDashProducts/>}
+        {page==="Push to Shopify" && <IDashPush/>}
+        {page==="Collections" && <IDashCollections/>}
+        {page!=="Dashboard" && page!=="Products" && page!=="Push to Shopify" && page!=="Collections" && (
+          <><div className="idash-title">{page}</div><div className="idash-placeholder">Select a section from the sidebar to view its content.</div></>
+        )}
       </div>
     </div>
   );
@@ -723,10 +753,31 @@ export default function LandingPage() {
   const [shop, setShop] = useState("");
   const [showMorePlans, setShowMorePlans] = useState(false);
 
+  const heroRef = useRef<HTMLDivElement>(null);
+  const dashRef = useRef<HTMLDivElement>(null);
+  const dashSectionRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
+  }, []);
+
+  // Scroll-driven animations using vanilla JS (no GSAP — SSR safe)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Hero parallax on scroll
+    const onScroll = () => {
+      const scrollY = window.scrollY;
+      if (heroRef.current) {
+        const progress = Math.min(scrollY / 600, 1);
+        heroRef.current.style.transform = `translateY(${-progress * 80}px)`;
+        heroRef.current.style.opacity = `${1 - progress}`;
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const visiblePlans = showMorePlans ? PLANS : PLANS.slice(0, 3);
@@ -752,19 +803,21 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="lp-hero">
         <div className="lp-w" style={{ position:"relative", zIndex:1 }}>
-          <Reveal>
-            <h1>Vehicle fitment<br/><span className="lp-grad">intelligence</span> for Shopify</h1>
-            <p className="lp-hero-sub">Help customers find parts that fit. YMME search, auto-extraction, smart collections, and 7 storefront widgets for automotive e-commerce.</p>
-            <div className="lp-hero-ctas">
-              <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial {I.arr}</a>
-              <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg">See Features</a>
-            </div>
-            {/* Built for Shopify badge */}
-            <div className="lp-shopify-badge">
-              <ShopifyBag />
-              <span>Built for Shopify</span>
-            </div>
-          </Reveal>
+          <div ref={heroRef}>
+            <Reveal>
+              <h1>Vehicle fitment<br/><span className="lp-grad">intelligence</span> for Shopify</h1>
+              <p className="lp-hero-sub">Help customers find parts that fit. YMME search, auto-extraction, smart collections, and 7 storefront widgets for automotive e-commerce.</p>
+              <div className="lp-hero-ctas">
+                <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial {I.arr}</a>
+                <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg">See Features</a>
+              </div>
+              {/* Built for Shopify badge */}
+              <div className="lp-shopify-badge">
+                <ShopifyBag />
+                <span>Built for Shopify</span>
+              </div>
+            </Reveal>
+          </div>
           <Reveal delay={0.15}>
             <div className="lp-stats">
               <Stat value={stats.makes} label="Vehicle Makes" />
@@ -778,12 +831,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Dashboard Showcase ── */}
-      <section className="lp-hero-showcase">
+      {/* ── Interactive Dashboard ── */}
+      <section ref={dashSectionRef} className="lp-hero-showcase">
         <div className="lp-w">
-          <Reveal className="lp-dash-reveal">
-            <DashboardShowcase />
-          </Reveal>
+          <div ref={dashRef} className="lp-dash-glow-wrap">
+            <div className="lp-dash-glow" />
+            <InteractiveDashboard />
+          </div>
         </div>
       </section>
 
@@ -801,7 +855,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-left">
                 <span className="lp-tag">YMME Search Widget</span>
                 <h3>Cascading vehicle search with brand logos</h3>
                 <p>Customers select Make, Model, Year, Engine from your active vehicle database. Custom dropdown with searchable brand logos, My Garage for saved vehicles, and localStorage persistence across pages.</p>
@@ -812,7 +866,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Collection Redirect</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><YMMEDemo /></div>
+              <div className="lp-feature-visual lp-scroll-visual"><YMMEDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -823,7 +877,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-right">
                 <span className="lp-tag">UK Plate Lookup</span>
                 <h3>DVLA integration with MOT history</h3>
                 <p>Enterprise customers enter their UK registration number to instantly see vehicle details, MOT test history, tax status, and compatible parts. Powered by DVLA VES and DVSA MOT History APIs.</p>
@@ -834,7 +888,7 @@ export default function LandingPage() {
                   <span className="lp-pill">YMME Resolution</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><PlateDemo /></div>
+              <div className="lp-feature-visual lp-scroll-visual"><PlateDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -845,7 +899,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-left">
                 <span className="lp-tag">Compatibility Table</span>
                 <h3>Full vehicle compatibility on every product</h3>
                 <p>Product pages show a clear table of all compatible vehicles with Make, Model, Year range, and Engine. Customers know exactly if a part fits before adding to cart.</p>
@@ -855,7 +909,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Metafield Powered</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><CompatDemo /></div>
+              <div className="lp-feature-visual lp-scroll-visual"><CompatDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -866,7 +920,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-right">
                 <span className="lp-tag">Fitment Badge</span>
                 <h3>Instant compatibility check on every product</h3>
                 <p>A visual badge on every product page that shows whether the part fits the customer&apos;s saved vehicle. Green for compatible, red for incompatible, neutral if no vehicle selected.</p>
@@ -876,7 +930,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Reduce Returns</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><BadgeDemo /></div>
+              <div className="lp-feature-visual lp-scroll-visual"><BadgeDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -887,7 +941,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-left">
                 <span className="lp-tag">Vehicle Spec Pages</span>
                 <h3>SEO-optimized specification pages</h3>
                 <p>Auto-generated vehicle specification pages pushed as Shopify metaobjects. 90+ engine specs per vehicle with structured data for search engines. Browse and search your entire vehicle database.</p>
@@ -898,7 +952,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Searchable</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-feature-visual-wide"><VehicleSpecsDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-wide lp-scroll-visual"><VehicleSpecsDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -909,7 +963,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-right">
                 <span className="lp-tag">Vehicle Spec Detail</span>
                 <h3>Rich vehicle detail pages with performance data</h3>
                 <p>Each vehicle specification page features a hero section, quick stats, tabbed engine/performance/drivetrain data, and full specification tables. Customers see exactly what engine specs match their vehicle.</p>
@@ -920,7 +974,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Dimensions</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-feature-visual-detail"><VehicleSpecDetailDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-detail lp-scroll-visual"><VehicleSpecDetailDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -931,7 +985,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text">
+              <div className="lp-feature-text lp-scroll-left">
                 <span className="lp-tag">VIN Decode</span>
                 <h3>Decode any Vehicle Identification Number</h3>
                 <p>Customers paste their 17-character VIN to instantly identify their exact vehicle specification, engine code, and compatible parts. Works with all major vehicle manufacturers worldwide.</p>
@@ -941,7 +995,7 @@ export default function LandingPage() {
                   <span className="lp-pill">All Manufacturers</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><VINDecodeDemo /></div>
+              <div className="lp-feature-visual lp-scroll-visual"><VINDecodeDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -950,7 +1004,7 @@ export default function LandingPage() {
       {/* ── How It Works ── */}
       <section className="lp-section">
         <div className="lp-w">
-          <Reveal><div className="lp-section-header center">
+          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
             <span className="lp-tag">How It Works</span>
             <div className="lp-h2">From install to sales in 4 steps</div>
           </div></Reveal>
@@ -959,7 +1013,7 @@ export default function LandingPage() {
               { n:"2", t:"Auto-Extract", d:"Smart extraction scans product data and detects vehicle compatibility with 80%+ accuracy. No manual work." },
               { n:"3", t:"Push to Shopify", d:"Push tags, metafields, and smart collections. Search & Discovery filters activate automatically." },
               { n:"4", t:"Sell More Parts", d:"Customers find parts that fit their vehicle. Fewer returns, higher conversions, better SEO." },
-            ].map((s,i)=><Reveal key={i} delay={i*0.08}>
+            ].map((s,i)=><Reveal key={i} delay={i*0.08} className={`lp-scroll-fade lp-scroll-d${i+1}`}>
               <div style={{ padding:"24px 20px", borderRadius:"var(--radius)", border:"1px solid var(--border)", background:"var(--bg-elevated)", textAlign:"center" }}>
                 <div style={{ width:36, height:36, borderRadius:"50%", background:"var(--accent)", color:"#fff", fontSize:16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>{s.n}</div>
                 <h3 style={{ fontSize:14, fontWeight:600, marginBottom:6, letterSpacing:"-0.01em" }}>{s.t}</h3>
@@ -973,13 +1027,13 @@ export default function LandingPage() {
       {/* ── Systems ── */}
       <section id="systems" className="lp-section lp-section-alt">
         <div className="lp-w">
-          <Reveal><div className="lp-section-header center">
+          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
             <span className="lp-tag">Platform</span>
             <div className="lp-h2">Every system, explained</div>
             <p className="lp-sub">AutoSync is a complete platform with 14+ integrated systems working together.</p>
           </div></Reveal>
           <div className="lp-systems">
-            {SYSTEMS.map((sys,i) => <Reveal key={i} delay={i*0.04}><div className="lp-sys">
+            {SYSTEMS.map((sys,i) => <Reveal key={i} delay={i*0.04} className={`lp-scroll-fade lp-scroll-d${i+1}`}><div className="lp-sys">
               <div className="lp-sys-icon">{SYSTEM_ICONS[i]}</div>
               <h3>{sys.t}</h3>
               <p>{sys.d}</p>
@@ -992,13 +1046,13 @@ export default function LandingPage() {
       {/* ── Pricing ── */}
       <section id="pricing" className="lp-section">
         <div className="lp-w">
-          <Reveal><div className="lp-section-header center">
+          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
             <span className="lp-tag">Pricing</span>
             <div className="lp-h2">Simple, transparent pricing</div>
             <p className="lp-sub">Start free. Scale as you grow. Cancel anytime.</p>
           </div></Reveal>
           <div className="lp-pricing">
-            {visiblePlans.map((p,i) => <Reveal key={i} delay={i*0.04}><div className={`lp-price ${p.pop?"pop":""}`}>
+            {visiblePlans.map((p,i) => <Reveal key={i} delay={i*0.04} className={`lp-scroll-scale lp-scroll-d${i+1}`}><div className={`lp-price ${p.pop?"pop":""}`}>
               {p.pop && <div className="lp-price-badge">Most Popular</div>}
               <div className="lp-price-name">{p.name}</div>
               <div style={{ marginBottom:14 }}>
@@ -1029,7 +1083,7 @@ export default function LandingPage() {
       {/* ── Compare ── */}
       <section id="compare" className="lp-section lp-section-alt">
         <div className="lp-w">
-          <Reveal><div className="lp-section-header center">
+          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
             <span className="lp-tag">Comparison</span>
             <div className="lp-h2">AutoSync vs the competition</div>
           </div></Reveal>
@@ -1054,12 +1108,12 @@ export default function LandingPage() {
       {/* ── FAQ ── */}
       <section id="faq" className="lp-section">
         <div className="lp-w">
-          <Reveal><div className="lp-section-header center">
+          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
             <span className="lp-tag">FAQ</span>
             <div className="lp-h2">Frequently asked questions</div>
           </div></Reveal>
           <div className="lp-faq-list">
-            {FAQS.map((item,i) => <Reveal key={i} delay={i*0.03}><div className={`lp-faq ${faq===i?"open":""}`}>
+            {FAQS.map((item,i) => <Reveal key={i} delay={i*0.03} className={`lp-scroll-fade lp-scroll-d${i+1}`}><div className={`lp-faq ${faq===i?"open":""}`}>
               <button className="lp-faq-q" onClick={() => setFaq(faq===i?null:i)}>{item.q}<span className="lp-faq-ico">+</span></button>
               {faq===i && <div className="lp-faq-a">{item.a}</div>}
             </div></Reveal>)}
