@@ -413,14 +413,14 @@ body { margin: 0; padding: 0; background: #09090b; }
 .ymme-find-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 0 20px; height: 44px; border-radius: 8px; font-size: 14px; font-weight: 600;
-  background: #2563eb; color: #fff !important; border: none; cursor: pointer;
+  background: #2563eb !important; color: #fff !important; border: none !important; cursor: pointer;
   transition: background 0.15s; white-space: nowrap; width: 100%;
 }
-.ymme-find-btn:hover { background: #1d4ed8; }
+.ymme-find-btn:hover { background: #1d4ed8 !important; }
 .ymme-find-btn svg { flex-shrink: 0; }
 .demo-garage-btn {
   padding: 10px 12px; position: relative;
-  background: #fff; border: 1.5px solid #d1d5db !important;
+  background: #fff !important; border: 1.5px solid #d1d5db !important;
   border-radius: 8px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: border-color 0.15s;
