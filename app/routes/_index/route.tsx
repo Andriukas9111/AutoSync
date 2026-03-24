@@ -763,21 +763,88 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  // Scroll-driven animations using vanilla JS (no GSAP — SSR safe)
+  // GSAP ScrollTrigger — loaded dynamically to avoid SSR crash
   useEffect(() => {
     if (typeof window === "undefined") return;
+    let ctx: any;
 
-    // Hero parallax on scroll
-    const onScroll = () => {
-      const scrollY = window.scrollY;
-      if (heroRef.current) {
-        const progress = Math.min(scrollY / 600, 1);
-        heroRef.current.style.transform = `translateY(${-progress * 80}px)`;
-        heroRef.current.style.opacity = `${1 - progress}`;
+    (async () => {
+      try {
+        const { gsap } = await import("gsap");
+        const { ScrollTrigger } = await import("gsap/ScrollTrigger");
+        gsap.registerPlugin(ScrollTrigger);
+
+        ctx = gsap.context(() => {
+          // Hero parallax: fade out and move up
+          if (heroRef.current) {
+            gsap.to(heroRef.current, {
+              y: -120, opacity: 0, ease: "none",
+              scrollTrigger: { trigger: heroRef.current, start: "top top", end: "bottom top", scrub: true },
+            });
+          }
+
+          // Dashboard entrance: scale up from below
+          if (dashRef.current) {
+            gsap.fromTo(dashRef.current,
+              { y: 80, opacity: 0, scale: 0.95 },
+              { y: 0, opacity: 1, scale: 1, ease: "power2.out",
+                scrollTrigger: { trigger: dashRef.current, start: "top 90%", end: "top 50%", scrub: true },
+              }
+            );
+          }
+
+          // Pin dashboard while scrolling
+          if (dashSectionRef.current) {
+            ScrollTrigger.create({
+              trigger: dashSectionRef.current, start: "top 15%", end: "+=500",
+              pin: true, pinSpacing: true,
+            });
+          }
+
+          // Feature rows: text slides from left, visual from right (scrubbed)
+          document.querySelectorAll(".lp-feature-row").forEach((row) => {
+            const text = row.querySelector(".lp-feature-text");
+            const visual = row.querySelector(".lp-feature-visual, .lp-feature-visual-wide, .lp-feature-visual-detail");
+            if (text) {
+              gsap.fromTo(text,
+                { x: -60, opacity: 0 },
+                { x: 0, opacity: 1, ease: "power2.out",
+                  scrollTrigger: { trigger: row, start: "top 85%", end: "top 45%", scrub: true },
+                }
+              );
+            }
+            if (visual) {
+              gsap.fromTo(visual,
+                { x: 60, opacity: 0, scale: 0.97 },
+                { x: 0, opacity: 1, scale: 1, ease: "power2.out",
+                  scrollTrigger: { trigger: row, start: "top 85%", end: "top 45%", scrub: true },
+                }
+              );
+            }
+          });
+
+          // System cards stagger
+          gsap.fromTo(".lp-sys-card",
+            { y: 40, opacity: 0 },
+            { y: 0, opacity: 1, stagger: 0.08, ease: "power2.out",
+              scrollTrigger: { trigger: ".lp-systems-grid", start: "top 80%", end: "top 40%", scrub: true },
+            }
+          );
+
+          // Pricing cards scale up
+          gsap.fromTo(".lp-price-card",
+            { y: 30, opacity: 0, scale: 0.95 },
+            { y: 0, opacity: 1, scale: 1, stagger: 0.1, ease: "power2.out",
+              scrollTrigger: { trigger: "#pricing", start: "top 80%", end: "top 40%", scrub: true },
+            }
+          );
+        });
+      } catch (_e) {
+        // GSAP failed to load — CSS scroll-timeline fallback handles it
       }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    })();
+
+    return () => { if (ctx) ctx.revert(); };
   }, []);
 
   const visiblePlans = showMorePlans ? PLANS : PLANS.slice(0, 3);
