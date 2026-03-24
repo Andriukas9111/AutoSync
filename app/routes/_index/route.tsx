@@ -78,32 +78,32 @@ export default function LandingPage() {
       <style dangerouslySetInnerHTML={{ __html: `
         *{margin:0;padding:0;box-sizing:border-box}
         html{scroll-behavior:smooth}
-        body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased}
+        body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;background:#09090b;-webkit-font-smoothing:antialiased}
 
         /* Nav */
         .as-nav{position:fixed;top:0;left:0;right:0;z-index:100;transition:all .3s}
-        .as-nav--solid{background:rgba(255,255,255,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,0,0,.06);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+        .as-nav--solid{background:rgba(9,9,11,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06)}
         .as-nav-inner{max-width:1200px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
-        .as-nav-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;color:#0f172a;text-decoration:none}
+        .as-nav-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;color:#fff;text-decoration:none}
         .as-nav-links{display:flex;align-items:center;gap:32px}
-        .as-nav-links a{color:#64748b;text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
-        .as-nav-links a:hover{color:#0f172a}
+        .as-nav-links a{color:rgba(255,255,255,.5);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
+        .as-nav-links a:hover{color:#fff}
         .as-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:all .2s;cursor:pointer;border:none}
         .as-btn--primary{background:#005bd2;color:#fff}
         .as-btn--primary:hover{background:#0047a8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,91,210,.3)}
-        .as-btn--outline{background:transparent;color:#0f172a;border:1px solid #d1d5db}
-        .as-btn--outline:hover{border-color:#005bd2;color:#005bd2}
+        .as-btn--outline{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.15)}
+        .as-btn--outline:hover{border-color:rgba(255,255,255,.3);color:#fff}
         .as-btn--large{padding:14px 32px;font-size:16px;border-radius:10px}
         .as-btn--white{background:#fff;color:#0f172a}
         .as-btn--white:hover{background:#f1f5f9;transform:translateY(-1px)}
 
         /* Hero */
-        .as-hero{padding:140px 24px 100px;background:linear-gradient(180deg,#0a0f1e 0%,#0f1d3a 50%,#0f172a 100%);color:#fff;position:relative;overflow:hidden}
-        .as-hero::before{content:'';position:absolute;top:50%;left:50%;width:800px;height:800px;background:radial-gradient(circle,rgba(0,91,210,.12) 0%,transparent 70%);transform:translate(-50%,-50%);pointer-events:none}
+        .as-hero{padding:140px 24px 100px;background:#09090b;color:#fff;position:relative;overflow:hidden}
+        .as-hero::before{content:'';position:absolute;top:50%;left:50%;width:800px;height:800px;background:radial-gradient(circle,rgba(0,91,210,.08) 0%,transparent 70%);transform:translate(-50%,-50%);pointer-events:none}
         .as-hero-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
         .as-hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,91,210,.15);border:1px solid rgba(0,91,210,.3);border-radius:100px;padding:6px 16px 6px 8px;font-size:13px;color:#93c5fd;margin-bottom:24px}
         .as-hero-badge-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
-        .as-hero h1{font-size:clamp(36px,5vw,56px);font-weight:800;line-height:1.08;letter-spacing:-2px;margin-bottom:20px}
+        .as-hero h1{font-size:clamp(36px,5vw,56px);font-weight:500;line-height:1.08;letter-spacing:-2px;margin-bottom:20px}
         .as-hero h1 span{background:linear-gradient(135deg,#60a5fa,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
         .as-hero p{font-size:18px;line-height:1.7;color:rgba(255,255,255,.65);max-width:500px;margin-bottom:32px}
         .as-hero-ctas{display:flex;gap:12px;flex-wrap:wrap}
@@ -119,65 +119,65 @@ export default function LandingPage() {
         .as-wp-btn{width:100%;padding:10px;background:#005bd2;border:none;border-radius:6px;color:#fff;font-weight:600;font-size:14px;cursor:pointer}
 
         /* Stats */
-        .as-stats{padding:60px 24px;border-bottom:1px solid #f1f5f9}
+        .as-stats{padding:60px 24px;border-bottom:1px solid rgba(255,255,255,.06);background:#09090b}
         .as-stats-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:40px;text-align:center}
         .as-stat-num{font-size:clamp(32px,4vw,48px);font-weight:800;color:#005bd2;letter-spacing:-1px}
-        .as-stat-label{font-size:14px;color:#64748b;margin-top:4px}
+        .as-stat-label{font-size:14px;color:rgba(255,255,255,.4);margin-top:4px}
 
         /* Section headers */
-        .as-section{padding:100px 24px}
-        .as-section--alt{background:#f8fafc}
+        .as-section{padding:120px 24px;background:#09090b}
+        .as-section--alt{background:#111113}
         .as-section--dark{background:#0f172a;color:#fff}
         .as-section-inner{max-width:1100px;margin:0 auto}
         .as-section-header{text-align:center;margin-bottom:64px}
         .as-section-tag{font-size:13px;font-weight:600;color:#005bd2;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
-        .as-section-title{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
-        .as-section-desc{font-size:18px;color:#64748b;max-width:560px;margin:0 auto;line-height:1.7}
+        .as-section-title{font-size:clamp(28px,4vw,44px);font-weight:500;color:#fff;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
+        .as-section-desc{font-size:17px;color:rgba(255,255,255,.4);max-width:560px;margin:0 auto;line-height:1.7}
         .as-section--dark .as-section-desc{color:rgba(255,255,255,.6)}
 
         /* Widget Showcase */
         .as-showcase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
-        .as-browser{background:#fff;border-radius:10px;border:1px solid #e2e8f0;overflow:hidden;transition:transform .3s,box-shadow .3s}
-        .as-browser:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
-        .as-browser-bar{background:#f1f5f9;padding:10px 16px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #e2e8f0}
+        .as-browser{background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(255,255,255,.08);overflow:hidden;transition:transform .3s,box-shadow .3s}
+        .as-browser:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,91,210,.06)}
+        .as-browser-bar{background:rgba(255,255,255,.02);padding:10px 16px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,.06)}
         .as-browser-dot{width:8px;height:8px;border-radius:50%}
         .as-browser-url{font-size:11px;color:#94a3b8;margin-left:10px}
         .as-browser-body{padding:20px}
 
         /* Feature cards */
         .as-features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-        .as-feature{background:#fff;border:1px solid #e8ecf1;border-radius:10px;padding:28px;transition:all .25s}
-        .as-feature:hover{border-color:#005bd2;box-shadow:0 8px 24px rgba(0,91,210,.08);transform:translateY(-2px)}
-        .as-feature-icon{width:40px;height:40px;border-radius:10px;background:#e8f0fe;display:flex;align-items:center;justify-content:center;color:#005bd2;margin-bottom:16px}
-        .as-feature h3{font-size:17px;font-weight:700;margin-bottom:8px}
-        .as-feature p{font-size:14px;color:#64748b;line-height:1.65}
+        .as-feature{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:28px;transition:all .25s}
+        .as-feature:hover{border-color:rgba(0,91,210,.4);box-shadow:0 0 30px rgba(0,91,210,.06);transform:translateY(-2px)}
+        .as-feature-icon{width:40px;height:40px;border-radius:10px;background:rgba(0,91,210,.1);display:flex;align-items:center;justify-content:center;color:#005bd2;margin-bottom:16px}
+        .as-feature h3{font-size:17px;font-weight:600;color:#fff;margin-bottom:8px}
+        .as-feature p{font-size:14px;color:rgba(255,255,255,.4);line-height:1.65}
 
         /* Steps */
         .as-steps{display:flex;justify-content:center;gap:60px;flex-wrap:wrap}
         .as-step{text-align:center;max-width:220px}
         .as-step-num{width:48px;height:48px;border-radius:50%;background:#005bd2;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin:0 auto 16px}
-        .as-step h3{font-size:18px;font-weight:700;margin-bottom:8px}
-        .as-step p{font-size:14px;color:#64748b;line-height:1.6}
+        .as-step h3{font-size:18px;font-weight:600;color:#fff;margin-bottom:8px}
+        .as-step p{font-size:14px;color:rgba(255,255,255,.4);line-height:1.6}
 
         /* Pricing */
         .as-pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
-        .as-plan{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:28px 20px;position:relative;transition:all .25s}
-        .as-plan:hover{border-color:#005bd2;box-shadow:0 4px 20px rgba(0,91,210,.1)}
-        .as-plan--featured{border-color:#005bd2;box-shadow:0 4px 20px rgba(0,91,210,.12);transform:scale(1.03)}
+        .as-plan{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:28px 20px;position:relative;transition:all .25s}
+        .as-plan:hover{border-color:rgba(0,91,210,.4);box-shadow:0 0 20px rgba(0,91,210,.06)}
+        .as-plan--featured{border-color:rgba(0,91,210,.5);box-shadow:0 0 30px rgba(0,91,210,.1);transform:scale(1.03)}
         .as-plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#005bd2;color:#fff;font-size:11px;font-weight:700;padding:4px 14px;border-radius:100px;white-space:nowrap}
-        .as-plan-name{font-size:14px;font-weight:600;color:#64748b;margin-bottom:8px}
-        .as-plan-price{font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:4px}
+        .as-plan-name{font-size:14px;font-weight:500;color:rgba(255,255,255,.5);margin-bottom:8px}
+        .as-plan-price{font-size:36px;font-weight:600;color:#fff;letter-spacing:-1px;margin-bottom:4px}
         .as-plan-price span{font-size:14px;font-weight:400;color:#94a3b8}
         .as-plan-limit{font-size:13px;color:#005bd2;margin-bottom:16px}
         .as-plan-features{list-style:none;padding:0;margin:0 0 20px}
-        .as-plan-features li{font-size:13px;color:#475569;padding:5px 0;display:flex;align-items:flex-start;gap:6px}
+        .as-plan-features li{font-size:13px;color:rgba(255,255,255,.45);padding:5px 0;display:flex;align-items:flex-start;gap:6px}
         .as-plan-features li::before{content:'✓';color:#005bd2;font-weight:700;flex-shrink:0}
 
         /* Comparison */
         .as-compare{width:100%;border-collapse:collapse;font-size:14px}
-        .as-compare th{text-align:left;padding:14px 16px;font-weight:600;border-bottom:2px solid #e2e8f0}
-        .as-compare td{padding:12px 16px;border-bottom:1px solid #f1f5f9}
-        .as-compare tr:hover td{background:#f8fafc}
+        .as-compare th{text-align:left;padding:14px 16px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);color:#fff}
+        .as-compare td{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(255,255,255,.5)}
+        .as-compare tr:hover td{background:rgba(255,255,255,.02)}
         .as-compare .as-check{color:#22c55e;font-weight:700}
         .as-compare .as-cross{color:#ef4444}
         .as-compare .as-highlight{color:#005bd2;font-weight:700}
@@ -186,10 +186,10 @@ export default function LandingPage() {
         .as-cta{text-align:center;padding:80px 24px}
 
         /* Login */
-        .as-login{max-width:400px;margin:0 auto;background:#fff;border-radius:10px;border:1px solid #e2e8f0;padding:32px;text-align:center}
-        .as-login h3{font-size:18px;font-weight:700;margin-bottom:16px}
+        .as-login{max-width:400px;margin:0 auto;background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(255,255,255,.08);padding:32px;text-align:center}
+        .as-login h3{font-size:18px;font-weight:500;color:#fff;margin-bottom:16px}
         .as-login-row{display:flex;gap:8px}
-        .as-login input{flex:1;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:15px}
+        .as-login input{flex:1;padding:10px 14px;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:15px;background:rgba(255,255,255,.05);color:#fff}
         .as-login input:focus{outline:none;border-color:#005bd2;box-shadow:0 0 0 3px rgba(0,91,210,.1)}
 
         /* Footer */
@@ -301,14 +301,14 @@ export default function LandingPage() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
                   {[["Make", "BMW"], ["Model", "3 Series"], ["Year", "2022"], ["Engine", "M340i 382 Hp"]].map(([l, v]) => (
-                    <div key={l} style={{ border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 12px" }}>
-                      <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1 }}>{l}</div>
+                    <div key={l} style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 6, padding: "8px 12px" }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: 1 }}>{l}</div>
                       <div style={{ fontSize: 14, fontWeight: 600 }}>{v}</div>
                     </div>
                   ))}
                 </div>
                 <div style={{ background: "#005bd2", color: "#fff", textAlign: "center", padding: 10, borderRadius: 6, fontWeight: 600, fontSize: 14 }}>🔍 Find Parts</div>
-                <div style={{ textAlign: "center", fontSize: 10, color: "#94a3b8", marginTop: 8, opacity: .5 }}>Powered by AutoSync</div>
+                <div style={{ textAlign: "center", fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 8, opacity: .5 }}>Powered by AutoSync</div>
               </div>
             </div>
 
@@ -323,7 +323,7 @@ export default function LandingPage() {
               <div className="as-browser-body" style={{ textAlign: "center" }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Find Parts by Registration</div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
-                  <div style={{ display: "flex", border: "2px solid #1a1a2e", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{ display: "flex", border: "2px solid rgba(255,255,255,.2)", borderRadius: 6, overflow: "hidden" }}>
                     <div style={{ background: "#003da5", color: "#fff", padding: "8px 6px", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center" }}>GB</div>
                     <div style={{ background: "#f4c542", padding: "8px 14px", fontWeight: 700, fontSize: 16 }}>BD18 JYC</div>
                   </div>
@@ -351,16 +351,16 @@ export default function LandingPage() {
                   <span style={{ background: "#dcfce7", color: "#166534", fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 100 }}>✓ Fits your vehicle</span>
                 </div>
                 <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-                  <thead><tr style={{ borderBottom: "2px solid #e2e8f0" }}>
-                    {["Make", "Model", "Years", "Engine"].map(h => <th key={h} style={{ padding: 8, textAlign: "left", fontWeight: 600, color: "#64748b", fontSize: 12 }}>{h}</th>)}
+                  <thead><tr style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+                    {["Make", "Model", "Years", "Engine"].map(h => <th key={h} style={{ padding: 8, textAlign: "left", fontWeight: 600, color: "rgba(255,255,255,.4)", fontSize: 12 }}>{h}</th>)}
                   </tr></thead>
                   <tbody>
                     {[["BMW", "3 Series (G20)", "2019–2025", "330i 258 Hp"], ["BMW", "3 Series (F30)", "2012–2019", "320i 184 Hp"], ["BMW", "4 Series (F32)", "2013–2020", "420i 184 Hp"]].map(([m, mo, y, e], i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                      <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,.04)" }}>
                         <td style={{ padding: 8, fontWeight: 600 }}>{m}</td>
-                        <td style={{ padding: 8, color: "#475569" }}>{mo}</td>
-                        <td style={{ padding: 8, color: "#64748b" }}>{y}</td>
-                        <td style={{ padding: 8, color: "#64748b" }}>{e}</td>
+                        <td style={{ padding: 8, color: "rgba(255,255,255,.5)" }}>{mo}</td>
+                        <td style={{ padding: 8, color: "rgba(255,255,255,.4)" }}>{y}</td>
+                        <td style={{ padding: 8, color: "rgba(255,255,255,.4)" }}>{e}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -465,7 +465,7 @@ export default function LandingPage() {
             <div className="as-section-tag">Why AutoSync</div>
             <h2 className="as-section-title">Compare with alternatives</h2>
           </div>
-          <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", overflow: "hidden" }}>
+          <div style={{ background: "rgba(255,255,255,.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
             <table className="as-compare">
               <thead><tr>
                 <th style={{ width: "30%" }}>Feature</th>
@@ -515,7 +515,7 @@ export default function LandingPage() {
             <Form method="post" action="/auth/login">
               <div className="as-login-row">
                 <input type="text" name="shop" placeholder="your-store" />
-                <span style={{ display: "flex", alignItems: "center", fontSize: 14, color: "#64748b" }}>.myshopify.com</span>
+                <span style={{ display: "flex", alignItems: "center", fontSize: 14, color: "rgba(255,255,255,.4)" }}>.myshopify.com</span>
               </div>
               <button type="submit" className="as-btn as-btn--primary" style={{ width: "100%", marginTop: 12 }}>Open Dashboard</button>
             </Form>
