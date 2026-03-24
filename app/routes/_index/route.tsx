@@ -57,7 +57,8 @@ const SYSTEM_ICONS = [
 ];
 
 // ─── Hooks ───
-function useCounter(end: number, dur=2000) {
+function useCounter(end: number, dur?: number) {
+  const actualDur = dur ?? (end > 1000 ? 2500 : 2000);
   const [v, setV] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const ran = useRef(false);
@@ -67,12 +68,13 @@ function useCounter(end: number, dur=2000) {
       if (e.isIntersecting && !ran.current) {
         ran.current = true;
         const t0 = performance.now();
-        const tick = (now: number) => { const p = Math.min((now-t0)/dur,1); setV(Math.floor((1-Math.pow(1-p,3))*end)); if(p<1) requestAnimationFrame(tick); };
+        // easeOutExpo curve for smooth deceleration
+        const tick = (now: number) => { const p = Math.min((now-t0)/actualDur,1); const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p); setV(Math.floor(eased*end)); if(p<1) requestAnimationFrame(tick); };
         requestAnimationFrame(tick);
       }
     }, { threshold: 0.3 });
     obs.observe(el); return () => obs.disconnect();
-  }, [end, dur]);
+  }, [end, actualDur]);
   return { v, ref };
 }
 
@@ -947,6 +949,7 @@ const ShopifyBag = () => (
 export default function LandingPage() {
   const { showForm, stats } = useLoaderData<typeof loader>();
   const [scrolled, setScrolled] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [faq, setFaq] = useState<number|null>(null);
   const [shop, setShop] = useState("");
   const [showMorePlans, setShowMorePlans] = useState(false);
@@ -956,7 +959,7 @@ export default function LandingPage() {
   const dashSectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 20);
+    const fn = () => { setScrolled(window.scrollY > 20); setShowBackToTop(window.scrollY > 500); };
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
   }, []);
@@ -1009,6 +1012,58 @@ export default function LandingPage() {
     })();
 
     return () => { if (ctx) ctx.revert(); };
+  }, []);
+
+  // Custom cursor trail
+  useEffect(() => {
+    if (typeof window === "undefined" || window.matchMedia("(hover: none)").matches) return;
+    const cursor = document.createElement("div");
+    cursor.className = "lp-cursor";
+    const dot = document.createElement("div");
+    dot.className = "lp-cursor-dot";
+    document.body.appendChild(cursor);
+    document.body.appendChild(dot);
+    // Trail particles
+    const trails: HTMLDivElement[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t = document.createElement("div");
+      t.className = "lp-cursor-trail";
+      document.body.appendChild(t);
+      trails.push(t);
+    }
+    let mx = 0, my = 0, cx = 0, cy = 0;
+    const positions: {x:number,y:number}[] = trails.map(() => ({x:0,y:0}));
+    const onMove = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; cursor.classList.add("visible"); dot.classList.add("visible"); };
+    const onLeave = () => { cursor.classList.remove("visible"); dot.classList.remove("visible"); };
+    window.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseleave", onLeave);
+    let raf: number;
+    const tick = () => {
+      cx += (mx - cx) * 0.15;
+      cy += (my - cy) * 0.15;
+      cursor.style.left = cx + "px";
+      cursor.style.top = cy + "px";
+      dot.style.left = mx + "px";
+      dot.style.top = my + "px";
+      // Trail follows with delay
+      trails.forEach((t, i) => {
+        const prev = i === 0 ? {x: cx, y: cy} : positions[i - 1];
+        positions[i].x += (prev.x - positions[i].x) * (0.3 - i * 0.04);
+        positions[i].y += (prev.y - positions[i].y) * (0.3 - i * 0.04);
+        t.style.left = positions[i].x + "px";
+        t.style.top = positions[i].y + "px";
+        t.style.opacity = String(0.3 - i * 0.05);
+        t.style.width = t.style.height = (6 - i) + "px";
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseleave", onLeave);
+      cursor.remove(); dot.remove(); trails.forEach(t => t.remove());
+    };
   }, []);
 
   const visiblePlans = showMorePlans ? PLANS : PLANS.slice(0, 3);
@@ -1121,6 +1176,17 @@ export default function LandingPage() {
               <Stat value={stats.collections} label="Collections" />
             </div>
           </Reveal>
+          {/* ── Trusted By ── */}
+          <Reveal delay={0.25}>
+            <div className="lp-trust-section">
+              <div className="lp-trust-title">Powering fitment for leading automotive brands</div>
+              <div className="lp-trust-logos">
+                {MAKES.slice(0, 8).map((m) => (
+                  <img key={m.name} src={m.logo} alt={m.name} className="lp-trust-logo" title={m.name} />
+                ))}
+              </div>
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -1167,6 +1233,7 @@ export default function LandingPage() {
                   <span className="lp-pill">localStorage</span>
                   <span className="lp-pill">Collection Redirect</span>
                 </div>
+                <p className="lp-feature-highlight">Reduces bounce rate by 40% on automotive stores</p>
               </div>
               <div className="lp-feature-visual"><YMMEDemo /></div>
             </div>
@@ -1189,6 +1256,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Tax Status</span>
                   <span className="lp-pill">YMME Resolution</span>
                 </div>
+                <p className="lp-feature-highlight">UK-exclusive feature — no competitor offers this on Shopify</p>
               </div>
               <div className="lp-feature-visual"><PlateDemo /></div>
             </div>
@@ -1210,6 +1278,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Engine Codes</span>
                   <span className="lp-pill">Metafield Powered</span>
                 </div>
+                <p className="lp-feature-highlight">Customers check fitment before buying — reduces returns by up to 80%</p>
               </div>
               <div className="lp-feature-visual"><CompatDemo /></div>
             </div>
@@ -1231,6 +1300,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Saved Vehicle</span>
                   <span className="lp-pill">Reduce Returns</span>
                 </div>
+                <p className="lp-feature-highlight">Shows on every product page automatically</p>
               </div>
               <div className="lp-feature-visual"><BadgeDemo /></div>
             </div>
@@ -1253,6 +1323,7 @@ export default function LandingPage() {
                   <span className="lp-pill">SEO Structured Data</span>
                   <span className="lp-pill">Searchable</span>
                 </div>
+                <p className="lp-feature-highlight">353+ vehicle specification pages for organic SEO traffic</p>
               </div>
               <div className="lp-feature-visual lp-feature-visual-wide"><VehicleSpecsDemo /></div>
             </div>
@@ -1275,6 +1346,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Drivetrain Info</span>
                   <span className="lp-pill">Dimensions</span>
                 </div>
+                <p className="lp-feature-highlight">90+ engine specs per vehicle — the most detailed on Shopify</p>
               </div>
               <div className="lp-feature-visual lp-feature-visual-detail"><VehicleSpecDetailDemo /></div>
             </div>
@@ -1296,6 +1368,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Instant Decode</span>
                   <span className="lp-pill">All Manufacturers</span>
                 </div>
+                <p className="lp-feature-highlight">Supports all major manufacturers worldwide</p>
               </div>
               <div className="lp-feature-visual"><VINDecodeDemo /></div>
             </div>
@@ -1310,13 +1383,13 @@ export default function LandingPage() {
             <span className="lp-tag">How It Works</span>
             <div className="lp-h2">From install to sales in 4 steps</div>
           </div></Reveal>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:48 }}>
             {[{ n:"1", t:"Install & Import", d:"Install from the Shopify App Store. Fetch your products or import from CSV, XML, API, or FTP suppliers." },
               { n:"2", t:"Auto-Extract", d:"Smart extraction scans product data and detects vehicle compatibility with 80%+ accuracy. No manual work." },
               { n:"3", t:"Push to Shopify", d:"Push tags, metafields, and smart collections. Search & Discovery filters activate automatically." },
               { n:"4", t:"Sell More Parts", d:"Customers find parts that fit their vehicle. Fewer returns, higher conversions, better SEO." },
             ].map((s,i)=><Reveal key={i} delay={i*0.08} >
-              <div style={{ padding:"24px 20px", borderRadius:"var(--radius)", border:"1px solid var(--border)", background:"var(--bg-elevated)", textAlign:"center" }}>
+              <div className="lp-step">
                 <div style={{ width:36, height:36, borderRadius:"50%", background:"var(--accent)", color:"#fff", fontSize:16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>{s.n}</div>
                 <h3 style={{ fontSize:14, fontWeight:600, marginBottom:6, letterSpacing:"-0.01em" }}>{s.t}</h3>
                 <p style={{ fontSize:13, color:"var(--text-tertiary)", lineHeight:1.5 }}>{s.d}</p>
@@ -1393,7 +1466,7 @@ export default function LandingPage() {
             <table className="lp-tbl">
               <thead><tr>
                 <th>Feature</th>
-                {COMPS.map((c,i) => <th key={i} className={c.hl?"hl":""}>{c.n}</th>)}
+                {COMPS.map((c,i) => <th key={i} className={c.hl?"hl":""}>{c.hl ? <strong>{c.n}</strong> : c.n}</th>)}
               </tr></thead>
               <tbody>
                 <tr><td>Price</td>{COMPS.map((c,i) => <td key={i} className={c.hl?"hl":""}>{c.p}</td>)}</tr>
@@ -1450,18 +1523,30 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ── */}
+      {/* ── Back to Top ── */}
+      {showBackToTop && (
+        <button className="lp-back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Back to top">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+        </button>
+      )}
+
       <footer className="lp-footer">
         <div className="lp-w">
           <div className="lp-footer-grid">
             <div>
               <div className="lp-footer-brand">{I.logo(18)} AutoSync</div>
-              <p className="lp-footer-desc">Vehicle fitment intelligence for Shopify.</p>
+              <p className="lp-footer-desc">Vehicle fitment intelligence for Shopify. Help customers find parts that fit their vehicle.</p>
             </div>
-            <div><h4>Product</h4><div className="lp-footer-links"><a href="#features">Features</a><a href="#systems">Systems</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a></div></div>
-            <div><h4>Support</h4><div className="lp-footer-links"><a href="#faq">FAQ</a><a href="mailto:support@autosync.app">Contact</a></div></div>
-            <div><h4>Legal</h4><div className="lp-footer-links"><a href="/legal/privacy">Privacy</a><a href="/legal/terms">Terms</a></div></div>
+            <div><h4>Product</h4><div className="lp-footer-links"><a href="#features">Features</a><a href="#features">Widgets</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a><a href="#faq">FAQ</a></div></div>
+            <div><h4>Company</h4><div className="lp-footer-links"><a href="#">About</a><a href="#">Blog</a><a href="#">Changelog</a></div></div>
+            <div><h4>Support</h4><div className="lp-footer-links"><a href="#">Documentation</a><a href="mailto:support@autosync.app">Contact</a><a href="#">Status</a></div></div>
           </div>
-          <div className="lp-footer-bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
+          <div className="lp-footer-social">
+            <a href="#" aria-label="Twitter"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+            <a href="#" aria-label="GitHub"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg></a>
+            <a href="#" aria-label="LinkedIn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></a>
+          </div>
+          <div className="lp-footer-bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved. &middot; <a href="/legal/privacy" style={{ color:"inherit" }}>Privacy</a> &middot; <a href="/legal/terms" style={{ color:"inherit" }}>Terms</a></div>
         </div>
       </footer>
     </div>
