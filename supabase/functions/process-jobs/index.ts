@@ -66,28 +66,54 @@ Deno.serve(async (req) => {
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find the next running job (with locking to prevent duplicate processing)
+    // Find the next pending/running job and atomically claim it.
+    // Uses a conditional update: only succeeds if the row still matches the filter,
+    // preventing two pg_cron ticks from processing the same job simultaneously.
     const staleLockCutoff = new Date(Date.now() - 5 * 60000).toISOString();
-    const { data: job, error: jobError } = await db
+    const lockTime = new Date().toISOString();
+
+    // Step 1: Find a candidate job
+    const { data: candidate, error: candidateError } = await db
       .from("sync_jobs")
-      .select("*")
-      .eq("status", "running")
+      .select("id")
+      .in("status", ["running", "pending"])
       .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
 
-    if (jobError) {
-      console.error("[process-jobs] Job query error:", jobError.message);
-      return new Response(JSON.stringify({ error: jobError.message }), { status: 500 });
+    if (candidateError) {
+      console.error("[process-jobs] Job query error:", candidateError.message);
+      return new Response(JSON.stringify({ error: candidateError.message }), { status: 500 });
     }
 
-    if (!job) {
+    if (!candidate) {
       return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
     }
 
-    // Lock the job to prevent duplicate processing by next pg_cron tick
-    await db.from("sync_jobs").update({ locked_at: new Date().toISOString() }).eq("id", job.id);
+    // Step 2: Atomically claim the job with a conditional update.
+    // This only succeeds if the job still has status running/pending AND locked_at is still claimable.
+    // If another pg_cron tick already claimed it, this update affects 0 rows.
+    const { data: claimedJob, error: lockError } = await db
+      .from("sync_jobs")
+      .update({ locked_at: lockTime, status: "running" })
+      .eq("id", candidate.id)
+      .in("status", ["running", "pending"])
+      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+      .select("*")
+      .maybeSingle();
+
+    if (lockError) {
+      console.error("[process-jobs] Lock error:", lockError.message);
+      return new Response(JSON.stringify({ error: lockError.message }), { status: 500 });
+    }
+
+    if (!claimedJob) {
+      // Another worker already claimed this job — that's fine, just exit
+      return new Response(JSON.stringify({ status: "idle", message: "Job already claimed" }));
+    }
+
+    const job = claimedJob;
 
     console.log(`[process-jobs] Processing job ${job.id} type=${job.type} shop=${job.shop_id}`);
 
@@ -146,8 +172,11 @@ Deno.serve(async (req) => {
         }).eq("shop_id", shopId);
       } catch (_e) { /* non-critical */ }
     } else {
+      // Release the lock between chunks so the next pg_cron tick can pick it up.
+      // Without this, the 5-minute stale lock timeout would block multi-batch jobs.
       await db.from("sync_jobs").update({
         processed_items: newProcessed,
+        locked_at: null,
       }).eq("id", job.id);
     }
 

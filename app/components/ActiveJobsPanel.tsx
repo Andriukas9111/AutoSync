@@ -75,7 +75,8 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
             total = processed + 50;
           }
           const percent = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
-          const isRunning = job.status === "running";
+          const isPending = job.status === "pending";
+          const isRunning = job.status === "running" || isPending;
           const isComplete = job.status === "completed";
           const isFailed = job.status === "failed";
 
@@ -91,6 +92,7 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
                       <Text as="span" variant="bodyMd" fontWeight="semibold">
                         {jobs.length > 1 ? `Step ${i + 1}: ` : ""}{formatJobType(job.type)}
                       </Text>
+                      {isPending && <Badge tone="attention">Queued</Badge>}
                       {isComplete && <Badge tone="success">Complete</Badge>}
                       {isFailed && <Badge tone="critical">Failed</Badge>}
                     </InlineStack>

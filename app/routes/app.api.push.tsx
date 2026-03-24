@@ -44,12 +44,13 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
-  // Get the total count of mapped products (for progress tracking)
+  // Get the total count of pushable products (must match Edge Function worker predicate)
+  // Worker uses: .not("fitment_status", "eq", "unmapped") — so we use the same filter
   const { count: mappedCount } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
-    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"]);
+    .not("fitment_status", "eq", "unmapped");
 
   // Create a sync job record — Edge Function picks this up via pg_cron
   const { data: job, error: jobError } = await db

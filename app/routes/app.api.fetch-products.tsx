@@ -29,7 +29,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .insert({
       shop_id: shopId,
       type: "fetch",
-      status: "running",
+      status: "processing",  // NOT "running" or "pending" — prevents cron worker from claiming this
       progress: 0,
       started_at: new Date().toISOString(),
     })
