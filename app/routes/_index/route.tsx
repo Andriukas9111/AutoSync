@@ -694,6 +694,145 @@ function PushFlowDemo() {
   );
 }
 
+// ─── Mega Menu ───
+const MEGA_FEATURES = {
+  widgets: [
+    { title: "YMME Search", desc: "Cascading Make/Model/Year/Engine dropdowns" },
+    { title: "Plate Lookup", desc: "UK registration number vehicle lookup" },
+    { title: "VIN Decode", desc: "17-character VIN decoder" },
+    { title: "Fitment Badge", desc: "Fits/doesn't fit compatibility badge" },
+    { title: "Compatibility Table", desc: "Full vehicle compatibility list" },
+    { title: "Wheel Finder", desc: "PCD, offset, and bore search" },
+    { title: "Vehicle Specs", desc: "Detailed specification pages" },
+  ],
+  engine: [
+    { title: "Smart Extraction", desc: "Pattern-matching vehicle detection" },
+    { title: "Auto-Mapping", desc: "Automatic fitment assignment" },
+    { title: "Collection Builder", desc: "SEO-optimized smart collections" },
+    { title: "Push to Shopify", desc: "Tags, metafields, and filters" },
+  ],
+  data: [
+    { title: "YMME Database", desc: "331+ makes, 3K+ models, 24K+ engines" },
+    { title: "Provider Import", desc: "CSV, XML, JSON, API, FTP sources" },
+    { title: "Pricing Engine", desc: "Markup, margin, MAP, and fixed rules" },
+    { title: "Analytics", desc: "Coverage, performance, and insights" },
+  ],
+};
+
+const MEGA_SYSTEMS = {
+  infrastructure: [
+    { title: "Edge Functions", desc: "Server-side processing on Supabase" },
+    { title: "Background Jobs", desc: "Async processing with pg_cron" },
+    { title: "Rate Limiting", desc: "Shopify API rate limit management" },
+    { title: "Multi-tenant", desc: "Isolated data per merchant" },
+  ],
+  shopify: [
+    { title: "Theme Extensions", desc: "Online Store 2.0 widget blocks" },
+    { title: "App Proxy", desc: "Storefront API communication layer" },
+    { title: "Metafields", desc: "5 vehicle metafield types" },
+    { title: "Search & Discovery", desc: "Automatic filter activation" },
+  ],
+  data: [
+    { title: "Supabase", desc: "PostgreSQL with real-time subscriptions" },
+    { title: "Session Storage", desc: "Prisma-backed OAuth sessions" },
+    { title: "File Processing", desc: "CSV, XML, JSON parsing pipelines" },
+    { title: "Vehicle Scrapers", desc: "NHTSA and auto-data.net sources" },
+  ],
+};
+
+function MegaMenu() {
+  return null; // Rendered inline in nav
+}
+
+// ─── Collections Flow Demo ───
+function CollectionsFlowDemo() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [step, setStep] = useState(0);
+  const ran = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !ran.current) {
+        ran.current = true;
+        let s = 0;
+        const advance = () => {
+          s++;
+          setStep(s);
+          if (s < 10) setTimeout(advance, 300);
+        };
+        setTimeout(advance, 400);
+      }
+    }, { threshold: 0.3 });
+    obs.observe(el); return () => obs.disconnect();
+  }, []);
+
+  const products = [
+    { name: "Eibach Pro-Kit Springs", tags: ["_autosync_BMW", "_autosync_3_Series"] },
+    { name: "Bilstein B14 Coilovers", tags: ["_autosync_Audi", "_autosync_A4"] },
+    { name: "Brembo Brake Kit", tags: ["_autosync_Mercedes", "_autosync_C_Class"] },
+  ];
+
+  const collections = [
+    { name: "BMW Parts", count: "423 products", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" },
+    { name: "Audi Parts", count: "312 products", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png" },
+    { name: "Mercedes Parts", count: "189 products", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mercedes-benz.png" },
+  ];
+
+  return (
+    <div className="lp-feature-row">
+      <div className="lp-feature-text">
+        <span className="lp-tag">SMART COLLECTIONS</span>
+        <h3>Auto-generated vehicle collections with SEO</h3>
+        <p>Collections are created automatically with brand logos, meta descriptions, year-range titles, and published to all sales channels. Zero manual work required.</p>
+        <div className="lp-feature-pills">
+          <span className="lp-pill">Make Strategy</span>
+          <span className="lp-pill">Make+Model</span>
+          <span className="lp-pill">Year Ranges</span>
+          <span className="lp-pill">SEO Optimized</span>
+          <span className="lp-pill">Brand Logos</span>
+        </div>
+      </div>
+      <div className="lp-feature-visual" ref={ref} style={{ minHeight: 400 }}>
+        <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
+        <div className="lp-collections-flow" style={{ background: "#fff", padding: 28 }}>
+          <div className="lp-cf-products">
+            {products.map((p, i) => (
+              <div key={i} className={`lp-cf-product ${step > i ? "visible" : ""}`} style={{ transitionDelay: `${i * 0.15}s` }}>
+                <div className="lp-cf-product-name">{p.name}</div>
+                <div className="lp-cf-product-tags">
+                  {p.tags.map((t, j) => (
+                    <span key={j} className={`lp-cf-tag ${step > i + 2 ? "visible" : ""}`} style={{ transitionDelay: `${(i * 0.15) + (j * 0.2)}s` }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="lp-cf-arrow">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <path d="M8 20h24M24 12l8 8-8 8" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div className="lp-cf-collections">
+            {collections.map((c, i) => (
+              <div key={i} className={`lp-cf-collection ${step > i + 5 ? "visible" : ""}`} style={{ transitionDelay: `${i * 0.2}s` }}>
+                <div className="lp-cf-collection-header">
+                  <img src={c.logo} alt="" className="lp-cf-collection-logo" />
+                  <div className="lp-cf-collection-name">{c.name}</div>
+                </div>
+                <div className="lp-cf-collection-meta">
+                  <span className="lp-cf-seo-badge">SEO</span>
+                  <span className="lp-cf-count">{c.count}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Data ───
 const PLANS = [
   { name:"Free", price:0, products:"50", fitments:"200", providers:"0", makes:"5", features:["Manual mapping","Product browser","Help docs","50 product limit","Basic support","YMME data access"], pop:false },
@@ -857,8 +996,70 @@ export default function LandingPage() {
         <div className="lp-w lp-nav-inner">
           <a href="#" className="lp-logo">{I.logo()} AutoSync</a>
           <div className="lp-nav-links">
-            <a href="#features">Features</a>
-            <a href="#systems">Systems</a>
+            <div className="lp-nav-item">
+              <a href="#features">Features</a>
+              <div className="lp-mega">
+                <div>
+                  <div className="lp-mega-col-title">Widgets</div>
+                  {MEGA_FEATURES.widgets.map((item, i) => (
+                    <a key={i} href="#features" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+                <div>
+                  <div className="lp-mega-col-title">Engine</div>
+                  {MEGA_FEATURES.engine.map((item, i) => (
+                    <a key={i} href="#features" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+                <div>
+                  <div className="lp-mega-col-title">Data</div>
+                  {MEGA_FEATURES.data.map((item, i) => (
+                    <a key={i} href="#features" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="lp-nav-item">
+              <a href="#systems">Systems</a>
+              <div className="lp-mega">
+                <div>
+                  <div className="lp-mega-col-title">Infrastructure</div>
+                  {MEGA_SYSTEMS.infrastructure.map((item, i) => (
+                    <a key={i} href="#systems" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+                <div>
+                  <div className="lp-mega-col-title">Shopify</div>
+                  {MEGA_SYSTEMS.shopify.map((item, i) => (
+                    <a key={i} href="#systems" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+                <div>
+                  <div className="lp-mega-col-title">Data Layer</div>
+                  {MEGA_SYSTEMS.data.map((item, i) => (
+                    <a key={i} href="#systems" className="lp-mega-item">
+                      <div className="lp-mega-item-title">{item.title}</div>
+                      <div className="lp-mega-item-desc">{item.desc}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
             <a href="#pricing">Pricing</a>
             <a href="#compare">Compare</a>
             <a href="#faq">FAQ</a>
@@ -913,6 +1114,15 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <PushFlowDemo />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Collections Flow ── */}
+      <section className="lp-section">
+        <div className="lp-w">
+          <Reveal>
+            <CollectionsFlowDemo />
           </Reveal>
         </div>
       </section>
