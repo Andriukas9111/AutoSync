@@ -424,13 +424,13 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
 
   const actions = [
     {
-      content: "Reset Products to Pending (Re-extract)",
+      content: "Reset Products to Unmapped (Re-extract)",
       onAction: () => {
         setPopoverActive(false);
         setConfirmAction({
           intent: "admin-reset-fitment-status",
           title: `Reset fitment status for ${shopName}?`,
-          message: "This will reset all product fitment statuses to 'pending', so they can be re-processed by the extraction engine on the next run.",
+          message: "This will reset all product fitment statuses to 'unmapped', so they can be re-processed by the extraction engine on the next run.",
         });
       },
     },

@@ -1319,7 +1319,9 @@
 
   function initWheelFinder(container) {
     var proxyUrl = container.dataset.proxyUrl;
-    var currencySymbol = container.dataset.currencySymbol || '$'; // From Liquid: {{ cart.currency.symbol }}
+    var currencyCode = container.dataset.currencyCode || 'USD'; // From Liquid: {{ cart.currency.iso_code }}
+    var formatter;
+    try { formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode }); } catch (_e) { formatter = null; }
     var searchBtn = container.querySelector('[data-autosync-wheel-search]');
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
@@ -1382,7 +1384,8 @@
                 if (item.product.price) {
                   var price = document.createElement('span');
                   price.className = 'autosync-wheel-finder__price';
-                  price.textContent = currencySymbol + Number(item.product.price).toFixed(2);
+                  var amount = Number(item.product.price);
+                  price.textContent = formatter ? formatter.format(amount) : ('$' + amount.toFixed(2));
                   card.appendChild(price);
                 }
 

@@ -41,19 +41,19 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: `Failed to create sync job: ${jobError?.message ?? "unknown"}` }, { status: 500 });
   }
 
-  // Run the fetch with a timeout guard to stay within Vercel limits
+  // Run the fetch with AbortController for proper timeout cancellation.
+  // When timeout fires, the signal aborts in-flight GraphQL calls and DB writes.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
   try {
-    const fetchPromise = fetchProductsFromShopify({
+    const result = await fetchProductsFromShopify({
       admin,
       shopId,
       jobId: job.id,
+      signal: controller.signal,
     });
-
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error("Fetch timed out — partial results saved. Refresh to see progress.")), FETCH_TIMEOUT_MS);
-    });
-
-    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    clearTimeout(timeoutId);
 
     // Mark job as completed
     await db
@@ -71,8 +71,10 @@ export async function action({ request }: ActionFunctionArgs) {
       jobId: job.id,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Fetch failed";
-    const isTimeout = message.includes("timed out");
+    clearTimeout(timeoutId);
+    const isAborted = err instanceof DOMException && err.name === "AbortError";
+    const message = isAborted ? "Fetch timed out — partial results saved" : (err instanceof Error ? err.message : "Fetch failed");
+    const isTimeout = isAborted || message.includes("timed out");
     const stack = err instanceof Error ? err.stack : undefined;
     console.error("[fetch-products] Pipeline error:", message, stack);
 

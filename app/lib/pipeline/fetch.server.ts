@@ -46,6 +46,7 @@ interface FetchProductsOptions {
   shopId: string;
   jobId: string;
   onProgress?: (processed: number, total: number) => void;
+  signal?: AbortSignal; // AbortController signal for timeout cancellation
 }
 
 export async function fetchProductsFromShopify({
@@ -53,6 +54,7 @@ export async function fetchProductsFromShopify({
   shopId,
   jobId,
   onProgress,
+  signal,
 }: FetchProductsOptions): Promise<{ fetched: number; errors: string[] }> {
   let cursor: string | null = null;
   let hasNextPage = true;
@@ -68,6 +70,8 @@ export async function fetchProductsFromShopify({
 
   try {
     while (hasNextPage) {
+      // Check if the operation was aborted (timeout)
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
       const response: Response = await admin.graphql(PRODUCTS_QUERY, {
         variables: {
           first: pageSize,

@@ -66,25 +66,32 @@ export async function loader({ request }: LoaderFunctionArgs) {
     jobQuery = jobQuery.eq("type", type);
   }
 
-  // ── Query 2: Product fitment_status grouped (replaces 6 separate count queries) ──
-  // Fetch just the fitment_status column for all products, then count in JS
-  // This is ONE query instead of SIX separate count(*) queries
-  const productStatusQuery = db
-    .from("products")
-    .select("fitment_status, synced_at")
-    .eq("shop_id", shopId);
+  // ── Queries 2-3: Product counts by fitment_status (head-only, no row data) ──
+  // Uses 7 parallel count queries with head:true — returns just numbers, not rows.
+  // At scale (100K+ products), this is far more efficient than fetching all rows.
+  const productCountQueries = {
+    total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
+    autoMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
+    smartMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
+    manualMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
+    flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
+    pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
+  };
 
-  // ── Query 3: Vehicle page sync_status grouped (replaces 4 separate count queries) ──
-  const vehicleStatusQuery = db
-    .from("vehicle_page_sync")
-    .select("sync_status")
-    .eq("shop_id", shopId);
+  // ── Query 3: Vehicle page sync_status counts (head-only) ──
+  const vehicleCountQueries = {
+    total: db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    synced: db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
+    pending: db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "pending"),
+    failed: db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "failed"),
+  };
 
-  // ── Queries 4-6: Remaining counts (all in parallel) ──
+  // ── All queries in parallel ──
   const [
     jobsResult,
-    productStatusResult,
-    vehicleStatusResult,
+    pTotal, pUnmapped, pAuto, pSmart, pManual, pFlagged, pPushed,
+    vpTotal, vpSynced, vpPending, vpFailed,
     fitmentRes,
     collectionRes,
     activeMakesRes,
@@ -93,8 +100,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     tenantRes,
   ] = await Promise.all([
     jobQuery.limit(5),
-    productStatusQuery,
-    vehicleStatusQuery,
+    productCountQueries.total,
+    productCountQueries.unmapped,
+    productCountQueries.autoMapped,
+    productCountQueries.smartMapped,
+    productCountQueries.manualMapped,
+    productCountQueries.flagged,
+    productCountQueries.pushed,
+    vehicleCountQueries.total,
+    vehicleCountQueries.synced,
+    vehicleCountQueries.pending,
+    vehicleCountQueries.failed,
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
@@ -103,32 +119,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
     db.from("tenants").select("plan").eq("shop_id", shopId).maybeSingle(),
   ]);
 
-  // ── Count product statuses from the single query result ──
-  const products = productStatusResult.data ?? [];
-  let total = 0, unmapped = 0, autoMapped = 0, smartMapped = 0, manualMapped = 0, flagged = 0, pushedProducts = 0;
-  for (const p of products) {
-    total++;
-    switch (p.fitment_status) {
-      case "unmapped": unmapped++; break;
-      case "auto_mapped": autoMapped++; break;
-      case "smart_mapped": smartMapped++; break;
-      case "manual_mapped": manualMapped++; break;
-      case "flagged": flagged++; break;
-    }
-    if (p.synced_at) pushedProducts++;
-  }
+  // ── Extract counts ──
+  const total = pTotal.count ?? 0;
+  const unmapped = pUnmapped.count ?? 0;
+  const autoMapped = pAuto.count ?? 0;
+  const smartMapped = pSmart.count ?? 0;
+  const manualMapped = pManual.count ?? 0;
+  const flagged = pFlagged.count ?? 0;
+  const pushedProducts = pPushed.count ?? 0;
 
-  // ── Count vehicle page statuses from the single query result ──
-  const vehiclePages = vehicleStatusResult.data ?? [];
-  let vpTotal = 0, vpSynced = 0, vpPending = 0, vpFailed = 0;
-  for (const vp of vehiclePages) {
-    vpTotal++;
-    switch (vp.sync_status) {
-      case "synced": vpSynced++; break;
-      case "pending": vpPending++; break;
-      case "failed": vpFailed++; break;
-    }
-  }
+  // Vehicle page counts already extracted from head-only queries above
+  const vpTotalCount = vpTotal.count ?? 0;
+  const vpSyncedCount = vpSynced.count ?? 0;
+  const vpPendingCount = vpPending.count ?? 0;
+  const vpFailedCount = vpFailed.count ?? 0;
 
   // ── YMME global counts (cached — NOT queried every poll) ──
   const ymme = await getYMMECounts();
@@ -157,11 +161,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
       // Fitment & collections
       fitments: fitmentRes.count ?? 0,
       collections: collectionRes.count ?? 0,
-      // Vehicle pages (from single query)
-      vehiclePages: vpTotal,
-      vehiclePagesSynced: vpSynced,
-      vehiclePagesPending: vpPending,
-      vehiclePagesFailed: vpFailed,
+      // Vehicle pages (head-only count queries)
+      vehiclePages: vpTotalCount,
+      vehiclePagesSynced: vpSyncedCount,
+      vehiclePagesPending: vpPendingCount,
+      vehiclePagesFailed: vpFailedCount,
       // Providers
       providers: providerRes.count ?? 0,
       // Push status
