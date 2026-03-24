@@ -32,6 +32,29 @@ const I = {
   chev: <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6l4 4 4-4"/></svg>,
 };
 
+// ─── System SVG Icons (48x48, stroke-only, accent color) ───
+const SysIcons = {
+  extraction: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="20" cy="20" r="12"/><path d="M28.5 28.5L38 38"/><line x1="14" y1="17" x2="26" y2="17"/><line x1="14" y1="21" x2="24" y2="21"/><line x1="14" y1="25" x2="20" y2="25"/></svg>,
+  ymmeDb: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="24" cy="14" rx="14" ry="5"/><path d="M10 14v10c0 2.76 6.27 5 14 5s14-2.24 14-5V14"/><path d="M10 24v10c0 2.76 6.27 5 14 5s14-2.24 14-5V24"/><path d="M24 42v-4"/><circle cx="24" cy="8" r="2" fill="#5B7FFF" stroke="none"/></svg>,
+  collections: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="15" height="15" rx="3"/><rect x="27" y="6" width="15" height="15" rx="3"/><rect x="6" y="27" width="15" height="15" rx="3"/><rect x="27" y="27" width="15" height="15" rx="3"/><circle cx="13.5" cy="13.5" r="3"/><circle cx="34.5" cy="13.5" r="3"/></svg>,
+  widgets: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="36" height="36" rx="4"/><line x1="6" y1="14" x2="42" y2="14"/><circle cx="11" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/><circle cx="21" cy="10" r="1.5"/><rect x="10" y="18" width="12" height="8" rx="2"/><rect x="26" y="18" width="12" height="8" rx="2"/><rect x="10" y="30" width="28" height="6" rx="2"/></svg>,
+  providerImport: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M24 34V14"/><path d="M17 21l7-7 7 7"/><rect x="10" y="34" width="28" height="6" rx="2"/><rect x="8" y="8" width="10" height="12" rx="2"/><rect x="30" y="8" width="10" height="12" rx="2"/></svg>,
+  vehicleSpecs: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="8" y="4" width="32" height="40" rx="3"/><line x1="14" y1="12" x2="34" y2="12"/><line x1="14" y1="18" x2="34" y2="18"/><line x1="14" y1="24" x2="34" y2="24"/><rect x="14" y="30" width="20" height="8" rx="2"/><line x1="24" y1="30" x2="24" y2="38"/><line x1="14" y1="34" x2="34" y2="34"/></svg>,
+  pushEngine: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M24 38V10"/><path d="M16 18l8-8 8 8"/><path d="M14 42h20"/><path d="M18 38l6-6 6 6"/><circle cx="24" cy="6" r="2"/></svg>,
+  pricingEngine: <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#5B7FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="10" y="6" width="28" height="36" rx="4"/><line x1="16" y1="14" x2="32" y2="14"/><line x1="16" y1="20" x2="32" y2="20"/><line x1="16" y1="26" x2="24" y2="26"/><line x1="28" y1="26" x2="32" y2="26"/><text x="17" y="36" fontSize="10" fill="#5B7FFF" stroke="none" fontWeight="700">$</text><text x="27" y="36" fontSize="10" fill="#5B7FFF" stroke="none" fontWeight="700">$</text></svg>,
+};
+
+const SYSTEM_ICONS = [
+  SysIcons.extraction,
+  SysIcons.ymmeDb,
+  SysIcons.collections,
+  SysIcons.widgets,
+  SysIcons.providerImport,
+  SysIcons.vehicleSpecs,
+  SysIcons.pushEngine,
+  SysIcons.pricingEngine,
+];
+
 // ─── Hooks ───
 function useCounter(end: number, dur=2000) {
   const [v, setV] = useState(0);
@@ -68,7 +91,7 @@ function Stat({ value, label }: { value: number; label: string }) {
   return <div ref={c.ref} className="lp-stat"><div className="lp-stat-val">{c.v.toLocaleString()}</div><div className="lp-stat-label">{label}</div></div>;
 }
 
-// ─── Make logos ───
+// ─── Make logos (12+ makes) ───
 const MAKES = [
   { name:"BMW", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" },
   { name:"Audi", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png" },
@@ -78,6 +101,12 @@ const MAKES = [
   { name:"Ford", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/ford.png" },
   { name:"Porsche", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/porsche.png" },
   { name:"Honda", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/honda.png" },
+  { name:"Chevrolet", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/chevrolet.png" },
+  { name:"Nissan", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/nissan.png" },
+  { name:"Hyundai", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/hyundai.png" },
+  { name:"Kia", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/kia.png" },
+  { name:"Subaru", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/subaru.png" },
+  { name:"Mazda", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mazda.png" },
 ];
 
 // ─── Widget Demos ───
@@ -86,6 +115,17 @@ const GARAGE_VEHICLES = [
   { year:"2019", make:"Audi", model:"A4 Avant", engine:"2.0 TFSI · 190 Hp" },
   { year:"2021", make:"Porsche", model:"Panamera", engine:"2.9L V6 · 440 Hp" },
 ];
+
+// ─── UK Flag SVG ───
+const UKFlag = () => (
+  <svg width="24" height="16" viewBox="0 0 60 40" style={{ display:"block", flexShrink:0 }}>
+    <rect width="60" height="40" fill="#012169"/>
+    <path d="M0 0L60 40M60 0L0 40" stroke="#fff" strokeWidth="6"/>
+    <path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" strokeWidth="3"/>
+    <path d="M30 0V40M0 20H60" stroke="#fff" strokeWidth="10"/>
+    <path d="M30 0V40M0 20H60" stroke="#C8102E" strokeWidth="6"/>
+  </svg>
+);
 
 function YMMEDemo() {
   const [make, setMake] = useState("BMW");
@@ -120,7 +160,7 @@ function YMMEDemo() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
             Find Parts
           </button>
-          <button className="demo-btn-blue" style={{ padding:"10px 12px", position:"relative", background:"#fff", border:"1px solid #e5e7eb" }} onClick={() => { setGarage(!garage); setOpen(false); }}>
+          <button className="demo-garage-btn" onClick={() => { setGarage(!garage); setOpen(false); }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
             <span style={{ position:"absolute", top:-6, right:-6, background:"#2563eb", color:"#fff", borderRadius:"50%", width:18, height:18, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>3</span>
           </button>
@@ -152,18 +192,45 @@ function YMMEDemo() {
 }
 
 function PlateDemo() {
-  const [plate, setPlate] = useState("AL61 EAJ");
-  const [show, setShow] = useState(true);
-  const [motOpen, setMotOpen] = useState(false);
+  const [plate, setPlate] = useState("");
+  const [show, setShow] = useState(false);
+  const [motOpen, setMotOpen] = useState(true);
+  const [typed, setTyped] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ran = useRef(false);
+
+  useEffect(() => {
+    const el = containerRef.current; if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !ran.current) {
+        ran.current = true;
+        const text = "AL61 EAJ";
+        let i = 0;
+        const typeNext = () => {
+          if (i < text.length) {
+            i++;
+            setPlate(text.slice(0, i));
+            setTimeout(typeNext, 120 + Math.random() * 80);
+          } else {
+            setTyped(true);
+            setTimeout(() => setShow(true), 400);
+          }
+        };
+        setTimeout(typeNext, 600);
+      }
+    }, { threshold: 0.3 });
+    obs.observe(el); return () => obs.disconnect();
+  }, []);
+
   return (
-    <>
+    <div ref={containerRef}>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
       <div className="lp-demo-light demo-plate-light">
         <div className="demo-title" style={{ textAlign:"center" }}>Find Parts by Registration</div>
         <div className="demo-subtitle" style={{ textAlign:"center" }}>Enter your UK registration number to find compatible parts</div>
         <div style={{ display:"flex", gap:8, marginBottom:8 }}>
           <div className="demo-plate-wrap" style={{ flex:1 }}>
-            <div className="demo-plate-gb">GB</div>
+            <div className="demo-plate-gb"><UKFlag /></div>
             <input className="demo-plate-input" placeholder="AB12 CDE" value={plate} onChange={e => setPlate(e.target.value.toUpperCase())} />
           </div>
           <button className="demo-btn-blue" onClick={() => setShow(true)}>
@@ -177,6 +244,7 @@ function PlateDemo() {
           <div className="demo-recent-chip"><span style={{ background:"#facc15", color:"#000", padding:"1px 6px", borderRadius:3, fontSize:10, fontWeight:700, fontFamily:"monospace" }}>S777 MNH</span> Porsche Panamera</div>
           <div className="demo-recent-chip"><span style={{ background:"#facc15", color:"#000", padding:"1px 6px", borderRadius:3, fontSize:10, fontWeight:700, fontFamily:"monospace" }}>AL61 EAJ</span> BMW 3 Series</div>
         </div>
+        <div className={`demo-plate-result-wrap ${show ? "show" : ""}`}>
         {show && <div className="demo-plate-result">
           <div className="demo-plate-badges">
             <span className="demo-plate-gb-badge">GB</span>
@@ -221,9 +289,10 @@ function PlateDemo() {
             </div>}
           </div>
         </div>}
+        </div>
         <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -290,12 +359,12 @@ function VehicleSpecsDemo() {
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
       <div className="lp-demo-light">
         <div style={{ width:40, height:3, background:"#2563eb", borderRadius:2, marginBottom:10 }}/>
-        <div className="demo-title">Vehicle Specifications</div>
+        <div className="demo-title" style={{ fontSize:18 }}>Vehicle Specifications</div>
         <div className="demo-subtitle">Browse detailed specs for all supported vehicles</div>
         <div className="demo-specs-search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
           <input placeholder="Search vehicles..." />
-          <span className="demo-specs-count">353 vehicles</span>
+          <span className="demo-specs-count-big">353 vehicles</span>
         </div>
         <div className="demo-vehicle-grid">
           {SPEC_VEHICLES.map((v,i) => (
@@ -325,7 +394,7 @@ function VehicleSpecDetailDemo() {
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="demo-spec-hero">
+      <div className="demo-spec-hero demo-spec-hero-tall">
         <div className="demo-spec-hero-make">
           <img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" />
           <span>BMW</span>
@@ -358,11 +427,28 @@ function VehicleSpecDetailDemo() {
       <div style={{ background:"#fff" }}>
         <table className="demo-spec-table">
           <tbody>
-            {[["Engine Code","M10B18"],["Displacement","1.6L"],["Cylinders","4"],["Configuration","Inline"],["Aspiration","Naturally aspirated"],["Power","102 HP"],["Torque","140 Nm"]].map(([k,v],i) =>
+            {[["Engine Code","M10B18"],["Displacement","1.6L (1,573 cc)"],["Cylinders","4"],["Configuration","Inline"],["Aspiration","Naturally aspirated"],["Power","102 HP @ 5,800 rpm"],["Torque","140 Nm @ 4,500 rpm"],["Valves","8 (2 per cyl)"],["Bore x Stroke","89.0 x 71.0 mm"],["Compression","9.5:1"],["Fuel System","Bosch L-Jetronic"]].map(([k,v],i) =>
               <tr key={i}><td>{k}</td><td>{v}</td></tr>
             )}
           </tbody>
         </table>
+      </div>
+      {/* Compatible Parts section */}
+      <div style={{ background:"#fff", padding:"16px 24px", borderTop:"2px solid #f3f4f6" }}>
+        <div style={{ fontSize:14, fontWeight:700, color:"#111827", marginBottom:12 }}>Compatible Parts</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:10 }}>
+          {[
+            { name:"Brake Pads (Front)", price:"$45.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Brake" },
+            { name:"Oil Filter", price:"$12.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Filter" },
+            { name:"Spark Plugs (Set)", price:"$28.99", img:"https://placehold.co/80x80/f3f4f6/6b7280?text=Spark" },
+          ].map((p,i) => (
+            <div key={i} style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:10, textAlign:"center", background:"#fff" }}>
+              <img src={p.img} alt="" style={{ width:60, height:60, objectFit:"contain", margin:"0 auto 6px", borderRadius:6 }}/>
+              <div style={{ fontSize:12, fontWeight:600, color:"#111827", marginBottom:2 }}>{p.name}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:"#2563eb" }}>{p.price}</div>
+            </div>
+          ))}
+        </div>
       </div>
       <div style={{ background:"#fff", padding:"12px 24px" }}>
         <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
@@ -372,7 +458,6 @@ function VehicleSpecDetailDemo() {
 }
 
 function VINDecodeDemo() {
-  const [vin, setVin] = useState("");
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
@@ -382,10 +467,31 @@ function VINDecodeDemo() {
         <div className="demo-vin-input-row">
           <span className="demo-vin-badge">VIN</span>
           <div className="demo-vin-field">
-            <input placeholder="WBAPH5C55BA123456" value={vin} onChange={e => setVin(e.target.value.toUpperCase().slice(0,17))} maxLength={17} />
-            <span className="demo-vin-counter">{vin.length}/17</span>
+            <input value="WBAPH5C55BA123456" readOnly style={{ letterSpacing:1.5 }} />
+            <span className="demo-vin-counter">17/17</span>
           </div>
           <button className="demo-btn-blue">Decode VIN</button>
+        </div>
+        {/* VIN Decode Result */}
+        <div className="demo-vin-result">
+          <div style={{ fontSize:11, fontWeight:700, color:"#16a34a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ verticalAlign:"middle", marginRight:4 }}><path d="M3 8l3 3 7-7" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            VIN Decoded Successfully
+          </div>
+          <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginBottom:4 }}>2011 BMW 5 Series 528i</div>
+          <div style={{ fontSize:12, color:"#6b7280", marginBottom:14 }}>WBAPH5C55BA123456</div>
+          <div className="demo-vin-specs-grid">
+            {[["Year","2011"],["Make","BMW"],["Model","5 Series"],["Trim","528i"],["Body","Sedan"],["Drive","RWD"],["Engine","3.0L I6"],["Fuel","Gasoline"],["Transmission","Automatic"],["Country","Germany"]].map(([k,v],i)=>
+              <div key={i} className="demo-vin-spec-cell">
+                <div className="demo-vin-spec-key">{k}</div>
+                <div className="demo-vin-spec-val">{v}</div>
+              </div>
+            )}
+          </div>
+          <button className="demo-btn-blue" style={{ width:"100%", marginTop:12 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            Find Compatible Parts
+          </button>
         </div>
         <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
@@ -395,12 +501,12 @@ function VINDecodeDemo() {
 
 // ─── Data ───
 const PLANS = [
-  { name:"Free", price:0, products:"50", fitments:"200", providers:"0", features:["Manual mapping","Product browser","Help docs"], pop:false },
-  { name:"Starter", price:19, products:"1,000", fitments:"5,000", providers:"1", features:["Push tags & metafields","YMME Search widget","Fitment Badge","Compatibility table"], pop:false },
-  { name:"Growth", price:49, products:"10,000", fitments:"50,000", providers:"3", features:["All Starter features","Smart auto-extraction","All 4 storefront widgets","Make collections","Bulk operations","Analytics dashboard"], pop:true },
-  { name:"Professional", price:99, products:"50,000", fitments:"250,000", providers:"5", features:["All Growth features","API & FTP data import","Wheel Finder widget","Vehicle Spec Pages","Make+Model collections","Priority support"], pop:false },
-  { name:"Business", price:179, products:"200,000", fitments:"1,000,000", providers:"15", features:["All Professional features","Pricing Engine","Year-range collections","My Garage widget","Dedicated support"], pop:false },
-  { name:"Enterprise", price:299, products:"Unlimited", fitments:"Unlimited", providers:"Unlimited", features:["All Business features","UK Plate Lookup (DVLA)","VIN Decode","Full CSS customisation","SLA guarantee"], pop:false },
+  { name:"Free", price:0, products:"50", fitments:"200", providers:"0", makes:"5", features:["Manual mapping","Product browser","Help docs","50 product limit","Basic support","YMME data access"], pop:false },
+  { name:"Starter", price:19, products:"1,000", fitments:"5,000", providers:"1", makes:"20", features:["Push tags & metafields","YMME Search widget","Fitment Badge","Compatibility table","1 provider import","Email support"], pop:false },
+  { name:"Growth", price:49, products:"10,000", fitments:"50,000", providers:"3", makes:"50", features:["All Starter features","Smart auto-extraction","All 4 storefront widgets","Make collections","Bulk operations","Analytics dashboard"], pop:true },
+  { name:"Professional", price:99, products:"50,000", fitments:"250,000", providers:"5", makes:"100", features:["All Growth features","API & FTP data import","Wheel Finder widget","Vehicle Spec Pages","Make+Model collections","Priority support"], pop:false },
+  { name:"Business", price:179, products:"200,000", fitments:"1,000,000", providers:"15", makes:"200", features:["All Professional features","Pricing Engine","Year-range collections","My Garage widget","Dedicated support","Custom branding"], pop:false },
+  { name:"Enterprise", price:299, products:"Unlimited", fitments:"Unlimited", providers:"Unlimited", makes:"Unlimited", features:["All Business features","UK Plate Lookup (DVLA)","VIN Decode","Full CSS customisation","SLA guarantee","White-glove onboarding"], pop:false },
 ];
 
 const COMPS = [
@@ -434,6 +540,14 @@ const SYSTEMS = [
   { t:"Pricing Engine", d:"Markup, margin, fixed, and MAP pricing rules scoped by vendor, product type, provider, tag, or SKU prefix.", s:"4 rule types" },
 ];
 
+// ─── Shopify Bag Icon ───
+const ShopifyBag = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <path d="M7 8V6a5 5 0 0110 0v2h3a1 1 0 011 1v10a3 3 0 01-3 3H6a3 3 0 01-3-3V9a1 1 0 011-1h3z" stroke="#95BF47" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M10 12a2 2 0 004 0" stroke="#95BF47" strokeWidth="1.5" strokeLinecap="round"/>
+  </svg>
+);
+
 // ═══════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════
@@ -442,12 +556,15 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [faq, setFaq] = useState<number|null>(null);
   const [shop, setShop] = useState("");
+  const [showMorePlans, setShowMorePlans] = useState(false);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", fn);
     return () => window.removeEventListener("scroll", fn);
   }, []);
+
+  const visiblePlans = showMorePlans ? PLANS : PLANS.slice(0, 3);
 
   return (
     <div className="lp">
@@ -476,6 +593,11 @@ export default function LandingPage() {
             <div className="lp-hero-ctas">
               <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial {I.arr}</a>
               <a href="#features" className="lp-btn lp-btn-ghost lp-btn-lg">See Features</a>
+            </div>
+            {/* Built for Shopify badge */}
+            <div className="lp-shopify-badge">
+              <ShopifyBag />
+              <span>Built for Shopify</span>
             </div>
           </Reveal>
           <Reveal delay={0.15}>
@@ -593,7 +715,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Searchable</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><VehicleSpecsDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-wide"><VehicleSpecsDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -615,7 +737,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Dimensions</span>
                 </div>
               </div>
-              <div className="lp-feature-visual"><VehicleSpecDetailDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-detail"><VehicleSpecDetailDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -675,6 +797,7 @@ export default function LandingPage() {
           </div></Reveal>
           <div className="lp-systems">
             {SYSTEMS.map((sys,i) => <Reveal key={i} delay={i*0.04}><div className="lp-sys">
+              <div className="lp-sys-icon">{SYSTEM_ICONS[i]}</div>
               <h3>{sys.t}</h3>
               <p>{sys.d}</p>
               <span className="lp-sys-stat">{sys.s}</span>
@@ -692,16 +815,17 @@ export default function LandingPage() {
             <p className="lp-sub">Start free. Scale as you grow. Cancel anytime.</p>
           </div></Reveal>
           <div className="lp-pricing">
-            {PLANS.map((p,i) => <Reveal key={i} delay={i*0.04}><div className={`lp-price ${p.pop?"pop":""}`}>
+            {visiblePlans.map((p,i) => <Reveal key={i} delay={i*0.04}><div className={`lp-price ${p.pop?"pop":""}`}>
               {p.pop && <div className="lp-price-badge">Most Popular</div>}
               <div className="lp-price-name">{p.name}</div>
               <div style={{ marginBottom:14 }}>
                 {p.price===0 ? <span className="lp-price-amt">Free</span> : <><span className="lp-price-amt">${p.price}</span><span className="lp-price-per">/mo</span></>}
               </div>
               <div className="lp-price-limits">
-                <div>{p.products} products</div>
-                <div>{p.fitments} fitments</div>
-                <div>{p.providers} providers</div>
+                <div><strong>{p.products}</strong> products</div>
+                <div><strong>{p.fitments}</strong> fitments</div>
+                <div><strong>{p.providers}</strong> providers</div>
+                <div><strong>{p.makes}</strong> active makes</div>
               </div>
               <ul className="lp-price-feat">
                 {p.features.map((f,j) => <li key={j}>{I.chk} {f}</li>)}
@@ -711,6 +835,11 @@ export default function LandingPage() {
               </a>
             </div></Reveal>)}
           </div>
+          {!showMorePlans && <div style={{ textAlign:"center", marginTop:24 }}>
+            <button className="lp-btn lp-btn-outline" onClick={() => setShowMorePlans(true)}>
+              Show more plans {I.chev}
+            </button>
+          </div>}
         </div>
       </section>
 
