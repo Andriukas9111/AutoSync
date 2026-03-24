@@ -396,7 +396,7 @@ body { margin: 0; padding: 0; background: #09090b; }
 
 /* ─── YMME Demo ─── */
 .demo-grid-ymme {
-  display: grid; grid-template-columns: 1fr 1fr 0.8fr 1.2fr auto auto; gap: 10px;
+  display: grid; grid-template-columns: 1fr 1fr 0.7fr 1.3fr minmax(130px, auto) 48px; gap: 10px;
   align-items: end;
 }
 .demo-ymme-bottom-row {
