@@ -156,13 +156,15 @@ function YMMEDemo() {
             <div className="demo-label">Engine</div>
             {step >= 4 ? <div className="demo-sel ymme-anim-fill"><span>M340i (382 Hp)</span>{I.chev}</div> : <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>}
           </div>
-        </div>
-        <div className="demo-ymme-bottom-row">
-          {step >= 5 ? <button className="ymme-find-btn ymme-anim-fill">{SearchIcon} Find Parts</button> : <button className="ymme-find-btn" style={{ opacity: 0.4 }}>{SearchIcon} Find Parts</button>}
-          <button className="demo-garage-btn" style={{ width: 44, height: 44 }}>
-            {GarageIcon}
-            {garageCount > 0 && <span className="demo-garage-badge">{garageCount}</span>}
-          </button>
+          <div style={{ alignSelf: "end" }}>
+            {step >= 5 ? <button className="ymme-find-btn ymme-anim-fill">{SearchIcon} Find Parts</button> : <button className="ymme-find-btn" style={{ opacity: 0.4 }}>{SearchIcon} Find Parts</button>}
+          </div>
+          <div style={{ alignSelf: "end" }}>
+            <button className="demo-garage-btn" style={{ width: 44, height: 44 }}>
+              {GarageIcon}
+              {garageCount > 0 && <span className="demo-garage-badge">{garageCount}</span>}
+            </button>
+          </div>
         </div>
         {showGarage && (
           <div className="demo-garage-light" style={{ animation: "ymme-fade-in 0.3s ease" }}>

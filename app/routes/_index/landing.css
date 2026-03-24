@@ -356,10 +356,10 @@ body { margin: 0; padding: 0; background: #09090b; }
   position: relative;
 }
 .lp-fw-demo-inner {
-  width: 100%; max-width: 720px;
-  border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.1);
+  width: 100%; max-width: 800px;
+  border-radius: var(--radius); border: 1px solid rgba(255,255,255,0.08);
   overflow: hidden; background: #fff;
-  box-shadow: 0 40px 80px -20px rgba(0,0,0,0.4);
+  box-shadow: 0 40px 80px -20px rgba(0,0,0,0.5), 0 0 60px -20px rgba(99,102,241,0.1);
   animation: fw-fade-in 0.3s ease;
 }
 @keyframes fw-fade-in {
@@ -396,11 +396,11 @@ body { margin: 0; padding: 0; background: #09090b; }
 
 /* ─── YMME Demo ─── */
 .demo-grid-ymme {
-  display: grid; grid-template-columns: 1fr 1fr 0.7fr 1.3fr; gap: 10px;
-  align-items: end; margin-bottom: 12px;
+  display: grid; grid-template-columns: 1fr 1fr 0.8fr 1.2fr auto auto; gap: 10px;
+  align-items: end;
 }
 .demo-ymme-bottom-row {
-  display: flex; gap: 10px; align-items: center;
+  display: none; /* Merged into grid row */
 }
 .lp-demo-light .demo-sel {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
@@ -413,10 +413,10 @@ body { margin: 0; padding: 0; background: #09090b; }
 .ymme-find-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 0 20px; height: 44px; border-radius: 8px; font-size: 14px; font-weight: 600;
-  background: #6366f1; color: #fff !important; border: none; cursor: pointer;
-  transition: background 0.15s; white-space: nowrap; flex: 1;
+  background: #2563eb; color: #fff !important; border: none; cursor: pointer;
+  transition: background 0.15s; white-space: nowrap; width: 100%;
 }
-.ymme-find-btn:hover { background: #818cf8; }
+.ymme-find-btn:hover { background: #1d4ed8; }
 .ymme-find-btn svg { flex-shrink: 0; }
 .demo-garage-btn {
   padding: 10px 12px; position: relative;
