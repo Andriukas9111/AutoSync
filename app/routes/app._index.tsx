@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useNavigation } from "react-router";
 import {
   Page,
   Layout,
@@ -424,6 +424,8 @@ export default function Dashboard() {
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const pageLoading = navigation.state === "loading";
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
@@ -573,6 +575,7 @@ export default function Dashboard() {
             )}
 
             {/* ─── System Overview — 3-column status cards ─── */}
+            {pageLoading ? <SkeletonCard variant="stat" count={9} cols={3} /> : (
             <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
               {/* Products & Fitments */}
               <Card>
@@ -656,6 +659,7 @@ export default function Dashboard() {
                 </BlockStack>
               </Card>
             </InlineGrid>
+            )}
 
             {/* ─── Fitment Coverage — Hero Card ─── */}
             <Card>

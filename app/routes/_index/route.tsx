@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect, Form, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import db from "../../lib/db.server";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -81,971 +81,838 @@ function useFadeIn() {
     return () => observer.disconnect();
   }, []);
 
-  return { ref, style: { opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(40px)", transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)" } as React.CSSProperties };
+  return { ref, visible };
 }
 
-/* ─── Stat counter component ─── */
-function StatCounter({ end, label, suffix }: { end: number; label: string; suffix?: string }) {
-  const { value, ref } = useCounter(end);
+/* ─── AutoSync Logo SVG ─── */
+function AutoSyncLogo({ size = 40 }: { size?: number }) {
   return (
-    <div ref={ref} style={{ textAlign: "center" }}>
-      <div style={{ fontSize: "48px", fontWeight: 800, color: "#005bd2", letterSpacing: "-2px", lineHeight: 1 }}>
-        {value.toLocaleString()}{suffix || ""}
-      </div>
-      <div style={{ fontSize: "14px", color: "#64748b", marginTop: "8px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "1px" }}>{label}</div>
-    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width={size} height={size}>
+      <path fill="#005bd2" d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z"/>
+      <path fill="#005bd2" d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z"/>
+    </svg>
   );
 }
 
-/* ─── SVG Icons ─── */
+/* ─── SVG Icons (Polaris-style line icons) ─── */
 const icons = {
-  ymme: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-      <path d="M11 8v6M8 11h6" />
-    </svg>
-  ),
-  plate: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="6" width="20" height="12" rx="3" />
-      <path d="M6 12h2M10 12h4M16 12h2" />
-    </svg>
-  ),
-  extract: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4Z" />
-      <circle cx="12" cy="15" r="2" />
-    </svg>
-  ),
-  collections: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="3" y="14" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-    </svg>
-  ),
-  vehicle: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
-      <path d="M15 18H9" />
-      <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
-      <circle cx="7" cy="18" r="2" />
-      <circle cx="17" cy="18" r="2" />
-    </svg>
-  ),
-  badge: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2 L15.09 8.26 L22 9.27 L17 14.14 L18.18 21.02 L12 17.77 L5.82 21.02 L7 14.14 L2 9.27 L8.91 8.26 Z" />
-    </svg>
-  ),
-  provider: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="7 10 12 15 17 10" />
-      <line x1="12" y1="15" x2="12" y2="3" />
-    </svg>
-  ),
-  filters: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-    </svg>
-  ),
-  analytics: (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 20V10M12 20V4M6 20v-6" />
-    </svg>
-  ),
-  check: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
-  ),
-  x: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  ),
+  database: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>,
+  zap: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+  search: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>,
+  tag: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+  layers: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
+  globe: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>,
+  shield: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  barChart: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>,
+  settings: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
+  upload: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>,
+  check: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#005bd2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  checkGreen: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  x: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  car: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17h14M5 17a2 2 0 01-2-2v-4l2.67-5.34A2 2 0 017.46 4h9.08a2 2 0 011.79 1.11L21 10.5V15a2 2 0 01-2 2M5 17a2 2 0 002 2h1a2 2 0 002-2M14 17a2 2 0 002 2h1a2 2 0 002-2"/></svg>,
 };
 
-/* ─── Feature card component ─── */
-function FeatureCard({ icon, title, desc, index }: { icon: React.ReactNode; title: string; desc: string; index: number }) {
-  const [hovered, setHovered] = useState(false);
-  const fade = useFadeIn();
+/* ─── Pricing Data ─── */
+const plans = [
+  { name: "Free", price: "$0", period: "", products: "50", fitments: "200", providers: "0", features: ["Manual mapping", "Basic YMME widget", "Community support"], highlight: false },
+  { name: "Starter", price: "$19", period: "/mo", products: "500", fitments: "2,500", providers: "1", features: ["Push tags & metafields", "YMME search widget", "Fitment badge", "Email support"], highlight: false },
+  { name: "Growth", price: "$49", period: "/mo", products: "5,000", fitments: "25,000", providers: "3", features: ["Auto extraction engine", "All 4 storefront widgets", "Smart collections (Make)", "Bulk operations", "Priority email support"], highlight: true },
+  { name: "Professional", price: "$99", period: "/mo", products: "25,000", fitments: "100,000", providers: "5", features: ["API integration", "Custom vehicles", "My Garage feature", "Collections (Make + Model)", "Dedicated support"], highlight: false },
+  { name: "Business", price: "$179", period: "/mo", products: "100,000", fitments: "500,000", providers: "15", features: ["FTP import", "Wheel Finder widget", "Priority support", "Advanced analytics", "Custom branding"], highlight: false },
+  { name: "Enterprise", price: "$299", period: "/mo", products: "Unlimited", fitments: "Unlimited", providers: "Unlimited", features: ["DVLA plate lookup", "VIN decoder", "Full CSS customisation", "Dedicated account manager", "SLA guarantee"], highlight: false },
+];
 
-  return (
-    <div
-      ref={fade.ref}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        ...fade.style,
-        transitionDelay: `${index * 0.08}s`,
-        background: hovered ? "#fafbff" : "white",
-        borderRadius: "8px",
-        padding: "32px",
-        border: hovered ? "1px solid #005bd2" : "1px solid #e8ecf1",
-        boxShadow: hovered ? "0 8px 30px rgba(0,91,210,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
-        transform: hovered ? "translateY(-4px)" : "translateY(0)",
-        transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-        cursor: "default",
-      }}
-    >
-      <div style={{
-        width: "52px",
-        height: "52px",
-        borderRadius: "8px",
-        background: "linear-gradient(135deg, #eef4ff, #dbeafe)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        marginBottom: "20px",
-      }}>
-        {icon}
-      </div>
-      <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a", marginBottom: "8px", margin: "0 0 8px" }}>{title}</h3>
-      <p style={{ color: "#64748b", lineHeight: 1.7, fontSize: "15px", margin: 0 }}>{desc}</p>
-    </div>
-  );
-}
+/* ════════════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* ─── Pricing card component ─── */
-function PricingCard({ name, price, products, fitments, features, highlight }: {
-  name: string; price: string; products: string; fitments: string; features: string[]; highlight?: boolean;
-}) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: highlight ? "linear-gradient(135deg, #005bd2 0%, #0043a0 100%)" : "white",
-        color: highlight ? "white" : "#0f172a",
-        borderRadius: "8px",
-        padding: highlight ? "40px 28px" : "32px 24px",
-        border: highlight ? "none" : hovered ? "1px solid #005bd2" : "1px solid #e8ecf1",
-        boxShadow: highlight ? "0 20px 60px rgba(0,91,210,0.3)" : hovered ? "0 8px 30px rgba(0,0,0,0.08)" : "0 1px 3px rgba(0,0,0,0.04)",
-        transform: highlight ? "scale(1.05)" : hovered ? "translateY(-4px)" : "translateY(0)",
-        transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-        position: "relative" as const,
-        display: "flex",
-        flexDirection: "column" as const,
-      }}
-    >
-      {highlight && (
-        <div style={{
-          position: "absolute",
-          top: "-12px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "#10b981",
-          color: "white",
-          fontSize: "12px",
-          fontWeight: 700,
-          padding: "4px 16px",
-          borderRadius: "8px",
-          textTransform: "uppercase",
-          letterSpacing: "1px",
-        }}>Most Popular</div>
-      )}
-      <div style={{ fontSize: "15px", fontWeight: 600, opacity: 0.8, marginBottom: "4px" }}>{name}</div>
-      <div style={{ fontSize: "40px", fontWeight: 800, marginBottom: "4px", letterSpacing: "-2px" }}>
-        {price}<span style={{ fontSize: "16px", fontWeight: 400, opacity: 0.7 }}>/mo</span>
-      </div>
-      <div style={{ fontSize: "13px", opacity: 0.6, marginBottom: "4px" }}>{products} products</div>
-      <div style={{ fontSize: "13px", opacity: 0.6, marginBottom: "20px" }}>{fitments} fitments</div>
-      <div style={{ borderTop: highlight ? "1px solid rgba(255,255,255,0.2)" : "1px solid #e8ecf1", paddingTop: "20px", flex: 1 }}>
-        {features.map((f) => (
-          <div key={f} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", marginBottom: "10px", opacity: 0.9 }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={highlight ? "#86efac" : "#005bd2"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            {f}
-          </div>
-        ))}
-      </div>
-      <a
-        href="https://apps.shopify.com"
-        style={{
-          display: "block",
-          textAlign: "center",
-          padding: "14px",
-          borderRadius: "8px",
-          fontWeight: 600,
-          fontSize: "15px",
-          textDecoration: "none",
-          marginTop: "20px",
-          background: highlight ? "white" : "#005bd2",
-          color: highlight ? "#005bd2" : "white",
-          transition: "opacity 0.2s",
-        }}
-      >
-        {name === "Free" ? "Start Free" : "Get Started"}
-      </a>
-    </div>
-  );
-}
-
-/* ─── CSS keyframes as a style element ─── */
-function AnimationStyles() {
-  return (
-    <style>{`
-      @keyframes heroGradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-      }
-      @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-20px); }
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 0.4; }
-        50% { opacity: 0.8; }
-      }
-    `}</style>
-  );
-}
-
-/* ─── Main page ─── */
 export default function LandingPage() {
   const { showForm, stats } = useLoaderData<typeof loader>();
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const heroFade = useFadeIn();
-  const problemFade = useFadeIn();
-  const howFade = useFadeIn();
-  const compFade = useFadeIn();
-  const ctaFade = useFadeIn();
+  const makes = useCounter(Number(stats.makes), 2000);
+  const models = useCounter(Number(stats.models), 2200);
+  const engines = useCounter(Number(stats.engines), 2400);
+  const specs = useCounter(Number(stats.specs), 2600);
+
+  const fadeWidgets = useFadeIn();
+  const fadeFeatures = useFadeIn();
+  const fadeHowItWorks = useFadeIn();
+  const fadePricing = useFadeIn();
+  const fadeCompare = useFadeIn();
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollTo = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    setMobileMenuOpen(false);
+  }, []);
+
+  const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
   return (
-    <>
-      <AnimationStyles />
-      <div style={{ minHeight: "100vh", background: "#ffffff", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", color: "#0f172a", overflowX: "hidden" }}>
+    <div style={{ fontFamily: font, color: "#0f172a", overflowX: "hidden" as const }}>
 
-        {/* ─── NAV BAR ─── */}
-        <nav style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 100,
-          background: "rgba(15, 23, 42, 0.85)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          padding: "0 24px",
-        }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: "64px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <svg width="40" height="40" viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg"><path fill="#005bd2" d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z"/><path fill="#005bd2" d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z"/></svg>
-              <span style={{ fontSize: "20px", fontWeight: 700, color: "white", letterSpacing: "-0.5px" }}>AutoSync</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "32px" }}>
-              <a href="#features" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "14px", fontWeight: 500, transition: "color 0.2s" }}>Features</a>
-              <a href="#pricing" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "14px", fontWeight: 500, transition: "color 0.2s" }}>Pricing</a>
-              <a href="#login" style={{ color: "rgba(255,255,255,0.7)", textDecoration: "none", fontSize: "14px", fontWeight: 500, transition: "color 0.2s" }}>Login</a>
-              <a href="https://apps.shopify.com" style={{
-                display: "inline-block",
-                padding: "8px 20px",
-                background: "#005bd2",
-                color: "white",
-                borderRadius: "8px",
-                fontWeight: 600,
-                fontSize: "14px",
-                textDecoration: "none",
-                transition: "background 0.2s",
-              }}>Install Free</a>
-            </div>
+      {/* ─── NAVBAR ─── */}
+      <nav style={{
+        position: "fixed" as const, top: 0, left: 0, right: 0, zIndex: 1000,
+        padding: "0 24px", height: 64,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        background: scrolled ? "rgba(255,255,255,0.85)" : "rgba(15,23,42,0.2)",
+        backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
+        borderBottom: scrolled ? "1px solid rgba(0,0,0,0.06)" : "1px solid rgba(255,255,255,0.1)",
+        transition: "all 0.3s ease",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          <AutoSyncLogo size={32} />
+          <span style={{ fontSize: 20, fontWeight: 700, color: scrolled ? "#0f172a" : "#fff", transition: "color 0.3s" }}>AutoSync</span>
+        </div>
+
+        {/* Desktop nav */}
+        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+          <div style={{ display: "flex", gap: 24 }}>
+            {[{ label: "Features", id: "features" }, { label: "Widgets", id: "widgets" }, { label: "Pricing", id: "pricing" }, { label: "Login", id: "login" }].map(item => (
+              <button key={item.id} onClick={() => scrollTo(item.id)} style={{
+                background: "none", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500,
+                color: scrolled ? "#475569" : "rgba(255,255,255,0.85)", transition: "color 0.3s",
+                fontFamily: font,
+              }}>{item.label}</button>
+            ))}
           </div>
-        </nav>
+          <a href="https://apps.shopify.com" target="_blank" rel="noopener noreferrer" style={{
+            background: "#005bd2", color: "#fff", padding: "8px 20px", borderRadius: 8,
+            fontSize: 14, fontWeight: 600, textDecoration: "none", transition: "background 0.2s",
+          }}>Install Free</a>
+        </div>
+      </nav>
 
-        {/* ─── HERO ─── */}
-        <header style={{
-          position: "relative",
-          background: "linear-gradient(135deg, #0f172a 0%, #1a2744 30%, #0f172a 60%, #162033 100%)",
-          backgroundSize: "200% 200%",
-          animation: "heroGradient 12s ease infinite",
-          color: "white",
-          padding: "160px 24px 120px",
-          textAlign: "center",
-          overflow: "hidden",
-        }}>
-          {/* Background decorative elements */}
-          <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            <div style={{ position: "absolute", top: "-20%", right: "-10%", width: "600px", height: "600px", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.15) 0%, transparent 70%)", animation: "float 8s ease-in-out infinite" }} />
-            <div style={{ position: "absolute", bottom: "-30%", left: "-15%", width: "800px", height: "800px", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.1) 0%, transparent 70%)", animation: "float 10s ease-in-out infinite 2s" }} />
-            <div style={{
-              position: "absolute",
-              inset: 0,
-              backgroundImage: "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
-              backgroundSize: "60px 60px",
-            }} />
-            <svg style={{ position: "absolute", top: "15%", left: "8%", opacity: 0.08, animation: "float 6s ease-in-out infinite" }} width="120" height="120" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="50" stroke="white" strokeWidth="1" fill="none" />
-              <circle cx="60" cy="60" r="30" stroke="white" strokeWidth="1" fill="none" />
-            </svg>
-            <svg style={{ position: "absolute", bottom: "20%", right: "12%", opacity: 0.06, animation: "float 7s ease-in-out infinite 1s" }} width="80" height="80" viewBox="0 0 80 80">
-              <rect x="10" y="10" width="60" height="60" rx="8" stroke="white" strokeWidth="1" fill="none" transform="rotate(15 40 40)" />
-            </svg>
-            <svg style={{ position: "absolute", top: "40%", right: "25%", opacity: 0.05, animation: "float 9s ease-in-out infinite 3s" }} width="60" height="60" viewBox="0 0 60 60">
-              <polygon points="30,5 55,50 5,50" stroke="white" strokeWidth="1" fill="none" />
-            </svg>
-          </div>
+      {/* ─── HERO ─── */}
+      <section style={{
+        background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%)",
+        padding: "140px 24px 100px", position: "relative" as const, overflow: "hidden" as const,
+        minHeight: 600,
+      }}>
+        {/* Background decoration */}
+        <div style={{
+          position: "absolute" as const, top: -200, right: -200, width: 600, height: 600,
+          borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.15) 0%, transparent 70%)",
+        }} />
+        <div style={{
+          position: "absolute" as const, bottom: -100, left: -100, width: 400, height: 400,
+          borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.1) 0%, transparent 70%)",
+        }} />
 
-          <div ref={heroFade.ref} style={{ ...heroFade.style, maxWidth: "900px", margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", gap: 60, flexWrap: "wrap" as const, position: "relative" as const, zIndex: 1 }}>
+          {/* Left content */}
+          <div style={{ flex: "1 1 500px", minWidth: 300 }}>
             <div style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "6px 16px 6px 8px",
-              borderRadius: "100px",
-              background: "rgba(0,91,210,0.2)",
+              display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px",
+              background: "rgba(0,91,210,0.2)", borderRadius: 20, marginBottom: 24,
               border: "1px solid rgba(0,91,210,0.3)",
-              marginBottom: "32px",
-              fontSize: "13px",
-              fontWeight: 500,
-              color: "rgba(255,255,255,0.9)",
             }}>
-              <span style={{ display: "inline-flex", width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-              Built for Shopify
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
+              <span style={{ color: "rgba(255,255,255,0.9)", fontSize: 13, fontWeight: 500 }}>Built for Shopify</span>
             </div>
 
             <h1 style={{
-              fontSize: "clamp(36px, 6vw, 72px)",
-              fontWeight: 800,
-              lineHeight: 1.05,
-              margin: "0 0 24px",
-              letterSpacing: "-2px",
-              background: "linear-gradient(135deg, #ffffff 0%, #94b8ff 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
+              fontSize: "clamp(36px, 5vw, 56px)", fontWeight: 800, lineHeight: 1.1,
+              color: "#fff", margin: "0 0 20px",
             }}>
-              Vehicle Fitment,<br />Solved for Shopify
+              Vehicle Fitment<br />
+              <span style={{ color: "#5b9cf5" }}>Intelligence</span> for Shopify
             </h1>
-            <p style={{
-              fontSize: "clamp(17px, 2vw, 21px)",
-              color: "rgba(255,255,255,0.65)",
-              maxWidth: "620px",
-              margin: "0 auto 44px",
-              lineHeight: 1.7,
-            }}>
-              The complete Year/Make/Model/Engine system for automotive parts stores.
-              Map products to vehicles, generate smart collections, and help every
-              customer find the right part — instantly.
+
+            <p style={{ fontSize: 18, lineHeight: 1.6, color: "rgba(255,255,255,0.7)", margin: "0 0 36px", maxWidth: 520 }}>
+              The complete Year/Make/Model/Engine fitment platform. Help your customers find the right parts instantly with intelligent search widgets, automated product mapping, and a database of 29,000+ engines.
             </p>
-            <div style={{ display: "flex", gap: "16px", justifyContent: "center", flexWrap: "wrap" }}>
-              <a href="https://apps.shopify.com" style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "16px 36px",
-                background: "#005bd2",
-                color: "white",
-                borderRadius: "14px",
-                fontWeight: 600,
-                fontSize: "17px",
-                textDecoration: "none",
-                boxShadow: "0 4px 24px rgba(0,91,210,0.4)",
+
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap" as const }}>
+              <a href="https://apps.shopify.com" target="_blank" rel="noopener noreferrer" style={{
+                background: "#005bd2", color: "#fff", padding: "14px 32px", borderRadius: 8,
+                fontSize: 16, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 8,
                 transition: "transform 0.2s, box-shadow 0.2s",
-              }}>
-                Install Free on Shopify
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-              </a>
-              <a href="#how-it-works" style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "16px 36px",
-                background: "rgba(255,255,255,0.06)",
-                color: "white",
-                borderRadius: "14px",
-                fontWeight: 600,
-                fontSize: "17px",
-                textDecoration: "none",
-                border: "1px solid rgba(255,255,255,0.12)",
-                backdropFilter: "blur(8px)",
-                transition: "background 0.2s, border-color 0.2s",
-              }}>
-                See How It Works
-              </a>
+                boxShadow: "0 4px 14px rgba(0,91,210,0.4)",
+              }}>Install Free on Shopify</a>
+              <button onClick={() => scrollTo("widgets")} style={{
+                background: "rgba(255,255,255,0.1)", color: "#fff", padding: "14px 32px", borderRadius: 8,
+                fontSize: 16, fontWeight: 600, border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer",
+                backdropFilter: "blur(10px)", fontFamily: font, transition: "background 0.2s",
+              }}>See Widgets</button>
             </div>
           </div>
-        </header>
 
-        {/* ─── SOCIAL PROOF / STATS BAR ─── */}
-        <section style={{
-          background: "white",
-          borderBottom: "1px solid #f1f5f9",
-          padding: "56px 24px",
-          position: "relative",
-        }}>
-          <div style={{ maxWidth: "1000px", margin: "0 auto" }}>
-            <p style={{ textAlign: "center", fontSize: "14px", color: "#94a3b8", fontWeight: 500, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "36px" }}>
-              Powered by a comprehensive vehicle database
-            </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "40px" }}>
-              <StatCounter end={stats.makes as number} label="Vehicle Makes" suffix="+" />
-              <StatCounter end={stats.models as number} label="Models" suffix="+" />
-              <StatCounter end={stats.engines as number} label="Engine Variants" suffix="+" />
-              <StatCounter end={stats.specs as number} label="Vehicle Specs" suffix="+" />
-            </div>
-          </div>
-        </section>
-
-        {/* ─── PROBLEM / SOLUTION ─── */}
-        <section style={{ padding: "100px 24px", background: "#f8fafc" }}>
-          <div ref={problemFade.ref} style={{ ...problemFade.style, maxWidth: "1100px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>The Problem</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Automotive fitment is broken on Shopify
-              </h2>
-              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "600px", margin: "0 auto", lineHeight: 1.7 }}>
-                Merchants struggle with manual tagging, customer complaints about wrong parts, and zero tooling for Year/Make/Model search.
-              </p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "24px" }}>
-              {[
-                {
-                  problem: "Customers can't find parts for their vehicle",
-                  solution: "YMME widget with cascading dropdowns that persist across pages",
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                    </svg>
-                  ),
-                },
-                {
-                  problem: "Manually tagging thousands of products takes weeks",
-                  solution: "Smart auto-extraction detects fitment from titles, descriptions, and tags automatically",
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                    </svg>
-                  ),
-                },
-                {
-                  problem: "No way to organize by vehicle — collections are generic",
-                  solution: "Auto-generate smart collections per Make, Model, and Year with logos and SEO",
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
-                  ),
-                },
-              ].map((item) => (
-                <div key={item.problem} style={{
-                  background: "white",
-                  borderRadius: "8px",
-                  padding: "36px",
-                  border: "1px solid #e8ecf1",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                }}>
-                  <div style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "8px",
-                    background: "linear-gradient(135deg, #005bd2, #0043a0)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: "20px",
+          {/* Right — floating widget preview */}
+          <div style={{ flex: "1 1 400px", minWidth: 320, display: "flex", justifyContent: "center" }}>
+            <div style={{ animation: "float 3s ease-in-out infinite" }}>
+              {/* Mini YMME widget preview */}
+              <div style={{
+                background: "#fff", borderRadius: 12, padding: 24, width: 340,
+                boxShadow: "0 20px 60px rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.1)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <AutoSyncLogo size={20} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Find Parts For Your Vehicle</span>
+                </div>
+                {/* Fake dropdowns */}
+                {[
+                  { label: "Make", value: "BMW", icon: "https://www.carlogos.org/car-logos/bmw-logo.png" },
+                  { label: "Model", value: "3 Series" },
+                  { label: "Year", value: "2022" },
+                  { label: "Engine", value: "M340i 382 Hp" },
+                ].map((item, i) => (
+                  <div key={i} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "10px 12px", borderRadius: 8, border: "1px solid #e2e8f0",
+                    marginBottom: 8, background: "#f8fafc",
                   }}>
-                    {item.icon}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {item.icon && <img src={item.icon} alt="" style={{ width: 18, height: 18, objectFit: "contain" as const }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                      <span style={{ fontSize: 13, color: "#64748b" }}>{item.label}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{item.value}</span>
                   </div>
-                  <p style={{ fontSize: "15px", color: "#ef4444", fontWeight: 600, marginBottom: "8px" }}>
-                    {item.problem}
-                  </p>
-                  <p style={{ fontSize: "15px", color: "#475569", lineHeight: 1.7, margin: 0 }}>
-                    {item.solution}
-                  </p>
+                ))}
+                <button style={{
+                  width: "100%", padding: "12px 0", borderRadius: 8, border: "none",
+                  background: "#005bd2", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                  marginTop: 4,
+                }}>Find Parts</button>
+                <div style={{ textAlign: "center" as const, marginTop: 8 }}>
+                  <span style={{ fontSize: 10, color: "#94a3b8" }}>Powered by AutoSync</span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ─── WIDGET SHOWCASE ─── */}
-        <section style={{ padding: "100px 24px", background: "#f6f6f7" }}>
-          <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>See It In Action</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Powerful widgets for your storefront
-              </h2>
-              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "560px", margin: "0 auto", lineHeight: 1.7 }}>
-                Every widget works on any Shopify theme. Zero coding required.
-              </p>
+      {/* ─── STATS BAR ─── */}
+      <section style={{ background: "#fff", padding: "48px 24px", borderBottom: "1px solid #f1f5f9" }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", display: "flex", justifyContent: "space-around", flexWrap: "wrap" as const, gap: 32 }}>
+          {[
+            { label: "Vehicle Makes", counter: makes },
+            { label: "Models", counter: models },
+            { label: "Engines", counter: engines },
+            { label: "Vehicle Specs", counter: specs },
+          ].map((item, i) => (
+            <div key={i} ref={item.counter.ref} style={{ textAlign: "center" as const, minWidth: 140 }}>
+              <div style={{ fontSize: "clamp(32px, 4vw, 48px)", fontWeight: 800, color: "#005bd2", lineHeight: 1 }}>
+                {item.counter.value.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 14, color: "#64748b", marginTop: 6, fontWeight: 500 }}>{item.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ─── WIDGET SHOWCASE ─── */}
+      <section id="widgets" ref={fadeWidgets.ref} style={{
+        background: "#f6f6f7", padding: "80px 24px",
+        opacity: fadeWidgets.visible ? 1 : 0, transform: fadeWidgets.visible ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+      }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 60 }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, margin: "0 0 12px", color: "#0f172a" }}>See It In Action</h2>
+            <p style={{ fontSize: 18, color: "#64748b", maxWidth: 600, margin: "0 auto" }}>
+              Production-ready storefront widgets that install with one click. No coding required.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column" as const, gap: 48 }}>
+
+            {/* Row 1: YMME + Plate Lookup */}
+            <div style={{ display: "flex", gap: 32, flexWrap: "wrap" as const, justifyContent: "center" }}>
+              {/* YMME Search Widget */}
+              <BrowserFrame title="YMME Vehicle Search Widget">
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#005bd2" }} />
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", letterSpacing: "0.5px", textTransform: "uppercase" as const }}>Find Parts For Your Vehicle</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    <SelectMock label="Make" value="BMW" hasLogo />
+                    <SelectMock label="Model" value="3 Series" />
+                    <SelectMock label="Year" value="2022" />
+                    <SelectMock label="Engine" value="M340i 382 Hp" />
+                  </div>
+                  <button style={{
+                    width: "100%", padding: "11px 0", borderRadius: 8, border: "none",
+                    background: "#005bd2", color: "#fff", fontSize: 14, fontWeight: 600, marginTop: 10, cursor: "pointer",
+                  }}>Find Parts</button>
+                  <div style={{ textAlign: "center" as const, marginTop: 8 }}>
+                    <span style={{ fontSize: 10, color: "#94a3b8" }}>Powered by AutoSync</span>
+                  </div>
+                </div>
+              </BrowserFrame>
+
+              {/* UK Plate Lookup */}
+              <BrowserFrame title="UK Registration Plate Lookup">
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+                    <div style={{
+                      flex: 1, display: "flex", alignItems: "center", gap: 0,
+                      borderRadius: 6, overflow: "hidden" as const, border: "2px solid #1a1a1a",
+                    }}>
+                      <div style={{
+                        background: "#003399", color: "#fff", padding: "10px 8px",
+                        fontSize: 11, fontWeight: 700, display: "flex", flexDirection: "column" as const,
+                        alignItems: "center", gap: 2, lineHeight: 1,
+                      }}>
+                        <span style={{ fontSize: 8 }}>GB</span>
+                        <span style={{ fontSize: 14 }}>{'🇬🇧'}</span>
+                      </div>
+                      <div style={{
+                        flex: 1, background: "#f7c948", padding: "10px 14px",
+                        fontSize: 22, fontWeight: 800, fontFamily: "'Charles Wright', monospace",
+                        letterSpacing: 2, color: "#1a1a1a", textAlign: "center" as const,
+                      }}>BD18 SMR</div>
+                    </div>
+                    <button style={{
+                      padding: "10px 18px", borderRadius: 6, border: "none",
+                      background: "#005bd2", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                      whiteSpace: "nowrap" as const,
+                    }}>Look Up</button>
+                  </div>
+                  <div style={{
+                    background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: 14,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#15803d" }}>Vehicle Found</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6 }}>
+                      <strong>2018 Volvo XC40</strong> &bull; 2.0L Diesel &bull; 150 HP<br />
+                      <span style={{ color: "#005bd2", fontWeight: 600 }}>23 compatible parts available</span>
+                    </div>
+                  </div>
+                </div>
+              </BrowserFrame>
             </div>
 
-            {/* Widget previews in browser frames */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "32px" }}>
-
-              {/* YMME Search Widget Preview */}
-              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
-                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>your-store.myshopify.com</span>
-                </div>
-                <div style={{ padding: "24px" }}>
-                  <p style={{ fontSize: "15px", fontWeight: 700, marginBottom: "12px", color: "#0f172a" }}>Find Parts for Your Vehicle</p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "12px" }}>
-                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
-                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Make</span>BMW
-                    </div>
-                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
-                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Model</span>3 Series
-                    </div>
-                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
-                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Year</span>2022
-                    </div>
-                    <div style={{ padding: "8px 12px", border: "1px solid #d1d5db", borderRadius: "6px", fontSize: "13px", color: "#0f172a", background: "#f9fafb" }}>
-                      <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Engine</span>M340i (382 Hp)
-                    </div>
+            {/* Row 2: Compatibility Table + Vehicle Spec */}
+            <div style={{ display: "flex", gap: 32, flexWrap: "wrap" as const, justifyContent: "center" }}>
+              {/* Vehicle Compatibility Table */}
+              <BrowserFrame title="Vehicle Compatibility Table">
+                <div style={{ padding: 20 }}>
+                  <div style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px",
+                    background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, marginBottom: 14,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#15803d" }}>Fits your vehicle</span>
                   </div>
-                  <button style={{ width: "100%", padding: "10px", background: "#005bd2", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
-                    🔍 Find Parts
-                  </button>
-                </div>
-              </div>
-
-              {/* Plate Lookup Widget Preview */}
-              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
-                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>UK Plate Lookup</span>
-                </div>
-                <div style={{ padding: "24px", textAlign: "center" }}>
-                  <p style={{ fontSize: "15px", fontWeight: 700, marginBottom: "16px", color: "#0f172a" }}>Find Parts by Registration</p>
-                  <div style={{ display: "flex", gap: "8px", justifyContent: "center", marginBottom: "16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", background: "#f4c542", borderRadius: "6px", overflow: "hidden", border: "2px solid #0f172a" }}>
-                      <div style={{ background: "#003da5", color: "white", padding: "8px 6px", fontSize: "10px", fontWeight: 700 }}>GB</div>
-                      <input disabled value="BD18 JYC" style={{ padding: "8px 12px", fontSize: "16px", fontWeight: 700, border: "none", background: "#f4c542", width: "120px", color: "#0f172a" }} />
-                    </div>
-                    <button style={{ padding: "8px 16px", background: "#005bd2", color: "white", border: "none", borderRadius: "6px", fontWeight: 600, fontSize: "13px" }}>
-                      🔍 Look Up
-                    </button>
-                  </div>
-                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "6px", padding: "12px", textAlign: "left", fontSize: "13px" }}>
-                    <div style={{ fontWeight: 600, color: "#166534", marginBottom: "4px" }}>✓ Vehicle Found</div>
-                    <div style={{ color: "#0f172a" }}>2018 Volvo XC40 • 2.0L Diesel • 150 HP</div>
-                    <div style={{ color: "#64748b", fontSize: "12px", marginTop: "4px" }}>23 compatible parts available</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Vehicle Compatibility Table Preview */}
-              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
-                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>Product Page Widget</span>
-                </div>
-                <div style={{ padding: "24px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <p style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", margin: 0 }}>Vehicle Compatibility</p>
-                    <span style={{ background: "#dcfce7", color: "#166534", fontSize: "12px", fontWeight: 600, padding: "4px 10px", borderRadius: "20px" }}>✓ Fits your vehicle</span>
-                  </div>
-                  <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" as const, fontSize: 13 }}>
                     <thead>
-                      <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Make</th>
-                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Model</th>
-                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Years</th>
-                        <th style={{ padding: "8px", textAlign: "left", fontWeight: 600, color: "#64748b" }}>Engine</th>
+                      <tr style={{ borderBottom: "2px solid #e2e8f0" }}>
+                        {["Make", "Model", "Years", "Engine"].map(h => (
+                          <th key={h} style={{ textAlign: "left" as const, padding: "8px 10px", color: "#64748b", fontWeight: 600, fontSize: 11, textTransform: "uppercase" as const, letterSpacing: 0.5 }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {[
-                        ["BMW", "3 Series", "2019–2022", "M340i (382 Hp)"],
-                        ["BMW", "3 Series", "2019–2022", "330i (255 Hp)"],
-                        ["BMW", "4 Series", "2020–2023", "M440i (382 Hp)"],
-                      ].map(([make, model, years, engine], idx) => (
-                        <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                          <td style={{ padding: "8px", color: "#0f172a" }}>{make}</td>
-                          <td style={{ padding: "8px", color: "#0f172a" }}>{model}</td>
-                          <td style={{ padding: "8px", color: "#64748b" }}>{years}</td>
-                          <td style={{ padding: "8px", color: "#64748b" }}>{engine}</td>
+                        { make: "BMW", model: "3 Series (F30)", years: "2012-2019", engine: "320i 184 Hp" },
+                        { make: "BMW", model: "3 Series (G20)", years: "2019-2025", engine: "330i 258 Hp" },
+                        { make: "BMW", model: "4 Series (F32)", years: "2013-2020", engine: "420i 184 Hp" },
+                      ].map((row, i) => (
+                        <tr key={i} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "10px" }}><strong>{row.make}</strong></td>
+                          <td style={{ padding: "10px" }}>{row.model}</td>
+                          <td style={{ padding: "10px" }}>{row.years}</td>
+                          <td style={{ padding: "10px", color: "#64748b" }}>{row.engine}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
+              </BrowserFrame>
 
-            {/* Additional widget previews row */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px", marginTop: "32px" }}>
-              {/* Vehicle Spec Card Preview */}
-              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                <div style={{ background: "linear-gradient(135deg, #0f172a, #1e3a5f)", color: "white", padding: "24px" }}>
-                  <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "1px", opacity: 0.7, marginBottom: "4px" }}>BMW</div>
-                  <div style={{ fontSize: "24px", fontWeight: 800 }}>M340i</div>
-                  <div style={{ fontSize: "14px", opacity: 0.8 }}>382 Hp • 3.0L Turbo • Petrol</div>
-                  <div style={{ display: "flex", gap: "6px", marginTop: "12px", flexWrap: "wrap" }}>
-                    {["2022", "B58", "Petrol", "AWD", "Steptronic"].map(tag => (
-                      <span key={tag} style={{ background: "rgba(255,255,255,0.15)", padding: "4px 10px", borderRadius: "20px", fontSize: "11px" }}>{tag}</span>
+              {/* Vehicle Spec Card */}
+              <BrowserFrame title="Vehicle Specification Card">
+                <div style={{
+                  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+                  padding: 24, color: "#fff", borderRadius: "0 0 8px 8px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                    <div style={{
+                      width: 40, height: 40, background: "rgba(255,255,255,0.1)", borderRadius: 8,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.6)",
+                    }}>AUDI</div>
+                    <div>
+                      <div style={{ fontSize: 22, fontWeight: 800 }}>A1</div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>1.4 TFSI (150 Hp) S tronic</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 16 }}>
+                    {["2014", "EA211", "Petrol", "Hatchback"].map(tag => (
+                      <span key={tag} style={{
+                        padding: "4px 10px", borderRadius: 12, fontSize: 11, fontWeight: 600,
+                        background: "rgba(0,91,210,0.3)", color: "#93c5fd",
+                      }}>{tag}</span>
                     ))}
                   </div>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", textAlign: "center", padding: "16px", gap: "8px", borderBottom: "1px solid #e2e8f0" }}>
-                  {[["382 HP", "Power"], ["500 Nm", "Torque"], ["3.0L", "Displ."], ["4.4s", "0-100"]].map(([v, l]) => (
-                    <div key={l}>
-                      <div style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a" }}>{v}</div>
-                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>{l}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Fitment Badge + Admin Dashboard Preview */}
-              <div style={{ background: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                <div style={{ background: "#f1f5f9", padding: "8px 16px", display: "flex", alignItems: "center", gap: "6px", borderBottom: "1px solid #e2e8f0" }}>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#ef4444" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#eab308" }}></div>
-                  <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#22c55e" }}></div>
-                  <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "8px" }}>Admin Dashboard</span>
-                </div>
-                <div style={{ padding: "24px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                  <div style={{
+                    display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12,
+                    background: "rgba(255,255,255,0.05)", borderRadius: 8, padding: 14,
+                  }}>
                     {[
-                      ["2,844", "Products"],
-                      ["5,827", "Vehicle Links"],
-                      ["44%", "Coverage"],
-                    ].map(([v, l]) => (
-                      <div key={l} style={{ background: "#f8fafc", borderRadius: "6px", padding: "12px", textAlign: "center" }}>
-                        <div style={{ fontSize: "18px", fontWeight: 700, color: "#0f172a" }}>{v}</div>
-                        <div style={{ fontSize: "11px", color: "#64748b" }}>{l}</div>
+                      { val: "150", unit: "HP" },
+                      { val: "250", unit: "Nm" },
+                      { val: "1.4", unit: "L" },
+                      { val: "7.9", unit: "s" },
+                    ].map((s, i) => (
+                      <div key={i} style={{ textAlign: "center" as const }}>
+                        <div style={{ fontSize: 20, fontWeight: 800 }}>{s.val}</div>
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", textTransform: "uppercase" as const }}>{s.unit}</div>
                       </div>
                     ))}
                   </div>
-                  <div style={{ background: "#f8fafc", borderRadius: "6px", padding: "12px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                      <span style={{ fontSize: "13px", fontWeight: 600, color: "#0f172a" }}>Fitment Coverage</span>
-                      <span style={{ fontSize: "13px", fontWeight: 700, color: "#005bd2" }}>44%</span>
+                </div>
+              </BrowserFrame>
+            </div>
+
+            {/* Row 3: Admin Dashboard */}
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <BrowserFrame title="AutoSync Admin Dashboard" wide>
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                    <AutoSyncLogo size={18} />
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Dashboard</span>
+                    <span style={{ fontSize: 11, color: "#64748b", marginLeft: "auto" }}>autosync-9.myshopify.com</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
+                    {[
+                      { label: "Products", value: "2,844", color: "#005bd2" },
+                      { label: "Fitments", value: "5,827", color: "#7c3aed" },
+                      { label: "Coverage", value: "44%", color: "#059669" },
+                      { label: "Collections", value: "1,125", color: "#d97706" },
+                    ].map((stat, i) => (
+                      <div key={i} style={{
+                        background: "#f8fafc", borderRadius: 8, padding: 14,
+                        border: "1px solid #e2e8f0",
+                      }}>
+                        <div style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase" as const, fontWeight: 600, letterSpacing: 0.5 }}>{stat.label}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, color: stat.color, marginTop: 4 }}>{stat.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Fitment Coverage</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#005bd2" }}>44%</span>
                     </div>
-                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
-                      <div style={{ width: "44%", height: "100%", background: "#005bd2", borderRadius: "3px" }}></div>
+                    <div style={{ height: 8, background: "#e2e8f0", borderRadius: 4, overflow: "hidden" as const }}>
+                      <div style={{ width: "44%", height: "100%", background: "linear-gradient(90deg, #005bd2, #5b9cf5)", borderRadius: 4 }} />
                     </div>
                   </div>
                 </div>
+              </BrowserFrame>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FEATURES ─── */}
+      <section id="features" ref={fadeFeatures.ref} style={{
+        background: "#fff", padding: "80px 24px",
+        opacity: fadeFeatures.visible ? 1 : 0, transform: fadeFeatures.visible ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+      }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 60 }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, margin: "0 0 12px" }}>Everything You Need to Sell Parts</h2>
+            <p style={{ fontSize: 18, color: "#64748b", maxWidth: 600, margin: "0 auto" }}>
+              From data import to storefront experience, AutoSync handles the entire fitment workflow.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 24 }}>
+            {[
+              { icon: icons.database, title: "29,000+ Engine Database", desc: "Pre-built YMME database covering 374 makes, 3,888 models, and 29,515 engines. No manual data entry required." },
+              { icon: icons.zap, title: "AI-Free Smart Extraction", desc: "Pattern-matching engine automatically maps products to vehicles from titles and descriptions. No AI black box." },
+              { icon: icons.search, title: "YMME Search Widget", desc: "Cascading Year/Make/Model/Engine dropdowns with make logos. Customers find compatible parts in seconds." },
+              { icon: icons.tag, title: "Push Tags & Metafields", desc: "One-click sync to Shopify. Fitment data stored as app-owned metafields and smart collection tags." },
+              { icon: icons.layers, title: "Smart Collections", desc: "Automatically create and maintain collections by make, model, or year. Proper SEO titles and descriptions." },
+              { icon: icons.globe, title: "UK Plate Lookup", desc: "DVLA integration lets UK customers enter their registration plate to instantly find compatible parts." },
+              { icon: icons.shield, title: "Vehicle Spec Pages", desc: "Auto-generated vehicle specification pages with full technical details, published as Shopify metaobjects." },
+              { icon: icons.barChart, title: "Fitment Analytics", desc: "Track coverage, mapping progress, and sales impact. See which makes and models drive the most revenue." },
+              { icon: icons.upload, title: "Multi-Source Import", desc: "Import from CSV, XML, JSON, API, or FTP. Smart column mapping remembers your configuration." },
+            ].map((feat, i) => (
+              <div key={i} style={{
+                background: "#fff", borderRadius: 8, padding: 28, border: "1px solid #e2e8f0",
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+              onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.08)"; }}
+              onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                <div style={{
+                  width: 44, height: 44, borderRadius: 10, background: "#eff6ff",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#005bd2", marginBottom: 16,
+                }}>{feat.icon}</div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>{feat.title}</h3>
+                <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, margin: 0 }}>{feat.desc}</p>
               </div>
-            </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ─── FEATURES ─── */}
-        <section id="features" style={{ padding: "100px 24px", background: "white" }}>
-          <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>Features</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Everything you need to sell<br />automotive parts online
-              </h2>
-              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "560px", margin: "0 auto", lineHeight: 1.7 }}>
-                From product mapping to storefront widgets, AutoSync handles every aspect of vehicle fitment.
-              </p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-              {[
-                { icon: icons.ymme, title: "YMME Search Widget", desc: "Cascading Year/Make/Model/Engine dropdowns that help customers find compatible parts. Persists across pages with localStorage." },
-                { icon: icons.plate, title: "UK Plate Lookup", desc: "Customers enter their registration and instantly see compatible parts. Powered by DVLA and MOT APIs with full vehicle history." },
-                { icon: icons.extract, title: "Smart Auto-Extraction", desc: "Automatically detect vehicle fitment from product titles, descriptions, and tags. Engine families, chassis codes, and platform groups." },
-                { icon: icons.collections, title: "Smart Collections", desc: "Auto-generate make, model, and year-range collections with brand logos, SEO descriptions, and proper tag-based rules." },
-                { icon: icons.vehicle, title: "Vehicle Spec Pages", desc: "SEO-optimized vehicle specification pages with full engine data, linked products, and a premium responsive design." },
-                { icon: icons.badge, title: "Fitment Badge", desc: "'Fits your vehicle' or 'May not fit' indicators on every product page. Customers know instantly if a part is compatible." },
-                { icon: icons.provider, title: "Provider Import", desc: "Import products from CSV, XML, FTP, or API. Auto-detect file format with smart column mapping that remembers your settings." },
-                { icon: icons.filters, title: "Search & Discovery Filters", desc: "Structured metafields for Shopify Search and Discovery — filter by Make, Model, Year, and Engine directly in the storefront." },
-                { icon: icons.analytics, title: "Analytics Dashboard", desc: "Fitment coverage, popular makes and models, conversion funnel, plate lookups, and supplier performance tracking." },
-              ].map((f, i) => (
-                <FeatureCard key={f.title} icon={f.icon} title={f.title} desc={f.desc} index={i} />
-              ))}
-            </div>
+      {/* ─── HOW IT WORKS ─── */}
+      <section ref={fadeHowItWorks.ref} style={{
+        background: "#f6f6f7", padding: "80px 24px",
+        opacity: fadeHowItWorks.visible ? 1 : 0, transform: fadeHowItWorks.visible ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+      }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 60 }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, margin: "0 0 12px" }}>How It Works</h2>
+            <p style={{ fontSize: 18, color: "#64748b" }}>Four simple steps to vehicle-aware selling</p>
           </div>
-        </section>
 
-        {/* ─── HOW IT WORKS ─── */}
-        <section id="how-it-works" style={{ padding: "100px 24px", background: "#f8fafc" }}>
-          <div ref={howFade.ref} style={{ ...howFade.style, maxWidth: "1000px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>How It Works</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Up and running in minutes
-              </h2>
-              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "500px", margin: "0 auto", lineHeight: 1.7 }}>
-                Four simple steps to vehicle fitment on your store.
-              </p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "32px" }}>
-              {[
-                { step: "1", title: "Install", desc: "Install AutoSync from the Shopify App Store. Enable the theme widgets in your Online Store editor." },
-                { step: "2", title: "Import", desc: "Sync your Shopify products or import from CSV, XML, FTP, or API. Smart column mapping handles the rest." },
-                { step: "3", title: "Map", desc: "Auto-extraction detects vehicles from product data. Review suggestions or map manually with cascading dropdowns." },
-                { step: "4", title: "Sell", desc: "Push fitment data to Shopify. Customers search by vehicle, see compatibility badges, and find the right parts." },
-              ].map((s) => (
-                <div key={s.step} style={{ textAlign: "center", position: "relative" }}>
-                  <div style={{
-                    width: "64px",
-                    height: "64px",
-                    borderRadius: "50%",
-                    background: "linear-gradient(135deg, #005bd2, #0043a0)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    margin: "0 auto 20px",
-                    fontSize: "24px",
-                    fontWeight: 800,
-                    color: "white",
-                    boxShadow: "0 4px 20px rgba(0,91,210,0.3)",
-                  }}>
-                    {s.step}
-                  </div>
-                  <h3 style={{ fontSize: "18px", fontWeight: 700, marginBottom: "8px", color: "#0f172a" }}>{s.title}</h3>
-                  <p style={{ fontSize: "15px", color: "#64748b", lineHeight: 1.7, margin: 0 }}>{s.desc}</p>
-                </div>
-              ))}
-            </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 32 }}>
+            {[
+              { step: 1, title: "Install", desc: "Add AutoSync from the Shopify App Store. Free plan available instantly." },
+              { step: 2, title: "Import", desc: "Sync your Shopify products or import from CSV, API, or FTP data sources." },
+              { step: 3, title: "Map", desc: "Our extraction engine automatically maps products to vehicles. Review and refine." },
+              { step: 4, title: "Sell", desc: "Customers search by their vehicle and find exactly what fits. Conversions increase." },
+            ].map((s, i) => (
+              <div key={i} style={{ textAlign: "center" as const }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: "50%", background: "#005bd2",
+                  color: "#fff", fontSize: 20, fontWeight: 800, display: "flex", alignItems: "center",
+                  justifyContent: "center", margin: "0 auto 16px",
+                }}>{s.step}</div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: "0 0 8px" }}>{s.title}</h3>
+                <p style={{ fontSize: 14, color: "#64748b", lineHeight: 1.6, margin: 0 }}>{s.desc}</p>
+              </div>
+            ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* ─── PRICING ─── */}
-        <section id="pricing" style={{ padding: "100px 24px", background: "white" }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>Pricing</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Start free, scale as you grow
-              </h2>
-              <p style={{ fontSize: "18px", color: "#64748b", maxWidth: "500px", margin: "0 auto", lineHeight: 1.7 }}>
-                Every plan includes the YMME database. Upgrade anytime.
-              </p>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "16px", alignItems: "start" }}>
-              <PricingCard name="Free" price="$0" products="50" fitments="200" features={["Manual mapping", "YMME widget", "Fitment badge"]} />
-              <PricingCard name="Starter" price="$19" products="500" fitments="2,500" features={["Auto extraction", "Push tags", "1 provider"]} />
-              <PricingCard name="Growth" price="$49" products="5,000" fitments="25,000" features={["All widgets", "Smart collections", "3 providers", "Bulk operations"]} highlight />
-              <PricingCard name="Professional" price="$99" products="25,000" fitments="100,000" features={["API integration", "My Garage", "5 providers", "Custom vehicles"]} />
-              <PricingCard name="Business" price="$179" products="100,000" fitments="500,000" features={["FTP import", "Wheel Finder", "15 providers", "Priority support"]} />
-              <PricingCard name="Enterprise" price="$299" products="Unlimited" fitments="Unlimited" features={["DVLA plate lookup", "VIN decode", "Full CSS control", "Dedicated support"]} />
-            </div>
+      {/* ─── PRICING ─── */}
+      <section id="pricing" ref={fadePricing.ref} style={{
+        background: "#fff", padding: "80px 24px",
+        opacity: fadePricing.visible ? 1 : 0, transform: fadePricing.visible ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+      }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 60 }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, margin: "0 0 12px" }}>Simple, Transparent Pricing</h2>
+            <p style={{ fontSize: 18, color: "#64748b", maxWidth: 600, margin: "0 auto" }}>
+              Start free. Scale as you grow. No hidden fees, no long-term contracts.
+            </p>
           </div>
-        </section>
 
-        {/* ─── COMPETITOR COMPARISON ─── */}
-        <section style={{ padding: "100px 24px", background: "#f8fafc" }}>
-          <div ref={compFade.ref} style={{ ...compFade.style, maxWidth: "900px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "64px" }}>
-              <p style={{ fontSize: "14px", color: "#005bd2", fontWeight: 600, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "12px" }}>Comparison</p>
-              <h2 style={{ fontSize: "clamp(28px, 4vw, 44px)", fontWeight: 800, letterSpacing: "-1px", margin: "0 0 16px", lineHeight: 1.15 }}>
-                Why merchants choose AutoSync
-              </h2>
-            </div>
-            <div style={{
-              background: "white",
-              borderRadius: "8px",
-              border: "1px solid #e8ecf1",
-              overflow: "hidden",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-            }}>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                borderBottom: "2px solid #f1f5f9",
-                padding: "20px 24px",
-                fontSize: "14px",
-                fontWeight: 700,
-                color: "#64748b",
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, alignItems: "start" }}>
+            {plans.map((plan, i) => (
+              <div key={i} style={{
+                background: "#fff", borderRadius: 8, padding: 24,
+                border: plan.highlight ? "2px solid #005bd2" : "1px solid #e2e8f0",
+                position: "relative" as const,
+                boxShadow: plan.highlight ? "0 8px 30px rgba(0,91,210,0.12)" : "none",
+                transform: plan.highlight ? "scale(1.02)" : "none",
               }}>
-                <div>Feature</div>
-                <div style={{ textAlign: "center", color: "#005bd2" }}>AutoSync</div>
-                <div style={{ textAlign: "center" }}>Convermax</div>
-                <div style={{ textAlign: "center" }}>Others</div>
-              </div>
-              {[
-                { feature: "Starting price", autosync: "Free", convermax: "$250/mo", others: "$49/mo" },
-                { feature: "YMME Database", autosync: true, convermax: true, others: false },
-                { feature: "UK Plate Lookup", autosync: true, convermax: false, others: false },
-                { feature: "Smart Collections", autosync: true, convermax: false, others: false },
-                { feature: "Auto Extraction", autosync: true, convermax: false, others: false },
-                { feature: "Vehicle Spec Pages", autosync: true, convermax: false, others: false },
-                { feature: "Provider Import (FTP/API)", autosync: true, convermax: true, others: false },
-                { feature: "Built for Shopify", autosync: true, convermax: false, others: true },
-              ].map((row, i) => (
-                <div key={row.feature} style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr 1fr",
-                  padding: "16px 24px",
-                  borderBottom: i < 7 ? "1px solid #f1f5f9" : "none",
-                  fontSize: "14px",
-                  alignItems: "center",
-                }}>
-                  <div style={{ fontWeight: 500, color: "#334155" }}>{row.feature}</div>
-                  <div style={{ textAlign: "center" }}>
-                    {typeof row.autosync === "boolean" ? (row.autosync ? icons.check : icons.x) : <span style={{ fontWeight: 700, color: "#005bd2" }}>{row.autosync}</span>}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    {typeof row.convermax === "boolean" ? (row.convermax ? icons.check : icons.x) : <span style={{ color: "#64748b" }}>{row.convermax}</span>}
-                  </div>
-                  <div style={{ textAlign: "center" }}>
-                    {typeof row.others === "boolean" ? (row.others ? icons.check : icons.x) : <span style={{ color: "#64748b" }}>{row.others}</span>}
-                  </div>
+                {plan.highlight && (
+                  <div style={{
+                    position: "absolute" as const, top: -12, left: "50%", transform: "translateX(-50%)",
+                    background: "#005bd2", color: "#fff", padding: "4px 14px", borderRadius: 12,
+                    fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: 0.5,
+                    whiteSpace: "nowrap" as const,
+                  }}>Most Popular</div>
+                )}
+                <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>{plan.name}</div>
+                <div style={{ marginBottom: 16 }}>
+                  <span style={{ fontSize: 32, fontWeight: 800, color: "#0f172a" }}>{plan.price}</span>
+                  <span style={{ fontSize: 14, color: "#64748b" }}>{plan.period}</span>
                 </div>
-              ))}
-            </div>
-            <p style={{ textAlign: "center", fontSize: "14px", color: "#94a3b8", marginTop: "20px" }}>
-              Competitors include Convermax, EasySearch, and azFitment.
-            </p>
-          </div>
-        </section>
-
-        {/* ─── FINAL CTA ─── */}
-        <section style={{
-          padding: "100px 24px",
-          background: "linear-gradient(135deg, #0f172a 0%, #1a2744 50%, #0f172a 100%)",
-          textAlign: "center",
-          position: "relative",
-          overflow: "hidden",
-        }}>
-          <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            <div style={{ position: "absolute", top: "-50%", left: "50%", transform: "translateX(-50%)", width: "1000px", height: "1000px", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.2) 0%, transparent 70%)" }} />
-          </div>
-          <div ref={ctaFade.ref} style={{ ...ctaFade.style, maxWidth: "700px", margin: "0 auto", position: "relative", zIndex: 1 }}>
-            <h2 style={{ fontSize: "clamp(28px, 4vw, 48px)", fontWeight: 800, color: "white", letterSpacing: "-1px", margin: "0 0 20px", lineHeight: 1.15 }}>
-              Ready to sell more parts?
-            </h2>
-            <p style={{ fontSize: "18px", color: "rgba(255,255,255,0.6)", maxWidth: "500px", margin: "0 auto 40px", lineHeight: 1.7 }}>
-              Join automotive Shopify stores using AutoSync to increase conversions with accurate vehicle fitment.
-            </p>
-            <a href="https://apps.shopify.com" style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "18px 40px",
-              background: "#005bd2",
-              color: "white",
-              borderRadius: "14px",
-              fontWeight: 600,
-              fontSize: "18px",
-              textDecoration: "none",
-              boxShadow: "0 4px 24px rgba(0,91,210,0.4)",
-              transition: "transform 0.2s, box-shadow 0.2s",
-            }}>
-              Get Started for Free
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
-        </section>
-
-        {/* ─── LOGIN ─── */}
-        {showForm && (
-          <section id="login" style={{ padding: "80px 24px", background: "white" }}>
-            <div style={{
-              maxWidth: "420px",
-              margin: "0 auto",
-              background: "#f8fafc",
-              borderRadius: "8px",
-              padding: "40px",
-              border: "1px solid #e8ecf1",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-            }}>
-              <div style={{ textAlign: "center", marginBottom: "28px" }}>
-                <svg width="36" height="36" viewBox="0 0 150 150" fill="none" style={{ marginBottom: "12px" }}>
-                  <path d="M75 10 L130 45 L130 105 L75 140 L20 105 L20 45 Z" fill="#005bd2" opacity="0.9" />
-                  <path d="M60 65 L75 50 L100 80 L75 100 L50 80 Z" fill="white" />
-                </svg>
-                <h3 style={{ fontSize: "22px", fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>Welcome back</h3>
-                <p style={{ fontSize: "14px", color: "#64748b", margin: 0 }}>Enter your store URL to open the dashboard</p>
+                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                  <strong style={{ color: "#0f172a" }}>{plan.products}</strong> products
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+                  <strong style={{ color: "#0f172a" }}>{plan.fitments}</strong> fitments
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 16 }}>
+                  <strong style={{ color: "#0f172a" }}>{plan.providers}</strong> providers
+                </div>
+                <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
+                  {plan.features.map((feat, j) => (
+                    <div key={j} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 13, color: "#374151" }}>
+                      {icons.check}
+                      <span>{feat}</span>
+                    </div>
+                  ))}
+                </div>
+                <a href="https://apps.shopify.com" target="_blank" rel="noopener noreferrer" style={{
+                  display: "block", textAlign: "center" as const, padding: "10px 0", borderRadius: 8,
+                  marginTop: 16, fontSize: 14, fontWeight: 600, textDecoration: "none",
+                  background: plan.highlight ? "#005bd2" : "#f1f5f9",
+                  color: plan.highlight ? "#fff" : "#0f172a",
+                  border: plan.highlight ? "none" : "1px solid #e2e8f0",
+                  transition: "background 0.2s",
+                }}>Get Started</a>
               </div>
-              <Form method="post" action="/auth/login" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── COMPETITOR COMPARISON ─── */}
+      <section ref={fadeCompare.ref} style={{
+        background: "#f6f6f7", padding: "80px 24px",
+        opacity: fadeCompare.visible ? 1 : 0, transform: fadeCompare.visible ? "translateY(0)" : "translateY(20px)",
+        transition: "opacity 0.6s ease, transform 0.6s ease",
+      }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 48 }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, margin: "0 0 12px" }}>Why AutoSync?</h2>
+            <p style={{ fontSize: 18, color: "#64748b" }}>Compare us with the competition</p>
+          </div>
+
+          <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e2e8f0", overflow: "hidden" as const }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" as const, fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ textAlign: "left" as const, padding: "14px 16px", fontWeight: 600, color: "#64748b", fontSize: 12, textTransform: "uppercase" as const }}>Feature</th>
+                  <th style={{ textAlign: "center" as const, padding: "14px 16px", fontWeight: 700, color: "#005bd2", fontSize: 13 }}>AutoSync</th>
+                  <th style={{ textAlign: "center" as const, padding: "14px 16px", fontWeight: 600, color: "#64748b", fontSize: 13 }}>Convermax</th>
+                  <th style={{ textAlign: "center" as const, padding: "14px 16px", fontWeight: 600, color: "#64748b", fontSize: 13 }}>Others</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { feature: "Starting Price", us: "$0/mo", them: "$250/mo", others: "$50-100/mo" },
+                  { feature: "YMME Database Included", us: true, them: false, others: false },
+                  { feature: "Auto Extraction Engine", us: true, them: false, others: false },
+                  { feature: "UK Plate Lookup (DVLA)", us: true, them: false, others: false },
+                  { feature: "Smart Collections", us: true, them: true, others: false },
+                  { feature: "Multi-Source Import", us: true, them: false, others: true },
+                  { feature: "Vehicle Spec Pages", us: true, them: false, others: false },
+                  { feature: "Built for Shopify", us: true, them: false, others: true },
+                ].map((row, i) => (
+                  <tr key={i} style={{ borderTop: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "12px 16px", fontWeight: 500 }}>{row.feature}</td>
+                    <td style={{ padding: "12px 16px", textAlign: "center" as const }}>
+                      {typeof row.us === "boolean" ? (row.us ? icons.checkGreen : icons.x) : <span style={{ fontWeight: 700, color: "#005bd2" }}>{row.us}</span>}
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "center" as const }}>
+                      {typeof row.them === "boolean" ? (row.them ? icons.checkGreen : icons.x) : <span style={{ color: "#64748b" }}>{row.them}</span>}
+                    </td>
+                    <td style={{ padding: "12px 16px", textAlign: "center" as const }}>
+                      {typeof row.others === "boolean" ? (row.others ? icons.checkGreen : icons.x) : <span style={{ color: "#64748b" }}>{row.others}</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── CTA SECTION ─── */}
+      <section style={{
+        background: "linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)",
+        padding: "80px 24px", textAlign: "center" as const, position: "relative" as const, overflow: "hidden" as const,
+      }}>
+        <div style={{
+          position: "absolute" as const, top: -100, right: -100, width: 400, height: 400,
+          borderRadius: "50%", background: "radial-gradient(circle, rgba(0,91,210,0.15) 0%, transparent 70%)",
+        }} />
+        <div style={{ position: "relative" as const, zIndex: 1, maxWidth: 600, margin: "0 auto" }}>
+          <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 800, color: "#fff", margin: "0 0 16px" }}>
+            Ready to sell more parts?
+          </h2>
+          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.7)", margin: "0 0 32px" }}>
+            Join automotive merchants already using AutoSync to increase conversions with vehicle-specific search.
+          </p>
+          <a href="https://apps.shopify.com" target="_blank" rel="noopener noreferrer" style={{
+            display: "inline-block", background: "#005bd2", color: "#fff", padding: "16px 40px",
+            borderRadius: 8, fontSize: 18, fontWeight: 700, textDecoration: "none",
+            boxShadow: "0 4px 14px rgba(0,91,210,0.4)", transition: "transform 0.2s",
+          }}>Install Free on Shopify</a>
+        </div>
+      </section>
+
+      {/* ─── LOGIN FORM ─── */}
+      <section id="login" style={{ background: "#fff", padding: "80px 24px" }}>
+        <div style={{ maxWidth: 440, margin: "0 auto" }}>
+          <div style={{ textAlign: "center" as const, marginBottom: 32 }}>
+            <AutoSyncLogo size={48} />
+            <h2 style={{ fontSize: 24, fontWeight: 800, margin: "16px 0 8px" }}>Merchant Login</h2>
+            <p style={{ fontSize: 14, color: "#64748b", margin: 0 }}>Already have AutoSync installed? Enter your store domain below.</p>
+          </div>
+          <div style={{
+            background: "#fff", borderRadius: 8, padding: 32,
+            border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+          }}>
+            <Form method="post" action="/auth/login">
+              <label style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                Store Domain
+              </label>
+              <div style={{ display: "flex", gap: 8 }}>
                 <input
                   type="text"
                   name="shop"
-                  placeholder="your-store.myshopify.com"
+                  placeholder="your-store"
                   style={{
-                    padding: "14px 16px",
-                    borderRadius: "10px",
-                    border: "1px solid #d1d5db",
-                    fontSize: "15px",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    outline: "none",
-                    transition: "border-color 0.2s, box-shadow 0.2s",
+                    flex: 1, padding: "10px 14px", borderRadius: 8, border: "1px solid #d1d5db",
+                    fontSize: 14, fontFamily: font, outline: "none",
                   }}
                 />
-                <button
-                  type="submit"
-                  style={{
-                    padding: "14px 24px",
-                    background: "#005bd2",
-                    color: "white",
-                    borderRadius: "10px",
-                    fontSize: "15px",
-                    fontWeight: 600,
-                    border: "none",
-                    cursor: "pointer",
-                    transition: "background 0.2s",
-                  }}
-                >
-                  Open Dashboard
-                </button>
-              </Form>
-            </div>
-          </section>
-        )}
+                <span style={{
+                  display: "flex", alignItems: "center", padding: "10px 14px",
+                  background: "#f8fafc", borderRadius: 8, border: "1px solid #d1d5db",
+                  fontSize: 14, color: "#64748b", whiteSpace: "nowrap" as const,
+                }}>.myshopify.com</span>
+              </div>
+              <button type="submit" style={{
+                width: "100%", padding: "12px 0", borderRadius: 8, border: "none",
+                background: "#005bd2", color: "#fff", fontSize: 14, fontWeight: 600,
+                cursor: "pointer", marginTop: 16, fontFamily: font,
+              }}>Log In</button>
+            </Form>
+          </div>
+        </div>
+      </section>
 
-        {/* ─── FOOTER ─── */}
-        <footer style={{ background: "#0f172a", color: "white", padding: "60px 24px 40px" }}>
-          <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "start", gap: "40px", marginBottom: "40px" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
-                  <svg width="20" height="20" viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg"><path fill="#005bd2" d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z"/><path fill="#005bd2" d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z"/></svg>
-                  <span style={{ fontSize: "18px", fontWeight: 700 }}>AutoSync</span>
-                </div>
-                <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.5)", maxWidth: "280px", lineHeight: 1.7 }}>
-                  Vehicle fitment intelligence for Shopify automotive stores.
-                </p>
+      {/* ─── FOOTER ─── */}
+      <footer style={{
+        background: "#0f172a", padding: "48px 24px 32px", color: "rgba(255,255,255,0.7)",
+      }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap" as const, gap: 40, marginBottom: 40 }}>
+            {/* Brand */}
+            <div style={{ minWidth: 200 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                <AutoSyncLogo size={28} />
+                <span style={{ fontSize: 18, fontWeight: 700, color: "#fff" }}>AutoSync</span>
               </div>
-              <div style={{ display: "flex", gap: "48px", flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "16px" }}>Product</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <a href="#features" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}>Features</a>
-                    <a href="#pricing" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}>Pricing</a>
-                    <a href="#how-it-works" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}>How It Works</a>
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: "13px", fontWeight: 600, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "16px" }}>Legal</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <a href="/legal/privacy" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}>Privacy Policy</a>
-                    <a href="/legal/terms" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none", fontSize: "14px", transition: "color 0.2s" }}>Terms of Service</a>
-                  </div>
-                </div>
+              <p style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 260, margin: 0, color: "rgba(255,255,255,0.5)" }}>
+                Vehicle fitment intelligence for Shopify automotive stores. Built by Performance HQ.
+              </p>
+            </div>
+
+            {/* Product */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" as const, letterSpacing: 1, marginBottom: 12 }}>Product</div>
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+                {["Features", "Widgets", "Pricing", "Changelog"].map(item => (
+                  <button key={item} onClick={() => scrollTo(item.toLowerCase())} style={{
+                    background: "none", border: "none", color: "rgba(255,255,255,0.6)",
+                    fontSize: 13, cursor: "pointer", textAlign: "left" as const, padding: 0,
+                    fontFamily: font,
+                  }}>{item}</button>
+                ))}
               </div>
             </div>
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", margin: 0 }}>
-                &copy; 2026 AutoSync. All rights reserved.
-              </p>
-              <p style={{ fontSize: "13px", color: "rgba(255,255,255,0.35)", margin: 0 }}>
-                Built for Shopify merchants worldwide.
-              </p>
+
+            {/* Legal */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" as const, letterSpacing: 1, marginBottom: 12 }}>Legal</div>
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+                {[
+                  { label: "Privacy Policy", href: "/legal/privacy" },
+                  { label: "Terms of Service", href: "/legal/terms" },
+                ].map(item => (
+                  <a key={item.label} href={item.href} style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, textDecoration: "none" }}>{item.label}</a>
+                ))}
+              </div>
+            </div>
+
+            {/* Support */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase" as const, letterSpacing: 1, marginBottom: 12 }}>Support</div>
+              <div style={{ display: "flex", flexDirection: "column" as const, gap: 8 }}>
+                <a href="mailto:support@autosync.dev" style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, textDecoration: "none" }}>support@autosync.dev</a>
+              </div>
             </div>
           </div>
-        </footer>
+
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 24, textAlign: "center" as const }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+              &copy; {new Date().getFullYear()} AutoSync by Performance HQ. All rights reserved.
+            </span>
+          </div>
+        </div>
+      </footer>
+
+      {/* ─── GLOBAL ANIMATIONS ─── */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { margin: 0; padding: 0; }
+        a:hover { opacity: 0.9; }
+      `}</style>
+    </div>
+  );
+}
+
+/* ─── Browser Frame Mockup ─── */
+function BrowserFrame({ title, children, wide }: { title: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div style={{
+      background: "#fff", borderRadius: 8, border: "1px solid #e2e8f0",
+      boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
+      width: wide ? "100%" : undefined, maxWidth: wide ? 700 : 360,
+      flex: wide ? undefined : "1 1 340px",
+      transition: "transform 0.2s, box-shadow 0.2s",
+    }}
+    onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 30px rgba(0,0,0,0.1)"; }}
+    onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.06)"; }}
+    >
+      {/* Browser chrome */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+        background: "#f8fafc", borderBottom: "1px solid #e2e8f0",
+        borderRadius: "8px 8px 0 0",
+      }}>
+        <div style={{ display: "flex", gap: 5 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff5f57" }} />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#febc2e" }} />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#28c840" }} />
+        </div>
+        <div style={{
+          flex: 1, background: "#fff", borderRadius: 4, padding: "4px 10px",
+          fontSize: 11, color: "#94a3b8", border: "1px solid #e2e8f0",
+          overflow: "hidden" as const, textOverflow: "ellipsis" as const, whiteSpace: "nowrap" as const,
+        }}>{title}</div>
       </div>
-    </>
+      {children}
+    </div>
+  );
+}
+
+/* ─── Select Mockup ─── */
+function SelectMock({ label, value, hasLogo }: { label: string; value: string; hasLogo?: boolean }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "9px 10px", borderRadius: 6, border: "1px solid #e2e8f0",
+      background: "#f8fafc", fontSize: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {hasLogo && <img src="https://www.carlogos.org/car-logos/bmw-logo.png" alt="" style={{ width: 14, height: 14, objectFit: "contain" as const }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+        <span style={{ color: "#64748b" }}>{label}</span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ fontWeight: 600, color: "#0f172a" }}>{value}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
   );
 }
