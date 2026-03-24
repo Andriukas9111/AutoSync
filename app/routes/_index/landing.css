@@ -852,38 +852,62 @@ body { margin: 0; padding: 0; background: #09090b; }
 
 /* ─── Responsive: 768px ─── */
 @media (max-width: 768px) {
-  .lp-hero-title { font-size: clamp(32px, 8vw, 48px); gap: 0 10px; }
-  .lp-hero-ctas { flex-direction: column; align-items: center; }
+  .lp-hero-title { font-size: clamp(28px, 7vw, 40px); gap: 0 8px; }
+  .lp-hero-sub { font-size: 15px; }
+  .lp-hero-ctas { flex-direction: column; align-items: stretch; gap: 10px; }
+  .lp-hero-ctas .lp-btn { width: 100%; justify-content: center; }
   .lp-stats { grid-template-columns: repeat(2, 1fr); }
   .lp-stat:nth-child(2) { border-right: none; }
+  .lp-stat-num { font-size: 24px; }
   .lp-nav-links { display: none; }
-  .lp-interactive-dash { flex-direction: column; height: auto; }
+  .lp-section { padding: 60px 0; }
+  .lp-section-title { font-size: 24px !important; }
+  .lp-section-sub { font-size: 14px; }
+  .lp-interactive-dash { flex-direction: column; height: auto; overflow-x: auto; max-width: 100%; }
   .lp-idash-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; padding: 12px; }
   .lp-idash-nav-item { border-left: none; padding: 6px 12px; font-size: 12px; }
   .lp-idash-logo { padding: 0 12px 0 0; border-bottom: none; margin-bottom: 0; }
   .idash-actions { grid-template-columns: repeat(2, 1fr); }
   .idash-stats-row { grid-template-columns: repeat(2, 1fr); }
-  .lp-steps { flex-direction: column; gap: 32px; }
+  .lp-steps { flex-direction: column; gap: 24px; }
   .lp-steps-line { display: none; }
   .lp-systems { grid-template-columns: 1fr; }
-  .lp-pricing { grid-template-columns: 1fr; }
+  .lp-pricing { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
   .demo-grid-ymme { grid-template-columns: 1fr 1fr; }
   .demo-vehicle-grid { grid-template-columns: 1fr; }
   .demo-vin-specs-grid { grid-template-columns: repeat(2, 1fr); }
   .demo-quick-stats { grid-template-columns: repeat(3, 1fr); }
-  .lp-footer-grid { grid-template-columns: 1fr; gap: 32px; }
+  .lp-footer-grid { grid-template-columns: 1fr; gap: 24px; }
   .lp-tbl { min-width: 600px; }
+  .lp-tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .lp-fw-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; gap: 0; }
+  .lp-fw-item { white-space: nowrap; min-width: auto; padding: 8px 12px; }
+  .lp-fw-item-desc { display: none !important; }
+  .lp-fw-demo { padding: 16px; }
+  .lp-fw-demo-inner { max-width: 100%; }
+  .lp-demo-light { padding: 16px !important; }
+  .demo-title { font-size: 16px !important; }
+  .demo-sel { font-size: 13px !important; padding: 8px 10px !important; }
+  .demo-label { font-size: 10px !important; }
+  .lp-hero { padding: 100px 0 50px; }
 }
 
 /* ─── Responsive: 480px ─── */
 @media (max-width: 480px) {
   .lp-w { padding: 0 16px; }
-  .lp-section { padding: 100px 0; }
-  .lp-hero { padding: 110px 0 60px; }
-  .lp-hero-sub { font-size: 16px; }
+  .lp-section { padding: 48px 0; }
+  .lp-hero { padding: 80px 0 40px; }
+  .lp-hero-title { font-size: clamp(24px, 6vw, 32px); }
+  .lp-hero-sub { font-size: 14px; }
+  .lp-stat-num { font-size: 20px; }
+  .lp-stat-label { font-size: 10px; }
   .lp-fw-demo-inner { border-radius: var(--radius-sm); }
   .demo-grid-ymme { grid-template-columns: 1fr; }
   .demo-specs-light { grid-template-columns: 1fr; }
   .demo-vin-input-row { flex-direction: column; }
   .demo-quick-stats { grid-template-columns: repeat(2, 1fr); }
+  .lp-interactive-dash { display: none; }
+  .lp-section-title { font-size: 22px !important; }
+  .lp-price-amount { font-size: 36px; }
+  .lp-step-num { width: 36px; height: 36px; font-size: 16px; }
 }
