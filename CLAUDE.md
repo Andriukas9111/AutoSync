@@ -303,7 +303,6 @@ extensions/
       ymme-search.liquid      # Cascading vehicle search
       fitment-badge.liquid    # "Fits your vehicle" badge
       vehicle-compatibility.liquid # Full compatibility table
-      floating-vehicle-bar.liquid  # Persistent vehicle bar
       plate-lookup.liquid     # UK reg plate lookup (Enterprise)
       wheel-finder.liquid     # PCD/offset/bore search (Business+)
       vin-decode.liquid       # VIN decoder
@@ -398,7 +397,6 @@ Shopify limits: 250 tags/product, 128 items/list metafield.
 - `ymme-search.liquid` — Cascading vehicle search dropdowns (with localStorage persistence + popover garage)
 - `fitment-badge.liquid` — "Fits your vehicle" badge on product pages
 - `vehicle-compatibility.liquid` — Full compatibility table
-- `floating-vehicle-bar.liquid` — Persistent selected vehicle bar (Euro Car Parts style)
 - `plate-lookup.liquid` — UK registration number lookup (Enterprise)
 - `wheel-finder.liquid` — PCD/offset/bore search (Business+)
 - `vin-decode.liquid` — VIN decoder
