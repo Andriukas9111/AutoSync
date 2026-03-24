@@ -151,14 +151,20 @@ export function autoMapColumns(headers: string[]): ColumnMapping[] {
 
 /**
  * Load saved column mappings for a provider from the database.
+ * shopId is required for multi-tenant security — ensures mappings are scoped to the tenant.
  */
 export async function loadSavedMappings(
   providerId: string,
+  shopId?: string,
 ): Promise<ColumnMapping[]> {
-  const { data } = await db
+  let query = db
     .from("provider_column_mappings")
     .select("source_column, target_field, transform_rule, is_user_edited")
     .eq("provider_id", providerId);
+  if (shopId) {
+    query = query.eq("shop_id", shopId);
+  }
+  const { data } = await query;
 
   if (!data) return [];
 

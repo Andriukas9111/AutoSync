@@ -172,16 +172,29 @@ async function buildCollectionTargets(
 ): Promise<CollectionTarget[]> {
   const targets: CollectionTarget[] = [];
 
-  // Query ALL fitments (both with and without YMME IDs)
+  // Query ALL fitments (both with and without YMME IDs), paginated to avoid 1000-row limit.
   // This ensures collections work whether fitments came from auto-extraction
   // (no ymme IDs) or manual mapping (with ymme IDs).
-  const { data: fitments, error } = await db
-    .from("vehicle_fitments")
-    .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
-    .eq("shop_id", shopId)
-    .not("make", "is", null);
+  const fitments: any[] = [];
+  let fOffset = 0;
+  while (true) {
+    const { data: batch, error: batchErr } = await db
+      .from("vehicle_fitments")
+      .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .range(fOffset, fOffset + 999);
+    if (batchErr) {
+      console.error("[collections] Failed to query fitments:", batchErr.message);
+      return [];
+    }
+    if (!batch || batch.length === 0) break;
+    fitments.push(...batch);
+    fOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
 
-  if (error || !fitments || fitments.length === 0) return [];
+  if (fitments.length === 0) return [];
 
   // Resolve YMME IDs from text names when missing
   const makeNameToId = new Map<string, string | number>();
