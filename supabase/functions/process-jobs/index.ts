@@ -66,11 +66,13 @@ Deno.serve(async (req) => {
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find the next running job
+    // Find the next running job (with locking to prevent duplicate processing)
+    const staleLockCutoff = new Date(Date.now() - 5 * 60000).toISOString();
     const { data: job, error: jobError } = await db
       .from("sync_jobs")
       .select("*")
       .eq("status", "running")
+      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -83,6 +85,9 @@ Deno.serve(async (req) => {
     if (!job) {
       return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
     }
+
+    // Lock the job to prevent duplicate processing by next pg_cron tick
+    await db.from("sync_jobs").update({ locked_at: new Date().toISOString() }).eq("id", job.id);
 
     console.log(`[process-jobs] Processing job ${job.id} type=${job.type} shop=${job.shop_id}`);
 
@@ -118,12 +123,14 @@ Deno.serve(async (req) => {
         error: result.error,
         processed_items: newProcessed,
         completed_at: new Date().toISOString(),
+        locked_at: null,
       }).eq("id", job.id);
     } else if (!result.hasMore) {
       await db.from("sync_jobs").update({
         status: "completed",
         processed_items: newProcessed,
         completed_at: new Date().toISOString(),
+        locked_at: null,
       }).eq("id", job.id);
 
       // Update tenant counts on job completion (keeps Dashboard accurate)

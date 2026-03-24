@@ -913,7 +913,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       resolved,
       resolvedEngine: resolved.engineName || "",
       compatibleCount,
-      _debug: debugInfo,
+      ...(process.env.NODE_ENV !== "production" ? { _debug: debugInfo } : {}),
     });
   } catch (err) {
     if (err instanceof VesError) {
@@ -1109,6 +1109,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
       const { data: fitments } = await db
         .from("vehicle_fitments")
         .select("product_id")
+        .eq("shop_id", shop)
         .ilike("make", decoded.make)
         .ilike("model", `%${decoded.model}%`)
         .lte("year_from", decoded.modelYear)
@@ -1120,7 +1121,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
           .from("products")
           .select("id, shopify_gid, title, handle, image_url, price")
           .in("id", productIds.slice(0, 50))
-          .eq("status", "approved");
+          .eq("shop_id", shop);
         compatibleProducts = products ?? [];
       }
     } catch (searchErr) {

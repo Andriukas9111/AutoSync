@@ -328,7 +328,6 @@ export default function Push() {
 
   // Don't show "completed" banner when job was just created — the progress bar shows status
   const isJobCreated = actionData && "jobCreated" in actionData;
-  const showResults = actionData && "success" in actionData && actionData.success && !isJobCreated;
   const showError = actionData && "error" in actionData;
 
   // Unified data — ALL live stats from one source (useAppData)
@@ -390,33 +389,6 @@ export default function Push() {
           <Layout.Section>
             <Banner tone="critical">
               <p>{(actionData as any).error}</p>
-            </Banner>
-          </Layout.Section>
-        )}
-
-        {/* Success banner */}
-        {showResults && (
-          <Layout.Section>
-            <Banner tone="success" title="Push completed successfully">
-              <BlockStack gap="200">
-                {(actionData as any).pushResult && (
-                  <Text as="p" variant="bodyMd">
-                    {(actionData as any).pushResult.tagsPushed} tags pushed,{" "}
-                    {(actionData as any).pushResult.metafieldsPushed} metafields set,{" "}
-                    {(actionData as any).pushResult.processed} products processed
-                    {(actionData as any).pushResult.errors > 0 &&
-                      ` (${(actionData as any).pushResult.errors} errors)`}
-                  </Text>
-                )}
-                {(actionData as any).collectionsResult && (
-                  <Text as="p" variant="bodyMd">
-                    {(actionData as any).collectionsResult.created} collections created,{" "}
-                    {(actionData as any).collectionsResult.updated} updated
-                    {(actionData as any).collectionsResult.errors > 0 &&
-                      ` (${(actionData as any).collectionsResult.errors} errors)`}
-                  </Text>
-                )}
-              </BlockStack>
             </Banner>
           </Layout.Section>
         )}
