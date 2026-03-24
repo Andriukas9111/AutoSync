@@ -559,7 +559,10 @@ export async function createBillingSubscription(
       variables: {
         name,
         returnUrl,
-        test: process.env.NODE_ENV !== "production",
+        // Use explicit env var for billing test mode.
+        // Set BILLING_TEST_MODE=true in .env for development/staging.
+        // In production (Vercel), this env var should NOT be set, so charges are real.
+        test: process.env.BILLING_TEST_MODE === "true",
         lineItems: [
           {
             plan: {

@@ -1,10 +1,11 @@
 /**
  * Active Jobs Panel — shows all running/recent jobs with live progress.
- * Polls /app/api/job-status every 3 seconds.
- * Uses unified design: IconBadge headers, step number circles, Polaris components.
+ *
+ * ⚡ OPTIMIZED: No longer polls independently.
+ * Receives jobs + stats from useAppData() via props, eliminating the duplicate
+ * polling loop that was doubling DB query load (was 3s + 5s = 880 queries/min).
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Card,
   BlockStack,
@@ -18,54 +19,26 @@ import {
 } from "@shopify/polaris";
 import { ClockIcon, CheckCircleIcon } from "@shopify/polaris-icons";
 import { IconBadge } from "./IconBadge";
-import { formatJobType, formatElapsed, STATUS_TONES, getJobWaitingMessage, getJobCompletionMessage } from "../lib/design";
+import { formatJobType, formatElapsed, getJobWaitingMessage } from "../lib/design";
+import type { AppJob, AppStats } from "../lib/use-app-data";
 
-interface Job {
-  id: string;
-  type: string;
-  status: string;
-  processed_items: number | null;
-  total_items: number | null;
-  error: string | null;
-  started_at: string | null;
-  completed_at: string | null;
+interface ActiveJobsPanelProps {
+  navigate: (path: string) => void;
+  jobs: AppJob[];
+  stats: AppStats;
 }
 
-// formatJobType and formatElapsed imported from design.ts
-
-export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void }) {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const [liveStats, setLiveStats] = useState<Record<string, number>>({});
-
-  const poll = useCallback(async () => {
-    try {
-      const res = await fetch("/app/api/job-status?type=all");
-      if (res.ok) {
-        const result = await res.json();
-        if (result.stats) setLiveStats(result.stats);
-        // Show running jobs + recently completed (last 5 min)
-        const allJobs = (result.jobs || []) as Job[];
-        const relevant = allJobs.filter((j: Job) => {
-          if (j.status === "running" || j.status === "paused") return true;
-          if (j.status === "completed" && j.completed_at) {
-            const age = Date.now() - new Date(j.completed_at).getTime();
-            return age < 5 * 60 * 1000; // Show completed jobs for 5 minutes
-          }
-          if (j.status === "failed") return true;
-          return false;
-        });
-        setJobs(relevant);
-      }
-    } catch { /* non-fatal */ }
-  }, []);
-
-  useEffect(() => {
-    poll();
-    intervalRef.current = setInterval(poll, 3000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [poll]);
+export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPanelProps) {
+  // Filter to relevant jobs: running, paused, pending, recently completed (5 min), or failed
+  const jobs = allJobs.filter((j) => {
+    if (j.status === "running" || j.status === "paused" || j.status === "pending") return true;
+    if (j.status === "completed" && j.completed_at) {
+      const age = Date.now() - new Date(j.completed_at).getTime();
+      return age < 5 * 60 * 1000;
+    }
+    if (j.status === "failed") return true;
+    return false;
+  });
 
   if (jobs.length === 0) return null;
 
@@ -88,19 +61,18 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
           <Badge tone="info">{`${jobs.filter(j => j.status === "running").length} running`}</Badge>
         </InlineStack>
 
-        {/* Sort jobs: push first, then collections (shows task flow order) */}
+        {/* Sort jobs: extract → push → collections → vehicle_pages */}
         {[...jobs].sort((a, b) => {
-          const order: Record<string, number> = { push: 1, collections: 2, extract: 0, vehicle_pages: 3 };
+          const order: Record<string, number> = { extract: 0, push: 1, collections: 2, vehicle_pages: 3 };
           return (order[a.type] ?? 5) - (order[b.type] ?? 5);
         }).map((job, i) => {
           // For collection jobs, show actual created count from live stats
           const isCollectionJob = job.type === "collections";
-          const processed = isCollectionJob ? (liveStats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
-          // For collection jobs: total should never be product count
-          // If total > 2x processed, it's likely wrong (product count leaked in)
+          const processed = isCollectionJob ? (stats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
+          // Guard against wrong total (product count leaked into collection job)
           let total = job.total_items ?? 0;
           if (isCollectionJob && total > 0 && processed > 0 && total > processed * 2.5) {
-            total = processed + 50; // use estimate instead of wrong total
+            total = processed + 50;
           }
           const percent = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
           const isRunning = job.status === "running";
@@ -153,7 +125,7 @@ export function ActiveJobsPanel({ navigate }: { navigate: (path: string) => void
                         status: job.status,
                         processed,
                         total,
-                        otherRunningJobs: jobs.filter((j: any) => j.id !== job.id),
+                        otherRunningJobs: allJobs.filter((j) => j.id !== job.id),
                       })}
                     </Text>
                   )}

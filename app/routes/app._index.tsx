@@ -403,7 +403,7 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
-  const { stats: liveData, isLoading: dataLoading } = useAppData({
+  const { stats: liveData, jobs: liveJobs, isLoading: dataLoading } = useAppData({
     total: totalProducts,
     unmapped,
     autoMapped,
@@ -536,7 +536,7 @@ export default function Dashboard() {
             </Card>
 
             {/* ─── Active Jobs — Live Progress ─── */}
-            <ActiveJobsPanel navigate={navigate} />
+            <ActiveJobsPanel navigate={navigate} jobs={liveJobs} stats={s} />
 
             {/* Onboarding checklist */}
             {showOnboarding && (
