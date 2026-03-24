@@ -87,14 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const limits = getPlanLimits(plan);
   const isFirstTime = !tenant;
 
-  // Product breakdown
-  const totalProducts = totalProductsResult.count ?? 0;
-  const unmapped = unmappedResult.count ?? 0;
-  const autoMapped = autoMappedResult.count ?? 0;
-  const smartMapped = smartMappedResult.count ?? 0;
-  const manualMapped = manualMappedResult.count ?? 0;
-  const flagged = flaggedResult.count ?? 0;
-  const mapped = autoMapped + smartMapped + manualMapped;
+  // Product counts come from useAppData (live polling) — no longer in loader
 
   // Top makes from fitment data
   const makeCounts = new Map<string, number>();
