@@ -499,6 +499,171 @@ function VINDecodeDemo() {
   );
 }
 
+// ─── Dashboard Showcase ───
+function DashboardShowcase() {
+  return (
+    <div className="lp-dash-wrapper">
+      <div className="lp-dash-glow" />
+      <div className="lp-dash-browser">
+        {/* Browser chrome */}
+        <div className="lp-dash-chrome">
+          <div className="lp-dash-chrome-dots">
+            <span className="lp-dash-dot red" />
+            <span className="lp-dash-dot yellow" />
+            <span className="lp-dash-dot green" />
+          </div>
+          <div className="lp-dash-chrome-title">AutoSync Dashboard</div>
+        </div>
+        <div className="lp-dash-body">
+          {/* Sidebar */}
+          <div className="lp-dash-sidebar">
+            <div className="lp-dash-sidebar-logo">{I.logo(14)} <span>AutoSync</span></div>
+            <div className="lp-dash-nav-item active">Dashboard</div>
+            <div className="lp-dash-nav-item">Products</div>
+            <div className="lp-dash-nav-item">Fitment</div>
+            <div className="lp-dash-nav-item">Push to Shopify</div>
+            <div className="lp-dash-nav-item">Collections</div>
+            <div className="lp-dash-nav-item">Settings</div>
+          </div>
+          {/* Main content */}
+          <div className="lp-dash-main">
+            <div className="lp-dash-main-title">Dashboard</div>
+            {/* Quick Actions */}
+            <div className="lp-dash-section-label">Quick Actions</div>
+            <div className="lp-dash-actions">
+              <div className="lp-dash-action-card">
+                <div className="lp-dash-action-icon" style={{ background:"#eff6ff", color:"#2563eb" }}>&#9679;</div>
+                <div className="lp-dash-action-name">Fetch Products</div>
+              </div>
+              <div className="lp-dash-action-card">
+                <div className="lp-dash-action-icon" style={{ background:"#fef3c7", color:"#d97706" }}>&#9679;</div>
+                <div className="lp-dash-action-name">Auto Extract</div>
+                <span className="lp-dash-action-badge">1,593 pending</span>
+              </div>
+              <div className="lp-dash-action-card">
+                <div className="lp-dash-action-icon" style={{ background:"#f0fdf4", color:"#16a34a" }}>&#9679;</div>
+                <div className="lp-dash-action-name">Manual Map</div>
+              </div>
+              <div className="lp-dash-action-card lp-dash-action-highlight">
+                <div className="lp-dash-action-icon" style={{ background:"rgba(255,255,255,0.2)", color:"#fff" }}>&#9679;</div>
+                <div className="lp-dash-action-name">Push to Shopify</div>
+              </div>
+            </div>
+            {/* Stats row */}
+            <div className="lp-dash-stats-row">
+              <div className="lp-dash-stat-card">
+                <div className="lp-dash-stat-num">2,844</div>
+                <div className="lp-dash-stat-lbl">Total Products</div>
+              </div>
+              <div className="lp-dash-stat-card">
+                <div className="lp-dash-stat-num">5,827</div>
+                <div className="lp-dash-stat-lbl">Vehicle Links</div>
+              </div>
+              <div className="lp-dash-stat-card">
+                <div className="lp-dash-stat-num">1,251</div>
+                <div className="lp-dash-stat-lbl">Mapped</div>
+              </div>
+              <div className="lp-dash-stat-card">
+                <div className="lp-dash-stat-num">44%</div>
+                <div className="lp-dash-stat-lbl">Coverage</div>
+              </div>
+            </div>
+            {/* Progress bar */}
+            <div className="lp-dash-section-label">Fitment Coverage</div>
+            <div className="lp-dash-progress-wrap">
+              <div className="lp-dash-progress-bar">
+                <div className="lp-dash-progress-fill" style={{ width:"44%" }} />
+              </div>
+              <div className="lp-dash-progress-labels">
+                <span>1,593 Needs Review</span>
+                <span>1,251 Mapped</span>
+              </div>
+            </div>
+            {/* Bottom row */}
+            <div className="lp-dash-bottom-row">
+              <div className="lp-dash-bottom-card">
+                <div className="lp-dash-section-label">Top Makes</div>
+                <div className="lp-dash-make-row"><span>Audi</span><span className="lp-dash-make-count">584</span></div>
+                <div className="lp-dash-make-row"><span>Aria</span><span className="lp-dash-make-count">308</span></div>
+                <div className="lp-dash-make-row"><span>Alfa Romeo</span><span className="lp-dash-make-count">103</span></div>
+              </div>
+              <div className="lp-dash-bottom-card">
+                <div className="lp-dash-section-label">YMME Database</div>
+                <div className="lp-dash-make-row"><span>Makes</span><span className="lp-dash-make-count">374</span></div>
+                <div className="lp-dash-make-row"><span>Models</span><span className="lp-dash-make-count">3,888</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Push Flow Demo ───
+function PushFlowDemo() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [triggered, setTriggered] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [done, setDone] = useState(false);
+  const ran = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !ran.current) {
+        ran.current = true;
+        setTriggered(true);
+        const t0 = performance.now();
+        const dur = 3000;
+        const tick = (now: number) => {
+          const p = Math.min((now - t0) / dur, 1);
+          const eased = 1 - Math.pow(1 - p, 3);
+          setProgress(Math.round(eased * 100));
+          if (p < 1) { requestAnimationFrame(tick); }
+          else { setDone(true); }
+        };
+        requestAnimationFrame(tick);
+      }
+    }, { threshold: 0.3 });
+    obs.observe(el); return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="lp-push-flow-row">
+      <div className="lp-push-flow-text">
+        <span className="lp-tag">SHOPIFY INTEGRATION</span>
+        <h3>One-click push to Shopify</h3>
+        <p>Push tags, metafields, and smart collections to your Shopify store. Search &amp; Discovery filters activate automatically via Edge Functions.</p>
+        <div className="lp-feature-pills">
+          <span className="lp-pill">Edge Functions</span>
+          <span className="lp-pill">Background Processing</span>
+          <span className="lp-pill">Rate Limited</span>
+        </div>
+      </div>
+      <div className="lp-push-flow-visual">
+        <div className="lp-push-card">
+          <div className="lp-push-card-header">
+            <span className="lp-push-card-title">{done ? "Push Complete!" : "Pushing 2,844 products..."}</span>
+            {done && <span className="lp-push-card-check">&#10003;</span>}
+          </div>
+          <div className="lp-push-progress-bar">
+            <div className="lp-push-progress-fill" style={{ width: triggered ? `${progress}%` : "0%" }} />
+          </div>
+          <div className="lp-push-progress-pct">{triggered ? progress : 0}%</div>
+          {done && (
+            <div className="lp-push-results">
+              <div className="lp-push-result-item"><span className="lp-push-result-label">Tags</span><span className="lp-push-result-val">2,844</span></div>
+              <div className="lp-push-result-item"><span className="lp-push-result-label">Metafields</span><span className="lp-push-result-val">14,220</span></div>
+              <div className="lp-push-result-item"><span className="lp-push-result-label">Collections</span><span className="lp-push-result-val">1,125</span></div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Data ───
 const PLANS = [
   { name:"Free", price:0, products:"50", fitments:"200", providers:"0", makes:"5", features:["Manual mapping","Product browser","Help docs","50 product limit","Basic support","YMME data access"], pop:false },
@@ -609,6 +774,24 @@ export default function LandingPage() {
               <Stat value={stats.fitments} label="Fitment Links" />
               <Stat value={stats.collections} label="Collections" />
             </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Dashboard Showcase ── */}
+      <section className="lp-hero-showcase">
+        <div className="lp-w">
+          <Reveal className="lp-dash-reveal">
+            <DashboardShowcase />
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Push Flow ── */}
+      <section className="lp-section lp-section-alt">
+        <div className="lp-w">
+          <Reveal>
+            <PushFlowDemo />
           </Reveal>
         </div>
       </section>

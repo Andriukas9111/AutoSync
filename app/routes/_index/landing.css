@@ -898,6 +898,339 @@
   font-size: 13px; font-weight: 700; color: #111827;
 }
 
+/* ─── Dashboard Showcase ─── */
+.lp-hero-showcase {
+  padding: 0 0 120px;
+  position: relative;
+}
+.lp-dash-reveal {
+  opacity: 0;
+  transform: translateY(80px) perspective(1200px) rotateX(4deg);
+  transition: opacity 1s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+              transform 1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.lp-dash-reveal.visible {
+  opacity: 1;
+  transform: translateY(0) perspective(1200px) rotateX(2deg);
+}
+.lp-dash-wrapper {
+  position: relative;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.lp-dash-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 900px; height: 500px;
+  background: radial-gradient(ellipse, rgba(91,127,255,0.12) 0%, transparent 65%);
+  pointer-events: none;
+  filter: blur(60px);
+  z-index: 0;
+}
+.lp-dash-browser {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 60px 120px -30px rgba(0,0,0,0.5);
+}
+.lp-dash-chrome {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #e5e7eb;
+  border-bottom: 1px solid #d1d5db;
+}
+.lp-dash-chrome-dots {
+  display: flex; gap: 6px;
+}
+.lp-dash-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.lp-dash-dot.red { background: #ef4444; }
+.lp-dash-dot.yellow { background: #f59e0b; }
+.lp-dash-dot.green { background: #22c55e; }
+.lp-dash-chrome-title {
+  font-size: 12px; font-weight: 600; color: #6b7280;
+  letter-spacing: -0.01em;
+}
+.lp-dash-body {
+  display: flex;
+  min-height: 380px;
+}
+.lp-dash-sidebar {
+  width: 160px;
+  flex-shrink: 0;
+  background: #1a1a2e;
+  padding: 14px 0;
+  display: flex;
+  flex-direction: column;
+}
+.lp-dash-sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 8px;
+}
+.lp-dash-sidebar-logo span { color: #fff; }
+.lp-dash-nav-item {
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.5);
+  cursor: default;
+  border-left: 3px solid transparent;
+  transition: color 0.15s;
+}
+.lp-dash-nav-item.active {
+  color: #fff;
+  background: rgba(91,127,255,0.1);
+  border-left-color: #5B7FFF;
+  font-weight: 600;
+}
+.lp-dash-main {
+  flex: 1;
+  background: #f8f9fa;
+  padding: 20px 24px;
+  overflow: hidden;
+}
+.lp-dash-main-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+.lp-dash-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+.lp-dash-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.lp-dash-action-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  position: relative;
+}
+.lp-dash-action-icon {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 6px;
+  font-size: 10px;
+}
+.lp-dash-action-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+}
+.lp-dash-action-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 9px;
+  font-weight: 600;
+}
+.lp-dash-action-highlight {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.lp-dash-action-highlight .lp-dash-action-name {
+  color: #fff;
+}
+.lp-dash-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.lp-dash-stat-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.lp-dash-stat-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+.lp-dash-stat-lbl {
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.lp-dash-progress-wrap {
+  margin-bottom: 16px;
+}
+.lp-dash-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 100px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.lp-dash-progress-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lp-dash-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #9ca3af;
+  font-weight: 500;
+}
+.lp-dash-bottom-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.lp-dash-bottom-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.lp-dash-make-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 0;
+  font-size: 11px;
+  color: #374151;
+}
+.lp-dash-make-count {
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ─── Push Flow Demo ─── */
+.lp-push-flow-row {
+  display: grid;
+  grid-template-columns: 45fr 55fr;
+  gap: 80px;
+  align-items: center;
+}
+.lp-push-flow-text h3 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 16px;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.lp-push-flow-text p {
+  font-size: 16px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.lp-push-flow-visual {
+  display: flex;
+  justify-content: center;
+}
+.lp-push-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  box-shadow: 0 40px 100px -20px rgba(0,0,0,0.5);
+}
+.lp-push-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.lp-push-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+.lp-push-card-check {
+  color: #4ade80;
+  font-size: 18px;
+  font-weight: 700;
+}
+.lp-push-progress-bar {
+  width: 100%;
+  height: 10px;
+  background: #e5e7eb;
+  border-radius: 100px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.lp-push-progress-fill {
+  height: 100%;
+  border-radius: 100px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  transition: width 0.15s linear;
+}
+.lp-push-progress-pct {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-light);
+  text-align: right;
+  margin-bottom: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.lp-push-results {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.lp-push-result-item {
+  text-align: center;
+}
+.lp-push-result-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.lp-push-result-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 1024px) {
   .lp-section { padding: 120px 0; }
@@ -911,6 +1244,10 @@
   .lp-feature-visual-detail { max-width: 100%; }
   .lp-systems { grid-template-columns: repeat(2, 1fr); }
   .lp-pricing { grid-template-columns: repeat(2, 1fr); }
+  .lp-push-flow-row { grid-template-columns: 1fr; gap: 40px; }
+  .lp-dash-sidebar { width: 120px; }
+  .lp-dash-actions { grid-template-columns: repeat(2, 1fr); }
+  .lp-dash-stats-row { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
   .lp-nav-links { display: none; }
@@ -931,6 +1268,11 @@
   .lp-h2 { font-size: clamp(28px, 5vw, 36px); }
   .lp-cta-section { padding: 120px 0; }
   .demo-vin-specs-grid { grid-template-columns: repeat(3, 1fr); }
+  .lp-dash-sidebar { display: none; }
+  .lp-dash-actions { grid-template-columns: repeat(2, 1fr); }
+  .lp-dash-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .lp-push-flow-row { grid-template-columns: 1fr; gap: 30px; }
+  .lp-push-results { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 480px) {
   .demo-grid { grid-template-columns: 1fr; }
