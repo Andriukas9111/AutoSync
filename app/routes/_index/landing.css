@@ -121,7 +121,7 @@
 
 /* ─── Stats ─── */
 .lp-stats {
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -381,10 +381,10 @@
 @media (max-width: 768px) {
   .lp-nav-links { display: none; }
   .lp-hero { padding: 120px 0 60px; }
-  .lp-stats { grid-template-columns: repeat(2, 1fr); }
+  .lp-stats { grid-template-columns: repeat(3, 1fr); }
   .lp-stat { border-right: none; }
-  .lp-stat:nth-child(odd) { border-right: 1px solid var(--border); }
-  .lp-stat:nth-child(1), .lp-stat:nth-child(2) { border-bottom: 1px solid var(--border); }
+  .lp-stat:nth-child(3n+1), .lp-stat:nth-child(3n+2) { border-right: 1px solid var(--border); }
+  .lp-stat:nth-child(-n+3) { border-bottom: 1px solid var(--border); }
   .lp-section { padding: 80px 0; }
   .demo-grid { grid-template-columns: 1fr 1fr; }
   .lp-pricing { grid-template-columns: 1fr; max-width: 380px; margin-left: auto; margin-right: auto; }
