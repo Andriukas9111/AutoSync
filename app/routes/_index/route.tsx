@@ -2,20 +2,25 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect, Form, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import db from "../../lib/db.server";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
-  const [makesRes, modelsRes, enginesRes, specsRes, tenantsRes] = await Promise.all([
+
+  const [makesRes, modelsRes, enginesRes, specsRes, tenantsRes, productsRes, fitmentsRes, collectionsRes] = await Promise.all([
     db.from("ymme_makes").select("id", { count: "exact", head: true }),
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
     db.from("tenants").select("id", { count: "exact", head: true }),
+    db.from("products").select("id", { count: "exact", head: true }),
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }),
+    db.from("collection_mappings").select("id", { count: "exact", head: true }),
   ]);
+
   return {
     showForm: Boolean(login),
     stats: {
@@ -24,11 +29,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       engines: enginesRes.count ?? 0,
       specs: specsRes.count ?? 0,
       tenants: tenantsRes.count ?? 0,
+      products: productsRes.count ?? 0,
+      fitments: fitmentsRes.count ?? 0,
+      collections: collectionsRes.count ?? 0,
     },
   };
 };
 
-/* Our real SVG logo as a component */
+/* ─── SVG Logo ─── */
 function Logo({ size = 32, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -38,740 +46,814 @@ function Logo({ size = 32, color = "currentColor" }: { size?: number; color?: st
   );
 }
 
-/* ─── Animated counter hook ─── */
+/* ─── Icons ─── */
+function CheckIcon() { return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
+function CrossIcon() { return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#ef4444" strokeWidth="2" strokeLinecap="round"/></svg>; }
+function DashIcon() { return <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 8h8" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round"/></svg>; }
+
+/* ─── Animated Counter ─── */
 function useCounter(end: number, duration = 2000) {
   const [value, setValue] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const started = useRef(false);
-
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          const startTime = performance.now();
-          const animate = (now: number) => {
-            const elapsed = now - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setValue(Math.floor(eased * end));
-            if (progress < 1) requestAnimationFrame(animate);
-          };
-          requestAnimationFrame(animate);
-        }
-      },
-      { threshold: 0.3 }
-    );
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !started.current) {
+        started.current = true;
+        const startTime = performance.now();
+        const animate = (now: number) => {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          setValue(Math.floor(eased * end));
+          if (progress < 1) requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      }
+    }, { threshold: 0.3 });
     observer.observe(el);
     return () => observer.disconnect();
   }, [end, duration]);
-
   return { value, ref };
 }
 
-/* ─── Scroll fade-in hook ─── */
-function useFadeIn() {
+function StatCounter({ value, label, suffix = "" }: { value: number; label: string; suffix?: string }) {
+  const counter = useCounter(value, 2000);
+  return (
+    <div ref={counter.ref} className="lp-stat">
+      <div className="lp-stat__number">{counter.value.toLocaleString()}{suffix}</div>
+      <div className="lp-stat__label">{label}</div>
+    </div>
+  );
+}
+
+/* ─── Scroll Fade-in ─── */
+function FadeIn({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
-
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { threshold: 0.1 }
-    );
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { setVisible(true); observer.disconnect(); }
+    }, { threshold: 0.15 });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  return { ref, visible };
-}
-
-/* ─── Check icon ─── */
-function Check() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M13.5 4.5L6.5 11.5L3 8" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-}
-
-/* ─── X icon ─── */
-function Cross() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M12 4L4 12M4 4l8 8" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-/* ─── Section wrapper ─── */
-function Section({ children, id, style }: { children: React.ReactNode; id?: string; style?: React.CSSProperties }) {
-  const { ref, visible } = useFadeIn();
-  return (
-    <section
-      ref={ref}
-      id={id}
-      style={{
-        padding: "120px 24px",
-        maxWidth: 1200,
-        margin: "0 auto",
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(40px)",
-        transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1)",
-        ...style,
-      }}
-    >
+    <div ref={ref} className={className} style={{ opacity: visible ? 1 : 0, transform: visible ? "translateY(0)" : "translateY(30px)", transition: `opacity 0.6s ease ${delay}s, transform 0.6s ease ${delay}s` }}>
       {children}
-    </section>
-  );
-}
-
-/* ─── Widget Mockups ─── */
-function YMMEMockup() {
-  return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 480, margin: "0 auto" }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 24, textAlign: "center" }}>Find Parts for Your Vehicle</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        {[
-          { label: "Make", value: "BMW" },
-          { label: "Model", value: "3 Series" },
-          { label: "Year", value: "2022" },
-          { label: "Engine", value: "M340i 382 Hp" },
-        ].map((f) => (
-          <div key={f.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{f.label}</div>
-            <div style={{ fontSize: 14, color: "#ededed", fontWeight: 500 }}>{f.value}</div>
-          </div>
-        ))}
-      </div>
-      <button style={{ width: "100%", marginTop: 20, padding: "12px 24px", background: "#005bd2", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-        Find Parts
-      </button>
     </div>
   );
 }
 
-function PlateMockup() {
-  return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 420, margin: "0 auto" }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 24, textAlign: "center" }}>Find Parts by Registration</div>
-      <div style={{ background: "#fdd835", borderRadius: 8, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{ background: "#003399", color: "#fff", borderRadius: 4, padding: "4px 6px", fontSize: 10, fontWeight: 600, lineHeight: 1 }}>GB</div>
-        <div style={{ fontSize: 24, fontWeight: 600, color: "#111", letterSpacing: 2, fontFamily: "monospace" }}>BD18 JYC</div>
-      </div>
-      <button style={{ width: "100%", padding: "12px 24px", background: "#005bd2", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 16 }}>
-        Look Up Vehicle
-      </button>
-      <div style={{ background: "rgba(34,197,94,0.08)", borderRadius: 8, border: "1px solid rgba(34,197,94,0.2)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#22c55e" opacity="0.15"/><path d="M6 9l2 2 4-4" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        <span style={{ color: "#22c55e", fontSize: 14, fontWeight: 500 }}>Vehicle Found &mdash; 2018 BMW 3 Series 320d</span>
-      </div>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════════════════════
+   INTERACTIVE WIDGET DEMOS (mock data, fully functional UI)
+   ═══════════════════════════════════════════════════════════════ */
 
-function CompatibilityMockup() {
+const DEMO_MAKES = [
+  { name: "BMW", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" },
+  { name: "Audi", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png" },
+  { name: "Mercedes-Benz", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mercedes-benz.png" },
+  { name: "Volkswagen", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/volkswagen.png" },
+  { name: "Toyota", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/toyota.png" },
+  { name: "Ford", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/ford.png" },
+  { name: "Porsche", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/porsche.png" },
+  { name: "Honda", logo: "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/honda.png" },
+];
+
+function YMMEDemo() {
+  const [make, setMake] = useState("BMW");
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [search, setSearch] = useState("");
+  const [garage, setGarage] = useState(false);
+  const filtered = DEMO_MAKES.filter(m => m.name.toLowerCase().includes(search.toLowerCase()));
+
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 24, maxWidth: 560, margin: "0 auto", overflow: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>Vehicle Compatibility</div>
-        <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#22c55e", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
-          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 6l2 2 4-4" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-          Fits your vehicle
+    <div className="demo-widget demo-ymme">
+      <h3 className="demo-widget__title">Find Parts for Your Vehicle</h3>
+      <div className="demo-ymme__grid">
+        <div className="demo-ymme__field" style={{ position: "relative" }}>
+          <label>Make</label>
+          <button className="demo-ymme__select" onClick={() => setShowDropdown(!showDropdown)}>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img src={DEMO_MAKES.find(m => m.name === make)?.logo} alt="" width="20" height="20" style={{ objectFit: "contain" }} />
+              {make}
+            </span>
+            <span style={{ opacity: 0.4 }}>&#9660;</span>
+          </button>
+          {showDropdown && (
+            <div className="demo-ymme__dropdown">
+              <input className="demo-ymme__search" placeholder="Search makes..." value={search} onChange={e => setSearch(e.target.value)} autoFocus />
+              <ul className="demo-ymme__list">
+                {filtered.map(m => (
+                  <li key={m.name} className={`demo-ymme__option ${m.name === make ? "active" : ""}`} onClick={() => { setMake(m.name); setShowDropdown(false); setSearch(""); }}>
+                    <img src={m.logo} alt="" width="20" height="20" style={{ objectFit: "contain" }} /> {m.name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
+        <div className="demo-ymme__field"><label>Model</label><select className="demo-ymme__select"><option>3 Series 1975-present</option></select></div>
+        <div className="demo-ymme__field"><label>Year</label><select className="demo-ymme__select"><option>2022</option></select></div>
+        <div className="demo-ymme__field"><label>Engine</label><select className="demo-ymme__select"><option>M340i (382 Hp)</option></select></div>
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-        <thead>
-          <tr>
-            {["Make", "Model", "Years", "Engine"].map((h) => (
-              <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: "rgba(255,255,255,0.35)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="demo-btn demo-btn--primary" style={{ flex: 1 }}>&#128269; Find Parts</button>
+        <button className="demo-btn demo-btn--ghost" onClick={() => setGarage(!garage)} style={{ position: "relative" }}>
+          &#127968;
+          <span style={{ position: "absolute", top: -6, right: -6, background: "#005bd2", color: "#fff", borderRadius: "50%", width: 18, height: 18, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>3</span>
+        </button>
+      </div>
+      {garage && (
+        <div className="demo-garage">
+          <div className="demo-garage__header"><strong>My Garage</strong><button className="demo-garage__clear">&#128465;</button></div>
+          {[{ y: 2013, mk: "Porsche", md: "Panamera", eng: "" }, { y: 2022, mk: "BMW", md: "3 Series", eng: "M340i (382 Hp) xDrive Steptronic (US)" }, { y: 2004, mk: "BMW", md: "6 Series", eng: "645Ci (333 Hp)" }].map((v, i) => (
+            <div key={i} className="demo-garage__item">
+              <div><strong>{v.y} {v.mk} {v.md}</strong>{v.eng && <div style={{ fontSize: 12, opacity: 0.6 }}>{v.eng}</div>}</div>
+              <div style={{ display: "flex", gap: 4 }}><button className="demo-btn demo-btn--sm">Select</button><button className="demo-btn demo-btn--sm demo-btn--ghost">&times;</button></div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="demo-widget__footer">&#9650; Powered by <strong>AutoSync</strong></div>
+    </div>
+  );
+}
+
+function PlateDemo() {
+  const [plate, setPlate] = useState("");
+  const [result, setResult] = useState(false);
+  return (
+    <div className="demo-widget demo-plate">
+      <h3 className="demo-widget__title" style={{ textAlign: "center" }}>Find Parts by Registration</h3>
+      <p style={{ textAlign: "center", fontSize: 14, opacity: 0.6, marginBottom: 16 }}>Enter your UK registration number to find compatible parts</p>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <div style={{ flex: 1, display: "flex", borderRadius: 8, overflow: "hidden", border: "2px solid #fbbf24" }}>
+          <div style={{ background: "#1e40af", color: "#fff", padding: "10px 8px", fontSize: 11, display: "flex", alignItems: "center", gap: 2 }}>
+            <span style={{ fontSize: 8 }}>&#9733;</span> GB
+          </div>
+          <input className="demo-plate__input" placeholder="Enter reg..." value={plate} onChange={e => setPlate(e.target.value.toUpperCase())} style={{ flex: 1, background: "#fbbf24", color: "#000", fontWeight: 700, fontSize: 20, textAlign: "center", border: "none", padding: "10px 12px", fontFamily: "'UKNumberPlate', monospace" }} />
+        </div>
+        <button className="demo-btn demo-btn--primary" onClick={() => setResult(true)}>&#128269; Look Up</button>
+      </div>
+      {result && (
+        <div className="demo-plate__result">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <span style={{ background: "#1e40af", color: "#fff", padding: "2px 8px", borderRadius: 4, fontSize: 12, fontWeight: 700 }}>GB</span>
+            <span style={{ background: "#fbbf24", color: "#000", padding: "2px 10px", borderRadius: 4, fontSize: 14, fontWeight: 700 }}>{plate || "AL61 EAJ"}</span>
+          </div>
+          <h4 style={{ fontSize: 18, fontWeight: 800, margin: "0 0 4px" }}>BMW M340I XDRIVE MHEV AUTO</h4>
+          <p style={{ fontSize: 13, opacity: 0.6, margin: "0 0 12px" }}>2022 &bull; ORANGE &bull; HYBRID ELECTRIC</p>
+          <div className="demo-plate__specs">
+            <div className="demo-plate__spec"><span>Year</span><strong>2022</strong></div>
+            <div className="demo-plate__spec"><span>Colour</span><strong>ORANGE</strong></div>
+            <div className="demo-plate__spec"><span>Fuel Type</span><strong>HYBRID ELECTRIC</strong></div>
+            <div className="demo-plate__spec"><span>Engine</span><strong>2998cc</strong></div>
+            <div className="demo-plate__spec"><span>CO&#8322; Emissions</span><strong>176 g/km</strong></div>
+            <div className="demo-plate__spec"><span>Type Approval</span><strong>M1</strong></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, margin: "12px 0" }}>
+            <div><div style={{ fontSize: 12, opacity: 0.6 }}>MOT</div><span style={{ color: "#22c55e", fontWeight: 600 }}>&#9679; Valid</span><div style={{ fontSize: 11, opacity: 0.5 }}>Expires: 11 Nov 2026</div></div>
+            <div><div style={{ fontSize: 12, opacity: 0.6 }}>TAX</div><span style={{ color: "#22c55e", fontWeight: 600 }}>&#9679; Taxed</span><div style={{ fontSize: 11, opacity: 0.5 }}>Due: 1 Nov 2026</div></div>
+          </div>
+          <button className="demo-btn demo-btn--primary" style={{ width: "100%" }}>Find Parts for This Vehicle &rarr;</button>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}><span style={{ opacity: 0.4 }}>&#128339;</span> <strong>MOT History</strong> <span style={{ fontSize: 12, opacity: 0.5 }}>2 tests</span></div>
+            {[{ date: "12 Nov 2025", result: "PASS", miles: "87,329 MI" }, { date: "4 Apr 2025", result: "PASS", miles: "72,485 MI" }].map((t, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+                <span style={{ fontSize: 13 }}>{t.date}</span>
+                <span style={{ background: "#dcfce7", color: "#166534", padding: "1px 8px", borderRadius: 4, fontSize: 12, fontWeight: 600 }}>{t.result}</span>
+                <span style={{ fontSize: 13, opacity: 0.5 }}>{t.miles}</span>
+              </div>
             ))}
-          </tr>
-        </thead>
+          </div>
+        </div>
+      )}
+      <div className="demo-widget__footer">&#9650; Powered by <strong>AutoSync</strong></div>
+    </div>
+  );
+}
+
+function CompatibilityDemo() {
+  return (
+    <div className="demo-widget">
+      <h3 className="demo-widget__title">Vehicle Compatibility</h3>
+      <table className="demo-table">
+        <thead><tr><th>Make</th><th>Model</th><th>Years</th><th>Engine</th></tr></thead>
         <tbody>
           {[
-            { make: "BMW", model: "3 Series (F30)", years: "2019-2023", engine: "320i 184 Hp" },
-            { make: "BMW", model: "3 Series (G20)", years: "2019-2025", engine: "330i 258 Hp" },
-            { make: "BMW", model: "4 Series (G22)", years: "2020-2025", engine: "M440i 374 Hp" },
+            { make: "BMW", model: "3 Series (F30/F31)", years: "2012-2019", engine: "320i (184 Hp)" },
+            { make: "BMW", model: "3 Series (G20/G21)", years: "2019-2024", engine: "320i (184 Hp)" },
+            { make: "BMW", model: "4 Series (F32/F33)", years: "2013-2020", engine: "420i (184 Hp)" },
+            { make: "Audi", model: "A4 (B9)", years: "2016-2024", engine: "2.0 TFSI (190 Hp)" },
+            { make: "Mercedes-Benz", model: "C-Class (W205)", years: "2014-2021", engine: "C200 (184 Hp)" },
           ].map((r, i) => (
-            <tr key={i}>
-              <td style={{ padding: "10px 12px", color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.make}</td>
-              <td style={{ padding: "10px 12px", color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.model}</td>
-              <td style={{ padding: "10px 12px", color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.years}</td>
-              <td style={{ padding: "10px 12px", color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.engine}</td>
-            </tr>
+            <tr key={i}><td>{r.make}</td><td>{r.model}</td><td>{r.years}</td><td>{r.engine}</td></tr>
           ))}
         </tbody>
       </table>
+      <div className="demo-widget__footer">&#9650; Powered by <strong>AutoSync</strong></div>
     </div>
   );
 }
 
-function VehicleSpecMockup() {
+function FitmentBadgeDemo() {
+  const [fits, setFits] = useState<boolean | null>(true);
   return (
-    <div style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(0,91,210,0.06) 100%)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 420, margin: "0 auto" }}>
-      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Audi</div>
-      <div style={{ fontSize: 28, fontWeight: 600, color: "#ededed", marginBottom: 4 }}>A1</div>
-      <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", marginBottom: 20 }}>1.4 TFSI 150 Hp</div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-        {["Petrol", "FWD", "Hatchback", "2015-2018"].map((b) => (
-          <span key={b} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{b}</span>
-        ))}
+    <div className="demo-widget" style={{ textAlign: "center" }}>
+      <h3 className="demo-widget__title">Fitment Badge on Product Pages</h3>
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 16 }}>
+        <button className={`demo-badge-btn ${fits === true ? "active" : ""}`} onClick={() => setFits(true)}>Fits</button>
+        <button className={`demo-badge-btn ${fits === false ? "active" : ""}`} onClick={() => setFits(false)}>Doesn&apos;t Fit</button>
+        <button className={`demo-badge-btn ${fits === null ? "active" : ""}`} onClick={() => setFits(null)}>No Vehicle</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-        {[
-          { val: "150", unit: "HP" },
-          { val: "250", unit: "Nm" },
-          { val: "1.4", unit: "L" },
-          { val: "7.9", unit: "s" },
-        ].map((s) => (
-          <div key={s.unit} style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 22, fontWeight: 600, color: "#005bd2" }}>{s.val}</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{s.unit}</div>
-          </div>
-        ))}
+      <div className={`demo-fitment-badge ${fits === true ? "fits" : fits === false ? "no-fit" : "neutral"}`}>
+        {fits === true && <><span className="demo-fitment-badge__icon">&#10003;</span> Fits your 2022 BMW 3 Series</>}
+        {fits === false && <><span className="demo-fitment-badge__icon">&#10007;</span> May not fit your 2022 BMW 3 Series</>}
+        {fits === null && <><span className="demo-fitment-badge__icon">&#128663;</span> Select a vehicle to check compatibility</>}
       </div>
     </div>
   );
 }
 
-function DashboardMockup() {
-  return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 24, maxWidth: 520, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
-        <Logo size={24} color="#005bd2" />
-        <span style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>AutoSync Dashboard</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Products", value: "2,844", color: "#005bd2" },
-          { label: "Fitments", value: "5,827", color: "#22c55e" },
-          { label: "Coverage", value: "44%", color: "#f59e0b" },
-          { label: "Collections", value: "1,125", color: "#8b5cf6" },
-        ].map((s) => (
-          <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", padding: "14px 16px" }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 600, color: s.color }}>{s.value}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "12px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Sync Progress</span>
-          <span style={{ fontSize: 12, color: "#005bd2", fontWeight: 500 }}>68%</span>
-        </div>
-        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 4, height: 6, overflow: "hidden" }}>
-          <div style={{ background: "linear-gradient(90deg, #005bd2, #3b82f6)", borderRadius: 4, height: "100%", width: "68%", transition: "width 1s ease" }} />
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════════════════════
+   PRICING DATA
+   ═══════════════════════════════════════════════════════════════ */
 
-/* ─── Main landing page ─── */
+const PLANS = [
+  { name: "Free", price: 0, badge: "", products: "50", fitments: "200", providers: "0", features: ["Manual mapping only", "Basic product browser", "Community support"], highlight: false },
+  { name: "Starter", price: 19, badge: "", products: "1,000", fitments: "5,000", providers: "1", features: ["Push tags & metafields", "YMME Search widget", "Fitment Badge widget", "Compatibility table", "Email support"], highlight: false },
+  { name: "Growth", price: 49, badge: "Popular", products: "10,000", fitments: "50,000", providers: "3", features: ["Everything in Starter", "Smart auto-extraction", "All 4 storefront widgets", "Make-based collections", "Bulk operations", "Analytics dashboard"], highlight: true },
+  { name: "Professional", price: 99, badge: "", products: "50,000", fitments: "250,000", providers: "5", features: ["Everything in Growth", "API data import", "Wheel Finder widget", "Vehicle Spec Pages", "Make + Model collections", "Custom vehicle support", "Priority support"], highlight: false },
+  { name: "Business", price: 179, badge: "", products: "200,000", fitments: "1,000,000", providers: "15", features: ["Everything in Professional", "FTP data import", "Pricing Engine", "Full YMME collections", "Year-range collections", "Dedicated support"], highlight: false },
+  { name: "Enterprise", price: 299, badge: "", products: "Unlimited", fitments: "Unlimited", providers: "Unlimited", features: ["Everything in Business", "UK Plate Lookup (DVLA)", "VIN Decode", "Full CSS customisation", "White-label option", "SLA guarantee"], highlight: false },
+];
+
+const COMPETITORS = [
+  { name: "AutoSync", price: "Free - $299", products: "50 - Unlimited", ymmeDb: true, autoExtract: true, collections: true, widgets: "7", plate: true, vin: true, wheelFinder: true, apiFtp: true, analytics: true, vehiclePages: true, highlight: true },
+  { name: "Convermax", price: "$250 - $850", products: "250K - 1M", ymmeDb: false, autoExtract: false, collections: false, widgets: "1", plate: false, vin: true, wheelFinder: true, apiFtp: false, analytics: false, vehiclePages: true, highlight: false },
+  { name: "EasySearch", price: "$19 - $75", products: "Unlimited", ymmeDb: true, autoExtract: false, collections: false, widgets: "2", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: false, vehiclePages: false, highlight: false },
+  { name: "C: YMM", price: "$10 - $75", products: "1.5M rows", ymmeDb: false, autoExtract: false, collections: false, widgets: "1", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: false, vehiclePages: false, highlight: false },
+  { name: "PCFitment", price: "$15 - $150", products: "SKU-based", ymmeDb: true, autoExtract: false, collections: false, widgets: "1", plate: false, vin: true, wheelFinder: false, apiFtp: false, analytics: true, vehiclePages: false, highlight: false },
+  { name: "VFitz", price: "$1 - $58", products: "Varies", ymmeDb: true, autoExtract: false, collections: false, widgets: "1", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: true, vehiclePages: false, highlight: false },
+  { name: "AutoFit AI", price: "$50 - $250", products: "2K - 25K", ymmeDb: false, autoExtract: true, collections: false, widgets: "2", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: false, vehiclePages: false, highlight: false },
+  { name: "PartFinder", price: "$49", products: "Unlimited", ymmeDb: false, autoExtract: false, collections: false, widgets: "1", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: true, vehiclePages: false, highlight: false },
+  { name: "SearchAuto", price: "$89 - $500", products: "Session-based", ymmeDb: false, autoExtract: false, collections: false, widgets: "1", plate: false, vin: false, wheelFinder: false, apiFtp: false, analytics: false, vehiclePages: false, highlight: false },
+];
+
+const FAQ_ITEMS = [
+  { q: "What is YMME and why does my store need it?", a: "YMME (Year, Make, Model, Engine) is the industry standard for vehicle parts compatibility. It helps customers quickly find parts that fit their specific vehicle, reducing returns by up to 80% and boosting conversion rates." },
+  { q: "Do I need to manually enter all vehicle data?", a: "No! AutoSync includes a pre-loaded database of 331 makes, 3,131 models, and 24,026 engines. Our smart extraction engine automatically detects vehicle compatibility from your product titles and descriptions." },
+  { q: "How does the UK plate lookup work?", a: "Enterprise plan includes DVLA integration. Customers enter their UK registration number and instantly see their vehicle details, MOT history, and compatible parts from your store." },
+  { q: "Will the widgets work with my Shopify theme?", a: "Yes! AutoSync widgets are built as Shopify Theme App Extension blocks. They work with any theme and require zero code changes. Simply drag and drop them in the theme editor." },
+  { q: "How is AutoSync different from Convermax?", a: "Convermax starts at $250/month and requires custom setup. AutoSync offers more features (plate lookup, VIN decode, smart collections, auto-extraction) starting from free, with a self-service setup that takes minutes." },
+  { q: "Can I import products from my supplier feeds?", a: "Yes! AutoSync supports CSV, XML, JSON, REST API, and FTP imports. Our smart column mapper automatically detects fields and remembers your mappings for future imports." },
+  { q: "What happens if I exceed my plan limits?", a: "You'll get a notification before reaching limits. Upgrade anytime to a higher plan. Your data is never deleted — you just won't be able to add more until you upgrade." },
+  { q: "Is there a free trial?", a: "Yes! The Free plan lets you try AutoSync with up to 50 products at no cost. Paid plans start at just $19/month — a fraction of what competitors charge." },
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN LANDING PAGE
+   ═══════════════════════════════════════════════════════════════ */
+
 export default function LandingPage() {
   const { showForm, stats } = useLoaderData<typeof loader>();
+  const [activeDemo, setActiveDemo] = useState(0);
   const [scrolled, setScrolled] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [shopDomain, setShopDomain] = useState("");
 
-  // Nav scroll effect
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Stat counters
-  const makes = useCounter(Number(stats.makes), 2000);
-  const models = useCounter(Number(stats.models), 2200);
-  const engines = useCounter(Number(stats.engines), 2400);
-  const specs = useCounter(Number(stats.specs), 2600);
-
-  const tabs = ["YMME Search", "Plate Lookup", "Compatibility", "Vehicle Specs", "Dashboard"];
-  const tabMockups = [<YMMEMockup key="y" />, <PlateMockup key="p" />, <CompatibilityMockup key="c" />, <VehicleSpecMockup key="v" />, <DashboardMockup key="d" />];
-
-  const features = [
-    {
-      title: "Smart Vehicle Mapping",
-      desc: "Our extraction engine analyzes product titles, descriptions, and tags to automatically match products to vehicles. Pattern matching across 55 make patterns, chassis codes, and engine families.",
-      bullets: ["Auto-extract Year/Make/Model/Engine", "Smart suggestions with confidence scores", "Manual mapping queue for edge cases"],
-    },
-    {
-      title: "Storefront Widgets",
-      desc: "Eight embeddable Liquid blocks that install directly into any Shopify theme. Cascading YMME search, fitment badges, compatibility tables, and a floating vehicle bar.",
-      bullets: ["Theme App Extension (no code edits)", "Works with all Shopify themes", "Real-time vehicle persistence"],
-    },
-    {
-      title: "Automated Collections",
-      desc: "Generate smart collections by Make, Make+Model, or Make+Model+Year. Each collection gets a logo, SEO metadata, and publishes to your Online Store automatically.",
-      bullets: ["One-click collection generation", "Brand logos and SEO built in", "Published to Online Store instantly"],
-    },
-    {
-      title: "Provider Data Import",
-      desc: "Connect CSV, XML, JSON, API, or FTP data sources. Smart column mapping remembers your preferences. Duplicate detection and preview before every import.",
-      bullets: ["5 source types supported", "Intelligent column mapping", "Preview and validate before import"],
-    },
-  ];
-
-  const plans = [
-    {
-      name: "Starter",
-      price: "$19",
-      desc: "For shops just getting started with fitment",
-      features: ["1,000 products", "5,000 fitments", "1 data provider", "YMME widget", "Fitment badge", "Push tags & metafields"],
-      cta: "Start Free Trial",
-    },
-    {
-      name: "Growth",
-      price: "$49",
-      desc: "For growing automotive businesses",
-      features: ["10,000 products", "50,000 fitments", "3 data providers", "All 4 widgets", "Auto extraction", "Make collections", "Bulk operations"],
-      cta: "Start Free Trial",
-      popular: true,
-    },
-    {
-      name: "Professional",
-      price: "$99",
-      desc: "For established parts retailers",
-      features: ["50,000 products", "250,000 fitments", "5 data providers", "API integration", "Custom vehicles", "My Garage", "Make+Model collections", "Priority support"],
-      cta: "Start Free Trial",
-    },
-  ];
-
-  const comparisonRows = [
-    { feature: "Starting Price", us: "Free", them: "$250/mo", others: "$49/mo" },
-    { feature: "Shopify Integration", us: "Native App", them: "JavaScript Embed", others: "Tag-based" },
-    { feature: "Vehicle Database", us: "29,000+ Engines", them: "Limited", others: "Basic YMME" },
-    { feature: "Auto Extraction", us: true, them: false, others: false },
-    { feature: "UK Plate Lookup", us: true, them: false, others: false },
-    { feature: "Vehicle Spec Pages", us: true, them: false, others: false },
-    { feature: "Collection Generation", us: true, them: true, others: false },
-    { feature: "FTP/API Import", us: true, them: false, others: true },
-    { feature: "Built for Shopify", us: true, them: false, others: false },
+  const demoTabs = [
+    { label: "YMME Search", icon: "&#128269;" },
+    { label: "Plate Lookup", icon: "&#127468;&#127463;" },
+    { label: "Compatibility", icon: "&#9745;" },
+    { label: "Fitment Badge", icon: "&#10003;" },
   ];
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html { scroll-behavior: smooth; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #09090b; color: #ededed; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-        a { color: inherit; text-decoration: none; }
+      <style dangerouslySetInnerHTML={{ __html: LANDING_CSS }} />
 
-        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-        @keyframes glow-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.7; } }
-
-        .nav-fixed { position: fixed; top: 0; left: 0; right: 0; z-index: 100; transition: all 0.3s ease; }
-        .nav-glass { background: rgba(9,9,11,0.82); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06); }
-
-        .btn-primary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 24px; background: #005bd2; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s ease; }
-        .btn-primary:hover { background: #0066ee; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,91,210,0.3); }
-        .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 24px; background: transparent; color: #ededed; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all 0.2s ease; }
-        .btn-secondary:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.04); }
-
-        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
-        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(0,0,0,0.3); }
-
-        .tab-btn { padding: 10px 20px; background: transparent; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border-radius: 8px; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
-        .tab-btn:hover { color: #ededed; border-color: rgba(255,255,255,0.12); }
-        .tab-btn.active { background: rgba(0,91,210,0.12); border-color: rgba(0,91,210,0.3); color: #3b82f6; }
-
-        .login-input { width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #ededed; font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.2s; }
-        .login-input:focus { border-color: #005bd2; }
-        .login-input::placeholder { color: rgba(255,255,255,0.25); }
-
-        @media (max-width: 1024px) {
-          .hero-grid { flex-direction: column !important; text-align: center; }
-          .hero-widget { margin-top: 48px !important; }
-          .features-alt { flex-direction: column !important; }
-          .features-alt.reverse { flex-direction: column !important; }
-          .pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; margin: 0 auto !important; }
-        }
-        @media (max-width: 768px) {
-          .nav-links { display: none !important; }
-          .hero-title { font-size: 36px !important; }
-          .stat-grid-4 { grid-template-columns: 1fr 1fr !important; }
-          .comparison-table { font-size: 12px !important; }
-          .footer-grid { grid-template-columns: 1fr 1fr !important; }
-          section { padding: 80px 20px !important; }
-          .tab-row { flex-wrap: wrap !important; }
-        }
-        @media (max-width: 480px) {
-          .hero-title { font-size: 28px !important; }
-          .hero-ctas { flex-direction: column !important; width: 100%; }
-          .hero-ctas a, .hero-ctas button { width: 100%; }
-          .stat-grid-4 { grid-template-columns: 1fr !important; }
-          .footer-grid { grid-template-columns: 1fr !important; }
-        }
-      `}} />
-
-      {/* ═══════════ NAV ═══════════ */}
-      <nav className={`nav-fixed ${scrolled ? "nav-glass" : ""}`}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Logo size={28} color="#005bd2" />
-            <span style={{ fontSize: 18, fontWeight: 600, color: "#ededed" }}>AutoSync</span>
+      {/* ─── Navigation ─── */}
+      <nav className={`lp-nav ${scrolled ? "lp-nav--scrolled" : ""}`}>
+        <div className="lp-container lp-nav__inner">
+          <a href="#" className="lp-nav__logo"><Logo size={28} color="#005bd2" /> <span>AutoSync</span></a>
+          <div className="lp-nav__links">
+            <a href="#widgets">Widgets</a>
+            <a href="#systems">Systems</a>
+            <a href="#pricing">Pricing</a>
+            <a href="#compare">Compare</a>
+            <a href="#faq">FAQ</a>
           </div>
-          <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
-            {[
-              { label: "Features", href: "#features" },
-              { label: "Widgets", href: "#widgets" },
-              { label: "Pricing", href: "#pricing" },
-              { label: "Compare", href: "#compare" },
-            ].map((l) => (
-              <a key={l.label} href={l.href} style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", fontWeight: 500, transition: "color 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.55)")}
-              >{l.label}</a>
-            ))}
-          </div>
-          <a href="#login" className="btn-primary" style={{ padding: "8px 20px", fontSize: 13 }}>Start Free</a>
+          <a href="#login" className="lp-btn lp-btn--sm">Start Free</a>
         </div>
       </nav>
 
-      {/* ═══════════ HERO ═══════════ */}
-      <section style={{ minHeight: "100vh", display: "flex", alignItems: "center", padding: "120px 24px 80px", position: "relative", overflow: "hidden" }}>
-        {/* Background glow */}
-        <div style={{ position: "absolute", top: "20%", left: "50%", width: 800, height: 800, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(0,91,210,0.08) 0%, transparent 70%)", pointerEvents: "none", animation: "glow-pulse 6s ease-in-out infinite" }} />
-
-        <div className="hero-grid" style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", alignItems: "center", gap: 64, position: "relative" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Built for Shopify pill */}
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 20, padding: "6px 16px", marginBottom: 24 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.15 2.74L8.12.59a2.5 2.5 0 00-2.24 0L1.85 2.74A2.5 2.5 0 00.6 4.9v4.2a2.5 2.5 0 001.25 2.16l4.03 2.15a2.5 2.5 0 002.24 0l4.03-2.15A2.5 2.5 0 0013.4 9.1V4.9a2.5 2.5 0 00-1.25-2.16z" fill="#22c55e" opacity="0.2"/><path d="M5 7l1.5 1.5L9.5 5" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <span style={{ fontSize: 13, color: "#22c55e", fontWeight: 500 }}>Built for Shopify</span>
+      {/* ─── Hero ─── */}
+      <section className="lp-hero">
+        <div className="lp-container">
+          <FadeIn className="lp-hero__content">
+            <div className="lp-hero__badge">&#10024; Built for Shopify</div>
+            <h1 className="lp-hero__title">Vehicle Fitment<br /><span className="lp-gradient-text">Intelligence</span> for Shopify</h1>
+            <p className="lp-hero__sub">Help customers find parts that fit their vehicle. Year, Make, Model, Engine search with auto-extraction, 7 storefront widgets, smart collections, and UK plate lookup.</p>
+            <div className="lp-hero__ctas">
+              <a href="#login" className="lp-btn lp-btn--lg">Start Free Trial</a>
+              <a href="#widgets" className="lp-btn lp-btn--lg lp-btn--outline">See Widgets</a>
             </div>
-
-            <h1 className="hero-title" style={{ fontSize: 56, fontWeight: 600, lineHeight: 1.1, color: "#ededed", marginBottom: 20, letterSpacing: "-0.02em" }}>
-              Vehicle Fitment{" "}
-              <span style={{ background: "linear-gradient(135deg, #005bd2, #3b82f6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                Intelligence
-              </span>
-              {" "}for Shopify
-            </h1>
-            <p style={{ fontSize: 18, lineHeight: 1.7, color: "rgba(255,255,255,0.55)", marginBottom: 36, maxWidth: 520 }}>
-              Help customers find parts that fit their vehicle. Year, Make, Model, Engine search — with auto-extraction, storefront widgets, and smart collections.
-            </p>
-
-            <div className="hero-ctas" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <a href="#login" className="btn-primary" style={{ padding: "14px 32px", fontSize: 15 }}>Start Free Trial</a>
-              <a href="#widgets" className="btn-secondary" style={{ padding: "14px 32px", fontSize: 15 }}>See Widgets</a>
-            </div>
-          </div>
-
-          {/* Floating widget preview */}
-          <div className="hero-widget" style={{ flex: "0 0 440px", animation: "float 6s ease-in-out infinite" }}>
-            <YMMEMockup />
-          </div>
+          </FadeIn>
+          <FadeIn className="lp-hero__stats" delay={0.2}>
+            <StatCounter value={stats.makes} label="Vehicle Makes" />
+            <StatCounter value={stats.models} label="Models" />
+            <StatCounter value={stats.engines} label="Engines" />
+            <StatCounter value={stats.specs} label="Vehicle Specs" />
+          </FadeIn>
         </div>
       </section>
 
-      {/* ═══════════ STATS ═══════════ */}
-      <section style={{ padding: "0 24px 80px", maxWidth: 1200, margin: "0 auto" }}>
-        <div className="stat-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "rgba(255,255,255,0.04)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      {/* ─── Trust Bar ─── */}
+      <section className="lp-trust">
+        <div className="lp-container lp-trust__inner">
           {[
-            { label: "Makes", counter: makes },
-            { label: "Models", counter: models },
-            { label: "Engines", counter: engines },
-            { label: "Vehicle Specs", counter: specs },
-          ].map((s) => (
-            <div key={s.label} ref={s.counter.ref} style={{ padding: "40px 24px", textAlign: "center", background: "#09090b" }}>
-              <div style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>
-                {s.counter.value.toLocaleString()}
-              </div>
-              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", fontWeight: 500 }}>{s.label}</div>
-            </div>
+            { icon: "&#128737;", text: "Built for Shopify" },
+            { icon: "&#128274;", text: "App-owned metafields" },
+            { icon: "&#9889;", text: "Edge Function processing" },
+            { icon: "&#127760;", text: "Multi-tenant SaaS" },
+            { icon: "&#128736;", text: "Zero code required" },
+          ].map((t, i) => (
+            <div key={i} className="lp-trust__item"><span>{t.icon}</span> {t.text}</div>
           ))}
         </div>
       </section>
 
-      {/* ═══════════ WIDGET SHOWCASE ═══════════ */}
-      <Section id="widgets">
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Storefront Widgets</div>
-          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Everything your store needs</h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)", maxWidth: 560, margin: "0 auto" }}>Eight embeddable widgets that install into any Shopify theme with zero code changes.</p>
-        </div>
-
-        {/* Tabs */}
-        <div className="tab-row" style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 48, flexWrap: "wrap" }}>
-          {tabs.map((t, i) => (
-            <button key={t} className={`tab-btn ${activeTab === i ? "active" : ""}`} onClick={() => setActiveTab(i)}>{t}</button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div style={{ position: "relative", minHeight: 320 }}>
-          {tabMockups.map((mockup, i) => (
-            <div key={i} style={{
-              position: i === activeTab ? "relative" : "absolute",
-              top: 0, left: 0, right: 0,
-              opacity: i === activeTab ? 1 : 0,
-              pointerEvents: i === activeTab ? "auto" : "none",
-              transition: "opacity 0.4s ease",
-            }}>
-              {mockup}
+      {/* ─── Interactive Widget Demos ─── */}
+      <section id="widgets" className="lp-section">
+        <div className="lp-container">
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">STOREFRONT WIDGETS</span>
+              <h2 className="lp-section__title">Interactive Widget Demos</h2>
+              <p className="lp-section__sub">7 embeddable widgets that install into any Shopify theme with zero code changes. Try them below.</p>
             </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* ═══════════ FEATURES ═══════════ */}
-      <section id="features" style={{ padding: "0 24px" }}>
-        {features.map((f, i) => {
-          const isReverse = i % 2 === 1;
-          return (
-            <Section key={f.title} style={{ padding: "80px 0" }}>
-              <div className={`features-alt ${isReverse ? "reverse" : ""}`} style={{ display: "flex", alignItems: "center", gap: 64, flexDirection: isReverse ? "row-reverse" : "row" }}>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ fontSize: 28, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>{f.title}</h3>
-                  <p style={{ fontSize: 15, lineHeight: 1.7, color: "rgba(255,255,255,0.55)", marginBottom: 24 }}>{f.desc}</p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    {f.bullets.map((b) => (
-                      <div key={b} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 20, height: 20, borderRadius: 10, background: "rgba(0,91,210,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <Check />
-                        </div>
-                        <span style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>{b}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div className="card-hover" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: 40, minHeight: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {i === 0 && <YMMEMockup />}
-                    {i === 1 && <CompatibilityMockup />}
-                    {i === 2 && <DashboardMockup />}
-                    {i === 3 && <PlateMockup />}
-                  </div>
-                </div>
-              </div>
-            </Section>
-          );
-        })}
-      </section>
-
-      {/* ═══════════ HOW IT WORKS ═══════════ */}
-      <Section id="how-it-works">
-        <div style={{ textAlign: "center", marginBottom: 64 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>How It Works</div>
-          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed" }}>Up and running in minutes</h2>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, position: "relative" }}>
-          {/* Connecting line */}
-          <div style={{ position: "absolute", top: 28, left: "12.5%", right: "12.5%", height: 2, background: "rgba(0,91,210,0.2)", zIndex: 0 }} />
-
-          {[
-            { step: "1", title: "Install", desc: "Add AutoSync from the Shopify App Store. One click install, no code required." },
-            { step: "2", title: "Import", desc: "Sync your products and import fitment data from CSV, API, FTP, or map manually." },
-            { step: "3", title: "Map", desc: "Auto-extraction matches products to vehicles. Review suggestions and confirm." },
-            { step: "4", title: "Go Live", desc: "Push to Shopify, generate collections, and enable storefront widgets." },
-          ].map((s) => (
-            <div key={s.step} style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "0 16px", position: "relative", zIndex: 1 }}>
-              <div style={{ width: 56, height: 56, borderRadius: 28, background: "#005bd2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 600, color: "#fff", marginBottom: 20, boxShadow: "0 0 24px rgba(0,91,210,0.3)" }}>
-                {s.step}
-              </div>
-              <h4 style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 8 }}>{s.title}</h4>
-              <p style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.45)", maxWidth: 220 }}>{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* ═══════════ PRICING ═══════════ */}
-      <Section id="pricing">
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Pricing</div>
-          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Simple, transparent pricing</h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)" }}>Start free. Upgrade as you grow. Cancel anytime.</p>
-        </div>
-
-        <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, maxWidth: 960, margin: "0 auto" }}>
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className="card-hover"
-              style={{
-                background: plan.popular ? "rgba(0,91,210,0.06)" : "rgba(255,255,255,0.03)",
-                borderRadius: 16,
-                border: plan.popular ? "1px solid rgba(0,91,210,0.3)" : "1px solid rgba(255,255,255,0.06)",
-                padding: 32,
-                position: "relative",
-              }}
-            >
-              {plan.popular && (
-                <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "#005bd2", borderRadius: 20, padding: "4px 16px", fontSize: 12, fontWeight: 600, color: "#fff" }}>
-                  Most Popular
-                </div>
-              )}
-              <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 4 }}>{plan.name}</div>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ fontSize: 44, fontWeight: 600, color: "#ededed" }}>{plan.price}</span>
-                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>/mo</span>
-              </div>
-              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", marginBottom: 24 }}>{plan.desc}</p>
-              <a href="#login" className="btn-primary" style={{ width: "100%", marginBottom: 24, padding: "12px 24px", background: plan.popular ? "#005bd2" : "rgba(255,255,255,0.06)" }}>
-                {plan.cta}
-              </a>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {plan.features.map((feat) => (
-                  <div key={feat} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Check />
-                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>{feat}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      {/* ═══════════ COMPETITOR COMPARISON ═══════════ */}
-      <Section id="compare">
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Compare</div>
-          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Why AutoSync wins</h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)" }}>More features, lower price, native Shopify integration.</p>
-        </div>
-
-        <div className="comparison-table" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden", maxWidth: 800, margin: "0 auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.35)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Feature</th>
-                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <span style={{ color: "#005bd2" }}>AutoSync</span>
-                </th>
-                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Convermax</th>
-                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Others</th>
-              </tr>
-            </thead>
-            <tbody>
-              {comparisonRows.map((row) => (
-                <tr key={row.feature}>
-                  <td style={{ padding: "14px 20px", fontSize: 14, color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{row.feature}</td>
-                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    {typeof row.us === "boolean" ? (row.us ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, fontWeight: 500, color: "#005bd2" }}>{row.us}</span>}
-                  </td>
-                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    {typeof row.them === "boolean" ? (row.them ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{row.them}</span>}
-                  </td>
-                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    {typeof row.others === "boolean" ? (row.others ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{row.others}</span>}
-                  </td>
-                </tr>
+          </FadeIn>
+          <FadeIn delay={0.1}>
+            <div className="lp-demo-tabs">
+              {demoTabs.map((tab, i) => (
+                <button key={i} className={`lp-demo-tab ${activeDemo === i ? "active" : ""}`} onClick={() => setActiveDemo(i)} dangerouslySetInnerHTML={{ __html: `${tab.icon} ${tab.label}` }} />
               ))}
-            </tbody>
-          </table>
-        </div>
-      </Section>
-
-      {/* ═══════════ CTA ═══════════ */}
-      <section style={{ padding: "120px 24px", position: "relative", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: "50%", left: "50%", width: 600, height: 600, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(0,91,210,0.1) 0%, transparent 70%)", pointerEvents: "none" }} />
-        <div style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", position: "relative" }}>
-          <h2 style={{ fontSize: 36, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Ready to help customers find the right parts?</h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)", marginBottom: 36, lineHeight: 1.7 }}>
-            Join automotive Shopify stores using AutoSync to boost sales and reduce returns with accurate vehicle fitment data.
-          </p>
-          <a href="#login" className="btn-primary" style={{ padding: "16px 40px", fontSize: 16 }}>Get Started Free</a>
+            </div>
+            <div className="lp-demo-frame">
+              <div className="lp-demo-frame__dots"><span /><span /><span /></div>
+              <div className="lp-demo-frame__content">
+                {activeDemo === 0 && <YMMEDemo />}
+                {activeDemo === 1 && <PlateDemo />}
+                {activeDemo === 2 && <CompatibilityDemo />}
+                {activeDemo === 3 && <FitmentBadgeDemo />}
+              </div>
+            </div>
+          </FadeIn>
         </div>
       </section>
 
-      {/* ═══════════ LOGIN ═══════════ */}
-      <Section id="login">
-        <div style={{ maxWidth: 420, margin: "0 auto" }}>
-          <div className="card-hover" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: 40 }}>
-            <div style={{ textAlign: "center", marginBottom: 32 }}>
-              <Logo size={40} color="#005bd2" />
-              <h3 style={{ fontSize: 22, fontWeight: 600, color: "#ededed", marginTop: 16, marginBottom: 8 }}>Log in to AutoSync</h3>
-              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>Enter your Shopify store domain to get started</p>
+      {/* ─── How It Works ─── */}
+      <section className="lp-section lp-section--alt">
+        <div className="lp-container">
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">HOW IT WORKS</span>
+              <h2 className="lp-section__title">From Install to Sales in 4 Steps</h2>
             </div>
-            {showForm && (
-              <Form method="post" action="/auth/login">
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.55)", marginBottom: 8 }}>Store domain</label>
-                  <input
-                    className="login-input"
-                    type="text"
-                    name="shop"
-                    placeholder="my-store.myshopify.com"
-                    value={shopDomain}
-                    onChange={(e) => setShopDomain(e.target.value)}
-                  />
-                </div>
-                <button className="btn-primary" type="submit" style={{ width: "100%", padding: "14px 24px", fontSize: 15 }}>
-                  Install AutoSync
-                </button>
-              </Form>
-            )}
+          </FadeIn>
+          <div className="lp-steps">
+            {[
+              { num: "1", title: "Install & Import", desc: "Install from Shopify App Store. Fetch your products or import from CSV/XML/API/FTP suppliers." },
+              { num: "2", title: "Auto-Extract Fitments", desc: "Our smart extraction engine scans product data and automatically detects vehicle compatibility with 80%+ accuracy." },
+              { num: "3", title: "Push to Shopify", desc: "Push tags, metafields, and smart collections to Shopify. Search & Discovery filters activate automatically." },
+              { num: "4", title: "Sell More Parts", desc: "Customers find parts that fit their vehicle. Fewer returns, higher conversions, professional storefront." },
+            ].map((s, i) => (
+              <FadeIn key={i} delay={i * 0.1} className="lp-step">
+                <div className="lp-step__num">{s.num}</div>
+                <h3 className="lp-step__title">{s.title}</h3>
+                <p className="lp-step__desc">{s.desc}</p>
+              </FadeIn>
+            ))}
           </div>
         </div>
-      </Section>
+      </section>
 
-      {/* ═══════════ FOOTER ═══════════ */}
-      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "64px 24px" }}>
-        <div className="footer-grid" style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-              <Logo size={24} color="#005bd2" />
-              <span style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>AutoSync</span>
+      {/* ─── System Deep-Dive ─── */}
+      <section id="systems" className="lp-section">
+        <div className="lp-container">
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">PLATFORM CAPABILITIES</span>
+              <h2 className="lp-section__title">Every System, Explained</h2>
+              <p className="lp-section__sub">AutoSync is a complete platform with 14+ integrated systems working together.</p>
             </div>
-            <p style={{ fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.35)", maxWidth: 280 }}>
-              Vehicle fitment intelligence for Shopify. Help customers find parts that fit.
-            </p>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Product</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {["Features", "Pricing", "Widgets", "Integrations"].map((l) => (
-                <a key={l} href={`#${l.toLowerCase()}`} style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
-                >{l}</a>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Company</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {["About", "Blog", "Careers", "Contact"].map((l) => (
-                <a key={l} href="#" style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
-                >{l}</a>
-              ))}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legal</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {[
-                { label: "Privacy Policy", href: "/legal/privacy" },
-                { label: "Terms of Service", href: "/legal/terms" },
-                { label: "GDPR", href: "#" },
-              ].map((l) => (
-                <a key={l.label} href={l.href} style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
-                >{l.label}</a>
-              ))}
-            </div>
+          </FadeIn>
+          <div className="lp-systems-grid">
+            {[
+              { icon: "&#129302;", title: "Smart Extraction Engine", desc: "Pattern-matching engine with 55 make patterns, 3-tier confidence routing (auto/flagged/unmapped). No AI costs — pure regex and coded rules.", stat: "80%+ accuracy" },
+              { icon: "&#128663;", title: "YMME Vehicle Database", desc: `Pre-loaded with ${stats.makes.toLocaleString()} makes, ${stats.models.toLocaleString()} models, ${stats.engines.toLocaleString()} engines sourced from auto-data.net.`, stat: `${stats.specs.toLocaleString()} specs` },
+              { icon: "&#128194;", title: "Smart Collections", desc: "Auto-creates SEO-optimized collections by Make, Make+Model, or Make+Model+Year Range. Includes brand logos and meta descriptions.", stat: "3 strategies" },
+              { icon: "&#128297;", title: "7 Storefront Widgets", desc: "YMME Search, Fitment Badge, Compatibility Table, Plate Lookup, VIN Decode, Wheel Finder, Vehicle Specs. All zero-code theme blocks.", stat: "7 widgets" },
+              { icon: "&#128229;", title: "Provider Import System", desc: "Import from CSV, XML, JSON, REST API, or FTP. Smart column mapper auto-detects fields and remembers your mappings.", stat: "5 formats" },
+              { icon: "&#128196;", title: "Vehicle Spec Pages", desc: "Auto-generated SEO pages with 90+ engine specs. Power, torque, displacement, fuel type — all as Shopify metaobjects.", stat: "90+ fields" },
+              { icon: "&#127919;", title: "Push to Shopify", desc: "Pushes tags (_autosync_BMW), metafields (make/model/year/engine lists), and activates Search & Discovery filters.", stat: "5 metafields" },
+              { icon: "&#128176;", title: "Pricing Engine", desc: "Markup, margin, fixed, and MAP pricing rules. Scope by vendor, product type, provider, tag, or SKU prefix.", stat: "4 rule types" },
+            ].map((sys, i) => (
+              <FadeIn key={i} delay={i * 0.05} className="lp-system-card">
+                <div className="lp-system-card__icon" dangerouslySetInnerHTML={{ __html: sys.icon }} />
+                <h3 className="lp-system-card__title">{sys.title}</h3>
+                <p className="lp-system-card__desc">{sys.desc}</p>
+                <div className="lp-system-card__stat">{sys.stat}</div>
+              </FadeIn>
+            ))}
           </div>
         </div>
-        <div style={{ maxWidth: 1200, margin: "48px auto 0", paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.04)", textAlign: "center" }}>
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.25)" }}>
-            &copy; {new Date().getFullYear()} AutoSync. All rights reserved.
-          </p>
+      </section>
+
+      {/* ─── Pricing ─── */}
+      <section id="pricing" className="lp-section lp-section--alt">
+        <div className="lp-container">
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">PRICING</span>
+              <h2 className="lp-section__title">Simple, Transparent Pricing</h2>
+              <p className="lp-section__sub">Start free. Upgrade as you grow. Cancel anytime. All plans include 30-day free trial.</p>
+            </div>
+          </FadeIn>
+          <div className="lp-pricing-grid">
+            {PLANS.map((plan, i) => (
+              <FadeIn key={i} delay={i * 0.05} className={`lp-pricing-card ${plan.highlight ? "lp-pricing-card--popular" : ""}`}>
+                {plan.badge && <div className="lp-pricing-card__badge">{plan.badge}</div>}
+                <h3 className="lp-pricing-card__name">{plan.name}</h3>
+                <div className="lp-pricing-card__price">
+                  {plan.price === 0 ? <span className="lp-pricing-card__amount">Free</span> : <><span className="lp-pricing-card__amount">${plan.price}</span><span className="lp-pricing-card__period">/month</span></>}
+                </div>
+                <div className="lp-pricing-card__limits">
+                  <div>{plan.products} products</div>
+                  <div>{plan.fitments} fitments</div>
+                  <div>{plan.providers} providers</div>
+                </div>
+                <ul className="lp-pricing-card__features">
+                  {plan.features.map((f, j) => <li key={j}><CheckIcon /> {f}</li>)}
+                </ul>
+                <a href="#login" className={`lp-btn ${plan.highlight ? "" : "lp-btn--outline"}`} style={{ width: "100%" }}>
+                  {plan.price === 0 ? "Get Started" : "Start Free Trial"}
+                </a>
+              </FadeIn>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Competitor Comparison ─── */}
+      <section id="compare" className="lp-section">
+        <div className="lp-container">
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">COMPARISON</span>
+              <h2 className="lp-section__title">AutoSync vs The Competition</h2>
+              <p className="lp-section__sub">See why AutoSync offers the best value for automotive parts stores on Shopify.</p>
+            </div>
+          </FadeIn>
+          <FadeIn delay={0.1}>
+            <div className="lp-compare-wrapper">
+              <table className="lp-compare-table">
+                <thead>
+                  <tr>
+                    <th>Feature</th>
+                    {COMPETITORS.map((c, i) => <th key={i} className={c.highlight ? "highlight" : ""}>{c.name}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td>Price</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.price}</td>)}</tr>
+                  <tr><td>Products</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.products}</td>)}</tr>
+                  <tr><td>YMME Database</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.ymmeDb ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Auto Extraction</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.autoExtract ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Smart Collections</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.collections ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Widgets</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.widgets}</td>)}</tr>
+                  <tr><td>UK Plate Lookup</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.plate ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>VIN Decode</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.vin ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Wheel Finder</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.wheelFinder ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>API/FTP Import</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.apiFtp ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Analytics</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.analytics ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                  <tr><td>Vehicle Pages</td>{COMPETITORS.map((c, i) => <td key={i} className={c.highlight ? "highlight" : ""}>{c.vehiclePages ? <CheckIcon /> : <CrossIcon />}</td>)}</tr>
+                </tbody>
+              </table>
+            </div>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ─── FAQ ─── */}
+      <section id="faq" className="lp-section lp-section--alt">
+        <div className="lp-container" style={{ maxWidth: 800 }}>
+          <FadeIn>
+            <div className="lp-section__header">
+              <span className="lp-section__tag">FAQ</span>
+              <h2 className="lp-section__title">Frequently Asked Questions</h2>
+            </div>
+          </FadeIn>
+          <div className="lp-faq-list">
+            {FAQ_ITEMS.map((item, i) => (
+              <FadeIn key={i} delay={i * 0.03}>
+                <div className={`lp-faq ${openFaq === i ? "lp-faq--open" : ""}`}>
+                  <button className="lp-faq__q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
+                    {item.q}
+                    <span className="lp-faq__arrow">{openFaq === i ? "−" : "+"}</span>
+                  </button>
+                  {openFaq === i && <div className="lp-faq__a">{item.a}</div>}
+                </div>
+              </FadeIn>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Final CTA ─── */}
+      <section className="lp-cta-section">
+        <div className="lp-container" style={{ textAlign: "center" }}>
+          <FadeIn>
+            <h2 style={{ fontSize: 36, fontWeight: 800, marginBottom: 16, color: "#fff" }}>Ready to Sell More Parts?</h2>
+            <p style={{ fontSize: 18, opacity: 0.8, marginBottom: 32, color: "#fff" }}>Join automotive stores using AutoSync to help customers find parts that fit.</p>
+            <a href="#login" className="lp-btn lp-btn--lg" style={{ background: "#fff", color: "#005bd2" }}>Start Your Free Trial &rarr;</a>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ─── Login ─── */}
+      <section id="login" className="lp-section">
+        <div className="lp-container" style={{ maxWidth: 480, textAlign: "center" }}>
+          <Logo size={48} color="#005bd2" />
+          <h2 style={{ fontSize: 24, fontWeight: 700, margin: "16px 0 8px" }}>AutoSync</h2>
+          <p style={{ fontSize: 14, opacity: 0.6, marginBottom: 24 }}>Enter your Shopify store domain to get started</p>
+          {showForm && (
+            <Form method="post" action="/auth/login">
+              <div style={{ display: "flex", gap: 8 }}>
+                <input name="shop" className="lp-login-input" placeholder="your-store.myshopify.com" value={shopDomain} onChange={e => setShopDomain(e.target.value)} />
+                <button type="submit" className="lp-btn">Install</button>
+              </div>
+            </Form>
+          )}
+        </div>
+      </section>
+
+      {/* ─── Footer ─── */}
+      <footer className="lp-footer">
+        <div className="lp-container">
+          <div className="lp-footer__grid">
+            <div>
+              <div className="lp-footer__logo"><Logo size={24} color="#94a3b8" /> AutoSync</div>
+              <p className="lp-footer__desc">Vehicle fitment intelligence for Shopify automotive stores.</p>
+            </div>
+            <div>
+              <h4>Product</h4>
+              <a href="#widgets">Widgets</a>
+              <a href="#systems">Systems</a>
+              <a href="#pricing">Pricing</a>
+              <a href="#compare">Compare</a>
+            </div>
+            <div>
+              <h4>Support</h4>
+              <a href="#faq">FAQ</a>
+              <a href="mailto:support@autosync.app">Contact</a>
+            </div>
+            <div>
+              <h4>Legal</h4>
+              <a href="/legal/privacy">Privacy Policy</a>
+              <a href="/legal/terms">Terms of Service</a>
+            </div>
+          </div>
+          <div className="lp-footer__bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
         </div>
       </footer>
     </>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CSS — Scoped to landing page only
+   ═══════════════════════════════════════════════════════════════ */
+
+const LANDING_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #0f172a; background: #fff; -webkit-font-smoothing: antialiased; }
+
+/* ─── Layout ─── */
+.lp-container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.lp-section { padding: 96px 0; }
+.lp-section--alt { background: #f8fafc; }
+
+/* ─── Nav ─── */
+.lp-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 16px 0; transition: all 0.3s; }
+.lp-nav--scrolled { background: rgba(255,255,255,0.95); backdrop-filter: blur(20px); box-shadow: 0 1px 3px rgba(0,0,0,0.06); padding: 12px 0; }
+.lp-nav__inner { display: flex; align-items: center; justify-content: space-between; }
+.lp-nav__logo { display: flex; align-items: center; gap: 8px; text-decoration: none; color: #0f172a; font-weight: 800; font-size: 18px; }
+.lp-nav__links { display: flex; gap: 32px; }
+.lp-nav__links a { text-decoration: none; color: #64748b; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+.lp-nav__links a:hover { color: #005bd2; }
+
+/* ─── Buttons ─── */
+.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px; text-decoration: none; border: none; cursor: pointer; transition: all 0.2s; background: #005bd2; color: #fff; font-family: inherit; }
+.lp-btn:hover { background: #004ab5; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,91,210,0.3); }
+.lp-btn--outline { background: transparent; color: #005bd2; border: 1.5px solid #005bd2; }
+.lp-btn--outline:hover { background: #005bd2; color: #fff; }
+.lp-btn--sm { padding: 8px 16px; font-size: 13px; }
+.lp-btn--lg { padding: 16px 32px; font-size: 16px; border-radius: 10px; }
+
+/* ─── Hero ─── */
+.lp-hero { padding: 160px 0 80px; background: linear-gradient(135deg, #f0f4ff 0%, #fff 50%, #f0f9ff 100%); }
+.lp-hero__content { max-width: 720px; }
+.lp-hero__badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 100px; background: #e0f2fe; color: #005bd2; font-size: 13px; font-weight: 600; margin-bottom: 24px; }
+.lp-hero__title { font-size: 56px; font-weight: 900; line-height: 1.1; letter-spacing: -1.5px; margin-bottom: 20px; color: #0f172a; }
+.lp-gradient-text { background: linear-gradient(135deg, #005bd2, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.lp-hero__sub { font-size: 18px; line-height: 1.6; color: #64748b; margin-bottom: 32px; max-width: 560px; }
+.lp-hero__ctas { display: flex; gap: 12px; }
+.lp-hero__stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 64px; padding-top: 48px; border-top: 1px solid #e2e8f0; }
+
+/* ─── Stats ─── */
+.lp-stat { text-align: center; }
+.lp-stat__number { font-size: 36px; font-weight: 800; color: #005bd2; }
+.lp-stat__label { font-size: 13px; color: #64748b; margin-top: 4px; font-weight: 500; }
+
+/* ─── Trust Bar ─── */
+.lp-trust { padding: 24px 0; border-bottom: 1px solid #e2e8f0; background: #fff; }
+.lp-trust__inner { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+.lp-trust__item { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #64748b; }
+
+/* ─── Section Headers ─── */
+.lp-section__header { text-align: center; margin-bottom: 56px; }
+.lp-section__tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: 2px; color: #005bd2; text-transform: uppercase; margin-bottom: 12px; }
+.lp-section__title { font-size: 40px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px; }
+.lp-section__sub { font-size: 17px; color: #64748b; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+
+/* ─── Demo Tabs ─── */
+.lp-demo-tabs { display: flex; justify-content: center; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
+.lp-demo-tab { padding: 10px 20px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: #fff; color: #64748b; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.lp-demo-tab.active { background: #005bd2; color: #fff; border-color: #005bd2; }
+.lp-demo-tab:hover:not(.active) { border-color: #005bd2; color: #005bd2; }
+
+/* ─── Demo Frame (browser chrome) ─── */
+.lp-demo-frame { max-width: 680px; margin: 0 auto; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 20px 60px rgba(0,0,0,0.08); overflow: hidden; background: #fff; }
+.lp-demo-frame__dots { display: flex; gap: 6px; padding: 12px 16px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+.lp-demo-frame__dots span { width: 10px; height: 10px; border-radius: 50%; }
+.lp-demo-frame__dots span:nth-child(1) { background: #ef4444; }
+.lp-demo-frame__dots span:nth-child(2) { background: #f59e0b; }
+.lp-demo-frame__dots span:nth-child(3) { background: #22c55e; }
+.lp-demo-frame__content { padding: 24px; }
+
+/* ─── Demo Widget Styles ─── */
+.demo-widget { position: relative; }
+.demo-widget__title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.demo-widget__footer { text-align: center; font-size: 12px; color: #94a3b8; margin-top: 16px; padding-top: 12px; border-top: 1px solid #f1f5f9; }
+.demo-btn { padding: 10px 16px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.demo-btn--primary { background: #005bd2; color: #fff; border-color: #005bd2; }
+.demo-btn--primary:hover { background: #004ab5; }
+.demo-btn--ghost { background: transparent; }
+.demo-btn--sm { padding: 4px 10px; font-size: 12px; background: #005bd2; color: #fff; border-color: #005bd2; border-radius: 4px; }
+
+/* ─── YMME Demo ─── */
+.demo-ymme__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.demo-ymme__field label { display: block; font-size: 12px; color: #64748b; margin-bottom: 4px; font-weight: 500; }
+.demo-ymme__select { width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid #e2e8f0; background: #fff; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; font-family: inherit; }
+.demo-ymme__dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); margin-top: 4px; max-height: 220px; overflow-y: auto; }
+.demo-ymme__search { width: 100%; padding: 10px 12px; border: none; border-bottom: 1px solid #e2e8f0; font-size: 14px; outline: none; font-family: inherit; }
+.demo-ymme__list { list-style: none; padding: 4px; }
+.demo-ymme__option { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; border-radius: 4px; font-size: 14px; transition: background 0.15s; }
+.demo-ymme__option:hover, .demo-ymme__option.active { background: #f1f5f9; }
+
+/* ─── Garage Demo ─── */
+.demo-garage { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+.demo-garage__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.demo-garage__clear { background: none; border: none; cursor: pointer; font-size: 16px; opacity: 0.4; }
+.demo-garage__item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+
+/* ─── Plate Demo ─── */
+.demo-plate__result { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; background: #fff; }
+.demo-plate__specs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.demo-plate__spec { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.demo-plate__spec span { color: #64748b; }
+
+/* ─── Table Demo ─── */
+.demo-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.demo-table th { text-align: left; padding: 10px 12px; background: #f8fafc; border-bottom: 2px solid #e2e8f0; font-weight: 600; font-size: 13px; color: #64748b; }
+.demo-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+
+/* ─── Fitment Badge Demo ─── */
+.demo-badge-btn { padding: 6px 16px; border-radius: 100px; border: 1.5px solid #e2e8f0; background: #fff; font-size: 13px; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.demo-badge-btn.active { background: #005bd2; color: #fff; border-color: #005bd2; }
+.demo-fitment-badge { padding: 14px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 10px; justify-content: center; transition: all 0.3s; }
+.demo-fitment-badge.fits { background: #dcfce7; color: #166534; }
+.demo-fitment-badge.no-fit { background: #fef2f2; color: #991b1b; }
+.demo-fitment-badge.neutral { background: #f1f5f9; color: #64748b; }
+.demo-fitment-badge__icon { font-size: 18px; }
+
+/* ─── Steps ─── */
+.lp-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 32px; }
+.lp-step { text-align: center; padding: 32px 24px; border-radius: 12px; background: #fff; border: 1px solid #e2e8f0; transition: all 0.3s; }
+.lp-step:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.06); }
+.lp-step__num { width: 48px; height: 48px; border-radius: 50%; background: #005bd2; color: #fff; font-size: 20px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+.lp-step__title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.lp-step__desc { font-size: 14px; color: #64748b; line-height: 1.5; }
+
+/* ─── System Cards ─── */
+.lp-systems-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.lp-system-card { padding: 28px; border-radius: 12px; border: 1px solid #e2e8f0; background: #fff; transition: all 0.3s; }
+.lp-system-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.06); border-color: #005bd2; }
+.lp-system-card__icon { font-size: 28px; margin-bottom: 12px; }
+.lp-system-card__title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.lp-system-card__desc { font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 12px; }
+.lp-system-card__stat { display: inline-block; padding: 4px 10px; border-radius: 100px; background: #e0f2fe; color: #005bd2; font-size: 12px; font-weight: 600; }
+
+/* ─── Pricing ─── */
+.lp-pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.lp-pricing-card { padding: 32px 24px; border-radius: 12px; border: 1px solid #e2e8f0; background: #fff; position: relative; transition: all 0.3s; }
+.lp-pricing-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(0,0,0,0.06); }
+.lp-pricing-card--popular { border-color: #005bd2; box-shadow: 0 0 0 1px #005bd2; }
+.lp-pricing-card__badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); padding: 4px 16px; border-radius: 100px; background: #005bd2; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.lp-pricing-card__name { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.lp-pricing-card__price { margin-bottom: 16px; }
+.lp-pricing-card__amount { font-size: 40px; font-weight: 800; }
+.lp-pricing-card__period { font-size: 15px; color: #64748b; }
+.lp-pricing-card__limits { padding: 12px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; margin-bottom: 16px; font-size: 13px; color: #64748b; display: flex; flex-direction: column; gap: 4px; }
+.lp-pricing-card__features { list-style: none; margin-bottom: 24px; }
+.lp-pricing-card__features li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
+
+/* ─── Compare Table ─── */
+.lp-compare-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.lp-compare-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 900px; }
+.lp-compare-table th, .lp-compare-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: center; }
+.lp-compare-table th { background: #f8fafc; font-weight: 600; font-size: 12px; position: sticky; top: 0; }
+.lp-compare-table td:first-child, .lp-compare-table th:first-child { text-align: left; font-weight: 500; }
+.lp-compare-table .highlight { background: #f0f7ff; }
+.lp-compare-table th.highlight { background: #005bd2; color: #fff; }
+
+/* ─── FAQ ─── */
+.lp-faq-list { display: flex; flex-direction: column; gap: 8px; }
+.lp-faq { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff; transition: all 0.2s; }
+.lp-faq--open { border-color: #005bd2; }
+.lp-faq__q { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border: none; background: none; font-size: 15px; font-weight: 600; cursor: pointer; text-align: left; font-family: inherit; color: #0f172a; }
+.lp-faq__arrow { font-size: 20px; color: #64748b; flex-shrink: 0; }
+.lp-faq__a { padding: 0 20px 16px; font-size: 14px; color: #64748b; line-height: 1.6; }
+
+/* ─── CTA Section ─── */
+.lp-cta-section { padding: 96px 0; background: linear-gradient(135deg, #005bd2, #7c3aed); }
+
+/* ─── Login ─── */
+.lp-login-input { flex: 1; padding: 12px 16px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 14px; outline: none; font-family: inherit; }
+.lp-login-input:focus { border-color: #005bd2; box-shadow: 0 0 0 3px rgba(0,91,210,0.1); }
+
+/* ─── Footer ─── */
+.lp-footer { padding: 64px 0 32px; background: #0f172a; color: #94a3b8; }
+.lp-footer__grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+.lp-footer__logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; color: #e2e8f0; margin-bottom: 12px; }
+.lp-footer__desc { font-size: 14px; line-height: 1.5; }
+.lp-footer h4 { color: #e2e8f0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.lp-footer a { display: block; color: #94a3b8; text-decoration: none; font-size: 14px; padding: 3px 0; transition: color 0.2s; }
+.lp-footer a:hover { color: #fff; }
+.lp-footer__bottom { padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 13px; text-align: center; }
+
+/* ─── Responsive ─── */
+@media (max-width: 1024px) {
+  .lp-hero__title { font-size: 42px; }
+  .lp-systems-grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-pricing-grid { grid-template-columns: repeat(2, 1fr); }
+  .lp-steps { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .lp-nav__links { display: none; }
+  .lp-hero { padding: 120px 0 48px; }
+  .lp-hero__title { font-size: 32px; }
+  .lp-hero__stats { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .lp-section { padding: 64px 0; }
+  .lp-section__title { font-size: 28px; }
+  .lp-demo-frame { margin: 0 -12px; border-radius: 8px; }
+  .demo-ymme__grid { grid-template-columns: 1fr 1fr; }
+  .lp-pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+  .lp-systems-grid { grid-template-columns: 1fr; }
+  .lp-steps { grid-template-columns: 1fr; }
+  .lp-footer__grid { grid-template-columns: 1fr 1fr; }
+  .lp-trust__inner { gap: 16px; }
+  .lp-hero__ctas { flex-direction: column; }
+}
+@media (max-width: 480px) {
+  .lp-hero__title { font-size: 28px; }
+  .lp-stat__number { font-size: 28px; }
+  .demo-ymme__grid { grid-template-columns: 1fr; }
+  .demo-plate__specs { grid-template-columns: 1fr; }
+  .lp-footer__grid { grid-template-columns: 1fr; }
+}
+`;
