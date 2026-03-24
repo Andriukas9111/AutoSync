@@ -328,11 +328,13 @@ async function processPushChunk(
   }
 
   // Get products with fitments — use OFFSET to skip already-processed ones
+  // Filter out products without shopify_product_id to avoid gid://shopify/Product/null
   const { data: products } = await db
     .from("products")
     .select("id, shopify_product_id")
     .eq("shop_id", shopId)
     .not("fitment_status", "eq", "unmapped")
+    .not("shopify_product_id", "is", null)
     .order("id")
     .range(alreadyProcessed, alreadyProcessed + BATCH_SIZE - 1);
 

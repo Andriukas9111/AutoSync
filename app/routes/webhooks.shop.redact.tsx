@@ -18,16 +18,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const tables = [
     "extraction_results",
     "vehicle_fitments",
+    "wheel_fitments",
     "vehicle_page_sync",
     "search_events",
     "conversion_events",
     "sync_jobs",
     "provider_column_mappings",
     "provider_imports",
+    "pricing_rules",
     "products",
     "providers",
     "collection_mappings",
     "tenant_active_makes",
+    "tenant_custom_vehicles",
     "app_settings",
     "tenants",  // Delete tenants LAST (parent table with FK CASCADE)
   ] as const;
