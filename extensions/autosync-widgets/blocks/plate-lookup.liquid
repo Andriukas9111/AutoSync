@@ -20,7 +20,7 @@
       </div></div>
       <input type="text" class="apl-plate-input" data-apl-input placeholder="{{ block.settings.placeholder_text | default: 'Enter reg (e.g. AB12 CDE)' }}" maxlength="8" autocomplete="off" spellcheck="false"/>
     </div>
-    <button type="button" class="apl-submit-btn" data-apl-submit>
+    <button type="button" class="apl-submit-btn" data-apl-submit aria-label="Look up vehicle by registration number">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>{{ block.settings.button_text | default: "Look Up" }}</span>
     </button>
@@ -30,7 +30,7 @@
   <div class="apl-error" data-apl-error style="display:none;">
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
     <p class="apl-error__msg" data-apl-error-msg>Something went wrong.</p>
-    <button type="button" class="apl-error__retry" data-apl-retry>Try Again</button>
+    <button type="button" class="apl-error__retry" data-apl-retry aria-label="Retry vehicle lookup">Try Again</button>
   </div>
   <div class="apl-results" data-apl-results style="display:none;"></div>
 </div>

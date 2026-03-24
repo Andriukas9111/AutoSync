@@ -1319,6 +1319,7 @@
 
   function initWheelFinder(container) {
     var proxyUrl = container.dataset.proxyUrl;
+    var currencySymbol = container.dataset.currencySymbol || '$'; // From Liquid: {{ cart.currency.symbol }}
     var searchBtn = container.querySelector('[data-autosync-wheel-search]');
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
@@ -1381,7 +1382,7 @@
                 if (item.product.price) {
                   var price = document.createElement('span');
                   price.className = 'autosync-wheel-finder__price';
-                  price.textContent = '\u00A3' + Number(item.product.price).toFixed(2);
+                  price.textContent = currencySymbol + Number(item.product.price).toFixed(2);
                   card.appendChild(price);
                 }
 

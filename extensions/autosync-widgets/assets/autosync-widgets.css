@@ -4,7 +4,9 @@
 /* CRITICAL: Prevent theme CSS from overriding our widget styles */
 [class^="autosync-"],
 [class^="apl-"],
-[class^="avs-"] {
+[class^="avs-"],
+[class^="avd-"],
+[class^="avsd-"] {
   box-sizing: border-box !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
 }
@@ -14,14 +16,20 @@
 [class^="apl-"] img,
 [class^="apl-"] svg,
 [class^="avs-"] img,
-[class^="avs-"] svg {
+[class^="avs-"] svg,
+[class^="avd-"] img,
+[class^="avd-"] svg,
+[class^="avsd-"] img,
+[class^="avsd-"] svg {
   max-width: 100% !important;
   height: auto !important;
 }
 /* Icons inside our widgets — never bigger than their container */
 [class^="autosync-"] img[width],
 [class^="apl-"] img[width],
-[class^="avs-"] img[width] {
+[class^="avs-"] img[width],
+[class^="avd-"] img[width],
+[class^="avsd-"] img[width] {
   width: attr(width px) !important;
   max-width: none !important;
   height: attr(height px) !important;
