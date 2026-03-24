@@ -856,16 +856,10 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       }
 
       debugInfo.resolved = resolved;
-      console.log("[proxy] YMME resolution result:", JSON.stringify({
-        dvla: { make: dvlaMake, model: dvlaModel, year: dvlaYear, cc: dvlaCC, fuel: dvlaFuel },
-        resolved,
-        enginesCount: debugInfo.enginesCount,
-        modelsCount: debugInfo.ymmeModelsCount,
-        candidatesCount: (debugInfo.topCandidates as unknown[])?.length ?? 0,
-      }));
+      // Debug info saved to response — no console.log on every customer request
     } catch (searchErr) {
       const errMsg = searchErr instanceof Error ? searchErr.message : String(searchErr);
-      console.error("[proxy] YMME resolution FAILED:", errMsg, searchErr instanceof Error ? searchErr.stack : "");
+      if (process.env.NODE_ENV !== "production") console.error("[proxy] YMME resolution FAILED:", errMsg);
       debugInfo.searchError = errMsg;
     }
 
