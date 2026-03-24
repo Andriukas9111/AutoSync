@@ -29,509 +29,747 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 /* Our real SVG logo as a component */
-function Logo({ size = 32 }: { size?: number }) {
+function Logo({ size = 32, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path fill="currentColor" d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z"/>
-      <path fill="currentColor" d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z"/>
+      <path fill={color} d="M649.88,613.79c-2.05,2.9-6.7,7.92-7.75,11.18-.28.88-1.56,2.26-2.12,3.05-1.35,1.92-2.6,3.92-3.83,5.93-.53.86-1.57,2.2-2.17,3.08-6.51,9.57-12.95,19.48-17.81,29.93-.26.56-.89,1.6-1.07,2.17l-2.96,4.78c-12.08,19.53-19.03,41.59-29.07,62.04l-55.07,112.19c-.12.24.12.77.03,1.03-6.69,10.45-15.8,30.69-21.07,40.92-.34.66-.7,2.05-.93,2.82l-2.13,4.15-.87,1.86-2.12,4.14-.79,1.86-2.99,6.2c-.3.45-.85,1.25-1.07,1.69l-2.14,4.25-.87,1.86-2.13,4.14c-.24.47-.55,1.5-.86,1.93-1.93,2.79-5.03,8.86-6.15,12.07-.17.49-.58,1.43-.85,1.87-1.62,2.61-4.14,8.22-5.08,11.15-.16.5-.64,1.41-.9,1.88l-1.15,2.09c-4.05,7.34-9.23,13.79-18.05,17.06l-297.19,110.08c-15.62,5.79-32-6.43-34.53-19.43-2.27-11.72,1.14-17.99,5.58-27.17l250.39-517.49,48.41-99.53,80.24-165.62,13.24-28.33,47.54-96.96c4.3-8.78,16.69-11.39,25.31-10.39s17.2,6.02,21.47,14.59l67.09,134.73,75.53,151.3,25.43,51.94c2.4,4.9-2.67,8.86-5.99,11.54l-31.01,25.01-19.62,17.35c-10.85,9.6-19.84,18.93-29.53,29.6l-19.64,21.62c-11.43,12.58-21.11,26.15-30.77,39.85Z"/>
+      <path fill={color} d="M728.87,955.34l-57.62-113.62c-7.69-15.15-15.92-29.06-22.26-44.66-3.86-9.48-1.11-19.61-.33-29.51,6.2-79.19,45.35-155.66,92.9-217.9,10.7-14,35.13-41.76,48.25-53.11,1.5-1.29,5.45-1.99,7.09-1.43s4.47,2.69,5.45,4.64l36.42,72.5,41.65,84.41,123.43,248.48,69.4,140.74c4.84,9.82-.25,21.97-6.35,28.37s-17.63,10.65-27.65,6.95l-289.84-107.29c-9.58-3.55-15.71-9.03-20.54-18.57Z"/>
     </svg>
   );
 }
 
-/* Animated counter */
-function Counter({ end, suffix = "" }: { end: number; suffix?: string }) {
-  const [val, setVal] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
+/* ─── Animated counter hook ─── */
+function useCounter(end: number, duration = 2000) {
+  const [value, setValue] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
   const started = useRef(false);
+
   useEffect(() => {
-    if (!ref.current) return;
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !started.current) {
-        started.current = true;
-        const t0 = performance.now();
-        const run = (now: number) => {
-          const p = Math.min((now - t0) / 1800, 1);
-          setVal(Math.round(end * (1 - Math.pow(1 - p, 3))));
-          if (p < 1) requestAnimationFrame(run);
-        };
-        requestAnimationFrame(run);
-      }
-    }, { threshold: 0.3 });
-    obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [end]);
-  return <span ref={ref}>{val.toLocaleString()}{suffix}</span>;
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          const startTime = performance.now();
+          const animate = (now: number) => {
+            const elapsed = now - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setValue(Math.floor(eased * end));
+            if (progress < 1) requestAnimationFrame(animate);
+          };
+          requestAnimationFrame(animate);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [end, duration]);
+
+  return { value, ref };
 }
 
+/* ─── Scroll fade-in hook ─── */
+function useFadeIn() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setVisible(true); },
+      { threshold: 0.1 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return { ref, visible };
+}
+
+/* ─── Check icon ─── */
+function Check() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M13.5 4.5L6.5 11.5L3 8" stroke="#005bd2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+
+/* ─── X icon ─── */
+function Cross() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M12 4L4 12M4 4l8 8" stroke="rgba(255,255,255,0.25)" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+/* ─── Section wrapper ─── */
+function Section({ children, id, style }: { children: React.ReactNode; id?: string; style?: React.CSSProperties }) {
+  const { ref, visible } = useFadeIn();
+  return (
+    <section
+      ref={ref}
+      id={id}
+      style={{
+        padding: "120px 24px",
+        maxWidth: 1200,
+        margin: "0 auto",
+        opacity: visible ? 1 : 0,
+        transform: visible ? "translateY(0)" : "translateY(40px)",
+        transition: "opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1)",
+        ...style,
+      }}
+    >
+      {children}
+    </section>
+  );
+}
+
+/* ─── Widget Mockups ─── */
+function YMMEMockup() {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 480, margin: "0 auto" }}>
+      <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 24, textAlign: "center" }}>Find Parts for Your Vehicle</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        {[
+          { label: "Make", value: "BMW" },
+          { label: "Model", value: "3 Series" },
+          { label: "Year", value: "2022" },
+          { label: "Engine", value: "M340i 382 Hp" },
+        ].map((f) => (
+          <div key={f.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", padding: "10px 14px" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>{f.label}</div>
+            <div style={{ fontSize: 14, color: "#ededed", fontWeight: 500 }}>{f.value}</div>
+          </div>
+        ))}
+      </div>
+      <button style={{ width: "100%", marginTop: 20, padding: "12px 24px", background: "#005bd2", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        Find Parts
+      </button>
+    </div>
+  );
+}
+
+function PlateMockup() {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 420, margin: "0 auto" }}>
+      <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 24, textAlign: "center" }}>Find Parts by Registration</div>
+      <div style={{ background: "#fdd835", borderRadius: 8, padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ background: "#003399", color: "#fff", borderRadius: 4, padding: "4px 6px", fontSize: 10, fontWeight: 600, lineHeight: 1 }}>GB</div>
+        <div style={{ fontSize: 24, fontWeight: 600, color: "#111", letterSpacing: 2, fontFamily: "monospace" }}>BD18 JYC</div>
+      </div>
+      <button style={{ width: "100%", padding: "12px 24px", background: "#005bd2", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 16 }}>
+        Look Up Vehicle
+      </button>
+      <div style={{ background: "rgba(34,197,94,0.08)", borderRadius: 8, border: "1px solid rgba(34,197,94,0.2)", padding: "12px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="9" fill="#22c55e" opacity="0.15"/><path d="M6 9l2 2 4-4" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        <span style={{ color: "#22c55e", fontSize: 14, fontWeight: 500 }}>Vehicle Found &mdash; 2018 BMW 3 Series 320d</span>
+      </div>
+    </div>
+  );
+}
+
+function CompatibilityMockup() {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 24, maxWidth: 560, margin: "0 auto", overflow: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>Vehicle Compatibility</div>
+        <div style={{ background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "#22c55e", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
+          <svg width="12" height="12" viewBox="0 0 12 12"><path d="M4 6l2 2 4-4" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+          Fits your vehicle
+        </div>
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr>
+            {["Make", "Model", "Years", "Engine"].map((h) => (
+              <th key={h} style={{ textAlign: "left", padding: "8px 12px", color: "rgba(255,255,255,0.35)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            { make: "BMW", model: "3 Series (F30)", years: "2019-2023", engine: "320i 184 Hp" },
+            { make: "BMW", model: "3 Series (G20)", years: "2019-2025", engine: "330i 258 Hp" },
+            { make: "BMW", model: "4 Series (G22)", years: "2020-2025", engine: "M440i 374 Hp" },
+          ].map((r, i) => (
+            <tr key={i}>
+              <td style={{ padding: "10px 12px", color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.make}</td>
+              <td style={{ padding: "10px 12px", color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.model}</td>
+              <td style={{ padding: "10px 12px", color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.years}</td>
+              <td style={{ padding: "10px 12px", color: "rgba(255,255,255,0.55)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{r.engine}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function VehicleSpecMockup() {
+  return (
+    <div style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(0,91,210,0.06) 100%)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 32, maxWidth: 420, margin: "0 auto" }}>
+      <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Audi</div>
+      <div style={{ fontSize: 28, fontWeight: 600, color: "#ededed", marginBottom: 4 }}>A1</div>
+      <div style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", marginBottom: 20 }}>1.4 TFSI 150 Hp</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+        {["Petrol", "FWD", "Hatchback", "2015-2018"].map((b) => (
+          <span key={b} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 20, padding: "4px 12px", fontSize: 12, color: "rgba(255,255,255,0.55)" }}>{b}</span>
+        ))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+        {[
+          { val: "150", unit: "HP" },
+          { val: "250", unit: "Nm" },
+          { val: "1.4", unit: "L" },
+          { val: "7.9", unit: "s" },
+        ].map((s) => (
+          <div key={s.unit} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: "#005bd2" }}>{s.val}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{s.unit}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DashboardMockup() {
+  return (
+    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", padding: 24, maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 24 }}>
+        <Logo size={24} color="#005bd2" />
+        <span style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>AutoSync Dashboard</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+        {[
+          { label: "Products", value: "2,844", color: "#005bd2" },
+          { label: "Fitments", value: "5,827", color: "#22c55e" },
+          { label: "Coverage", value: "44%", color: "#f59e0b" },
+          { label: "Collections", value: "1,125", color: "#8b5cf6" },
+        ].map((s) => (
+          <div key={s.label} style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)", padding: "14px 16px" }}>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{s.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 600, color: s.color }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "12px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Sync Progress</span>
+          <span style={{ fontSize: 12, color: "#005bd2", fontWeight: 500 }}>68%</span>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 4, height: 6, overflow: "hidden" }}>
+          <div style={{ background: "linear-gradient(90deg, #005bd2, #3b82f6)", borderRadius: 4, height: "100%", width: "68%", transition: "width 1s ease" }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Main landing page ─── */
 export default function LandingPage() {
   const { showForm, stats } = useLoaderData<typeof loader>();
   const [scrolled, setScrolled] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [shopDomain, setShopDomain] = useState("");
 
+  // Nav scroll effect
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Stat counters
+  const makes = useCounter(Number(stats.makes), 2000);
+  const models = useCounter(Number(stats.models), 2200);
+  const engines = useCounter(Number(stats.engines), 2400);
+  const specs = useCounter(Number(stats.specs), 2600);
+
+  const tabs = ["YMME Search", "Plate Lookup", "Compatibility", "Vehicle Specs", "Dashboard"];
+  const tabMockups = [<YMMEMockup key="y" />, <PlateMockup key="p" />, <CompatibilityMockup key="c" />, <VehicleSpecMockup key="v" />, <DashboardMockup key="d" />];
+
+  const features = [
+    {
+      title: "Smart Vehicle Mapping",
+      desc: "Our extraction engine analyzes product titles, descriptions, and tags to automatically match products to vehicles. Pattern matching across 55 make patterns, chassis codes, and engine families.",
+      bullets: ["Auto-extract Year/Make/Model/Engine", "Smart suggestions with confidence scores", "Manual mapping queue for edge cases"],
+    },
+    {
+      title: "Storefront Widgets",
+      desc: "Eight embeddable Liquid blocks that install directly into any Shopify theme. Cascading YMME search, fitment badges, compatibility tables, and a floating vehicle bar.",
+      bullets: ["Theme App Extension (no code edits)", "Works with all Shopify themes", "Real-time vehicle persistence"],
+    },
+    {
+      title: "Automated Collections",
+      desc: "Generate smart collections by Make, Make+Model, or Make+Model+Year. Each collection gets a logo, SEO metadata, and publishes to your Online Store automatically.",
+      bullets: ["One-click collection generation", "Brand logos and SEO built in", "Published to Online Store instantly"],
+    },
+    {
+      title: "Provider Data Import",
+      desc: "Connect CSV, XML, JSON, API, or FTP data sources. Smart column mapping remembers your preferences. Duplicate detection and preview before every import.",
+      bullets: ["5 source types supported", "Intelligent column mapping", "Preview and validate before import"],
+    },
+  ];
+
+  const plans = [
+    {
+      name: "Starter",
+      price: "$19",
+      desc: "For shops just getting started with fitment",
+      features: ["1,000 products", "5,000 fitments", "1 data provider", "YMME widget", "Fitment badge", "Push tags & metafields"],
+      cta: "Start Free Trial",
+    },
+    {
+      name: "Growth",
+      price: "$49",
+      desc: "For growing automotive businesses",
+      features: ["10,000 products", "50,000 fitments", "3 data providers", "All 4 widgets", "Auto extraction", "Make collections", "Bulk operations"],
+      cta: "Start Free Trial",
+      popular: true,
+    },
+    {
+      name: "Professional",
+      price: "$99",
+      desc: "For established parts retailers",
+      features: ["50,000 products", "250,000 fitments", "5 data providers", "API integration", "Custom vehicles", "My Garage", "Make+Model collections", "Priority support"],
+      cta: "Start Free Trial",
+    },
+  ];
+
+  const comparisonRows = [
+    { feature: "Starting Price", us: "Free", them: "$250/mo", others: "$49/mo" },
+    { feature: "Shopify Integration", us: "Native App", them: "JavaScript Embed", others: "Tag-based" },
+    { feature: "Vehicle Database", us: "29,000+ Engines", them: "Limited", others: "Basic YMME" },
+    { feature: "Auto Extraction", us: true, them: false, others: false },
+    { feature: "UK Plate Lookup", us: true, them: false, others: false },
+    { feature: "Vehicle Spec Pages", us: true, them: false, others: false },
+    { feature: "Collection Generation", us: true, them: true, others: false },
+    { feature: "FTP/API Import", us: true, them: false, others: true },
+    { feature: "Built for Shopify", us: true, them: false, others: false },
+  ];
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
-        *{margin:0;padding:0;box-sizing:border-box}
-        html{scroll-behavior:smooth}
-        body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;background:#09090b;-webkit-font-smoothing:antialiased}
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #09090b; color: #ededed; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+        a { color: inherit; text-decoration: none; }
 
-        /* Nav */
-        .as-nav{position:fixed;top:0;left:0;right:0;z-index:100;transition:all .3s}
-        .as-nav--solid{background:rgba(9,9,11,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06)}
-        .as-nav-inner{max-width:1200px;margin:0 auto;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
-        .as-nav-brand{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:700;color:#fff;text-decoration:none}
-        .as-nav-links{display:flex;align-items:center;gap:32px}
-        .as-nav-links a{color:rgba(255,255,255,.5);text-decoration:none;font-size:14px;font-weight:500;transition:color .2s}
-        .as-nav-links a:hover{color:#fff}
-        .as-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;transition:all .2s;cursor:pointer;border:none}
-        .as-btn--primary{background:#005bd2;color:#fff}
-        .as-btn--primary:hover{background:#0047a8;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,91,210,.3)}
-        .as-btn--outline{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.15)}
-        .as-btn--outline:hover{border-color:rgba(255,255,255,.3);color:#fff}
-        .as-btn--large{padding:14px 32px;font-size:16px;border-radius:10px}
-        .as-btn--white{background:#fff;color:#0f172a}
-        .as-btn--white:hover{background:#f1f5f9;transform:translateY(-1px)}
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+        @keyframes glow-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.7; } }
 
-        /* Hero */
-        .as-hero{padding:140px 24px 100px;background:#09090b;color:#fff;position:relative;overflow:hidden}
-        .as-hero::before{content:'';position:absolute;top:50%;left:50%;width:800px;height:800px;background:radial-gradient(circle,rgba(0,91,210,.08) 0%,transparent 70%);transform:translate(-50%,-50%);pointer-events:none}
-        .as-hero-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
-        .as-hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,91,210,.15);border:1px solid rgba(0,91,210,.3);border-radius:100px;padding:6px 16px 6px 8px;font-size:13px;color:#93c5fd;margin-bottom:24px}
-        .as-hero-badge-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
-        .as-hero h1{font-size:clamp(36px,5vw,56px);font-weight:500;line-height:1.08;letter-spacing:-2px;margin-bottom:20px}
-        .as-hero h1 span{background:linear-gradient(135deg,#60a5fa,#3b82f6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-        .as-hero p{font-size:18px;line-height:1.7;color:rgba(255,255,255,.65);max-width:500px;margin-bottom:32px}
-        .as-hero-ctas{display:flex;gap:12px;flex-wrap:wrap}
+        .nav-fixed { position: fixed; top: 0; left: 0; right: 0; z-index: 100; transition: all 0.3s ease; }
+        .nav-glass { background: rgba(9,9,11,0.82); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06); }
 
-        /* Widget Preview in Hero */
-        .as-widget-preview{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:24px;backdrop-filter:blur(10px);animation:floatUp 4s ease-in-out infinite}
-        .as-wp-title{font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-        .as-wp-title .dot{width:6px;height:6px;border-radius:50%;background:#005bd2}
-        .as-wp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
-        .as-wp-field{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:8px 12px}
-        .as-wp-field-label{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px}
-        .as-wp-field-value{font-size:14px;font-weight:500;color:#fff;margin-top:2px}
-        .as-wp-btn{width:100%;padding:10px;background:#005bd2;border:none;border-radius:6px;color:#fff;font-weight:600;font-size:14px;cursor:pointer}
+        .btn-primary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 24px; background: #005bd2; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s ease; }
+        .btn-primary:hover { background: #0066ee; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,91,210,0.3); }
+        .btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 10px 24px; background: transparent; color: #ededed; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all 0.2s ease; }
+        .btn-secondary:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.04); }
 
-        /* Stats */
-        .as-stats{padding:60px 24px;border-bottom:1px solid rgba(255,255,255,.06);background:#09090b}
-        .as-stats-inner{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:40px;text-align:center}
-        .as-stat-num{font-size:clamp(32px,4vw,48px);font-weight:800;color:#005bd2;letter-spacing:-1px}
-        .as-stat-label{font-size:14px;color:rgba(255,255,255,.4);margin-top:4px}
+        .card-hover { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(0,0,0,0.3); }
 
-        /* Section headers */
-        .as-section{padding:120px 24px;background:#09090b}
-        .as-section--alt{background:#111113}
-        .as-section--dark{background:#0f172a;color:#fff}
-        .as-section-inner{max-width:1100px;margin:0 auto}
-        .as-section-header{text-align:center;margin-bottom:64px}
-        .as-section-tag{font-size:13px;font-weight:600;color:#005bd2;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px}
-        .as-section-title{font-size:clamp(28px,4vw,44px);font-weight:500;color:#fff;letter-spacing:-1px;line-height:1.15;margin-bottom:16px}
-        .as-section-desc{font-size:17px;color:rgba(255,255,255,.4);max-width:560px;margin:0 auto;line-height:1.7}
-        .as-section--dark .as-section-desc{color:rgba(255,255,255,.6)}
+        .tab-btn { padding: 10px 20px; background: transparent; border: 1px solid rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border-radius: 8px; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+        .tab-btn:hover { color: #ededed; border-color: rgba(255,255,255,0.12); }
+        .tab-btn.active { background: rgba(0,91,210,0.12); border-color: rgba(0,91,210,0.3); color: #3b82f6; }
 
-        /* Widget Showcase */
-        .as-showcase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
-        .as-browser{background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(255,255,255,.08);overflow:hidden;transition:transform .3s,box-shadow .3s}
-        .as-browser:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,91,210,.06)}
-        .as-browser-bar{background:rgba(255,255,255,.02);padding:10px 16px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(255,255,255,.06)}
-        .as-browser-dot{width:8px;height:8px;border-radius:50%}
-        .as-browser-url{font-size:11px;color:#94a3b8;margin-left:10px}
-        .as-browser-body{padding:20px}
+        .login-input { width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #ededed; font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.2s; }
+        .login-input:focus { border-color: #005bd2; }
+        .login-input::placeholder { color: rgba(255,255,255,0.25); }
 
-        /* Feature cards */
-        .as-features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-        .as-feature{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:28px;transition:all .25s}
-        .as-feature:hover{border-color:rgba(0,91,210,.4);box-shadow:0 0 30px rgba(0,91,210,.06);transform:translateY(-2px)}
-        .as-feature-icon{width:40px;height:40px;border-radius:10px;background:rgba(0,91,210,.1);display:flex;align-items:center;justify-content:center;color:#005bd2;margin-bottom:16px}
-        .as-feature h3{font-size:17px;font-weight:600;color:#fff;margin-bottom:8px}
-        .as-feature p{font-size:14px;color:rgba(255,255,255,.4);line-height:1.65}
-
-        /* Steps */
-        .as-steps{display:flex;justify-content:center;gap:60px;flex-wrap:wrap}
-        .as-step{text-align:center;max-width:220px}
-        .as-step-num{width:48px;height:48px;border-radius:50%;background:#005bd2;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin:0 auto 16px}
-        .as-step h3{font-size:18px;font-weight:600;color:#fff;margin-bottom:8px}
-        .as-step p{font-size:14px;color:rgba(255,255,255,.4);line-height:1.6}
-
-        /* Pricing */
-        .as-pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px}
-        .as-plan{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:28px 20px;position:relative;transition:all .25s}
-        .as-plan:hover{border-color:rgba(0,91,210,.4);box-shadow:0 0 20px rgba(0,91,210,.06)}
-        .as-plan--featured{border-color:rgba(0,91,210,.5);box-shadow:0 0 30px rgba(0,91,210,.1);transform:scale(1.03)}
-        .as-plan-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#005bd2;color:#fff;font-size:11px;font-weight:700;padding:4px 14px;border-radius:100px;white-space:nowrap}
-        .as-plan-name{font-size:14px;font-weight:500;color:rgba(255,255,255,.5);margin-bottom:8px}
-        .as-plan-price{font-size:36px;font-weight:600;color:#fff;letter-spacing:-1px;margin-bottom:4px}
-        .as-plan-price span{font-size:14px;font-weight:400;color:#94a3b8}
-        .as-plan-limit{font-size:13px;color:#005bd2;margin-bottom:16px}
-        .as-plan-features{list-style:none;padding:0;margin:0 0 20px}
-        .as-plan-features li{font-size:13px;color:rgba(255,255,255,.45);padding:5px 0;display:flex;align-items:flex-start;gap:6px}
-        .as-plan-features li::before{content:'✓';color:#005bd2;font-weight:700;flex-shrink:0}
-
-        /* Comparison */
-        .as-compare{width:100%;border-collapse:collapse;font-size:14px}
-        .as-compare th{text-align:left;padding:14px 16px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);color:#fff}
-        .as-compare td{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(255,255,255,.5)}
-        .as-compare tr:hover td{background:rgba(255,255,255,.02)}
-        .as-compare .as-check{color:#22c55e;font-weight:700}
-        .as-compare .as-cross{color:#ef4444}
-        .as-compare .as-highlight{color:#005bd2;font-weight:700}
-
-        /* CTA */
-        .as-cta{text-align:center;padding:80px 24px}
-
-        /* Login */
-        .as-login{max-width:400px;margin:0 auto;background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(255,255,255,.08);padding:32px;text-align:center}
-        .as-login h3{font-size:18px;font-weight:500;color:#fff;margin-bottom:16px}
-        .as-login-row{display:flex;gap:8px}
-        .as-login input{flex:1;padding:10px 14px;border:1px solid rgba(255,255,255,.1);border-radius:8px;font-size:15px;background:rgba(255,255,255,.05);color:#fff}
-        .as-login input:focus{outline:none;border-color:#005bd2;box-shadow:0 0 0 3px rgba(0,91,210,.1)}
-
-        /* Footer */
-        .as-footer{background:#0f172a;color:rgba(255,255,255,.5);padding:48px 24px;text-align:center;font-size:13px}
-        .as-footer a{color:rgba(255,255,255,.6);text-decoration:none}
-        .as-footer a:hover{color:#fff}
-        .as-footer-links{display:flex;justify-content:center;gap:24px;margin-top:16px}
-
-        @keyframes floatUp{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-
-        @media(max-width:768px){
-          .as-hero-inner{grid-template-columns:1fr}
-          .as-features-grid{grid-template-columns:1fr}
-          .as-stats-inner{grid-template-columns:repeat(2,1fr);gap:24px}
-          .as-steps{flex-direction:column;align-items:center}
-          .as-nav-links a:not(.as-btn){display:none}
-          .as-showcase-grid{grid-template-columns:1fr}
+        @media (max-width: 1024px) {
+          .hero-grid { flex-direction: column !important; text-align: center; }
+          .hero-widget { margin-top: 48px !important; }
+          .features-alt { flex-direction: column !important; }
+          .features-alt.reverse { flex-direction: column !important; }
+          .pricing-grid { grid-template-columns: 1fr !important; max-width: 420px !important; margin: 0 auto !important; }
+        }
+        @media (max-width: 768px) {
+          .nav-links { display: none !important; }
+          .hero-title { font-size: 36px !important; }
+          .stat-grid-4 { grid-template-columns: 1fr 1fr !important; }
+          .comparison-table { font-size: 12px !important; }
+          .footer-grid { grid-template-columns: 1fr 1fr !important; }
+          section { padding: 80px 20px !important; }
+          .tab-row { flex-wrap: wrap !important; }
+        }
+        @media (max-width: 480px) {
+          .hero-title { font-size: 28px !important; }
+          .hero-ctas { flex-direction: column !important; width: 100%; }
+          .hero-ctas a, .hero-ctas button { width: 100%; }
+          .stat-grid-4 { grid-template-columns: 1fr !important; }
+          .footer-grid { grid-template-columns: 1fr !important; }
         }
       `}} />
 
-      {/* Nav */}
-      <nav className={`as-nav ${scrolled ? "as-nav--solid" : ""}`}>
-        <div className="as-nav-inner">
-          <a href="/" className="as-nav-brand" style={{ color: scrolled ? "#0f172a" : "#fff" }}>
-            <span style={{ color: "#005bd2" }}><Logo size={28} /></span> AutoSync
-          </a>
-          <div className="as-nav-links">
-            <a href="#showcase" style={{ color: scrolled ? undefined : "rgba(255,255,255,.7)" }}>Widgets</a>
-            <a href="#features" style={{ color: scrolled ? undefined : "rgba(255,255,255,.7)" }}>Features</a>
-            <a href="#pricing" style={{ color: scrolled ? undefined : "rgba(255,255,255,.7)" }}>Pricing</a>
-            <a href="#login" style={{ color: scrolled ? undefined : "rgba(255,255,255,.7)" }}>Login</a>
-            <a href="https://apps.shopify.com" className="as-btn as-btn--primary">Install Free</a>
+      {/* ═══════════ NAV ═══════════ */}
+      <nav className={`nav-fixed ${scrolled ? "nav-glass" : ""}`}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Logo size={28} color="#005bd2" />
+            <span style={{ fontSize: 18, fontWeight: 600, color: "#ededed" }}>AutoSync</span>
           </div>
+          <div className="nav-links" style={{ display: "flex", alignItems: "center", gap: 32 }}>
+            {[
+              { label: "Features", href: "#features" },
+              { label: "Widgets", href: "#widgets" },
+              { label: "Pricing", href: "#pricing" },
+              { label: "Compare", href: "#compare" },
+            ].map((l) => (
+              <a key={l.label} href={l.href} style={{ fontSize: 14, color: "rgba(255,255,255,0.55)", fontWeight: 500, transition: "color 0.2s" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.55)")}
+              >{l.label}</a>
+            ))}
+          </div>
+          <a href="#login" className="btn-primary" style={{ padding: "8px 20px", fontSize: 13 }}>Start Free</a>
         </div>
       </nav>
 
-      {/* Hero */}
-      <section className="as-hero">
-        <div className="as-hero-inner">
-          <div>
-            <div className="as-hero-badge">
-              <span className="as-hero-badge-dot" /> Built for Shopify
+      {/* ═══════════ HERO ═══════════ */}
+      <section style={{ minHeight: "100vh", display: "flex", alignItems: "center", padding: "120px 24px 80px", position: "relative", overflow: "hidden" }}>
+        {/* Background glow */}
+        <div style={{ position: "absolute", top: "20%", left: "50%", width: 800, height: 800, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(0,91,210,0.08) 0%, transparent 70%)", pointerEvents: "none", animation: "glow-pulse 6s ease-in-out infinite" }} />
+
+        <div className="hero-grid" style={{ maxWidth: 1200, margin: "0 auto", width: "100%", display: "flex", alignItems: "center", gap: 64, position: "relative" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Built for Shopify pill */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 20, padding: "6px 16px", marginBottom: 24 }}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12.15 2.74L8.12.59a2.5 2.5 0 00-2.24 0L1.85 2.74A2.5 2.5 0 00.6 4.9v4.2a2.5 2.5 0 001.25 2.16l4.03 2.15a2.5 2.5 0 002.24 0l4.03-2.15A2.5 2.5 0 0013.4 9.1V4.9a2.5 2.5 0 00-1.25-2.16z" fill="#22c55e" opacity="0.2"/><path d="M5 7l1.5 1.5L9.5 5" stroke="#22c55e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span style={{ fontSize: 13, color: "#22c55e", fontWeight: 500 }}>Built for Shopify</span>
             </div>
-            <h1>
-              Vehicle Fitment<br /><span>Intelligence</span><br />for Shopify
+
+            <h1 className="hero-title" style={{ fontSize: 56, fontWeight: 600, lineHeight: 1.1, color: "#ededed", marginBottom: 20, letterSpacing: "-0.02em" }}>
+              Vehicle Fitment{" "}
+              <span style={{ background: "linear-gradient(135deg, #005bd2, #3b82f6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                Intelligence
+              </span>
+              {" "}for Shopify
             </h1>
-            <p>
-              Help customers find the right parts for their vehicle. YMME search, UK plate lookup, smart collections, and fitment badges — all from one app.
+            <p style={{ fontSize: 18, lineHeight: 1.7, color: "rgba(255,255,255,0.55)", marginBottom: 36, maxWidth: 520 }}>
+              Help customers find parts that fit their vehicle. Year, Make, Model, Engine search — with auto-extraction, storefront widgets, and smart collections.
             </p>
-            <div className="as-hero-ctas">
-              <a href="https://apps.shopify.com" className="as-btn as-btn--primary as-btn--large">Start Free →</a>
-              <a href="#showcase" className="as-btn as-btn--outline as-btn--large" style={{ borderColor: "rgba(255,255,255,.2)", color: "#fff" }}>See Widgets</a>
+
+            <div className="hero-ctas" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              <a href="#login" className="btn-primary" style={{ padding: "14px 32px", fontSize: 15 }}>Start Free Trial</a>
+              <a href="#widgets" className="btn-secondary" style={{ padding: "14px 32px", fontSize: 15 }}>See Widgets</a>
             </div>
           </div>
 
-          {/* Floating YMME Widget Preview */}
-          <div className="as-widget-preview">
-            <div className="as-wp-title"><span className="dot" /> Find Parts for Your Vehicle</div>
-            <div className="as-wp-grid">
-              <div className="as-wp-field"><div className="as-wp-field-label">Make</div><div className="as-wp-field-value">BMW</div></div>
-              <div className="as-wp-field"><div className="as-wp-field-label">Model</div><div className="as-wp-field-value">3 Series</div></div>
-              <div className="as-wp-field"><div className="as-wp-field-label">Year</div><div className="as-wp-field-value">2022</div></div>
-              <div className="as-wp-field"><div className="as-wp-field-label">Engine</div><div className="as-wp-field-value">M340i 382 Hp</div></div>
-            </div>
-            <button className="as-wp-btn">🔍 Find Compatible Parts</button>
+          {/* Floating widget preview */}
+          <div className="hero-widget" style={{ flex: "0 0 440px", animation: "float 6s ease-in-out infinite" }}>
+            <YMMEMockup />
           </div>
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="as-stats">
-        <div className="as-stats-inner">
+      {/* ═══════════ STATS ═══════════ */}
+      <section style={{ padding: "0 24px 80px", maxWidth: 1200, margin: "0 auto" }}>
+        <div className="stat-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "rgba(255,255,255,0.04)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
           {[
-            [stats.makes, "Vehicle Makes"],
-            [stats.models, "Models"],
-            [stats.engines, "Engine Variants"],
-            [stats.specs, "Vehicle Specs"],
-          ].map(([n, l]) => (
-            <div key={String(l)}>
-              <div className="as-stat-num"><Counter end={Number(n)} /></div>
-              <div className="as-stat-label">{String(l)}</div>
+            { label: "Makes", counter: makes },
+            { label: "Models", counter: models },
+            { label: "Engines", counter: engines },
+            { label: "Vehicle Specs", counter: specs },
+          ].map((s) => (
+            <div key={s.label} ref={s.counter.ref} style={{ padding: "40px 24px", textAlign: "center", background: "#09090b" }}>
+              <div style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>
+                {s.counter.value.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", fontWeight: 500 }}>{s.label}</div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Widget Showcase */}
-      <section id="showcase" className="as-section as-section--alt">
-        <div className="as-section-inner">
-          <div className="as-section-header">
-            <div className="as-section-tag">See It In Action</div>
-            <h2 className="as-section-title">Storefront widgets that<br />work on any theme</h2>
-            <p className="as-section-desc">Install once, works everywhere. No coding required. Every widget adapts to your theme automatically.</p>
-          </div>
-          <div className="as-showcase-grid">
-            {/* YMME Widget */}
-            <div className="as-browser">
-              <div className="as-browser-bar">
-                <span className="as-browser-dot" style={{ background: "#ef4444" }} />
-                <span className="as-browser-dot" style={{ background: "#eab308" }} />
-                <span className="as-browser-dot" style={{ background: "#22c55e" }} />
-                <span className="as-browser-url">YMME Vehicle Search</span>
-              </div>
-              <div className="as-browser-body">
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#005bd2", display: "inline-block" }} />
-                  FIND PARTS FOR YOUR VEHICLE
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-                  {[["Make", "BMW"], ["Model", "3 Series"], ["Year", "2022"], ["Engine", "M340i 382 Hp"]].map(([l, v]) => (
-                    <div key={l} style={{ border: "1px solid rgba(255,255,255,.08)", borderRadius: 6, padding: "8px 12px" }}>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: 1 }}>{l}</div>
-                      <div style={{ fontSize: 14, fontWeight: 600 }}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ background: "#005bd2", color: "#fff", textAlign: "center", padding: 10, borderRadius: 6, fontWeight: 600, fontSize: 14 }}>🔍 Find Parts</div>
-                <div style={{ textAlign: "center", fontSize: 10, color: "rgba(255,255,255,.3)", marginTop: 8, opacity: .5 }}>Powered by AutoSync</div>
-              </div>
-            </div>
+      {/* ═══════════ WIDGET SHOWCASE ═══════════ */}
+      <Section id="widgets">
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Storefront Widgets</div>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Everything your store needs</h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)", maxWidth: 560, margin: "0 auto" }}>Eight embeddable widgets that install into any Shopify theme with zero code changes.</p>
+        </div>
 
-            {/* Plate Lookup */}
-            <div className="as-browser">
-              <div className="as-browser-bar">
-                <span className="as-browser-dot" style={{ background: "#ef4444" }} />
-                <span className="as-browser-dot" style={{ background: "#eab308" }} />
-                <span className="as-browser-dot" style={{ background: "#22c55e" }} />
-                <span className="as-browser-url">UK Plate Lookup</span>
-              </div>
-              <div className="as-browser-body" style={{ textAlign: "center" }}>
-                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 16 }}>Find Parts by Registration</div>
-                <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 16 }}>
-                  <div style={{ display: "flex", border: "2px solid rgba(255,255,255,.2)", borderRadius: 6, overflow: "hidden" }}>
-                    <div style={{ background: "#003da5", color: "#fff", padding: "8px 6px", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center" }}>GB</div>
-                    <div style={{ background: "#f4c542", padding: "8px 14px", fontWeight: 700, fontSize: 16 }}>BD18 JYC</div>
-                  </div>
-                  <div style={{ background: "#005bd2", color: "#fff", padding: "8px 18px", borderRadius: 6, fontWeight: 600, fontSize: 13, display: "flex", alignItems: "center" }}>🔍 Look Up</div>
-                </div>
-                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: 14, textAlign: "left" }}>
-                  <div style={{ fontWeight: 600, color: "#166534", fontSize: 14 }}>✓ Vehicle Found</div>
-                  <div style={{ fontSize: 14, marginTop: 4 }}>2018 Volvo XC40 • 2.0L Diesel • 150 HP</div>
-                  <div style={{ color: "#005bd2", fontSize: 13, marginTop: 4, fontWeight: 500 }}>23 compatible parts available →</div>
-                </div>
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className="tab-row" style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 48, flexWrap: "wrap" }}>
+          {tabs.map((t, i) => (
+            <button key={t} className={`tab-btn ${activeTab === i ? "active" : ""}`} onClick={() => setActiveTab(i)}>{t}</button>
+          ))}
+        </div>
 
-            {/* Vehicle Compatibility */}
-            <div className="as-browser">
-              <div className="as-browser-bar">
-                <span className="as-browser-dot" style={{ background: "#ef4444" }} />
-                <span className="as-browser-dot" style={{ background: "#eab308" }} />
-                <span className="as-browser-dot" style={{ background: "#22c55e" }} />
-                <span className="as-browser-url">Product Page</span>
-              </div>
-              <div className="as-browser-body">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <span style={{ fontWeight: 700, fontSize: 15 }}>Vehicle Compatibility</span>
-                  <span style={{ background: "#dcfce7", color: "#166534", fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 100 }}>✓ Fits your vehicle</span>
-                </div>
-                <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-                  <thead><tr style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
-                    {["Make", "Model", "Years", "Engine"].map(h => <th key={h} style={{ padding: 8, textAlign: "left", fontWeight: 600, color: "rgba(255,255,255,.4)", fontSize: 12 }}>{h}</th>)}
-                  </tr></thead>
-                  <tbody>
-                    {[["BMW", "3 Series (G20)", "2019–2025", "330i 258 Hp"], ["BMW", "3 Series (F30)", "2012–2019", "320i 184 Hp"], ["BMW", "4 Series (F32)", "2013–2020", "420i 184 Hp"]].map(([m, mo, y, e], i) => (
-                      <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,.04)" }}>
-                        <td style={{ padding: 8, fontWeight: 600 }}>{m}</td>
-                        <td style={{ padding: 8, color: "rgba(255,255,255,.5)" }}>{mo}</td>
-                        <td style={{ padding: 8, color: "rgba(255,255,255,.4)" }}>{y}</td>
-                        <td style={{ padding: 8, color: "rgba(255,255,255,.4)" }}>{e}</td>
-                      </tr>
+        {/* Tab content */}
+        <div style={{ position: "relative", minHeight: 320 }}>
+          {tabMockups.map((mockup, i) => (
+            <div key={i} style={{
+              position: i === activeTab ? "relative" : "absolute",
+              top: 0, left: 0, right: 0,
+              opacity: i === activeTab ? 1 : 0,
+              pointerEvents: i === activeTab ? "auto" : "none",
+              transition: "opacity 0.4s ease",
+            }}>
+              {mockup}
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ═══════════ FEATURES ═══════════ */}
+      <section id="features" style={{ padding: "0 24px" }}>
+        {features.map((f, i) => {
+          const isReverse = i % 2 === 1;
+          return (
+            <Section key={f.title} style={{ padding: "80px 0" }}>
+              <div className={`features-alt ${isReverse ? "reverse" : ""}`} style={{ display: "flex", alignItems: "center", gap: 64, flexDirection: isReverse ? "row-reverse" : "row" }}>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: 28, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>{f.title}</h3>
+                  <p style={{ fontSize: 15, lineHeight: 1.7, color: "rgba(255,255,255,0.55)", marginBottom: 24 }}>{f.desc}</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {f.bullets.map((b) => (
+                      <div key={b} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: 10, background: "rgba(0,91,210,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Check />
+                        </div>
+                        <span style={{ fontSize: 14, color: "rgba(255,255,255,0.7)" }}>{b}</span>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div className="card-hover" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: 40, minHeight: 280, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {i === 0 && <YMMEMockup />}
+                    {i === 1 && <CompatibilityMockup />}
+                    {i === 2 && <DashboardMockup />}
+                    {i === 3 && <PlateMockup />}
+                  </div>
+                </div>
               </div>
+            </Section>
+          );
+        })}
+      </section>
+
+      {/* ═══════════ HOW IT WORKS ═══════════ */}
+      <Section id="how-it-works">
+        <div style={{ textAlign: "center", marginBottom: 64 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>How It Works</div>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed" }}>Up and running in minutes</h2>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0, position: "relative" }}>
+          {/* Connecting line */}
+          <div style={{ position: "absolute", top: 28, left: "12.5%", right: "12.5%", height: 2, background: "rgba(0,91,210,0.2)", zIndex: 0 }} />
+
+          {[
+            { step: "1", title: "Install", desc: "Add AutoSync from the Shopify App Store. One click install, no code required." },
+            { step: "2", title: "Import", desc: "Sync your products and import fitment data from CSV, API, FTP, or map manually." },
+            { step: "3", title: "Map", desc: "Auto-extraction matches products to vehicles. Review suggestions and confirm." },
+            { step: "4", title: "Go Live", desc: "Push to Shopify, generate collections, and enable storefront widgets." },
+          ].map((s) => (
+            <div key={s.step} style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "0 16px", position: "relative", zIndex: 1 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 28, background: "#005bd2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, fontWeight: 600, color: "#fff", marginBottom: 20, boxShadow: "0 0 24px rgba(0,91,210,0.3)" }}>
+                {s.step}
+              </div>
+              <h4 style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 8 }}>{s.title}</h4>
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.45)", maxWidth: 220 }}>{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ═══════════ PRICING ═══════════ */}
+      <Section id="pricing">
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Pricing</div>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Simple, transparent pricing</h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)" }}>Start free. Upgrade as you grow. Cancel anytime.</p>
+        </div>
+
+        <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, maxWidth: 960, margin: "0 auto" }}>
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className="card-hover"
+              style={{
+                background: plan.popular ? "rgba(0,91,210,0.06)" : "rgba(255,255,255,0.03)",
+                borderRadius: 16,
+                border: plan.popular ? "1px solid rgba(0,91,210,0.3)" : "1px solid rgba(255,255,255,0.06)",
+                padding: 32,
+                position: "relative",
+              }}
+            >
+              {plan.popular && (
+                <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "#005bd2", borderRadius: 20, padding: "4px 16px", fontSize: 12, fontWeight: 600, color: "#fff" }}>
+                  Most Popular
+                </div>
+              )}
+              <div style={{ fontSize: 18, fontWeight: 600, color: "#ededed", marginBottom: 4 }}>{plan.name}</div>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ fontSize: 44, fontWeight: 600, color: "#ededed" }}>{plan.price}</span>
+                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)" }}>/mo</span>
+              </div>
+              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", marginBottom: 24 }}>{plan.desc}</p>
+              <a href="#login" className="btn-primary" style={{ width: "100%", marginBottom: 24, padding: "12px 24px", background: plan.popular ? "#005bd2" : "rgba(255,255,255,0.06)" }}>
+                {plan.cta}
+              </a>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {plan.features.map((feat) => (
+                  <div key={feat} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <Check />
+                    <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>{feat}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* ═══════════ COMPETITOR COMPARISON ═══════════ */}
+      <Section id="compare">
+        <div style={{ textAlign: "center", marginBottom: 56 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#005bd2", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Compare</div>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Why AutoSync wins</h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)" }}>More features, lower price, native Shopify integration.</p>
+        </div>
+
+        <div className="comparison-table" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden", maxWidth: 800, margin: "0 auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.35)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Feature</th>
+                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, fontWeight: 600, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span style={{ color: "#005bd2" }}>AutoSync</span>
+                </th>
+                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Convermax</th>
+                <th style={{ textAlign: "center", padding: "16px 20px", fontSize: 13, color: "rgba(255,255,255,0.45)", fontWeight: 500, borderBottom: "1px solid rgba(255,255,255,0.06)" }}>Others</th>
+              </tr>
+            </thead>
+            <tbody>
+              {comparisonRows.map((row) => (
+                <tr key={row.feature}>
+                  <td style={{ padding: "14px 20px", fontSize: 14, color: "#ededed", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>{row.feature}</td>
+                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    {typeof row.us === "boolean" ? (row.us ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, fontWeight: 500, color: "#005bd2" }}>{row.us}</span>}
+                  </td>
+                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    {typeof row.them === "boolean" ? (row.them ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{row.them}</span>}
+                  </td>
+                  <td style={{ padding: "14px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    {typeof row.others === "boolean" ? (row.others ? <span style={{ color: "#22c55e" }}><Check /></span> : <Cross />) : <span style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>{row.others}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      {/* ═══════════ CTA ═══════════ */}
+      <section style={{ padding: "120px 24px", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "50%", left: "50%", width: 600, height: 600, transform: "translate(-50%, -50%)", background: "radial-gradient(circle, rgba(0,91,210,0.1) 0%, transparent 70%)", pointerEvents: "none" }} />
+        <div style={{ maxWidth: 640, margin: "0 auto", textAlign: "center", position: "relative" }}>
+          <h2 style={{ fontSize: 36, fontWeight: 600, color: "#ededed", marginBottom: 16 }}>Ready to help customers find the right parts?</h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)", marginBottom: 36, lineHeight: 1.7 }}>
+            Join automotive Shopify stores using AutoSync to boost sales and reduce returns with accurate vehicle fitment data.
+          </p>
+          <a href="#login" className="btn-primary" style={{ padding: "16px 40px", fontSize: 16 }}>Get Started Free</a>
+        </div>
+      </section>
+
+      {/* ═══════════ LOGIN ═══════════ */}
+      <Section id="login">
+        <div style={{ maxWidth: 420, margin: "0 auto" }}>
+          <div className="card-hover" style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", padding: 40 }}>
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <Logo size={40} color="#005bd2" />
+              <h3 style={{ fontSize: 22, fontWeight: 600, color: "#ededed", marginTop: 16, marginBottom: 8 }}>Log in to AutoSync</h3>
+              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)" }}>Enter your Shopify store domain to get started</p>
+            </div>
+            {showForm && (
+              <Form method="post" action="/auth/login">
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.55)", marginBottom: 8 }}>Store domain</label>
+                  <input
+                    className="login-input"
+                    type="text"
+                    name="shop"
+                    placeholder="my-store.myshopify.com"
+                    value={shopDomain}
+                    onChange={(e) => setShopDomain(e.target.value)}
+                  />
+                </div>
+                <button className="btn-primary" type="submit" style={{ width: "100%", padding: "14px 24px", fontSize: 15 }}>
+                  Install AutoSync
+                </button>
+              </Form>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* ═══════════ FOOTER ═══════════ */}
+      <footer style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "64px 24px" }}>
+        <div className="footer-grid" style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <Logo size={24} color="#005bd2" />
+              <span style={{ fontSize: 16, fontWeight: 600, color: "#ededed" }}>AutoSync</span>
+            </div>
+            <p style={{ fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.35)", maxWidth: 280 }}>
+              Vehicle fitment intelligence for Shopify. Help customers find parts that fit.
+            </p>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Product</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {["Features", "Pricing", "Widgets", "Integrations"].map((l) => (
+                <a key={l} href={`#${l.toLowerCase()}`} style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
+                >{l}</a>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Company</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {["About", "Blog", "Careers", "Contact"].map((l) => (
+                <a key={l} href="#" style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
+                >{l}</a>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.55)", marginBottom: 16, textTransform: "uppercase", letterSpacing: "0.05em" }}>Legal</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {[
+                { label: "Privacy Policy", href: "/legal/privacy" },
+                { label: "Terms of Service", href: "/legal/terms" },
+                { label: "GDPR", href: "#" },
+              ].map((l) => (
+                <a key={l.label} href={l.href} style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", transition: "color 0.2s" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.color = "#ededed")}
+                  onMouseLeave={(e) => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}
+                >{l.label}</a>
+              ))}
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="as-section">
-        <div className="as-section-inner">
-          <div className="as-section-header">
-            <div className="as-section-tag">Features</div>
-            <h2 className="as-section-title">Everything you need to sell<br />automotive parts online</h2>
-            <p className="as-section-desc">From product mapping to storefront widgets, AutoSync handles every aspect of vehicle fitment.</p>
-          </div>
-          <div className="as-features-grid">
-            {[
-              ["🔍", "YMME Search Widget", "Cascading Year/Make/Model/Engine dropdowns. Persists across pages with localStorage."],
-              ["🇬🇧", "UK Plate Lookup", "Customers enter their reg plate, instantly see compatible parts. DVLA + MOT APIs."],
-              ["🤖", "Smart Auto-Extraction", "Automatically detect vehicle fitment from titles, descriptions, tags. Engine families + chassis codes."],
-              ["📦", "Smart Collections", "Auto-generate make, model, and year-range collections with brand logos and SEO."],
-              ["📄", "Vehicle Spec Pages", "SEO-optimized specification pages with full engine data and linked products."],
-              ["🏷️", "Fitment Badge", "'Fits your vehicle' or 'May not fit' badges on every product page."],
-              ["📥", "Provider Import", "CSV, XML, FTP, or API. Auto-detect format, smart column mapping with memory."],
-              ["🔎", "Search & Discovery Filters", "Structured metafields — filter by Make, Model, Year, Engine in Shopify filters."],
-              ["📊", "Analytics Dashboard", "Fitment coverage, popular makes/models, plate lookups, conversion funnel."],
-            ].map(([icon, title, desc]) => (
-              <div className="as-feature" key={title}>
-                <div className="as-feature-icon" style={{ fontSize: 20 }}>{icon}</div>
-                <h3>{title}</h3>
-                <p>{desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="as-section as-section--alt">
-        <div className="as-section-inner">
-          <div className="as-section-header">
-            <div className="as-section-tag">How It Works</div>
-            <h2 className="as-section-title">Up and running in minutes</h2>
-            <p className="as-section-desc">Four simple steps to vehicle fitment on your store.</p>
-          </div>
-          <div className="as-steps">
-            {[
-              ["1", "Install", "Install from the Shopify App Store. Enable widgets in your theme editor."],
-              ["2", "Import", "Sync products or import from CSV/FTP/API. Smart mapping handles the rest."],
-              ["3", "Map", "Auto-extraction detects vehicles. Review suggestions or map manually."],
-              ["4", "Sell", "Push to Shopify. Customers search by vehicle and find the right parts."],
-            ].map(([n, t, d]) => (
-              <div className="as-step" key={t}>
-                <div className="as-step-num">{n}</div>
-                <h3>{t}</h3>
-                <p>{d}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="as-section">
-        <div className="as-section-inner">
-          <div className="as-section-header">
-            <div className="as-section-tag">Pricing</div>
-            <h2 className="as-section-title">Start free, scale as you grow</h2>
-            <p className="as-section-desc">Every plan includes the YMME database. Upgrade anytime.</p>
-          </div>
-          <div className="as-pricing-grid">
-            {[
-              { name: "Free", price: "$0", limit: "50 products", features: ["Manual mapping", "YMME widget"] },
-              { name: "Starter", price: "$19", limit: "1,000 products", features: ["Push tags & metafields", "Fitment badge", "Email support"] },
-              { name: "Growth", price: "$49", limit: "10,000 products", featured: true, features: ["Auto extraction", "All 4 widgets", "Smart collections", "Bulk operations"] },
-              { name: "Professional", price: "$99", limit: "50,000 products", features: ["API integration", "My Garage", "Collections (Make+Model)"] },
-              { name: "Business", price: "$179", limit: "200,000 products", features: ["FTP import", "Wheel Finder", "Priority support"] },
-              { name: "Enterprise", price: "$299", limit: "Unlimited", features: ["DVLA plate lookup", "VIN decode", "Full CSS customisation"] },
-            ].map((p) => (
-              <div className={`as-plan ${p.featured ? "as-plan--featured" : ""}`} key={p.name}>
-                {p.featured && <div className="as-plan-badge">Most Popular</div>}
-                <div className="as-plan-name">{p.name}</div>
-                <div className="as-plan-price">{p.price}<span>/mo</span></div>
-                <div className="as-plan-limit">{p.limit}</div>
-                <ul className="as-plan-features">
-                  {p.features.map(f => <li key={f}>{f}</li>)}
-                </ul>
-                <a href="https://apps.shopify.com" className={`as-btn ${p.featured ? "as-btn--primary" : "as-btn--outline"}`} style={{ width: "100%", fontSize: 13 }}>Get Started</a>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Competitor Comparison */}
-      <section className="as-section as-section--alt">
-        <div className="as-section-inner">
-          <div className="as-section-header">
-            <div className="as-section-tag">Why AutoSync</div>
-            <h2 className="as-section-title">Compare with alternatives</h2>
-          </div>
-          <div style={{ background: "rgba(255,255,255,.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,.08)", overflow: "hidden" }}>
-            <table className="as-compare">
-              <thead><tr>
-                <th style={{ width: "30%" }}>Feature</th>
-                <th className="as-highlight">AutoSync</th>
-                <th>Convermax</th>
-                <th>Others</th>
-              </tr></thead>
-              <tbody>
-                {[
-                  ["Starting Price", "$0/mo", "$250/mo", "$50-100/mo"],
-                  ["YMME Database", "✓", "✗", "✗"],
-                  ["Auto Extraction Engine", "✓", "✗", "✗"],
-                  ["UK Plate Lookup (DVLA)", "✓", "✗", "✗"],
-                  ["Smart Collections", "✓", "✓", "✗"],
-                  ["Vehicle Spec Pages", "✓", "✗", "✗"],
-                  ["Multi-Source Import", "✓", "✗", "✓"],
-                  ["Built for Shopify", "✓", "✗", "✓"],
-                ].map(([feat, us, them, others]) => (
-                  <tr key={feat}>
-                    <td style={{ fontWeight: 600 }}>{feat}</td>
-                    <td className={us === "✓" ? "as-check" : us.includes("$0") ? "as-highlight" : ""}>{us}</td>
-                    <td className={them === "✗" ? "as-cross" : ""}>{them}</td>
-                    <td className={others === "✗" ? "as-cross" : ""}>{others}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="as-section as-section--dark">
-        <div className="as-cta">
-          <h2 className="as-section-title" style={{ color: "#fff", marginBottom: 16 }}>Ready to sell more parts?</h2>
-          <p className="as-section-desc" style={{ marginBottom: 32 }}>Join automotive merchants using AutoSync to help customers find the right parts.</p>
-          <a href="https://apps.shopify.com" className="as-btn as-btn--white as-btn--large">Install Free on Shopify →</a>
-        </div>
-      </section>
-
-      {/* Login */}
-      {showForm && (
-        <section id="login" className="as-section">
-          <div className="as-login">
-            <div style={{ color: "#005bd2", marginBottom: 12 }}><Logo size={32} /></div>
-            <h3>Already installed?</h3>
-            <Form method="post" action="/auth/login">
-              <div className="as-login-row">
-                <input type="text" name="shop" placeholder="your-store" />
-                <span style={{ display: "flex", alignItems: "center", fontSize: 14, color: "rgba(255,255,255,.4)" }}>.myshopify.com</span>
-              </div>
-              <button type="submit" className="as-btn as-btn--primary" style={{ width: "100%", marginTop: 12 }}>Open Dashboard</button>
-            </Form>
-          </div>
-        </section>
-      )}
-
-      {/* Footer */}
-      <footer className="as-footer">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16, color: "#fff" }}>
-          <Logo size={18} /> <span style={{ fontWeight: 700 }}>AutoSync</span>
-        </div>
-        <p>© {new Date().getFullYear()} AutoSync. Vehicle fitment intelligence for Shopify.</p>
-        <div className="as-footer-links">
-          <a href="/legal/privacy">Privacy</a>
-          <a href="/legal/terms">Terms</a>
+        <div style={{ maxWidth: 1200, margin: "48px auto 0", paddingTop: 24, borderTop: "1px solid rgba(255,255,255,0.04)", textAlign: "center" }}>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.25)" }}>
+            &copy; {new Date().getFullYear()} AutoSync. All rights reserved.
+          </p>
         </div>
       </footer>
     </>
