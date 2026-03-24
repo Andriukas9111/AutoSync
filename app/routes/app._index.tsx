@@ -57,29 +57,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // OPTIMIZED: Only fetch what useAppData() doesn't provide
-  // Product counts, fitments, collections, YMME stats all come from live polling
-  // Loader only needs: tenant, top makes, providers, recent jobs
+  // OPTIMIZED: 8 queries instead of 22, but enough to prevent zero-flash
+  // useAppData() provides live updates after initial render
   const [
     tenantResult,
+    totalProductsResult,
+    fitmentCountResult,
+    collectionCountResult,
     topMakesResult,
     providerListResult,
     recentJobsResult,
+    activeMakesResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
+    // Essential counts for initial render (prevents 0-flash)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Top makes by fitment count
     db.from("vehicle_fitments")
       .select("make")
       .eq("shop_id", shopId)
       .not("make", "is", null),
-    // Provider list (details not in job-status API)
+    // Provider list
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
-    // Recent jobs (more detail than job-status API provides)
+    // Recent jobs
     db.from("sync_jobs")
       .select("id, type, status, total_items, processed_items, completed_at, created_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(10),
+    // Active makes count
+    db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
 
   const tenant = tenantResult.data;
@@ -118,33 +127,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: false, // Will be determined by useAppData
-    // Products — initial zeros, useAppData fills live values
-    totalProducts: 0,
-    unmapped: 0,
+    hasPushed: (tenant?.product_count ?? 0) > 0,
+    // Products — use tenant cached counts for instant render, useAppData updates live
+    totalProducts: totalProductsResult.count ?? tenant?.product_count ?? 0,
+    unmapped: 0, // useAppData fills
     autoMapped: 0,
     smartMapped: 0,
     manualMapped: 0,
     flagged: 0,
     mapped: 0,
     // Fitments
-    fitmentCount: 0,
+    fitmentCount: fitmentCountResult.count ?? tenant?.fitment_count ?? 0,
     topMakes,
     // Providers
     providerCount: (providerListResult.data ?? []).length,
     providers: providerListResult.data ?? [],
     // Collections
-    collectionCount: 0,
+    collectionCount: collectionCountResult.count ?? 0,
     // Recent activity
     recentJobs: recentJobsResult.data ?? [],
-    // YMME — zeros, useAppData fills from job-status API
+    // YMME — zeros initially, useAppData fills from job-status API
     ymmeMakes: 0,
     ymmeModels: 0,
     ymmeEngines: 0,
     ymmeSpecs: 0,
-    // Push + sync stats — zeros, useAppData fills
-    pushedProducts: 0,
-    activeMakes: 0,
+    // Push + sync stats
+    pushedProducts: totalProductsResult.count ?? 0,
+    activeMakes: activeMakesResult.count ?? 0,
     vehiclePagesSynced: 0,
     // Unique makes/models from fitments (topMakes already has all makes)
     uniqueMakes: topMakes.length,
