@@ -81,22 +81,29 @@ const MAKES = [
 ];
 
 // ─── Widget Demos ───
+const GARAGE_VEHICLES = [
+  { year:"2022", make:"BMW", model:"M340i xDrive", engine:"B58B30O1 · 382 Hp" },
+  { year:"2019", make:"Audi", model:"A4 Avant", engine:"2.0 TFSI · 190 Hp" },
+  { year:"2021", make:"Porsche", model:"Panamera", engine:"2.9L V6 · 440 Hp" },
+];
+
 function YMMEDemo() {
   const [make, setMake] = useState("BMW");
   const [open, setOpen] = useState(false);
+  const [garage, setGarage] = useState(false);
   const [q, setQ] = useState("");
   const filtered = MAKES.filter(m => m.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="lp-demo-body">
+      <div className="lp-demo-light">
         <div className="demo-title">Find Parts for Your Vehicle</div>
-        <div className="demo-grid">
+        <div className="demo-grid" style={{ marginBottom: 12 }}>
           <div style={{ position:"relative" }}>
             <div className="demo-label">Make</div>
-            <button className="demo-sel" onClick={() => setOpen(!open)}>
+            <button className="demo-sel" onClick={() => { setOpen(!open); setGarage(false); }}>
               <span style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <img src={MAKES.find(m=>m.name===make)?.logo} alt="" width="16" height="16" style={{ objectFit:"contain" }}/>{make}
+                <img src={MAKES.find(m=>m.name===make)?.logo} alt="" width="22" height="22" style={{ objectFit:"contain" }}/>{make}
               </span>{I.chev}
             </button>
             {open && <div className="demo-dd">
@@ -108,54 +115,113 @@ function YMMEDemo() {
           <div><div className="demo-label">Year</div><div className="demo-sel"><span>2022</span>{I.chev}</div></div>
           <div><div className="demo-label">Engine</div><div className="demo-sel"><span>M340i (382 Hp)</span>{I.chev}</div></div>
         </div>
-        <div style={{ display:"flex", gap:6, marginTop:12 }}>
-          <button className="lp-btn lp-btn-accent" style={{ flex:1, padding:"10px 16px" }}>Find Parts</button>
-          <button className="lp-btn lp-btn-outline" style={{ padding:"10px 12px", position:"relative" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-            <span style={{ position:"absolute", top:-5, right:-5, background:"var(--accent)", color:"#fff", borderRadius:"50%", width:16, height:16, fontSize:9, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>3</span>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="demo-btn-blue" style={{ flex:1 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            Find Parts
+          </button>
+          <button className="demo-btn-blue" style={{ padding:"10px 12px", position:"relative", background:"#fff", border:"1px solid #e5e7eb" }} onClick={() => { setGarage(!garage); setOpen(false); }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            <span style={{ position:"absolute", top:-6, right:-6, background:"#2563eb", color:"#fff", borderRadius:"50%", width:18, height:18, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>3</span>
           </button>
         </div>
-        <div className="demo-footer">{I.logo(12)} Powered by AutoSync</div>
+        {garage && <div className="demo-garage-light">
+          <div className="demo-garage-hdr">
+            <span>My Garage</span>
+            <span style={{ fontSize:12, color:"#6b7280", fontWeight:400 }}>{GARAGE_VEHICLES.length} vehicles</span>
+          </div>
+          {GARAGE_VEHICLES.map((v,i) => (
+            <div key={i} className="demo-garage-item">
+              <div>
+                <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{v.year} {v.make} {v.model}</div>
+                <div style={{ fontSize:12, color:"#6b7280" }}>{v.engine}</div>
+              </div>
+              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                <button style={{ padding:"4px 12px", borderRadius:6, background:"#2563eb", color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer" }}>Select</button>
+                <button style={{ padding:"4px 6px", borderRadius:6, background:"#f3f4f6", border:"none", cursor:"pointer", display:"flex", alignItems:"center" }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>}
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
 }
 
 function PlateDemo() {
-  const [plate, setPlate] = useState("");
-  const [show, setShow] = useState(false);
+  const [plate, setPlate] = useState("AL61 EAJ");
+  const [show, setShow] = useState(true);
+  const [motOpen, setMotOpen] = useState(false);
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="lp-demo-body">
+      <div className="lp-demo-light demo-plate-light">
         <div className="demo-title" style={{ textAlign:"center" }}>Find Parts by Registration</div>
-        <p style={{ textAlign:"center", fontSize:12, color:"var(--text-tertiary)", marginBottom:12 }}>Enter your UK registration number</p>
-        <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+        <div className="demo-subtitle" style={{ textAlign:"center" }}>Enter your UK registration number to find compatible parts</div>
+        <div style={{ display:"flex", gap:8, marginBottom:8 }}>
           <div className="demo-plate-wrap" style={{ flex:1 }}>
             <div className="demo-plate-gb">GB</div>
             <input className="demo-plate-input" placeholder="AB12 CDE" value={plate} onChange={e => setPlate(e.target.value.toUpperCase())} />
           </div>
-          <button className="lp-btn lp-btn-accent" onClick={() => setShow(true)}>Look Up</button>
+          <button className="demo-btn-blue" onClick={() => setShow(true)}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            Look Up
+          </button>
         </div>
-        {show && <div style={{ border:"1px solid var(--border)", borderRadius:"var(--radius)", padding:16 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
-            <span style={{ background:"#1e3a8a", color:"#fff", padding:"1px 6px", borderRadius:3, fontSize:10, fontWeight:700 }}>GB</span>
-            <span style={{ background:"#facc15", color:"#000", padding:"1px 8px", borderRadius:3, fontSize:12, fontWeight:700 }}>{plate||"AL61 EAJ"}</span>
+        {/* Recent searches */}
+        <div style={{ fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>Recent</div>
+        <div className="demo-recent-row">
+          <div className="demo-recent-chip"><span style={{ background:"#facc15", color:"#000", padding:"1px 6px", borderRadius:3, fontSize:10, fontWeight:700, fontFamily:"monospace" }}>S777 MNH</span> Porsche Panamera</div>
+          <div className="demo-recent-chip"><span style={{ background:"#facc15", color:"#000", padding:"1px 6px", borderRadius:3, fontSize:10, fontWeight:700, fontFamily:"monospace" }}>AL61 EAJ</span> BMW 3 Series</div>
+        </div>
+        {show && <div className="demo-plate-result">
+          <div className="demo-plate-badges">
+            <span className="demo-plate-gb-badge">GB</span>
+            <span className="demo-plate-yellow-badge">{plate || "AL61 EAJ"}</span>
           </div>
-          <div style={{ fontSize:15, fontWeight:700, marginBottom:2 }}>BMW M340I XDRIVE MHEV AUTO</div>
-          <div style={{ fontSize:12, color:"var(--text-tertiary)", marginBottom:10 }}>2022 &middot; ORANGE &middot; HYBRID ELECTRIC</div>
-          <div className="demo-specs">
-            {[["Year","2022"],["Colour","ORANGE"],["Fuel","HYBRID ELECTRIC"],["Engine","2998cc"],["CO\u2082","176 g/km"],["Type","M1"]].map(([k,v],i)=>
-              <div key={i} className="demo-spec"><span>{k}</span><span>{v}</span></div>
+          <div className="demo-plate-vehicle">BMW M340I XDRIVE MHEV AUTO</div>
+          <div className="demo-plate-meta">2022 &middot; ORANGE &middot; HYBRID ELECTRIC</div>
+          <div className="demo-specs-light">
+            {[["Year","2022"],["Colour","ORANGE"],["Fuel Type","HYBRID ELECTRIC"],["Engine","2998cc"],["CO\u2082 Emissions","176 g/km"],["Type Approval","M1"],["Wheelplan","2 AXLE RIGID BODY"],["First Registered","30 Mar 2022"]].map(([k,v],i)=>
+              <div key={i} className="demo-spec-light"><span>{k}</span><span>{v}</span></div>
             )}
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, margin:"10px 0" }}>
-            <div><div style={{ fontSize:10, color:"var(--text-quaternary)" }}>MOT</div><span style={{ color:"var(--green)", fontWeight:600, fontSize:13 }}>Valid</span></div>
-            <div><div style={{ fontSize:10, color:"var(--text-quaternary)" }}>TAX</div><span style={{ color:"var(--green)", fontWeight:600, fontSize:13 }}>Taxed</span></div>
+          <div className="demo-status-row">
+            <div>
+              <label>MOT</label>
+              <div className="demo-status-val"><span className="demo-status-dot green"/>Valid</div>
+              <div className="demo-status-sub">Expires 11 Nov 2026</div>
+            </div>
+            <div>
+              <label>TAX</label>
+              <div className="demo-status-val"><span className="demo-status-dot green"/>Taxed</div>
+              <div className="demo-status-sub">Due 1 Nov 2026</div>
+            </div>
           </div>
-          <button className="lp-btn lp-btn-accent" style={{ width:"100%", padding:"10px 16px" }}>Find Parts for This Vehicle</button>
+          <button className="demo-btn-blue" style={{ width:"100%", marginBottom:8 }}>Find Parts for This Vehicle &rarr;</button>
+          <div className="demo-mot-history">
+            <button className="demo-mot-toggle" onClick={() => setMotOpen(!motOpen)}>
+              <span>MOT History <span className="demo-mot-count">2 tests</span></span>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#6b7280" strokeWidth="1.5" style={{ transform: motOpen ? "rotate(180deg)" : "none", transition:"transform 0.2s" }}><path d="M4 6l4 4 4-4"/></svg>
+            </button>
+            {motOpen && <div>
+              <div className="demo-mot-item">
+                <span className="demo-mot-date">12 Nov 2025</span>
+                <span className="demo-mot-pass">PASS</span>
+                <span className="demo-mot-miles">87,329 Mi</span>
+              </div>
+              <div className="demo-mot-item">
+                <span className="demo-mot-date">4 Apr 2025</span>
+                <span className="demo-mot-pass">PASS</span>
+                <span className="demo-mot-miles">72,485 Mi</span>
+              </div>
+            </div>}
+          </div>
         </div>}
-        <div className="demo-footer">{I.logo(12)} Powered by AutoSync</div>
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -166,14 +232,21 @@ function BadgeDemo() {
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="lp-demo-body" style={{ textAlign:"center" }}>
+      <div className="lp-demo-light" style={{ textAlign:"center" }}>
         <div className="demo-title">Fitment Badge</div>
-        <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:14 }}>
-          {["Fits","Doesn't Fit","No Vehicle"].map((t,i)=><button key={i} className={`lp-btn ${s===i?"lp-btn-accent":"lp-btn-outline"} lp-btn-sm`} style={{ fontSize:12 }} onClick={()=>setS(i as 0|1|2)}>{t}</button>)}
+        <div className="demo-subtitle">Real-time compatibility check on every product page</div>
+        <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:16 }}>
+          {["Fits","Doesn't Fit","No Vehicle"].map((t,i)=>
+            <button key={i} style={{
+              padding:"6px 14px", borderRadius:6, fontSize:12, fontWeight:600, cursor:"pointer", border:"1px solid",
+              background: s===i ? "#2563eb" : "#fff", color: s===i ? "#fff" : "#374151",
+              borderColor: s===i ? "#2563eb" : "#e5e7eb",
+            }} onClick={()=>setS(i as 0|1|2)}>{t}</button>
+          )}
         </div>
-        <div className={`demo-badge ${s===0?"fits":s===1?"nofit":"none"}`}>
-          {s===0 && <>{I.chk} Fits your 2022 BMW 3 Series</>}
-          {s===1 && <>{I.x} May not fit your 2022 BMW 3 Series</>}
+        <div className={`demo-badge-light ${s===0?"fits":s===1?"nofit":"none"}`}>
+          {s===0 && <><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> Fits your 2022 BMW 3 Series</>}
+          {s===1 && <><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#dc2626" strokeWidth="1.5" strokeLinecap="round"/></svg> May not fit your 2022 BMW 3 Series</>}
           {s===2 && <>Select a vehicle to check compatibility</>}
         </div>
       </div>
@@ -185,17 +258,136 @@ function CompatDemo() {
   return (
     <>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="lp-demo-body">
+      <div className="lp-demo-light">
         <div className="demo-title">Vehicle Compatibility</div>
+        <div className="demo-subtitle">All compatible vehicles for this product</div>
         <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
-            <thead><tr>{["Make","Model","Years","Engine"].map(h=><th key={h} style={{ textAlign:"left", padding:"8px 10px", borderBottom:"1px solid var(--border)", color:"var(--text-quaternary)", fontWeight:600, fontSize:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>{h}</th>)}</tr></thead>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+            <thead><tr>{["Make","Model","Years","Engine"].map(h=><th key={h} style={{ textAlign:"left", padding:"8px 10px", borderBottom:"2px solid #f3f4f6", color:"#9ca3af", fontWeight:600, fontSize:10, textTransform:"uppercase", letterSpacing:"0.06em" }}>{h}</th>)}</tr></thead>
             <tbody>{[["BMW","3 Series (F30)","2012\u20132019","320i (184 Hp)"],["BMW","3 Series (G20)","2019\u20132024","320i (184 Hp)"],["BMW","4 Series (F32)","2013\u20132020","420i (184 Hp)"],["Audi","A4 (B9)","2016\u20132024","2.0 TFSI (190 Hp)"],["Mercedes","C-Class (W205)","2014\u20132021","C200 (184 Hp)"]].map((r,i)=>
-              <tr key={i}>{r.map((c,j)=><td key={j} style={{ padding:"7px 10px", borderBottom:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:12 }}>{c}</td>)}</tr>
+              <tr key={i}>{r.map((c,j)=><td key={j} style={{ padding:"8px 10px", borderBottom:"1px solid #f3f4f6", color:"#374151", fontSize:13 }}>{c}</td>)}</tr>
             )}</tbody>
           </table>
         </div>
-        <div className="demo-footer">{I.logo(12)} Powered by AutoSync</div>
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
+      </div>
+    </>
+  );
+}
+
+const SPEC_VEHICLES = [
+  { make:"Acura", model:"ILX", engine:"2.0L 4-Cyl, 150 Hp", hp:"150", disp:"2.0L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/acura.png" },
+  { make:"Alfa Romeo", model:"146", engine:"1.4L Twin Spark, 103 Hp", hp:"103", disp:"1.4L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/alfa-romeo.png" },
+  { make:"BMW", model:"3 Series", engine:"316i (102 Hp) M10B18", hp:"102", disp:"1.6L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" },
+  { make:"Audi", model:"A3", engine:"1.6L FSI, 115 Hp", hp:"115", disp:"1.6L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png" },
+  { make:"Mercedes-Benz", model:"C-Class", engine:"C200 2.0L Turbo, 184 Hp", hp:"184", disp:"2.0L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mercedes-benz.png" },
+  { make:"Porsche", model:"Panamera", engine:"2.9L V6 Turbo, 440 Hp", hp:"440", disp:"2.9L", fuel:"Petrol", logo:"https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/porsche.png" },
+];
+
+function VehicleSpecsDemo() {
+  return (
+    <>
+      <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
+      <div className="lp-demo-light">
+        <div style={{ width:40, height:3, background:"#2563eb", borderRadius:2, marginBottom:10 }}/>
+        <div className="demo-title">Vehicle Specifications</div>
+        <div className="demo-subtitle">Browse detailed specs for all supported vehicles</div>
+        <div className="demo-specs-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input placeholder="Search vehicles..." />
+          <span className="demo-specs-count">353 vehicles</span>
+        </div>
+        <div className="demo-vehicle-grid">
+          {SPEC_VEHICLES.map((v,i) => (
+            <div key={i} className="demo-vehicle-card">
+              <div className="demo-vehicle-card-make">
+                <img src={v.logo} alt="" />
+                <span>{v.make}</span>
+              </div>
+              <h4>{v.model}</h4>
+              <div className="desc">{v.engine}</div>
+              <div className="demo-vehicle-card-pills">
+                <span className="demo-vehicle-card-pill green">{v.hp} HP</span>
+                <span className="demo-vehicle-card-pill">{v.disp}</span>
+                <span className="demo-vehicle-card-pill">{v.fuel}</span>
+              </div>
+              <span className="demo-vehicle-card-link">View Specs &rarr;</span>
+            </div>
+          ))}
+        </div>
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
+      </div>
+    </>
+  );
+}
+
+function VehicleSpecDetailDemo() {
+  return (
+    <>
+      <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
+      <div className="demo-spec-hero">
+        <div className="demo-spec-hero-make">
+          <img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" />
+          <span>BMW</span>
+        </div>
+        <h2>3 Series</h2>
+        <div className="sub">316i (102 Hp)</div>
+        <div className="demo-spec-hero-tags">
+          <span className="demo-spec-hero-tag">1987</span>
+          <span className="demo-spec-hero-tag">M10B18</span>
+          <span className="demo-spec-hero-tag">Petrol</span>
+          <span className="demo-spec-hero-tag">Sedan</span>
+          <span className="demo-spec-hero-tag">Rear wheel drive</span>
+        </div>
+        <p>The BMW 316i is a compact executive sedan powered by the naturally aspirated M10B18 inline-4 engine, producing 102 horsepower and 140 Nm of torque.</p>
+      </div>
+      <div className="demo-quick-stats">
+        <div className="demo-quick-stat"><div className="val">102</div><div className="label">HP</div></div>
+        <div className="demo-quick-stat"><div className="val">140</div><div className="label">Nm</div></div>
+        <div className="demo-quick-stat"><div className="val">1.6L</div><div className="label">Displ.</div></div>
+        <div className="demo-quick-stat"><div className="val">182</div><div className="label">km/h</div></div>
+        <div className="demo-quick-stat"><div className="val">12.1s</div><div className="label">0-100</div></div>
+        <div className="demo-quick-stat"><div className="val">Petrol</div><div className="label">Fuel</div></div>
+      </div>
+      <div className="demo-tab-bar">
+        <button className="demo-tab active">Engine</button>
+        <button className="demo-tab">Performance</button>
+        <button className="demo-tab">Drivetrain</button>
+        <button className="demo-tab">Dimensions</button>
+      </div>
+      <div style={{ background:"#fff" }}>
+        <table className="demo-spec-table">
+          <tbody>
+            {[["Engine Code","M10B18"],["Displacement","1.6L"],["Cylinders","4"],["Configuration","Inline"],["Aspiration","Naturally aspirated"],["Power","102 HP"],["Torque","140 Nm"]].map(([k,v],i) =>
+              <tr key={i}><td>{k}</td><td>{v}</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ background:"#fff", padding:"12px 24px" }}>
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
+      </div>
+    </>
+  );
+}
+
+function VINDecodeDemo() {
+  const [vin, setVin] = useState("");
+  return (
+    <>
+      <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
+      <div className="lp-demo-light" style={{ textAlign:"center" }}>
+        <div className="demo-title">Decode Your VIN</div>
+        <div className="demo-subtitle">Enter your 17-character Vehicle Identification Number</div>
+        <div className="demo-vin-input-row">
+          <span className="demo-vin-badge">VIN</span>
+          <div className="demo-vin-field">
+            <input placeholder="WBAPH5C55BA123456" value={vin} onChange={e => setVin(e.target.value.toUpperCase().slice(0,17))} maxLength={17} />
+            <span className="demo-vin-counter">{vin.length}/17</span>
+          </div>
+          <button className="demo-btn-blue">Decode VIN</button>
+        </div>
+        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -380,6 +572,71 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="lp-feature-visual"><BadgeDemo /></div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Feature 5: Vehicle Specs Gallery ── */}
+      <section className="lp-section">
+        <div className="lp-w">
+          <Reveal>
+            <div className="lp-feature-row">
+              <div className="lp-feature-text">
+                <span className="lp-tag">Vehicle Spec Pages</span>
+                <h3>SEO-optimized specification pages</h3>
+                <p>Auto-generated vehicle specification pages pushed as Shopify metaobjects. 90+ engine specs per vehicle with structured data for search engines. Browse and search your entire vehicle database.</p>
+                <div className="lp-feature-pills">
+                  <span className="lp-pill">Metaobjects</span>
+                  <span className="lp-pill">90+ Specs</span>
+                  <span className="lp-pill">SEO Structured Data</span>
+                  <span className="lp-pill">Searchable</span>
+                </div>
+              </div>
+              <div className="lp-feature-visual"><VehicleSpecsDemo /></div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Feature 6: Vehicle Spec Detail ── */}
+      <section className="lp-section lp-section-alt">
+        <div className="lp-w">
+          <Reveal>
+            <div className="lp-feature-row reverse">
+              <div className="lp-feature-text">
+                <span className="lp-tag">Vehicle Spec Detail</span>
+                <h3>Rich vehicle detail pages with performance data</h3>
+                <p>Each vehicle specification page features a hero section, quick stats, tabbed engine/performance/drivetrain data, and full specification tables. Customers see exactly what engine specs match their vehicle.</p>
+                <div className="lp-feature-pills">
+                  <span className="lp-pill">Engine Specs</span>
+                  <span className="lp-pill">Performance Data</span>
+                  <span className="lp-pill">Drivetrain Info</span>
+                  <span className="lp-pill">Dimensions</span>
+                </div>
+              </div>
+              <div className="lp-feature-visual"><VehicleSpecDetailDemo /></div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Feature 7: VIN Decode ── */}
+      <section className="lp-section">
+        <div className="lp-w">
+          <Reveal>
+            <div className="lp-feature-row">
+              <div className="lp-feature-text">
+                <span className="lp-tag">VIN Decode</span>
+                <h3>Decode any Vehicle Identification Number</h3>
+                <p>Customers paste their 17-character VIN to instantly identify their exact vehicle specification, engine code, and compatible parts. Works with all major vehicle manufacturers worldwide.</p>
+                <div className="lp-feature-pills">
+                  <span className="lp-pill">17-Character VIN</span>
+                  <span className="lp-pill">Instant Decode</span>
+                  <span className="lp-pill">All Manufacturers</span>
+                </div>
+              </div>
+              <div className="lp-feature-visual"><VINDecodeDemo /></div>
             </div>
           </Reveal>
         </div>
