@@ -396,11 +396,11 @@ body { margin: 0; padding: 0; background: #09090b; }
 
 /* ─── YMME Demo ─── */
 .demo-grid-ymme {
-  display: grid; grid-template-columns: 1fr 1fr 0.7fr 1.3fr minmax(130px, auto) 48px; gap: 10px;
-  align-items: end;
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;
+  align-items: end; margin-bottom: 12px;
 }
 .demo-ymme-bottom-row {
-  display: none; /* Merged into grid row */
+  display: flex; gap: 10px; align-items: center;
 }
 .lp-demo-light .demo-sel {
   width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
