@@ -183,7 +183,7 @@ function FeatureCard({ icon, title, desc, index }: { icon: React.ReactNode; titl
         ...fade.style,
         transitionDelay: `${index * 0.08}s`,
         background: hovered ? "#fafbff" : "white",
-        borderRadius: "16px",
+        borderRadius: "8px",
         padding: "32px",
         border: hovered ? "1px solid #005bd2" : "1px solid #e8ecf1",
         boxShadow: hovered ? "0 8px 30px rgba(0,91,210,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
@@ -195,7 +195,7 @@ function FeatureCard({ icon, title, desc, index }: { icon: React.ReactNode; titl
       <div style={{
         width: "52px",
         height: "52px",
-        borderRadius: "12px",
+        borderRadius: "8px",
         background: "linear-gradient(135deg, #eef4ff, #dbeafe)",
         display: "flex",
         alignItems: "center",
@@ -222,7 +222,7 @@ function PricingCard({ name, price, products, fitments, features, highlight }: {
       style={{
         background: highlight ? "linear-gradient(135deg, #005bd2 0%, #0043a0 100%)" : "white",
         color: highlight ? "white" : "#0f172a",
-        borderRadius: "20px",
+        borderRadius: "8px",
         padding: highlight ? "40px 28px" : "32px 24px",
         border: highlight ? "none" : hovered ? "1px solid #005bd2" : "1px solid #e8ecf1",
         boxShadow: highlight ? "0 20px 60px rgba(0,91,210,0.3)" : hovered ? "0 8px 30px rgba(0,0,0,0.08)" : "0 1px 3px rgba(0,0,0,0.04)",
@@ -244,7 +244,7 @@ function PricingCard({ name, price, products, fitments, features, highlight }: {
           fontSize: "12px",
           fontWeight: 700,
           padding: "4px 16px",
-          borderRadius: "20px",
+          borderRadius: "8px",
           textTransform: "uppercase",
           letterSpacing: "1px",
         }}>Most Popular</div>
@@ -271,7 +271,7 @@ function PricingCard({ name, price, products, fitments, features, highlight }: {
           display: "block",
           textAlign: "center",
           padding: "14px",
-          borderRadius: "12px",
+          borderRadius: "8px",
           fontWeight: 600,
           fontSize: "15px",
           textDecoration: "none",
@@ -540,7 +540,7 @@ export default function LandingPage() {
               ].map((item) => (
                 <div key={item.problem} style={{
                   background: "white",
-                  borderRadius: "20px",
+                  borderRadius: "8px",
                   padding: "36px",
                   border: "1px solid #e8ecf1",
                   boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
@@ -548,7 +548,7 @@ export default function LandingPage() {
                   <div style={{
                     width: "48px",
                     height: "48px",
-                    borderRadius: "12px",
+                    borderRadius: "8px",
                     background: "linear-gradient(135deg, #005bd2, #0043a0)",
                     display: "flex",
                     alignItems: "center",
@@ -677,7 +677,7 @@ export default function LandingPage() {
             </div>
             <div style={{
               background: "white",
-              borderRadius: "20px",
+              borderRadius: "8px",
               border: "1px solid #e8ecf1",
               overflow: "hidden",
               boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
@@ -780,7 +780,7 @@ export default function LandingPage() {
               maxWidth: "420px",
               margin: "0 auto",
               background: "#f8fafc",
-              borderRadius: "20px",
+              borderRadius: "8px",
               padding: "40px",
               border: "1px solid #e8ecf1",
               boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
