@@ -118,8 +118,10 @@ export async function removeAllTags(
       .select("shopify_product_id")
       .eq("shop_id", shopId)
       .neq("fitment_status", "unmapped")
+      .order("id", { ascending: true })
       .range(tagOffset, tagOffset + 999);
     if (batchErr) {
+      console.error("[cleanup] Batch query error:", batchErr.message);
       return { removed: 0, processed: 0, errors: [batchErr.message] };
     }
     if (!batch || batch.length === 0) break;
@@ -195,8 +197,10 @@ export async function removeAllMetafields(
       .select("shopify_product_id")
       .eq("shop_id", shopId)
       .neq("fitment_status", "unmapped")
+      .order("id", { ascending: true })
       .range(mfOffset, mfOffset + 999);
     if (batchErr) {
+      console.error("[cleanup] Metafield batch query error:", batchErr.message);
       return { removed: 0, processed: 0, errors: [batchErr.message] };
     }
     if (!batch || batch.length === 0) break;

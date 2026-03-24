@@ -183,10 +183,11 @@ async function buildCollectionTargets(
       .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
       .eq("shop_id", shopId)
       .not("make", "is", null)
+      .order("id", { ascending: true })
       .range(fOffset, fOffset + 999);
     if (batchErr) {
       console.error("[collections] Failed to query fitments:", batchErr.message);
-      return [];
+      throw new Error(`Failed to query fitments: ${batchErr.message}`);
     }
     if (!batch || batch.length === 0) break;
     fitments.push(...batch);

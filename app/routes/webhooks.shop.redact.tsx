@@ -13,15 +13,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log(`[webhook] ${topic}: ${shop} — Redacting all shop data`);
 
-  // Delete all tenant-scoped data in order (child tables first)
+  // Delete all tenant-scoped data in order (child tables first).
+  // GDPR compliance: must delete ALL tables with shop_id column.
   const tables = [
+    "extraction_results",
     "vehicle_fitments",
+    "vehicle_page_sync",
+    "search_events",
+    "conversion_events",
     "sync_jobs",
+    "provider_column_mappings",
+    "provider_imports",
     "products",
     "providers",
     "collection_mappings",
     "tenant_active_makes",
-    "tenants",
+    "app_settings",
+    "tenants",  // Delete tenants LAST (parent table with FK CASCADE)
   ] as const;
 
   for (const table of tables) {

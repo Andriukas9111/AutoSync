@@ -209,6 +209,11 @@
 
     if (!trigger || !dropdown || !optionsList) return;
 
+    // Accessibility: add ARIA attributes to make dropdown
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.setAttribute('aria-label', 'Select vehicle make');
+
     var isOpen = false;
     var allMakes = makes || [];
     var selectedMake = null;
@@ -346,6 +351,7 @@
       if (trigger.disabled) return;
       isOpen = true;
       customSelect.classList.add('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'true');
       renderOptions('');
       if (searchInput) {
         searchInput.value = '';
@@ -356,6 +362,7 @@
     function closeDropdown() {
       isOpen = false;
       customSelect.classList.remove('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -542,17 +549,24 @@
     var popover = container.querySelector('[data-autosync-garage-popover]');
     if (!trigger || !popover) return;
 
+    // Accessibility
+    trigger.setAttribute('aria-label', 'Open saved vehicles garage');
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+
     var isOpen = false;
 
     function open() {
       isOpen = true;
       popover.style.display = '';
+      trigger.setAttribute('aria-expanded', 'true');
       renderGarageUI(container);
     }
 
     function close() {
       isOpen = false;
       popover.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -1405,6 +1419,15 @@
         .catch(function () {
           searchBtn.disabled = false;
           searchBtn.textContent = 'Search Wheels';
+          // Show error message to user
+          if (resultsDiv) {
+            clearChildren(resultsDiv);
+            var errorMsg = document.createElement('p');
+            errorMsg.textContent = 'Unable to search wheels right now. Please try again.';
+            errorMsg.style.cssText = 'color: #c0392b; text-align: center; padding: 16px;';
+            resultsDiv.appendChild(errorMsg);
+            resultsDiv.classList.remove('autosync-wheel-finder--hidden');
+          }
         });
     });
   }
