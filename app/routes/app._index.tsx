@@ -57,76 +57,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Run ALL dashboard queries in parallel for maximum speed
+  // OPTIMIZED: Only fetch what useAppData() doesn't provide
+  // Product counts, fitments, collections, YMME stats all come from live polling
+  // Loader only needs: tenant, top makes, providers, recent jobs
   const [
     tenantResult,
-    pushCountResult,
-    // Product status breakdown
-    totalProductsResult,
-    unmappedResult,
-    autoMappedResult,
-    smartMappedResult,
-    manualMappedResult,
-    flaggedResult,
-    // Fitment stats
-    fitmentCountResult,
     topMakesResult,
-    // Provider stats
-    providerCountResult,
     providerListResult,
-    // Collection stats
-    collectionCountResult,
-    // Recent activity
     recentJobsResult,
-    // YMME database stats
-    ymmeMakesResult,
-    ymmeModelsResult,
-    ymmeEnginesResult,
-    ymmeSpecsResult,
-    pushedProductsResult,
-    activeMakesResult,
-    vehiclePagesResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
-    db.from("sync_jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("shop_id", shopId)
-      .eq("type", "push")
-      .eq("status", "completed"),
-    // Product counts by status
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
-    // Fitment count
-    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Top makes by fitment count (using text make field for reliability)
+    // Top makes by fitment count
     db.from("vehicle_fitments")
       .select("make")
       .eq("shop_id", shopId)
       .not("make", "is", null),
-    // Providers
-    db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Provider list (details not in job-status API)
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
-    // Collections
-    db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Recent jobs
+    // Recent jobs (more detail than job-status API provides)
     db.from("sync_jobs")
       .select("id, type, status, total_items, processed_items, completed_at, created_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(10),
-    // YMME stats (global, not tenant-specific)
-    db.from("ymme_makes").select("id", { count: "exact", head: true }),
-    db.from("ymme_models").select("id", { count: "exact", head: true }),
-    db.from("ymme_engines").select("id", { count: "exact", head: true }),
-    db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
-    // Push + active makes + vehicle pages
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
-    db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
   ]);
 
   const tenant = tenantResult.data;
@@ -155,8 +108,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 10)
     .map(([name, count]) => ({ name, count }));
 
-  const fitmentCount = fitmentCountResult.count ?? 0;
-
   // Dynamic plan price from configs (not hardcoded)
   const planConfigsMap = await getPlanConfigs();
   const currentPlanConfig = planConfigsMap[plan];
@@ -174,34 +125,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: (pushCountResult.count ?? 0) > 0,
-    // Products
-    totalProducts,
-    unmapped,
-    autoMapped,
-    smartMapped,
-    manualMapped,
-    flagged,
-    mapped,
+    hasPushed: false, // Will be determined by useAppData
+    // Products — initial zeros, useAppData fills live values
+    totalProducts: 0,
+    unmapped: 0,
+    autoMapped: 0,
+    smartMapped: 0,
+    manualMapped: 0,
+    flagged: 0,
+    mapped: 0,
     // Fitments
-    fitmentCount,
+    fitmentCount: 0,
     topMakes,
     // Providers
-    providerCount: providerCountResult.count ?? 0,
+    providerCount: (providerListResult.data ?? []).length,
     providers: providerListResult.data ?? [],
     // Collections
-    collectionCount: collectionCountResult.count ?? 0,
+    collectionCount: 0,
     // Recent activity
     recentJobs: recentJobsResult.data ?? [],
-    // YMME
-    ymmeMakes: ymmeMakesResult.count ?? 0,
-    ymmeModels: ymmeModelsResult.count ?? 0,
-    ymmeEngines: ymmeEnginesResult.count ?? 0,
-    ymmeSpecs: ymmeSpecsResult.count ?? 0,
-    // Push + sync stats
-    pushedProducts: pushedProductsResult.count ?? 0,
-    activeMakes: activeMakesResult.count ?? 0,
-    vehiclePagesSynced: vehiclePagesResult.count ?? 0,
+    // YMME — zeros, useAppData fills from job-status API
+    ymmeMakes: 0,
+    ymmeModels: 0,
+    ymmeEngines: 0,
+    ymmeSpecs: 0,
+    // Push + sync stats — zeros, useAppData fills
+    pushedProducts: 0,
+    activeMakes: 0,
+    vehiclePagesSynced: 0,
     // Unique makes/models from fitments (topMakes already has all makes)
     uniqueMakes: topMakes.length,
     uniqueModels: 0, // Will be filled by live polling
