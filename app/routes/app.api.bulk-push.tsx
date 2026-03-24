@@ -72,6 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.from("sync_jobs").update({
         status: "failed",
         error: errorMsg,
+        completed_at: new Date().toISOString(),
       }).eq("id", job?.id);
       return data({ error: errorMsg }, { status: 500 });
     }

@@ -403,7 +403,7 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
-  const { stats: liveData, jobs: liveJobs, isLoading: dataLoading } = useAppData({
+  const { stats: liveData, jobs: liveJobs } = useAppData({
     total: totalProducts,
     unmapped,
     autoMapped,

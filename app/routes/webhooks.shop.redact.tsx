@@ -26,6 +26,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     "provider_column_mappings",
     "provider_imports",
     "pricing_rules",
+    "price_history",
+    "price_alerts",
     "products",
     "providers",
     "collection_mappings",

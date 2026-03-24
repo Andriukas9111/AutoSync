@@ -89,21 +89,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .eq("shop_id", shopId)
     .is("fitment_status", null);
 
-  // 2. Bulk fix: products with fitments still marked "unmapped" → "auto_mapped"
-  // Uses a single query instead of N+1 individual updates
+  // 2. Bulk fix: products with fitments still marked "unmapped" → correct status
+  // Buckets by extraction_method so manual/smart mappings keep their higher-fidelity status
   {
     const { data: unmappedWithFitments } = await db
       .from("vehicle_fitments")
-      .select("product_id")
+      .select("product_id, extraction_method")
       .eq("shop_id", shopId);
     if (unmappedWithFitments && unmappedWithFitments.length > 0) {
-      const pidSet = [...new Set(unmappedWithFitments.map((f: { product_id: string }) => f.product_id))];
-      // Bulk update all unmapped products that have fitments to auto_mapped
-      await db.from("products")
-        .update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
-        .eq("shop_id", shopId)
-        .eq("fitment_status", "unmapped")
-        .in("id", pidSet);
+      // Group by product_id, keeping highest-precedence extraction_method
+      const methodByProduct = new Map<string, string>();
+      const precedence: Record<string, number> = { manual: 3, smart: 2, auto: 1 };
+      for (const f of unmappedWithFitments) {
+        const pid = f.product_id as string;
+        const method = (f.extraction_method as string) ?? "auto";
+        const current = methodByProduct.get(pid);
+        if (!current || (precedence[method] ?? 0) > (precedence[current] ?? 0)) {
+          methodByProduct.set(pid, method);
+        }
+      }
+      // Bucket product IDs by target status
+      const buckets: Record<string, string[]> = { auto_mapped: [], smart_mapped: [], manual_mapped: [] };
+      for (const [pid, method] of methodByProduct) {
+        const status = method === "manual" ? "manual_mapped" : method === "smart" ? "smart_mapped" : "auto_mapped";
+        buckets[status].push(pid);
+      }
+      const now = new Date().toISOString();
+      for (const [status, pids] of Object.entries(buckets)) {
+        if (pids.length === 0) continue;
+        await db.from("products")
+          .update({ fitment_status: status, updated_at: now })
+          .eq("shop_id", shopId)
+          .eq("fitment_status", "unmapped")
+          .in("id", pids);
+      }
     }
   }
 

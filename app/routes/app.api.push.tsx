@@ -63,6 +63,7 @@ export async function action({ request }: ActionFunctionArgs) {
       total_items: mappedCount ?? 0,
       processed_items: 0,
       metadata: JSON.stringify({ pushTags, pushMetafields }),
+      started_at: new Date().toISOString(),
     })
     .select("id")
     .single();

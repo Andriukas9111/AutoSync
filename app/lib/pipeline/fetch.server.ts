@@ -90,6 +90,7 @@ export async function fetchProductsFromShopify({
 
       // Upsert each product into our database
       for (const { node: product } of edges) {
+        if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
         // Extract numeric Shopify ID from GID
         const shopifyId = parseInt(
           product.id.replace("gid://shopify/Product/", ""),
@@ -135,6 +136,9 @@ export async function fetchProductsFromShopify({
           fetched++;
         }
       }
+
+      // Check abort before progress update
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
 
       // Update progress
       await db

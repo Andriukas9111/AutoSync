@@ -96,7 +96,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .eq("provider_id", providerId);
 
   if (search) {
-    const sanitized = search.replace(/[%,.*()]/g, '');
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
     if (sanitized) {
       query = query.or(`title.ilike.%${sanitized}%,sku.ilike.%${sanitized}%,provider_sku.ilike.%${sanitized}%`);
     }
@@ -241,8 +241,8 @@ export default function ProviderProducts() {
   const [statusValue, setStatusValue] = useState(initialStatus);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Live stats via unified polling hook
-  const { stats: _polledStats } = useAppData();
+  // Keep unified polling hook active for real-time updates
+  useAppData();
 
   const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
 

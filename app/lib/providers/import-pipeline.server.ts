@@ -288,7 +288,7 @@ export async function runProviderImport(
 export async function getSmartMappings(
   providerId: string,
   headers: string[],
-  shopId?: string,
+  shopId: string,
 ): Promise<{ mappings: ColumnMapping[]; warnings: string[]; hasSavedMappings: boolean }> {
   const savedMappings = await loadSavedMappings(providerId, shopId);
   const autoMappings = autoMapColumns(headers);

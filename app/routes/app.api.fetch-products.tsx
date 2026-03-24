@@ -73,8 +73,10 @@ export async function action({ request }: ActionFunctionArgs) {
   } catch (err: unknown) {
     clearTimeout(timeoutId);
     const isAborted = err instanceof DOMException && err.name === "AbortError";
-    const message = isAborted ? "Fetch timed out — partial results saved" : (err instanceof Error ? err.message : "Fetch failed");
-    const isTimeout = isAborted || message.includes("timed out");
+    const isTimeout = isAborted; // Only treat explicit abort as partial success
+    const message = isTimeout
+      ? "Fetch timed out — partial results saved"
+      : (err instanceof Error ? err.message : "Fetch failed");
     const stack = err instanceof Error ? err.stack : undefined;
     console.error("[fetch-products] Pipeline error:", message, stack);
 
@@ -89,7 +91,13 @@ export async function action({ request }: ActionFunctionArgs) {
       .eq("id", job.id);
 
     if (isTimeout) {
-      return data({ success: true, fetched: 0, errors: [message], jobId: job.id, partial: true });
+      // Return real progress from persisted data, not hardcoded 0
+      const { data: refreshedJob } = await db
+        .from("sync_jobs")
+        .select("processed_items")
+        .eq("id", job.id)
+        .single();
+      return data({ success: true, fetched: refreshedJob?.processed_items ?? 0, errors: [message], jobId: job.id, partial: true });
     }
 
     return data({ error: message }, { status: 500 });

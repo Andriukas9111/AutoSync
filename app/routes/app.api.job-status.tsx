@@ -66,9 +66,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     jobQuery = jobQuery.eq("type", type);
   }
 
-  // ── Queries 2-3: Product counts by fitment_status (head-only, no row data) ──
-  // Uses 7 parallel count queries with head:true — returns just numbers, not rows.
-  // At scale (100K+ products), this is far more efficient than fetching all rows.
+  // ── Product counts by fitment_status (7 parallel head-only count queries) ──
+  // Each query returns just a count, not rows — efficient at scale (100K+ products).
   const productCountQueries = {
     total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),

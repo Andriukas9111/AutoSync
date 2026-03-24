@@ -136,7 +136,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .eq("shop_id", shopId);
 
   if (search) {
-    const sanitized = search.replace(/[%,.*()]/g, '');
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
     if (sanitized) {
       query = query.or(`title.ilike.%${sanitized}%,handle.ilike.%${sanitized}%`);
     }

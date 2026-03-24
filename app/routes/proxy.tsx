@@ -1115,7 +1115,8 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
           .from("products")
           .select("id, shopify_gid, title, handle, image_url, price")
           .in("id", productIds.slice(0, 50))
-          .eq("shop_id", shop);
+          .eq("shop_id", shop)
+          .eq("status", "approved");
         compatibleProducts = products ?? [];
       }
     } catch (searchErr) {

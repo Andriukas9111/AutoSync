@@ -212,7 +212,6 @@
     // Accessibility: add ARIA attributes to make dropdown
     trigger.setAttribute('aria-haspopup', 'listbox');
     trigger.setAttribute('aria-expanded', 'false');
-    trigger.setAttribute('aria-label', 'Select vehicle make');
 
     var isOpen = false;
     var allMakes = makes || [];

@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS extraction_results (
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'extraction_results' AND column_name = 'needs_review'
+    WHERE table_schema = 'public'
+      AND table_name = 'extraction_results'
+      AND column_name = 'needs_review'
   ) THEN
     ALTER TABLE extraction_results ADD COLUMN needs_review BOOLEAN DEFAULT FALSE;
   END IF;
