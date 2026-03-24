@@ -24,6 +24,7 @@ import {
   SkeletonBodyText,
   Tooltip,
 } from "@shopify/polaris";
+import { HowItWorks } from "../components/HowItWorks";
 import {
   CashDollarIcon,
   ChartVerticalIcon,
@@ -262,6 +263,12 @@ export default function PricingPage() {
         },
       ]}
     >
+      <HowItWorks steps={[
+        { title: "Create Rules", description: "Define pricing rules by type (markup, margin, fixed, MAP) and scope them to vendors, product types, or specific providers." },
+        { title: "Preview Changes", description: "See how your rules affect product prices before applying. Review the price changes across your catalog." },
+        { title: "Apply & Sync", description: "Activate rules to automatically calculate prices. Push updated prices to Shopify with your next sync." },
+      ]} />
+
       {/* Success/Error banners */}
       {actionData && "message" in actionData && (
         <Box paddingBlockEnd="400">

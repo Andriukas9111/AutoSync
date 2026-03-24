@@ -16,10 +16,6 @@ name = "Vehicle Compatibility Table"
 template = "blocks/vehicle-compatibility.liquid"
 
 [[blocks]]
-name = "Floating Vehicle Bar"
-template = "blocks/floating-vehicle-bar.liquid"
-
-[[blocks]]
 name = "Plate Lookup"
 template = "blocks/plate-lookup.liquid"
 
