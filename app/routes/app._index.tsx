@@ -57,11 +57,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // OPTIMIZED: 8 queries instead of 22, but enough to prevent zero-flash
+  // OPTIMIZED: 13 queries (was 22) — all essential for zero-flash prevention
   // useAppData() provides live updates after initial render
   const [
     tenantResult,
     totalProductsResult,
+    unmappedResult,
+    autoMappedResult,
+    smartMappedResult,
+    manualMappedResult,
+    flaggedResult,
     fitmentCountResult,
     collectionCountResult,
     topMakesResult,
@@ -70,8 +75,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     activeMakesResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
-    // Essential counts for initial render (prevents 0-flash)
+    // Product counts — all needed for zero-flash prevention
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Top makes by fitment count
@@ -128,16 +138,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     limits,
     isFirstTime,
     hasPushed: (tenant?.product_count ?? 0) > 0,
-    // Products — use tenant cached counts for instant render, useAppData updates live
-    totalProducts: totalProductsResult.count ?? tenant?.product_count ?? 0,
-    unmapped: 0, // useAppData fills
-    autoMapped: 0,
-    smartMapped: 0,
-    manualMapped: 0,
-    flagged: 0,
-    mapped: 0,
+    // Products — real counts for instant render, useAppData updates live
+    totalProducts: totalProductsResult.count ?? 0,
+    unmapped: unmappedResult.count ?? 0,
+    autoMapped: autoMappedResult.count ?? 0,
+    smartMapped: smartMappedResult.count ?? 0,
+    manualMapped: manualMappedResult.count ?? 0,
+    flagged: flaggedResult.count ?? 0,
+    mapped: (autoMappedResult.count ?? 0) + (smartMappedResult.count ?? 0) + (manualMappedResult.count ?? 0),
     // Fitments
-    fitmentCount: fitmentCountResult.count ?? tenant?.fitment_count ?? 0,
+    fitmentCount: fitmentCountResult.count ?? 0,
     topMakes,
     // Providers
     providerCount: (providerListResult.data ?? []).length,
