@@ -84,12 +84,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const modelYearTo = model?.year_to ?? new Date().getFullYear();
 
       // Get distinct year ranges from engines for this model
+      // Only select year_from and year_to (no other columns) to minimize data transfer
+      // Supabase doesn't support SQL DISTINCT on specific columns, but limiting to
+      // just 2 columns keeps the response small even for models with many engines
       const { data: engines, error } = await db
         .from("ymme_engines")
         .select("year_from, year_to")
         .eq("model_id", modelId)
         .eq("active", true)
-        .not("year_from", "is", null); // Skip engines with null year_from
+        .not("year_from", "is", null)
+        .limit(500); // Cap at 500 — no model has more distinct year ranges than this
 
       if (error) {
         return data({ error: error.message }, { status: 500 });
