@@ -119,7 +119,7 @@ const GARAGE_VEHICLES = [
 
 // ─── UK Flag SVG ───
 const UKFlag = () => (
-  <svg width="24" height="16" viewBox="0 0 60 40" style={{ display:"block", flexShrink:0 }}>
+  <svg width="32" height="22" viewBox="0 0 60 40" style={{ display:"block", flexShrink:0 }}>
     <rect width="60" height="40" fill="#012169"/>
     <path d="M0 0L60 40M60 0L0 40" stroke="#fff" strokeWidth="6"/>
     <path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" strokeWidth="3"/>
@@ -129,66 +129,125 @@ const UKFlag = () => (
 );
 
 function YMMEDemo() {
-  const [make, setMake] = useState("BMW");
-  const [open, setOpen] = useState(false);
-  const [garage, setGarage] = useState(false);
-  const [q, setQ] = useState("");
-  const filtered = MAKES.filter(m => m.name.toLowerCase().includes(q.toLowerCase()));
+  const [step, setStep] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const ran = useRef(false);
+
+  useEffect(() => {
+    const el = containerRef.current; if (!el) return;
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && !ran.current) {
+        ran.current = true;
+        const delays = [500, 1200, 1800, 2400, 3000, 3500, 4200, 4800];
+        delays.forEach((d, i) => setTimeout(() => setStep(i + 1), d));
+      }
+    }, { threshold: 0.3 });
+    obs.observe(el); return () => obs.disconnect();
+  }, []);
+
+  const garageCount = step >= 8 ? 3 : step >= 5 ? 1 : 0;
+  const showGarage = step >= 6;
+  const showButton = step >= 7;
+
+  const SearchIcon = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>;
+  const GarageIcon = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
+
+  const garageVehicles = step >= 8
+    ? [
+        { year: "2022", make: "BMW", model: "3 Series", engine: "M340i (382 Hp)" },
+        { year: "2013", make: "Porsche", model: "Panamera", engine: "4.8L V8 · 440 Hp" },
+        { year: "2004", make: "BMW", model: "6 Series", engine: "645Ci · 333 Hp" },
+      ]
+    : [{ year: "2022", make: "BMW", model: "3 Series", engine: "M340i (382 Hp)" }];
+
   return (
-    <>
+    <div ref={containerRef}>
       <div className="lp-chrome"><span className="lp-dot"/><span className="lp-dot"/><span className="lp-dot"/></div>
-      <div className="lp-demo-light">
-        <div className="demo-title">Find Parts for Your Vehicle</div>
-        <div className="demo-grid" style={{ marginBottom: 12 }}>
-          <div style={{ position:"relative" }}>
+      <div className="lp-demo-light" style={{ padding: 28 }}>
+        <div className="demo-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find Parts for Your Vehicle</div>
+        <div className="demo-grid" style={{ marginBottom: 14 }}>
+          {/* Make */}
+          <div style={{ position: "relative" }}>
             <div className="demo-label">Make</div>
-            <button className="demo-sel" onClick={() => { setOpen(!open); setGarage(false); }}>
-              <span style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <img src={MAKES.find(m=>m.name===make)?.logo} alt="" width="22" height="22" style={{ objectFit:"contain" }}/>{make}
-              </span>{I.chev}
+            {step >= 1 ? (
+              <div className="demo-sel ymme-anim-fill">
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <img src={MAKES.find(m => m.name === "BMW")?.logo} alt="" width="22" height="22" style={{ objectFit: "contain" }} />BMW
+                </span>{I.chev}
+              </div>
+            ) : (
+              <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>
+            )}
+          </div>
+          {/* Model */}
+          <div>
+            <div className="demo-label">Model</div>
+            {step >= 2 ? (
+              <div className="demo-sel ymme-anim-fill"><span>3 Series</span>{I.chev}</div>
+            ) : (
+              <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>
+            )}
+          </div>
+          {/* Year */}
+          <div>
+            <div className="demo-label">Year</div>
+            {step >= 3 ? (
+              <div className="demo-sel ymme-anim-fill"><span>2022</span>{I.chev}</div>
+            ) : (
+              <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>
+            )}
+          </div>
+          {/* Engine */}
+          <div>
+            <div className="demo-label">Engine</div>
+            {step >= 4 ? (
+              <div className="demo-sel ymme-anim-fill"><span>M340i (382 Hp)</span>{I.chev}</div>
+            ) : (
+              <div className="demo-sel"><span style={{ color: "#9ca3af" }}>Select...</span>{I.chev}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Find Parts + Garage button row */}
+        {showButton && (
+          <div className="ymme-btn-row" style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button className="demo-btn-blue" style={{ flex: 1, height: 48, fontSize: 16 }}>
+              {SearchIcon} Find Parts
             </button>
-            {open && <div className="demo-dd">
-              <input placeholder="Search makes..." value={q} onChange={e=>setQ(e.target.value)} autoFocus />
-              {filtered.map(m => <div key={m.name} className={`demo-opt ${m.name===make?"active":""}`} onClick={()=>{setMake(m.name);setOpen(false);setQ("")}}><img src={m.logo} alt=""/>{m.name}</div>)}
-            </div>}
+            <button className="demo-garage-btn" style={{ width: 48, height: 48 }}>
+              {GarageIcon}
+              <span className="demo-garage-badge">{garageCount}</span>
+            </button>
           </div>
-          <div><div className="demo-label">Model</div><div className="demo-sel"><span>3 Series</span>{I.chev}</div></div>
-          <div><div className="demo-label">Year</div><div className="demo-sel"><span>2022</span>{I.chev}</div></div>
-          <div><div className="demo-label">Engine</div><div className="demo-sel"><span>M340i (382 Hp)</span>{I.chev}</div></div>
-        </div>
-        <div style={{ display:"flex", gap:8 }}>
-          <button className="demo-btn-blue" style={{ flex:1 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-            Find Parts
-          </button>
-          <button className="demo-garage-btn" onClick={() => { setGarage(!garage); setOpen(false); }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="1.5"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-            <span style={{ position:"absolute", top:-6, right:-6, background:"#2563eb", color:"#fff", borderRadius:"50%", width:18, height:18, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>3</span>
-          </button>
-        </div>
-        {garage && <div className="demo-garage-light">
-          <div className="demo-garage-hdr">
-            <span>My Garage</span>
-            <span style={{ fontSize:12, color:"#6b7280", fontWeight:400 }}>{GARAGE_VEHICLES.length} vehicles</span>
-          </div>
-          {GARAGE_VEHICLES.map((v,i) => (
-            <div key={i} className="demo-garage-item">
-              <div>
-                <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{v.year} {v.make} {v.model}</div>
-                <div style={{ fontSize:12, color:"#6b7280" }}>{v.engine}</div>
-              </div>
-              <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                <button style={{ padding:"4px 12px", borderRadius:6, background:"#2563eb", color:"#fff", fontSize:12, fontWeight:600, border:"none", cursor:"pointer" }}>Select</button>
-                <button style={{ padding:"4px 6px", borderRadius:6, background:"#f3f4f6", border:"none", cursor:"pointer", display:"flex", alignItems:"center" }}>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                </button>
-              </div>
+        )}
+
+        {/* Garage popover */}
+        {showGarage && (
+          <div className="demo-garage-light" style={{ animation: "ymme-fade-in 0.3s ease" }}>
+            <div className="demo-garage-hdr">
+              <span>My Garage</span>
+              <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 400 }}>{garageVehicles.length} vehicle{garageVehicles.length !== 1 ? "s" : ""}</span>
             </div>
-          ))}
-        </div>}
-        <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
+            {garageVehicles.map((v, i) => (
+              <div key={i} className="demo-garage-item" style={i > 0 && step >= 8 ? { animation: "ymme-fade-in 0.4s ease" } : undefined}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>{v.year} {v.make} {v.model}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280" }}>{v.engine}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button style={{ padding: "4px 12px", borderRadius: 6, background: "#2563eb", color: "#fff", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer" }}>Select</button>
+                  <button style={{ padding: "4px 6px", borderRadius: 6, background: "#f3f4f6", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="demo-footer-light" style={{ marginTop: 18, paddingTop: 14 }}>{I.logo(12)} Powered by AutoSync</div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -270,7 +329,7 @@ function PlateDemo() {
               <div className="demo-status-sub">Due 1 Nov 2026</div>
             </div>
           </div>
-          <button className="demo-btn-blue" style={{ width:"100%", marginBottom:8 }}>Find Parts for This Vehicle &rarr;</button>
+          <button className="demo-btn-blue" style={{ width:"100%", height:48, fontSize:16, marginBottom:8 }}>Find Parts for This Vehicle &rarr;</button>
           <div className="demo-mot-history">
             <button className="demo-mot-toggle" onClick={() => setMotOpen(!motOpen)}>
               <span>MOT History <span className="demo-mot-count">2 tests</span></span>

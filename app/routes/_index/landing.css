@@ -6,6 +6,15 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
+/* Charles Wright font for UK number plates */
+@font-face {
+  font-family: 'UKPlate';
+  src: url('https://cdn.jsdelivr.net/gh/nicholasgasior/gfonts@master/dist/uk-number-plate/uk-number-plate.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --bg: #0a0a0a;
   --bg-elevated: #0f0f0f;
@@ -208,13 +217,13 @@
 }
 .lp-section-header.center .lp-sub { margin: 0 auto; }
 
-/* ─── Feature Row (alternating layout, 40/60 split) ─── */
+/* ─── Feature Row (alternating layout, 35/65 split for bigger visuals) ─── */
 .lp-feature-row {
-  display: grid; grid-template-columns: 4fr 6fr;
-  gap: 80px; align-items: center; margin-bottom: 160px;
+  display: grid; grid-template-columns: 35fr 65fr;
+  gap: 60px; align-items: center; margin-bottom: 160px;
 }
 .lp-feature-row:last-child { margin-bottom: 0; }
-.lp-feature-row.reverse { grid-template-columns: 6fr 4fr; }
+.lp-feature-row.reverse { grid-template-columns: 65fr 35fr; }
 .lp-feature-row.reverse .lp-feature-text { order: 2; }
 .lp-feature-row.reverse .lp-feature-visual { order: 1; }
 /* Alternate rows via nth-child */
@@ -242,9 +251,12 @@
   box-shadow: 0 40px 100px -20px rgba(0,0,0,0.6);
   position: relative;
   min-width: 0;
-  max-width: 650px;
-  min-height: 400px;
+  width: 100%;
+  max-width: 720px;
+  min-height: 450px;
 }
+.lp-feature-visual-wide { max-width: 850px; }
+.lp-feature-visual-detail { max-width: 800px; }
 /* Force ALL text inside feature visuals to be dark */
 .lp-feature-visual *,
 .lp-feature-visual-wide *,
@@ -264,7 +276,7 @@
 /* ─── Demo Chrome ─── */
 .lp-chrome {
   display: flex; align-items: center; gap: 6px;
-  padding: 12px 16px; background: #f3f4f6;
+  padding: 14px 16px; background: #f3f4f6;
   border-bottom: 1px solid #e5e7eb;
 }
 .lp-dot { width: 10px; height: 10px; border-radius: 50%; }
@@ -275,16 +287,16 @@
 
 /* ─── Demo shared ─── */
 .demo-title { font-size: 16px; font-weight: 700; margin-bottom: 14px; letter-spacing: -0.01em; }
-.demo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.demo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .demo-label {
-  display: block; font-size: 10px; font-weight: 600;
+  display: block; font-size: 11px; font-weight: 600;
   color: var(--text-quaternary); text-transform: uppercase;
   letter-spacing: 0.08em; margin-bottom: 4px;
 }
 .demo-sel {
-  width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+  width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg);
-  color: var(--text-primary); font-size: 13px; font-family: var(--font);
+  color: var(--text-primary); font-size: 15px; font-family: var(--font);
   display: flex; align-items: center; justify-content: space-between;
   cursor: pointer; transition: border-color 0.15s;
 }
@@ -320,15 +332,17 @@
   border: 2px solid #facc15;
 }
 .demo-plate-gb {
-  background: #1e3a8a; color: #fff; padding: 8px 8px;
+  background: #1e3a8a; color: #fff; padding: 10px 10px;
   font-size: 10px; font-weight: 800; display: flex; align-items: center;
+  justify-content: center;
 }
+.demo-plate-gb svg { width: 32px; height: 22px; }
 .demo-plate-input {
   flex: 1; background: #facc15; color: #000; font-weight: 800;
-  font-size: 20px; text-align: center; border: none; padding: 8px 12px;
-  font-family: monospace; letter-spacing: 3px; outline: none;
+  font-size: 26px; text-align: center; border: none; padding: 12px 16px;
+  font-family: 'UKPlate', 'Courier New', monospace; letter-spacing: 4px; outline: none;
 }
-.demo-plate-input::placeholder { color: rgba(0,0,0,0.25); }
+.demo-plate-input::placeholder { color: rgba(0,0,0,0.2); font-family: 'UKPlate', monospace; }
 
 /* Badge */
 .demo-badge {
@@ -562,7 +576,7 @@
 
 /* ─── Light-themed Demo Interior ─── */
 .lp-demo-light {
-  background: #ffffff !important; color: #111827 !important; padding: 24px;
+  background: #ffffff !important; color: #111827 !important; padding: 28px;
 }
 .lp-demo-light span, .lp-demo-light div, .lp-demo-light p,
 .lp-demo-light td, .lp-demo-light th, .lp-demo-light input { color: #111827; }
@@ -576,7 +590,7 @@
   font-size: 13px; color: #6b7280; margin-bottom: 16px; line-height: 1.5;
 }
 .lp-demo-light .demo-label {
-  font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; color: #9ca3af; text-transform: uppercase;
   letter-spacing: 0.08em; margin-bottom: 4px; display: block;
 }
 
@@ -625,6 +639,34 @@
 }
 .demo-garage-light .demo-garage-item:last-child { border: none; }
 
+/* YMME auto-fill animation */
+@keyframes ymme-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes ymme-fill-flash {
+  0% { background: #eff6ff; border-color: #2563eb; }
+  100% { background: #fff; border-color: #e5e7eb; }
+}
+@keyframes ymme-bounce-in {
+  0% { opacity: 0; transform: translateY(16px); }
+  60% { opacity: 1; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.ymme-anim-fill {
+  animation: ymme-fill-flash 0.6s ease forwards;
+}
+.ymme-btn-row {
+  animation: ymme-bounce-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.demo-garage-badge {
+  position: absolute; top: -6px; right: -6px;
+  background: #2563eb; color: #fff; border-radius: 50%;
+  width: 20px; height: 20px; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; transition: transform 0.2s;
+}
+
 /* Powered by footer (light) */
 .demo-footer-light {
   text-align: center; font-size: 10px; color: #9ca3af;
@@ -634,17 +676,18 @@
 
 /* ─── Plate Demo (light) ─── */
 .demo-plate-light .demo-plate-wrap {
-  display: flex; border-radius: 8px; overflow: hidden; border: 2px solid #facc15;
+  display: flex; border-radius: 8px; overflow: hidden; border: 3px solid #facc15;
 }
 .demo-plate-light .demo-plate-gb {
-  background: #1e3a8a; color: #fff; padding: 4px 6px; font-size: 11px;
+  background: #1e3a8a; color: #fff; padding: 12px; font-size: 11px;
   font-weight: 800; display: flex; align-items: center; justify-content: center;
   min-width: 36px;
 }
+.demo-plate-light .demo-plate-gb svg { width: 32px; height: 22px; }
 .demo-plate-light .demo-plate-input {
   flex: 1; background: #facc15; color: #000; font-weight: 800;
-  font-size: 22px; text-align: center; border: none; padding: 10px 14px;
-  font-family: 'Courier New', monospace; letter-spacing: 3px; outline: none;
+  font-size: 28px; text-align: center; border: none; padding: 14px 20px;
+  font-family: 'UKPlate', 'Courier New', monospace; letter-spacing: 4px; outline: none;
 }
 .demo-plate-light .demo-plate-input::placeholder { color: rgba(0,0,0,0.2); }
 
@@ -659,7 +702,7 @@
 
 /* Plate result card (light) */
 .demo-plate-result {
-  border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px; margin-top: 14px;
+  border: 1px solid #e5e7eb; border-radius: 10px; padding: 24px; margin-top: 14px;
   background: #fff;
 }
 .demo-plate-badges { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
