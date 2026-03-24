@@ -940,43 +940,9 @@ export default function LandingPage() {
             });
           }
 
-          // Feature rows: text slides from left, visual from right (scrubbed)
-          document.querySelectorAll(".lp-feature-row").forEach((row) => {
-            const text = row.querySelector(".lp-feature-text");
-            const visual = row.querySelector(".lp-feature-visual, .lp-feature-visual-wide, .lp-feature-visual-detail");
-            if (text) {
-              gsap.fromTo(text,
-                { x: -60, opacity: 0 },
-                { x: 0, opacity: 1, ease: "power2.out",
-                  scrollTrigger: { trigger: row, start: "top 85%", end: "top 45%", scrub: true },
-                }
-              );
-            }
-            if (visual) {
-              gsap.fromTo(visual,
-                { x: 60, opacity: 0, scale: 0.97 },
-                { x: 0, opacity: 1, scale: 1, ease: "power2.out",
-                  scrollTrigger: { trigger: row, start: "top 85%", end: "top 45%", scrub: true },
-                }
-              );
-            }
-          });
-
-          // System cards stagger
-          gsap.fromTo(".lp-sys-card",
-            { y: 40, opacity: 0 },
-            { y: 0, opacity: 1, stagger: 0.08, ease: "power2.out",
-              scrollTrigger: { trigger: ".lp-systems-grid", start: "top 80%", end: "top 40%", scrub: true },
-            }
-          );
-
-          // Pricing cards scale up
-          gsap.fromTo(".lp-price-card",
-            { y: 30, opacity: 0, scale: 0.95 },
-            { y: 0, opacity: 1, scale: 1, stagger: 0.1, ease: "power2.out",
-              scrollTrigger: { trigger: "#pricing", start: "top 80%", end: "top 40%", scrub: true },
-            }
-          );
+          // NOTE: Feature rows, system cards, and pricing cards use CSS
+          // scroll-timeline animations instead of GSAP. GSAP opacity:0
+          // fromTo animations cause invisible content bugs on long pages.
         });
       } catch (_e) {
         // GSAP failed to load — CSS scroll-timeline fallback handles it
@@ -1132,7 +1098,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text lp-scroll-left">
+              <div className="lp-feature-text">
                 <span className="lp-tag">YMME Search Widget</span>
                 <h3>Cascading vehicle search with brand logos</h3>
                 <p>Customers select Make, Model, Year, Engine from your active vehicle database. Custom dropdown with searchable brand logos, My Garage for saved vehicles, and localStorage persistence across pages.</p>
@@ -1143,7 +1109,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Collection Redirect</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-scroll-visual"><YMMEDemo /></div>
+              <div className="lp-feature-visual"><YMMEDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1154,7 +1120,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text lp-scroll-right">
+              <div className="lp-feature-text">
                 <span className="lp-tag">UK Plate Lookup</span>
                 <h3>DVLA integration with MOT history</h3>
                 <p>Enterprise customers enter their UK registration number to instantly see vehicle details, MOT test history, tax status, and compatible parts. Powered by DVLA VES and DVSA MOT History APIs.</p>
@@ -1165,7 +1131,7 @@ export default function LandingPage() {
                   <span className="lp-pill">YMME Resolution</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-scroll-visual"><PlateDemo /></div>
+              <div className="lp-feature-visual"><PlateDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1176,7 +1142,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text lp-scroll-left">
+              <div className="lp-feature-text">
                 <span className="lp-tag">Compatibility Table</span>
                 <h3>Full vehicle compatibility on every product</h3>
                 <p>Product pages show a clear table of all compatible vehicles with Make, Model, Year range, and Engine. Customers know exactly if a part fits before adding to cart.</p>
@@ -1186,7 +1152,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Metafield Powered</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-scroll-visual"><CompatDemo /></div>
+              <div className="lp-feature-visual"><CompatDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1197,7 +1163,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text lp-scroll-right">
+              <div className="lp-feature-text">
                 <span className="lp-tag">Fitment Badge</span>
                 <h3>Instant compatibility check on every product</h3>
                 <p>A visual badge on every product page that shows whether the part fits the customer&apos;s saved vehicle. Green for compatible, red for incompatible, neutral if no vehicle selected.</p>
@@ -1207,7 +1173,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Reduce Returns</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-scroll-visual"><BadgeDemo /></div>
+              <div className="lp-feature-visual"><BadgeDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1218,7 +1184,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text lp-scroll-left">
+              <div className="lp-feature-text">
                 <span className="lp-tag">Vehicle Spec Pages</span>
                 <h3>SEO-optimized specification pages</h3>
                 <p>Auto-generated vehicle specification pages pushed as Shopify metaobjects. 90+ engine specs per vehicle with structured data for search engines. Browse and search your entire vehicle database.</p>
@@ -1229,7 +1195,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Searchable</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-feature-visual-wide lp-scroll-visual"><VehicleSpecsDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-wide"><VehicleSpecsDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1240,7 +1206,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row reverse">
-              <div className="lp-feature-text lp-scroll-right">
+              <div className="lp-feature-text">
                 <span className="lp-tag">Vehicle Spec Detail</span>
                 <h3>Rich vehicle detail pages with performance data</h3>
                 <p>Each vehicle specification page features a hero section, quick stats, tabbed engine/performance/drivetrain data, and full specification tables. Customers see exactly what engine specs match their vehicle.</p>
@@ -1251,7 +1217,7 @@ export default function LandingPage() {
                   <span className="lp-pill">Dimensions</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-feature-visual-detail lp-scroll-visual"><VehicleSpecDetailDemo /></div>
+              <div className="lp-feature-visual lp-feature-visual-detail"><VehicleSpecDetailDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1262,7 +1228,7 @@ export default function LandingPage() {
         <div className="lp-w">
           <Reveal>
             <div className="lp-feature-row">
-              <div className="lp-feature-text lp-scroll-left">
+              <div className="lp-feature-text">
                 <span className="lp-tag">VIN Decode</span>
                 <h3>Decode any Vehicle Identification Number</h3>
                 <p>Customers paste their 17-character VIN to instantly identify their exact vehicle specification, engine code, and compatible parts. Works with all major vehicle manufacturers worldwide.</p>
@@ -1272,7 +1238,7 @@ export default function LandingPage() {
                   <span className="lp-pill">All Manufacturers</span>
                 </div>
               </div>
-              <div className="lp-feature-visual lp-scroll-visual"><VINDecodeDemo /></div>
+              <div className="lp-feature-visual"><VINDecodeDemo /></div>
             </div>
           </Reveal>
         </div>
@@ -1281,7 +1247,7 @@ export default function LandingPage() {
       {/* ── How It Works ── */}
       <section className="lp-section">
         <div className="lp-w">
-          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
+          <Reveal ><div className="lp-section-header center">
             <span className="lp-tag">How It Works</span>
             <div className="lp-h2">From install to sales in 4 steps</div>
           </div></Reveal>
@@ -1290,7 +1256,7 @@ export default function LandingPage() {
               { n:"2", t:"Auto-Extract", d:"Smart extraction scans product data and detects vehicle compatibility with 80%+ accuracy. No manual work." },
               { n:"3", t:"Push to Shopify", d:"Push tags, metafields, and smart collections. Search & Discovery filters activate automatically." },
               { n:"4", t:"Sell More Parts", d:"Customers find parts that fit their vehicle. Fewer returns, higher conversions, better SEO." },
-            ].map((s,i)=><Reveal key={i} delay={i*0.08} className={`lp-scroll-fade lp-scroll-d${i+1}`}>
+            ].map((s,i)=><Reveal key={i} delay={i*0.08} >
               <div style={{ padding:"24px 20px", borderRadius:"var(--radius)", border:"1px solid var(--border)", background:"var(--bg-elevated)", textAlign:"center" }}>
                 <div style={{ width:36, height:36, borderRadius:"50%", background:"var(--accent)", color:"#fff", fontSize:16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>{s.n}</div>
                 <h3 style={{ fontSize:14, fontWeight:600, marginBottom:6, letterSpacing:"-0.01em" }}>{s.t}</h3>
@@ -1304,13 +1270,13 @@ export default function LandingPage() {
       {/* ── Systems ── */}
       <section id="systems" className="lp-section lp-section-alt">
         <div className="lp-w">
-          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
+          <Reveal ><div className="lp-section-header center">
             <span className="lp-tag">Platform</span>
             <div className="lp-h2">Every system, explained</div>
             <p className="lp-sub">AutoSync is a complete platform with 14+ integrated systems working together.</p>
           </div></Reveal>
           <div className="lp-systems">
-            {SYSTEMS.map((sys,i) => <Reveal key={i} delay={i*0.04} className={`lp-scroll-fade lp-scroll-d${i+1}`}><div className="lp-sys">
+            {SYSTEMS.map((sys,i) => <Reveal key={i} delay={i*0.04} ><div className="lp-sys">
               <div className="lp-sys-icon">{SYSTEM_ICONS[i]}</div>
               <h3>{sys.t}</h3>
               <p>{sys.d}</p>
@@ -1323,13 +1289,13 @@ export default function LandingPage() {
       {/* ── Pricing ── */}
       <section id="pricing" className="lp-section">
         <div className="lp-w">
-          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
+          <Reveal ><div className="lp-section-header center">
             <span className="lp-tag">Pricing</span>
             <div className="lp-h2">Simple, transparent pricing</div>
             <p className="lp-sub">Start free. Scale as you grow. Cancel anytime.</p>
           </div></Reveal>
           <div className="lp-pricing">
-            {visiblePlans.map((p,i) => <Reveal key={i} delay={i*0.04} className={`lp-scroll-scale lp-scroll-d${i+1}`}><div className={`lp-price ${p.pop?"pop":""}`}>
+            {visiblePlans.map((p,i) => <Reveal key={i} delay={i*0.04} ><div className={`lp-price ${p.pop?"pop":""}`}>
               {p.pop && <div className="lp-price-badge">Most Popular</div>}
               <div className="lp-price-name">{p.name}</div>
               <div style={{ marginBottom:14 }}>
@@ -1360,7 +1326,7 @@ export default function LandingPage() {
       {/* ── Compare ── */}
       <section id="compare" className="lp-section lp-section-alt">
         <div className="lp-w">
-          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
+          <Reveal ><div className="lp-section-header center">
             <span className="lp-tag">Comparison</span>
             <div className="lp-h2">AutoSync vs the competition</div>
           </div></Reveal>
@@ -1385,12 +1351,12 @@ export default function LandingPage() {
       {/* ── FAQ ── */}
       <section id="faq" className="lp-section">
         <div className="lp-w">
-          <Reveal className="lp-scroll-blur"><div className="lp-section-header center">
+          <Reveal ><div className="lp-section-header center">
             <span className="lp-tag">FAQ</span>
             <div className="lp-h2">Frequently asked questions</div>
           </div></Reveal>
           <div className="lp-faq-list">
-            {FAQS.map((item,i) => <Reveal key={i} delay={i*0.03} className={`lp-scroll-fade lp-scroll-d${i+1}`}><div className={`lp-faq ${faq===i?"open":""}`}>
+            {FAQS.map((item,i) => <Reveal key={i} delay={i*0.03} ><div className={`lp-faq ${faq===i?"open":""}`}>
               <button className="lp-faq-q" onClick={() => setFaq(faq===i?null:i)}>{item.q}<span className="lp-faq-ico">+</span></button>
               {faq===i && <div className="lp-faq-a">{item.a}</div>}
             </div></Reveal>)}

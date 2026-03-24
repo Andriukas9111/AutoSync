@@ -234,15 +234,26 @@
   background: var(--accent-glow); color: var(--accent-light);
   border: 1px solid rgba(91,127,255,0.12);
 }
-.lp-feature-visual {
-  border-radius: var(--radius-lg); border: 1px solid var(--border);
-  overflow: hidden; background: #ffffff;
+.lp-feature-visual,
+.lp-feature-visual-wide,
+.lp-feature-visual-detail {
+  border-radius: var(--radius-lg); border: 1px solid rgba(255,255,255,0.12);
+  overflow: hidden; background: #ffffff !important;
   box-shadow: 0 40px 100px -20px rgba(0,0,0,0.6);
   position: relative;
   min-width: 0;
   max-width: 650px;
   min-height: 400px;
 }
+/* Force ALL text inside feature visuals to be dark */
+.lp-feature-visual *,
+.lp-feature-visual-wide *,
+.lp-feature-visual-detail * {
+  color: #111827;
+}
+/* Exception: blue hero in spec detail */
+.demo-spec-hero *,
+.demo-spec-hero { color: #ffffff !important; }
 .lp-feature-visual-wide {
   max-width: 800px;
 }
