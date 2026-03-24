@@ -48,7 +48,6 @@ import { statMiniStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
-import { syncNHTSAToYMME } from "../lib/scrapers/nhtsa.server";
 import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
 import { isAdminShop } from "../lib/admin.server";
 
@@ -94,7 +93,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [
     tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes,
     fitmentCountRes, recentJobsRes, providersRes, productCountRes,
-    specsCountRes, scrapeJobsData,
+    specsCountRes, scrapeJobsData, activeJobsRes, collectionsCountRes,
   ] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
@@ -104,13 +103,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_aliases").select("*", { count: "exact", head: true }),
     db.from("vehicle_fitments").select("*", { count: "exact", head: true }),
     db.from("sync_jobs")
-      .select("shop_id, type, status, created_at, completed_at")
+      .select("shop_id, type, status, created_at, completed_at, processed_items, total_items, error")
       .order("created_at", { ascending: false })
       .limit(50),
     db.from("providers").select("shop_id, name, status, product_count"),
     db.from("products").select("*", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("*", { count: "exact", head: true }),
     listScrapeJobs(10),
+    // Live data: active jobs across ALL tenants
+    db.from("sync_jobs")
+      .select("id, shop_id, type, status, processed_items, total_items, started_at, locked_at")
+      .in("status", ["running", "pending"])
+      .order("created_at", { ascending: false })
+      .limit(20),
+    // Collections across all tenants
+    db.from("collection_mappings").select("id", { count: "exact", head: true }),
   ]);
 
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
@@ -174,6 +181,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planBreakdown, ymmeCounts, tenantUsage,
     recentJobs: recentJobs.slice(0, 10),
     scrapeJobs: scrapeJobsData,
+    // Live data
+    activeJobs: (activeJobsRes.data ?? []) as Array<{
+      id: string; shop_id: string; type: string; status: string;
+      processed_items: number | null; total_items: number | null;
+      started_at: string | null; locked_at: string | null;
+    }>,
+    totalCollections: collectionsCountRes.count ?? 0,
   };
 };
 
@@ -190,17 +204,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent") as string;
 
   switch (intent) {
-    case "sync-nhtsa": {
-      try {
-        const result = await syncNHTSAToYMME({ maxMakes: 30, delayMs: 150, scanYears: false });
-        return data({
-          ok: true, intent: "sync-nhtsa",
-          message: `Sync complete — ${result.makesProcessed} makes (${result.newMakes} new), ${result.modelsProcessed} models (${result.newModels} new), ${result.vehicleTypesUpdated} vehicle types updated.${result.errors.length > 0 ? ` ${result.errors.length} errors.` : ""}`,
-        });
-      } catch (err) {
-        return data({ ok: false, intent: "sync-nhtsa", message: err instanceof Error ? err.message : "NHTSA sync failed" });
-      }
-    }
     case "pause-autodata-sync": {
       try {
         const jobId = formData.get("job_id") as string;
