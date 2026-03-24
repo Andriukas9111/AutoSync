@@ -73,9 +73,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     providerListResult,
     recentJobsResult,
     activeMakesResult,
+    vehiclePagesResult,
+    modelCollectionResult,
+    ymmeMakesResult,
+    ymmeModelsResult,
+    ymmeEnginesResult,
+    ymmeSpecsResult,
   ] = await Promise.all([
     db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
-    // Product counts — all needed for zero-flash prevention
+    // Product counts
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
@@ -84,21 +90,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Top makes by fitment count
-    db.from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
-    // Provider list
+    // Top makes
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null),
+    // Providers
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
     // Recent jobs
-    db.from("sync_jobs")
-      .select("id, type, status, total_items, processed_items, completed_at, created_at")
-      .eq("shop_id", shopId)
-      .order("created_at", { ascending: false })
-      .limit(10),
+    db.from("sync_jobs").select("id, type, status, total_items, processed_items, completed_at, created_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(10),
     // Active makes count
     db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Vehicle pages
+    db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
+    // Models with parts (from collection_mappings)
+    db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "make_model"),
+    // YMME database (global)
+    db.from("ymme_makes").select("id", { count: "exact", head: true }),
+    db.from("ymme_models").select("id", { count: "exact", head: true }),
+    db.from("ymme_engines").select("id", { count: "exact", head: true }),
+    db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
   ]);
 
   const tenant = tenantResult.data;
@@ -156,18 +164,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     collectionCount: collectionCountResult.count ?? 0,
     // Recent activity
     recentJobs: recentJobsResult.data ?? [],
-    // YMME — zeros initially, useAppData fills from job-status API
-    ymmeMakes: 0,
-    ymmeModels: 0,
-    ymmeEngines: 0,
-    ymmeSpecs: 0,
+    // YMME database
+    ymmeMakes: ymmeMakesResult.count ?? 0,
+    ymmeModels: ymmeModelsResult.count ?? 0,
+    ymmeEngines: ymmeEnginesResult.count ?? 0,
+    ymmeSpecs: ymmeSpecsResult.count ?? 0,
     // Push + sync stats
     pushedProducts: totalProductsResult.count ?? 0,
     activeMakes: activeMakesResult.count ?? 0,
-    vehiclePagesSynced: 0,
+    vehiclePagesSynced: vehiclePagesResult.count ?? 0,
     // Unique makes/models from fitments (topMakes already has all makes)
     uniqueMakes: topMakes.length,
-    uniqueModels: 0, // Will be filled by live polling
+    uniqueModels: modelCollectionResult.count ?? 0,
   };
 };
 
