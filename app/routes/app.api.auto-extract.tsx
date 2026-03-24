@@ -149,8 +149,12 @@ export async function action({ request }: ActionFunctionArgs) {
         .eq("shop_id", shopId)
         .eq("fitment_status", "unmapped");
 
+      // Get processed count directly from the job record
+      const { data: jobData } = await db.from("sync_jobs").select("processed_items").eq("id", jobId).maybeSingle();
+      const processedCount = jobData?.processed_items ?? 0;
+
       await db.from("sync_jobs")
-        .update({ status: "running", total_items: (remaining ?? 0) + (await getProcessedCount(jobId)) })
+        .update({ status: "running", total_items: (remaining ?? 0) + processedCount })
         .eq("id", jobId)
         .eq("shop_id", shopId);
     }
@@ -431,11 +435,11 @@ export async function action({ request }: ActionFunctionArgs) {
             chunkFlagged++;
           }
         } else if (confidence >= 0.5) {
+          // Medium confidence — flag for manual review
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
         } else {
-          // Leave as unmapped but mark as scanned so we don't reprocess
-          await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+          // Low/no confidence — leave as unmapped (no valid match found)
           chunkUnmapped++;
         }
       } catch (err) {

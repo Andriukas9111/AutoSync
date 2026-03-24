@@ -262,6 +262,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const targetShop = formData.get("shop_id") as string;
       const cleanupType = formData.get("cleanup_type") as string || "all";
       if (!targetShop) return data({ ok: false, intent: "admin-shopify-cleanup", message: "No shop specified" });
+
+      // The admin's Shopify API client can only modify its own store.
+      // Cross-store cleanup requires the target tenant's own app instance.
+      if (targetShop !== session.shop) {
+        return data({ ok: false, intent: "admin-shopify-cleanup", message: "Cross-store cleanup not supported. Use the tenant's own app instance." });
+      }
+
       try {
         const results: string[] = [];
         if (cleanupType === "all" || cleanupType === "tags") {
@@ -304,12 +311,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!targetShop) return data({ ok: false, intent: "admin-reset-fitment-status", message: "No shop specified" });
       const { data: updatedRows, error } = await db
         .from("products")
-        .update({ fitment_status: "pending" })
+        .update({ fitment_status: "unmapped" })
         .eq("shop_id", targetShop)
         .select("id");
       const count = updatedRows?.length ?? 0;
       if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
-      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to pending for re-extraction.` });
+      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to unmapped for re-extraction.` });
     }
     case "admin-update-tenant-counts": {
       const targetShop = formData.get("shop_id") as string;

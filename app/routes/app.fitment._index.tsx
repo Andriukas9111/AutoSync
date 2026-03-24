@@ -89,33 +89,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .eq("shop_id", shopId)
     .is("fitment_status", null);
 
-  // 2. Fix products with fitments still marked "unmapped"
+  // 2. Bulk fix: products with fitments still marked "unmapped" → "auto_mapped"
+  // Uses a single query instead of N+1 individual updates
   {
-    const { data: fitmentProductIds } = await db
+    const { data: unmappedWithFitments } = await db
       .from("vehicle_fitments")
-      .select("product_id, extraction_method")
+      .select("product_id")
       .eq("shop_id", shopId);
-    if (fitmentProductIds && fitmentProductIds.length > 0) {
-      const pidSet = [...new Set(fitmentProductIds.map((f: { product_id: string }) => f.product_id))];
-      const { data: stillUnmapped } = await db
-        .from("products")
-        .select("id")
+    if (unmappedWithFitments && unmappedWithFitments.length > 0) {
+      const pidSet = [...new Set(unmappedWithFitments.map((f: { product_id: string }) => f.product_id))];
+      // Bulk update all unmapped products that have fitments to auto_mapped
+      await db.from("products")
+        .update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
         .eq("shop_id", shopId)
         .eq("fitment_status", "unmapped")
         .in("id", pidSet);
-      if (stillUnmapped && stillUnmapped.length > 0) {
-        for (const prod of stillUnmapped) {
-          const methods = fitmentProductIds
-            .filter((f: { product_id: string }) => f.product_id === prod.id)
-            .map((f: { extraction_method: string | null }) => f.extraction_method);
-          const newStatus = methods.includes("smart") ? "smart_mapped"
-            : methods.includes("manual") ? "manual_mapped"
-            : "auto_mapped";
-          await db.from("products")
-            .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
-            .eq("id", prod.id).eq("shop_id", shopId);
-        }
-      }
     }
   }
 
