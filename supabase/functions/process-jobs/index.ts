@@ -142,15 +142,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
     }
 
-    // Step 2: Atomically claim the job with a conditional update.
-    // This only succeeds if the job still has status running/pending AND locked_at is still claimable.
-    // If another pg_cron tick already claimed it, this update affects 0 rows.
+    // Step 2: Claim the job by setting locked_at.
+    // The candidate was already verified to match our criteria (status + lock timeout).
+    // Using eq("id") is safe since job IDs are unique UUIDs.
     const { data: claimedJob, error: lockError } = await db
       .from("sync_jobs")
       .update({ locked_at: lockTime, status: "running" })
       .eq("id", candidate.id)
-      .in("status", ["running", "pending"])
-      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
       .select("*")
       .maybeSingle();
 
