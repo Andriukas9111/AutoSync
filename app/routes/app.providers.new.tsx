@@ -28,11 +28,12 @@ import {
   LockIcon,
 } from "@shopify/polaris-icons";
 import { HowItWorks } from "../components/HowItWorks";
+import { PlanGate } from "../components/PlanGate";
 import { stepNumberStyle, infoCardStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError } from "../lib/billing.server";
-import type { ProviderType } from "../lib/types";
+import type { ProviderType, PlanTier, PlanLimits } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Loader — check plan limits
@@ -56,7 +57,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     limits.providers !== Infinity && providerCount >= limits.providers;
 
   return {
-    plan,
+    plan: plan as PlanTier,
+    limits,
     providerCount,
     providerLimit: limits.providers,
     atLimit,
@@ -222,7 +224,7 @@ const TYPE_CARDS: Array<{
 // Component
 // ---------------------------------------------------------------------------
 export default function ProvidersNew() {
-  const { plan, providerCount, providerLimit, atLimit, canUseApi, canUseFtp } =
+  const { plan, limits, providerCount, providerLimit, atLimit, canUseApi, canUseFtp } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -403,14 +405,7 @@ export default function ProvidersNew() {
 
                 {/* API Settings */}
                 {providerType === "api" && (
-                  <>
-                    {!canUseApi ? (
-                      <Banner tone="warning">
-                        API integration requires the{" "}
-                        <strong>Professional</strong> plan or higher. Current
-                        plan: <strong>{plan}</strong>.
-                      </Banner>
-                    ) : (
+                  <PlanGate feature="apiIntegration" currentPlan={plan as PlanTier} limits={limits as PlanLimits}>
                       <FormLayout>
                         <TextField
                           label="Endpoint URL"
@@ -477,19 +472,12 @@ export default function ProvidersNew() {
                           />
                         </FormLayout.Group>
                       </FormLayout>
-                    )}
-                  </>
+                  </PlanGate>
                 )}
 
                 {/* FTP Settings */}
                 {providerType === "ftp" && (
-                  <>
-                    {!canUseFtp ? (
-                      <Banner tone="warning">
-                        FTP import requires the <strong>Business</strong> plan
-                        or higher. Current plan: <strong>{plan}</strong>.
-                      </Banner>
-                    ) : (
+                  <PlanGate feature="ftpImport" currentPlan={plan as PlanTier} limits={limits as PlanLimits}>
                       <FormLayout>
                         <Select
                           label="Protocol"
@@ -557,8 +545,7 @@ export default function ProvidersNew() {
                           />
                         </FormLayout.Group>
                       </FormLayout>
-                    )}
-                  </>
+                  </PlanGate>
                 )}
               </BlockStack>
             </Card>

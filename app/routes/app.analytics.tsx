@@ -41,8 +41,9 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits, assertFeature } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
+import { PlanGate } from "../components/PlanGate";
 import { statGridStyle, statMiniStyle } from "../lib/design";
-import type { PlanTier } from "../lib/types";
+import type { PlanTier, PlanLimits } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -123,6 +124,7 @@ interface ConversionByVehicle {
 
 interface AnalyticsData {
   plan: PlanTier;
+  limits: PlanLimits;
   analyticsLevel: string;
   fitmentCoverage: FitmentCoverage;
   statusBreakdown: StatusBreakdown[];
@@ -162,6 +164,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return {
       gated: true,
       plan,
+      limits,
       analyticsLevel,
       fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
       statusBreakdown: [],
@@ -186,6 +189,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (analyticsLevel === "none") {
     return {
       plan,
+      limits,
       analyticsLevel,
       fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
       statusBreakdown: [],
@@ -492,6 +496,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
@@ -527,8 +532,10 @@ const STATUS_TONE: Record<string, "success" | "warning" | "critical" | "info" | 
 };
 
 export default function AnalyticsPage() {
+  const loaderData = useLoaderData<typeof loader>();
   const {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
@@ -546,7 +553,8 @@ export default function AnalyticsPage() {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
-  } = useLoaderData<typeof loader>();
+  } = loaderData;
+  const gated = "gated" in loaderData && (loaderData as any).gated === true;
 
   const [showExport, setShowExport] = useState(false);
 
@@ -574,15 +582,13 @@ export default function AnalyticsPage() {
   }, []);
 
   // ── Plan gate ──────────────────────────────────────────────
-  if (analyticsLevel === "none") {
+  if (gated || analyticsLevel === "none") {
     return (
       <Page title="Analytics" fullWidth>
-        <Banner title="Analytics requires the Starter plan or higher" tone="warning">
-          <p>
-            Upgrade your plan to access fitment coverage reports, popular vehicle
-            searches, supplier performance metrics, and inventory gap analysis.
-          </p>
-        </Banner>
+        <PlanGate feature="dashboardAnalytics" currentPlan={plan} limits={limits as PlanLimits}>
+          {/* Children never shown when gated */}
+          <></>
+        </PlanGate>
       </Page>
     );
   }

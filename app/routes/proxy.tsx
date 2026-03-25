@@ -174,7 +174,15 @@ async function handleTrack(params: URLSearchParams, body: string | null) {
 
 // ---------- Sub-route handlers ----------
 
-async function handleMakes(shop: string) {
+async function handleMakes(shop: string, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const tenant = await getTenant(shop);
+  if (!tenant) return json({ makes: [] }, 200, request);
+  const limits = getPlanLimits(tenant.plan);
+  if (!limits.features.ymmeWidget) {
+    return json({ error: "YMME widget requires Starter plan or higher", makes: [] }, 403, request);
+  }
+
   // Only return makes the tenant has activated (tenant_active_makes junction table)
   // If no tenant active makes exist, return empty array — forces merchant to activate makes first
   const { data: activeMakeIds } = await db
@@ -198,7 +206,19 @@ async function handleMakes(shop: string) {
   return json({ makes });
 }
 
-async function handleModels(params: URLSearchParams) {
+async function handleModels(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", models: [] }, 403, request);
+      }
+    }
+  }
+
   const makeId = params.get("make_id");
   if (!makeId) return json({ error: "Missing make_id parameter" }, 400);
 
@@ -222,7 +242,19 @@ async function handleModels(params: URLSearchParams) {
   return json({ models: cleanModels });
 }
 
-async function handleYears(params: URLSearchParams) {
+async function handleYears(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", years: [] }, 403, request);
+      }
+    }
+  }
+
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
@@ -270,7 +302,19 @@ async function handleYears(params: URLSearchParams) {
   return json({ years });
 }
 
-async function handleEngines(params: URLSearchParams) {
+async function handleEngines(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", engines: [] }, 403, request);
+      }
+    }
+  }
+
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
@@ -304,12 +348,23 @@ async function handleEngines(params: URLSearchParams) {
   return json({ engines: cleanEngines });
 }
 
-async function handleCollectionLookup(params: URLSearchParams) {
+async function handleCollectionLookup(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop") ?? "";
   const make = params.get("make");
   const model = params.get("model");
   const year = params.get("year");
   const engine = params.get("engine");
+
+  // Plan check: smartCollections feature required (not false/none)
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.smartCollections || limits.features.smartCollections === "none") {
+        return json({ error: "Smart collections requires a higher plan", found: false }, 403, request);
+      }
+    }
+  }
 
   if (!make) return json({ error: "Missing make parameter" }, 400);
 
@@ -1346,8 +1401,19 @@ function filterNulls(obj: Record<string, string | null | undefined>): Record<str
 }
 
 // ---------- Vehicle Gallery handler (lists all vehicle spec pages) ----------
-async function handleVehicleGallery(params: URLSearchParams) {
+async function handleVehicleGallery(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop") ?? "";
+
+  // Plan check: vehiclePages feature required
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(tenant.plan);
+      if (!limits.features.vehiclePages) {
+        return json({ error: "Vehicle pages requires a higher plan", vehicles: [] }, 403, request);
+      }
+    }
+  }
 
   // Fetch all synced vehicle pages for this shop
   const { data: synced } = await db
@@ -1515,15 +1581,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   switch (path) {
     case "makes":
-      return handleMakes(shop);
+      return handleMakes(shop, request);
     case "models":
-      return handleModels(params);
+      return handleModels(params, request);
     case "years":
-      return handleYears(params);
+      return handleYears(params, request);
     case "engines":
-      return handleEngines(params);
+      return handleEngines(params, request);
     case "collection-lookup":
-      return handleCollectionLookup(params);
+      return handleCollectionLookup(params, request);
     case "search":
       return handleSearch(params);
     case "wheel-search":
@@ -1533,7 +1599,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     case "vehicle-specs":
       return handleVehicleSpecs(params);
     case "vehicle-gallery":
-      return handleVehicleGallery(params);
+      return handleVehicleGallery(params, request);
     case "heartbeat":
       return json({ ok: true, ts: Date.now() });
     default:

@@ -37,7 +37,8 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import type { PlanTier, FitmentStatus } from "../lib/types";
+import { PlanGate } from "../components/PlanGate";
+import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -201,6 +202,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productFitmentGroups,
     topMakes,
     plan,
+    limits,
     autoExtractionAllowed: !!limits.features.autoExtraction,
     requiredPlanForAutoExtract: getMinimumPlanForFeature("autoExtraction"),
   };
@@ -258,6 +260,7 @@ export default function Fitment() {
     productFitmentGroups,
     topMakes,
     plan,
+    limits,
     autoExtractionAllowed,
     requiredPlanForAutoExtract,
   } = useLoaderData<typeof loader>();
@@ -403,18 +406,11 @@ export default function Fitment() {
                     <p>{extractResult.error}</p>
                   </Banner>
                 )}
-                {autoExtractionAllowed ? (
+                <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits}>
                   <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
                     {isExtracting ? "Extracting..." : "Run Auto Extract"}
                   </Button>
-                ) : (
-                  <Banner title="Plan upgrade required" tone="warning">
-                    <p>
-                      Auto extraction requires {requiredPlanForAutoExtract} plan or above.
-                      You are on {plan}.
-                    </p>
-                  </Banner>
-                )}
+                </PlanGate>
               </BlockStack>
             </Card>
           </Layout.Section>
