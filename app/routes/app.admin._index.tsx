@@ -1,17 +1,22 @@
-import { useState, useEffect, useRef } from "react";
+// ═══════════════════════════════════════════════════════════════════════════
+// Admin Command Center — 6-Tab Operations Dashboard
+// ═══════════════════════════════════════════════════════════════════════════
+// Tabs: Overview | Tenants | YMME Database | Activity | Announcements | Settings
+// All styles from design.ts, all Polaris components, URL-param driven tabs.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher, useRevalidator, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
-  Layout,
   Card,
-  IndexTable,
+  BlockStack,
+  InlineStack,
+  InlineGrid,
   Text,
   Badge,
-  InlineStack,
-  BlockStack,
-  InlineGrid,
   Button,
   Banner,
   Divider,
@@ -25,6 +30,8 @@ import {
   Popover,
   ActionList,
   Modal,
+  Checkbox,
+  IndexTable,
 } from "@shopify/polaris";
 import {
   PersonIcon,
@@ -34,32 +41,46 @@ import {
   RefreshIcon,
   SettingsIcon,
   ChartVerticalIcon,
-  ImportIcon,
   SearchIcon,
   ConnectIcon,
   WandIcon,
   GaugeIcon,
   AlertCircleIcon,
   ClockIcon,
+  DeleteIcon,
+  EditIcon,
+  PlusIcon,
+  NotificationIcon,
+  ViewIcon,
+  PageIcon,
+  ExportIcon,
 } from "@shopify/polaris-icons";
 import { DataTable } from "../components/DataTable";
-
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { statMiniStyle, statGridStyle } from "../lib/design";
+import {
+  statMiniStyle,
+  statGridStyle,
+  cardRowStyle,
+  listRowStyle,
+  barChartRowStyle,
+  STATUS_TONES,
+  formatJobType,
+} from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
+import { PLAN_ORDER } from "../lib/types";
 import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
 import { isAdminShop } from "../lib/admin.server";
 
-// ---------------------------------------------------------------------------
-// Plan tier config
-// ---------------------------------------------------------------------------
-const PLAN_BADGE_TONE: Record<
-  PlanTier,
-  "info" | "success" | "warning" | "critical" | "attention" | undefined
-> = {
+// ═══════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TAB_IDS = ["overview", "tenants", "ymme", "activity", "announcements", "settings"] as const;
+
+const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
   starter: "info",
   growth: "success",
@@ -81,9 +102,17 @@ function cap(plan: string): string {
   return PLAN_DISPLAY[plan as PlanTier] ?? plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
-// ---------------------------------------------------------------------------
+const fmtDate = (d: string | null) =>
+  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "\u2014";
+const fmtShort = (d: string) =>
+  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fmtType = (t: string) =>
+  t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Loader
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
@@ -92,70 +121,171 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Forbidden — you are not an app admin.", { status: 403 });
   }
 
+  const url = new URL(request.url);
+  const tab = url.searchParams.get("tab") ?? "overview";
+  const browseLevel = url.searchParams.get("browse") ?? null;
+  const makeId = url.searchParams.get("make_id") ?? null;
+  const modelId = url.searchParams.get("model_id") ?? null;
+  const engineId = url.searchParams.get("engine_id") ?? null;
+
+  // ── Core queries (always needed) ──
   const [
-    tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes,
-    fitmentCountRes, recentJobsRes, providersRes, productCountRes,
-    specsCountRes, scrapeJobsData, activeJobsRes, collectionsCountRes,
-    running24hRes, pending24hRes, completed24hRes, failed24hRes,
-    failedJobsDetailRes, stuckJobsRes,
+    tenantsRes, makesRes, modelsRes, enginesRes, aliasesRes,
+    fitmentCountRes, productCountRes, specsCountRes,
+    collectionsCountRes,
   ] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
     db.from("ymme_engines").select("*", { count: "exact", head: true }),
-    db.from("sync_jobs").select("*", { count: "exact", head: true }),
     db.from("ymme_aliases").select("*", { count: "exact", head: true }),
     db.from("vehicle_fitments").select("*", { count: "exact", head: true }),
+    db.from("products").select("*", { count: "exact", head: true }),
+    db.from("ymme_vehicle_specs").select("*", { count: "exact", head: true }),
+    db.from("collection_mappings").select("id", { count: "exact", head: true }),
+  ]);
+
+  // ── System health queries ──
+  const now24h = new Date(Date.now() - 86400000).toISOString();
+  const now30m = new Date(Date.now() - 1800000).toISOString();
+
+  const [
+    recentJobsRes, activeJobsRes,
+    failed24hCountRes, failedJobsDetailRes, stuckJobsRes,
+    completed24hRes, running24hRes, pending24hRes,
+    providersRes, scrapeJobsData,
+  ] = await Promise.all([
     db.from("sync_jobs")
       .select("shop_id, type, status, created_at, completed_at, processed_items, total_items, error")
       .order("created_at", { ascending: false })
       .limit(50),
-    db.from("providers").select("shop_id, name, status, product_count"),
-    db.from("products").select("*", { count: "exact", head: true }),
-    db.from("ymme_vehicle_specs").select("*", { count: "exact", head: true }),
-    listScrapeJobs(10),
-    // Live data: active jobs across ALL tenants
     db.from("sync_jobs")
       .select("id, shop_id, type, status, processed_items, total_items, started_at, locked_at")
       .in("status", ["running", "pending"])
       .order("created_at", { ascending: false })
       .limit(20),
-    // Collections across all tenants
-    db.from("collection_mappings").select("id", { count: "exact", head: true }),
-    // ── System Health queries ──
-    // Jobs by status in last 24h
-    db.from("sync_jobs")
-      .select("status", { count: "exact", head: true })
-      .eq("status", "running")
-      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
-    db.from("sync_jobs")
-      .select("status", { count: "exact", head: true })
-      .eq("status", "pending")
-      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
-    db.from("sync_jobs")
-      .select("status", { count: "exact", head: true })
-      .eq("status", "completed")
-      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
     db.from("sync_jobs")
       .select("status", { count: "exact", head: true })
       .eq("status", "failed")
-      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
-    // Failed jobs in last 24h (top 10 with details)
+      .gte("created_at", now24h),
     db.from("sync_jobs")
       .select("shop_id, type, status, error, created_at")
       .eq("status", "failed")
-      .gte("created_at", new Date(Date.now() - 86400000).toISOString())
+      .gte("created_at", now24h)
       .order("created_at", { ascending: false })
       .limit(10),
-    // Stuck jobs: running for more than 30 min without progress update
     db.from("sync_jobs")
       .select("id, shop_id, type, status, started_at, locked_at, processed_items, total_items, error")
       .eq("status", "running")
-      .lt("started_at", new Date(Date.now() - 1800000).toISOString())
+      .lt("started_at", now30m)
       .order("started_at", { ascending: true })
       .limit(20),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "completed")
+      .gte("created_at", now24h),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "running")
+      .gte("created_at", now24h),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "pending")
+      .gte("created_at", now24h),
+    db.from("providers").select("shop_id, name, status, product_count"),
+    listScrapeJobs(10),
   ]);
 
+  // ── Announcements ──
+  let announcements: Array<Record<string, unknown>> = [];
+  try {
+    const { data: annData } = await db
+      .from("announcements")
+      .select("*")
+      .order("created_at", { ascending: false });
+    announcements = annData ?? [];
+  } catch {
+    // Table may not exist yet
+  }
+
+  // ── Admin activity log ──
+  let adminActivityLog: Array<Record<string, unknown>> = [];
+  try {
+    const { data: actData } = await db
+      .from("admin_activity_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    adminActivityLog = actData ?? [];
+  } catch {
+    // Table may not exist yet
+  }
+
+  // ── YMME browse data (conditional on tab=ymme) ──
+  let browseMakes: Array<Record<string, unknown>> = [];
+  let browseModels: Array<Record<string, unknown>> = [];
+  let browseEngines: Array<Record<string, unknown>> = [];
+  let browseSpec: Record<string, unknown> | null = null;
+  let browseMakeName = "";
+  let browseModelName = "";
+
+  if (tab === "ymme") {
+    // YMME data quality queries
+    const [makesNoLogoRes, modelsNoEnginesRes, enginesNoSpecsRes] = await Promise.all([
+      db.from("ymme_makes").select("id", { count: "exact", head: true }).is("logo_url", null),
+      db.from("ymme_models").select("id, make_id", { count: "exact", head: true }),
+      db.from("ymme_engines").select("id, model_id", { count: "exact", head: true }),
+    ]);
+
+    if (engineId) {
+      // Single engine spec view
+      const { data: specData } = await db.from("ymme_vehicle_specs").select("*").eq("engine_id", engineId).maybeSingle();
+      const { data: engData } = await db.from("ymme_engines").select("*, ymme_models(name, ymme_makes(name))").eq("id", engineId).maybeSingle();
+      browseSpec = specData;
+      if (engData) {
+        browseEngines = [engData];
+        browseModelName = (engData as any)?.ymme_models?.name ?? "";
+        browseMakeName = (engData as any)?.ymme_models?.ymme_makes?.name ?? "";
+      }
+    } else if (modelId) {
+      // Engines for a model
+      const { data: engData } = await db.from("ymme_engines")
+        .select("id, name, fuel_type, displacement_l, power_hp, year_from, year_to")
+        .eq("model_id", modelId)
+        .order("name")
+        .limit(200);
+      browseEngines = engData ?? [];
+      const { data: mdlData } = await db.from("ymme_models").select("name, ymme_makes(name)").eq("id", modelId).maybeSingle();
+      browseModelName = (mdlData as any)?.name ?? "";
+      browseMakeName = (mdlData as any)?.ymme_makes?.name ?? "";
+    } else if (makeId) {
+      // Models for a make
+      const { data: mdlData } = await db.from("ymme_models")
+        .select("id, name")
+        .eq("make_id", makeId)
+        .order("name")
+        .limit(500);
+      browseModels = mdlData ?? [];
+      const { data: mkData } = await db.from("ymme_makes").select("name").eq("id", makeId).maybeSingle();
+      browseMakeName = (mkData as any)?.name ?? "";
+    } else {
+      // All makes
+      const { data: mkData } = await db.from("ymme_makes")
+        .select("id, name, logo_url")
+        .order("name")
+        .limit(500);
+      browseMakes = mkData ?? [];
+    }
+
+    // Attach quality counts
+    Object.assign(browseMakes, {
+      _qualityMakesNoLogo: makesNoLogoRes.count ?? 0,
+      _qualityModelsNoEngines: modelsNoEnginesRes.count ?? 0,
+      _qualityEnginesNoSpecs: enginesNoSpecsRes.count ?? 0,
+    });
+  }
+
+  // ── Derive tenant data ──
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
   const totalTenants = tenantList.length;
   const totalProducts = productCountRes.count ?? 0;
@@ -172,12 +302,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     engines: enginesRes.count ?? 0,
     aliases: aliasesRes.count ?? 0,
     specs: specsCountRes.count ?? 0,
-    totalJobs: jobsRes.count ?? 0,
   };
 
   const recentJobs = (recentJobsRes.data ?? []) as Array<{
     shop_id: string; type: string; status: string;
     created_at: string; completed_at: string | null;
+    processed_items: number | null; total_items: number | null;
+    error: string | null;
   }>;
 
   const jobsByTenant: Record<string, { total: number; completed: number; failed: number; lastJob: string | null }> = {};
@@ -212,13 +343,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isActive: !t.uninstalled_at,
   }));
 
-  // ── System Health data ──
   const systemHealth = {
     jobs24h: {
       running: running24hRes.count ?? 0,
       pending: pending24hRes.count ?? 0,
       completed: completed24hRes.count ?? 0,
-      failed: failed24hRes.count ?? 0,
+      failed: failed24hCountRes.count ?? 0,
     },
     failedJobs: (failedJobsDetailRes.data ?? []) as Array<{
       shop_id: string; type: string; status: string;
@@ -239,25 +369,52 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     },
   };
 
+  // Recent tenant installs/uninstalls for activity tab
+  const recentInstalls = tenantList
+    .filter((t) => t.installed_at)
+    .sort((a, b) => new Date(b.installed_at!).getTime() - new Date(a.installed_at!).getTime())
+    .slice(0, 10)
+    .map((t) => ({
+      shopId: t.shop_id,
+      domain: t.shop_domain ?? t.shop_id,
+      installedAt: t.installed_at,
+      uninstalledAt: t.uninstalled_at,
+    }));
+
   return {
-    tenants: tenantList, totalTenants, totalProducts, totalFitments,
-    planBreakdown, ymmeCounts, tenantUsage,
-    recentJobs: recentJobs.slice(0, 10),
+    tenants: tenantList,
+    totalTenants,
+    totalProducts,
+    totalFitments,
+    planBreakdown,
+    ymmeCounts,
+    tenantUsage,
+    recentJobs,
     scrapeJobs: scrapeJobsData,
     systemHealth,
-    // Live data
     activeJobs: (activeJobsRes.data ?? []) as Array<{
       id: string; shop_id: string; type: string; status: string;
       processed_items: number | null; total_items: number | null;
       started_at: string | null; locked_at: string | null;
     }>,
     totalCollections: collectionsCountRes.count ?? 0,
+    announcements,
+    adminActivityLog,
+    recentInstalls,
+    // YMME browse data
+    browseMakes,
+    browseModels,
+    browseEngines,
+    browseSpec,
+    browseMakeName,
+    browseModelName,
   };
 };
 
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
 // Action
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   if (!isAdminShop(session.shop)) {
@@ -268,16 +425,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = formData.get("intent") as string;
 
   switch (intent) {
-    case "pause-autodata-sync": {
-      try {
-        const jobId = formData.get("job_id") as string;
-        if (!jobId) return data({ ok: false, intent: "pause-autodata-sync", message: "No job ID" });
-        await pauseScrapeJob(jobId);
-        return data({ ok: true, intent: "pause-autodata-sync", message: "Scrape job paused. You can resume it later." });
-      } catch (err) {
-        return data({ ok: false, intent: "pause-autodata-sync", message: err instanceof Error ? err.message : "Pause failed" });
-      }
-    }
+    // ── Plan management ──
     case "change-plan": {
       const shopId = formData.get("shop_id") as string;
       const newPlan = formData.get("new_plan") as PlanTier;
@@ -286,8 +434,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!validPlans.includes(newPlan)) return data({ ok: false, intent: "change-plan", message: `Invalid plan: ${newPlan}` });
       const { error } = await db.from("tenants").update({ plan: newPlan }).eq("shop_id", shopId);
       if (error) return data({ ok: false, intent: "change-plan", message: error.message });
+      // Log admin activity
+      try {
+        await db.from("admin_activity_log").insert({
+          admin_shop_id: session.shop,
+          action: "change_plan",
+          target_shop_id: shopId,
+          details: { new_plan: newPlan },
+        });
+      } catch { /* graceful */ }
       return data({ ok: true, intent: "change-plan", message: `Plan changed to ${cap(newPlan)}.` });
     }
+
+    // ── Tenant purge actions ──
     case "admin-purge-tenant": {
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-purge-tenant", message: "No shop specified" });
@@ -298,6 +457,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.from("products").delete().eq("shop_id", targetShop);
       await db.from("providers").delete().eq("shop_id", targetShop);
       await db.from("sync_jobs").delete().eq("shop_id", targetShop);
+      try {
+        await db.from("admin_activity_log").insert({
+          admin_shop_id: session.shop, action: "purge_tenant", target_shop_id: targetShop, details: {},
+        });
+      } catch { /* graceful */ }
       return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.` });
     }
     case "admin-purge-fitments": {
@@ -323,7 +487,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .select("id");
       const count = updatedRows?.length ?? 0;
       if (error) return data({ ok: false, intent: "admin-reset-fitment-status", message: error.message });
-      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to unmapped for re-extraction.` });
+      return data({ ok: true, intent: "admin-reset-fitment-status", message: `${count} products reset to unmapped.` });
     }
     case "admin-update-tenant-counts": {
       const targetShop = formData.get("shop_id") as string;
@@ -339,176 +503,129 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (error) return data({ ok: false, intent: "admin-update-tenant-counts", message: error.message });
       return data({ ok: true, intent: "admin-update-tenant-counts", message: `Counts updated: ${productCount.count ?? 0} products, ${fitmentCount.count ?? 0} fitments.` });
     }
+
+    // ── Scraper controls ──
+    case "pause-autodata-sync": {
+      try {
+        const jobId = formData.get("job_id") as string;
+        if (!jobId) return data({ ok: false, intent: "pause-autodata-sync", message: "No job ID" });
+        await pauseScrapeJob(jobId);
+        return data({ ok: true, intent: "pause-autodata-sync", message: "Scrape job paused." });
+      } catch (err) {
+        return data({ ok: false, intent: "pause-autodata-sync", message: err instanceof Error ? err.message : "Pause failed" });
+      }
+    }
+
+    // ── Announcements CRUD ──
+    case "create_announcement": {
+      try {
+        const title = formData.get("ann_title") as string;
+        const description = formData.get("ann_description") as string;
+        const tone = formData.get("ann_tone") as string || "info";
+        const ctaText = formData.get("ann_cta_text") as string || null;
+        const ctaUrl = formData.get("ann_cta_url") as string || null;
+        const startsAt = formData.get("ann_starts_at") as string || new Date().toISOString();
+        const endsAt = formData.get("ann_ends_at") as string || null;
+        const targetPlans = formData.get("ann_target_plans") as string;
+        const dismissible = formData.get("ann_dismissible") === "true";
+
+        if (!title) return data({ ok: false, intent: "create_announcement", message: "Title is required" });
+
+        const { error } = await db.from("announcements").insert({
+          title,
+          description,
+          tone,
+          cta_text: ctaText,
+          cta_url: ctaUrl,
+          starts_at: startsAt,
+          ends_at: endsAt || null,
+          target_plans: targetPlans ? targetPlans.split(",").filter(Boolean) : null,
+          dismissible,
+          active: true,
+        });
+        if (error) return data({ ok: false, intent: "create_announcement", message: error.message });
+        return data({ ok: true, intent: "create_announcement", message: "Announcement created." });
+      } catch (err) {
+        return data({ ok: false, intent: "create_announcement", message: err instanceof Error ? err.message : "Failed" });
+      }
+    }
+    case "update_announcement": {
+      try {
+        const annId = formData.get("ann_id") as string;
+        const title = formData.get("ann_title") as string;
+        const description = formData.get("ann_description") as string;
+        const tone = formData.get("ann_tone") as string || "info";
+        const ctaText = formData.get("ann_cta_text") as string || null;
+        const ctaUrl = formData.get("ann_cta_url") as string || null;
+        const startsAt = formData.get("ann_starts_at") as string || null;
+        const endsAt = formData.get("ann_ends_at") as string || null;
+        const targetPlans = formData.get("ann_target_plans") as string;
+        const dismissible = formData.get("ann_dismissible") === "true";
+        const active = formData.get("ann_active") === "true";
+
+        if (!annId || !title) return data({ ok: false, intent: "update_announcement", message: "ID and title required" });
+
+        const { error } = await db.from("announcements").update({
+          title, description, tone,
+          cta_text: ctaText, cta_url: ctaUrl,
+          starts_at: startsAt, ends_at: endsAt || null,
+          target_plans: targetPlans ? targetPlans.split(",").filter(Boolean) : null,
+          dismissible, active,
+          updated_at: new Date().toISOString(),
+        }).eq("id", annId);
+        if (error) return data({ ok: false, intent: "update_announcement", message: error.message });
+        return data({ ok: true, intent: "update_announcement", message: "Announcement updated." });
+      } catch (err) {
+        return data({ ok: false, intent: "update_announcement", message: err instanceof Error ? err.message : "Failed" });
+      }
+    }
+    case "delete_announcement": {
+      try {
+        const annId = formData.get("ann_id") as string;
+        if (!annId) return data({ ok: false, intent: "delete_announcement", message: "No ID" });
+        const { error } = await db.from("announcements").delete().eq("id", annId);
+        if (error) return data({ ok: false, intent: "delete_announcement", message: error.message });
+        return data({ ok: true, intent: "delete_announcement", message: "Announcement deleted." });
+      } catch (err) {
+        return data({ ok: false, intent: "delete_announcement", message: err instanceof Error ? err.message : "Failed" });
+      }
+    }
+
     default:
       return data({ ok: false, intent, message: `Unknown action: ${intent}` });
   }
 };
 
-// ---------------------------------------------------------------------------
-// QuickActionCard — matches dashboard design system
-// ---------------------------------------------------------------------------
-function QuickActionCard({
-  icon,
-  label,
-  description,
-  onClick,
-  primary = false,
-  badge,
-  loading = false,
-}: {
-  icon: any;
-  label: string;
-  description: string;
-  onClick: () => void;
-  primary?: boolean;
-  badge?: { content: string; tone: "success" | "warning" | "critical" | "info" | "attention" };
-  loading?: boolean;
-}) {
-  return (
-    <div
-      onClick={loading ? undefined : onClick}
-      onKeyDown={(e) => { if (!loading && (e.key === "Enter" || e.key === " ")) onClick(); }}
-      role="button"
-      tabIndex={0}
-      style={{
-        cursor: loading ? "wait" : "pointer",
-        borderRadius: "var(--p-border-radius-300)",
-        border: primary
-          ? "2px solid var(--p-color-border-emphasis)"
-          : "1px solid var(--p-color-border)",
-        padding: "var(--p-space-400)",
-        background: primary
-          ? "var(--p-color-bg-surface-secondary)"
-          : "var(--p-color-bg-surface)",
-        transition: "box-shadow 120ms ease, border-color 120ms ease",
-        opacity: loading ? 0.7 : 1,
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
-        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)";
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = "none";
-        (e.currentTarget as HTMLElement).style.borderColor = primary
-          ? "var(--p-color-border-emphasis)"
-          : "var(--p-color-border)";
-      }}
-    >
-      <BlockStack gap="200">
-        <InlineStack gap="200" blockAlign="center" align="space-between">
-          <InlineStack gap="200" blockAlign="center">
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: primary
-                  ? "var(--p-color-bg-fill-emphasis)"
-                  : "var(--p-color-bg-surface-secondary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: primary
-                  ? "var(--p-color-text-inverse)"
-                  : "var(--p-color-icon-emphasis)",
-              }}
-            >
-              {loading ? <Spinner size="small" /> : <Icon source={icon} />}
-            </div>
-            <Text as="span" variant="headingSm">
-              {label}
-            </Text>
-          </InlineStack>
-          {badge && (
-            <Badge tone={badge.tone}>{badge.content}</Badge>
-          )}
-        </InlineStack>
-        <Text as="p" variant="bodySm" tone="subdued">
-          {description}
-        </Text>
-      </BlockStack>
-    </div>
-  );
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// Sub-components
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ---------------------------------------------------------------------------
-// StatCard — icon badge + number + label (same as dashboard StatusChip)
-// ---------------------------------------------------------------------------
-function StatCard({
-  icon,
-  value,
-  label,
-  sublabel,
-  bg,
-  color,
-}: {
-  icon: any;
-  value: string;
-  label: string;
-  sublabel?: string;
-  bg: string;
-  color: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        padding: "16px",
-        borderRadius: "var(--p-border-radius-300)",
-        background: "var(--p-color-bg-surface)",
-        border: "1px solid var(--p-color-border-secondary)",
-        flex: "1 1 0",
-        minWidth: "140px",
-      }}
-    >
-      <IconBadge icon={icon} size={36} bg={bg} color={color} />
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <Text as="span" variant="headingLg" fontWeight="bold">{value}</Text>
-        <Text as="span" variant="bodySm" tone="subdued">{label}</Text>
-        {sublabel && (
-          <Text as="span" variant="bodySm" tone="subdued">{sublabel}</Text>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// TenantPurgeActions — per-tenant dropdown with purge options
-// ---------------------------------------------------------------------------
+// ── TenantPurgeActions — per-tenant dropdown with purge options ──
 function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: string }) {
   const fetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
   const [popoverActive, setPopoverActive] = useState(false);
   const [confirmAction, setConfirmAction] = useState<{
-    intent: string;
-    title: string;
-    message: string;
-    extraFields?: Record<string, string>;
+    intent: string; title: string; message: string;
   } | null>(null);
   const isLoading = fetcher.state !== "idle";
 
   const actions = [
     {
-      content: "Reset Products to Unmapped (Re-extract)",
+      content: "Reset Products to Unmapped",
       onAction: () => {
         setPopoverActive(false);
         setConfirmAction({
           intent: "admin-reset-fitment-status",
           title: `Reset fitment status for ${shopName}?`,
-          message: "This will reset all product fitment statuses to 'unmapped', so they can be re-processed by the extraction engine on the next run.",
+          message: "All products will be reset to 'unmapped' for re-extraction.",
         });
       },
     },
     {
-      content: "Recalculate Tenant Counts",
+      content: "Recalculate Counts",
       onAction: () => {
         setPopoverActive(false);
-        fetcher.submit(
-          { intent: "admin-update-tenant-counts", shop_id: shopId },
-          { method: "post" },
-        );
+        fetcher.submit({ intent: "admin-update-tenant-counts", shop_id: shopId }, { method: "post" });
       },
     },
     {
@@ -519,19 +636,19 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
         setConfirmAction({
           intent: "admin-purge-fitments",
           title: `Purge fitments for ${shopName}?`,
-          message: "This will delete ALL vehicle fitments for this tenant and reset all product statuses to unmapped. This cannot be undone.",
+          message: "This will delete ALL vehicle fitments and reset all products to unmapped. Cannot be undone.",
         });
       },
     },
     {
-      content: "Purge Collections (DB only)",
+      content: "Purge Collections (DB)",
       destructive: true,
       onAction: () => {
         setPopoverActive(false);
         setConfirmAction({
           intent: "admin-purge-collections",
           title: `Purge collections for ${shopName}?`,
-          message: "This will delete ALL collection mappings in the database for this tenant. Shopify collections themselves will remain — use Shopify Cleanup to remove those too.",
+          message: "Deletes ALL collection mappings in DB. Shopify collections remain.",
         });
       },
     },
@@ -543,7 +660,7 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
         setConfirmAction({
           intent: "admin-purge-tenant",
           title: `Purge ALL data for ${shopName}?`,
-          message: "This will permanently delete ALL data for this tenant: fitments, products, providers, collections, settings, sync jobs. The tenant record itself will remain. This CANNOT be undone.",
+          message: "Permanently deletes ALL data: fitments, products, providers, collections, settings, jobs. CANNOT be undone.",
         });
       },
     },
@@ -554,13 +671,7 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
       <Popover
         active={popoverActive}
         activator={
-          <Button
-            size="slim"
-            variant="plain"
-            onClick={() => setPopoverActive((v) => !v)}
-            loading={isLoading}
-            disabled={isLoading}
-          >
+          <Button size="slim" variant="plain" onClick={() => setPopoverActive((v) => !v)} loading={isLoading} disabled={isLoading}>
             {isLoading ? "Working..." : "Actions \u25BE"}
           </Button>
         }
@@ -568,21 +679,15 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
       >
         <ActionList items={actions} />
       </Popover>
-
       {confirmAction && (
         <Modal
-          open
-          onClose={() => setConfirmAction(null)}
-          title={confirmAction.title}
+          open onClose={() => setConfirmAction(null)} title={confirmAction.title}
           primaryAction={{
             content: "Yes, proceed",
             destructive: confirmAction.intent.includes("purge"),
             loading: isLoading,
             onAction: () => {
-              fetcher.submit(
-                { intent: confirmAction.intent, shop_id: shopId, ...(confirmAction.extraFields ?? {}) },
-                { method: "post" },
-              );
+              fetcher.submit({ intent: confirmAction.intent, shop_id: shopId }, { method: "post" });
               setConfirmAction(null);
             },
           }}
@@ -593,86 +698,78 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
           </Modal.Section>
         </Modal>
       )}
-
       {fetcher.data?.message && (
         <div style={{ position: "fixed", bottom: "16px", right: "16px", zIndex: 999 }}>
-          <Banner
-            title={fetcher.data.message}
-            tone={fetcher.data.ok ? "success" : "critical"}
-            onDismiss={() => {}}
-          />
+          <Banner title={fetcher.data.message} tone={fetcher.data.ok ? "success" : "critical"} onDismiss={() => {}} />
         </div>
       )}
     </>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-const fmtDate = (d: string | null) =>
-  d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "\u2014";
-const fmtShort = (d: string) =>
-  new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-const fmtType = (t: string) =>
-  t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+// ═══════════════════════════════════════════════════════════════════════════
+// Main Component
+// ═══════════════════════════════════════════════════════════════════════════
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 export default function AdminPanel() {
+  const loaderData = useLoaderData<typeof loader>();
   const {
     tenants, totalTenants, totalProducts, totalFitments,
     planBreakdown, ymmeCounts, tenantUsage, recentJobs, scrapeJobs,
-    systemHealth,
-  } = useLoaderData<typeof loader>();
+    systemHealth, announcements, adminActivityLog, recentInstalls,
+    browseMakes, browseModels, browseEngines, browseSpec,
+    browseMakeName, browseModelName,
+  } = loaderData;
 
   const fetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
   const revalidator = useRevalidator();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isSyncing = fetcher.state !== "idle";
   const isRefreshing = revalidator.state === "loading";
   const [dismissed, setDismissed] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
-  const TAB_IDS = ["overview", "tenants", "ymme", "activity"];
-  const selectedTab = Math.max(0, TAB_IDS.indexOf(searchParams.get("tab") ?? "overview"));
-  const setSelectedTab = (idx: number) => { setSearchParams({ tab: TAB_IDS[idx] ?? "overview" }); };
 
-  // Live stats polling for admin dashboard
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [liveAdminStats, setLiveAdminStats] = useState<Record<string, number> | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) { const r = await res.json(); if (r.stats) setLiveAdminStats(r.stats); }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // ── Tab routing via URL params ──
+  const currentTab = searchParams.get("tab") ?? "overview";
+  const selectedTab = Math.max(0, TAB_IDS.indexOf(currentTab as typeof TAB_IDS[number]));
+  const setSelectedTab = useCallback((idx: number) => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("tab", TAB_IDS[idx] ?? "overview");
+    // Clear browse params when switching tabs
+    newParams.delete("browse");
+    newParams.delete("make_id");
+    newParams.delete("model_id");
+    newParams.delete("engine_id");
+    setSearchParams(newParams);
+  }, [searchParams, setSearchParams]);
+
+  // ── Local state ──
   const [search, setSearch] = useState("");
+  const [planFilter, setPlanFilter] = useState("all");
   const [planOverrides, setPlanOverrides] = useState<Record<string, string>>({});
   const [autodataDelay, setAutodataDelay] = useState("500");
   const [autodataScrapeSpecs, setAutodataScrapeSpecs] = useState("true");
+  const [annModalOpen, setAnnModalOpen] = useState(false);
+  const [editingAnn, setEditingAnn] = useState<Record<string, unknown> | null>(null);
+  const [annForm, setAnnForm] = useState({
+    title: "", description: "", tone: "info",
+    cta_text: "", cta_url: "",
+    starts_at: "", ends_at: "",
+    target_plans: [] as string[],
+    dismissible: true,
+    active: true,
+  });
 
-  // Chunked brand-by-brand scrape state
+  // ── Scraper state ──
   const [scrapeState, setScrapeState] = useState<{
-    running: boolean;
-    currentBrand: string;
-    brandIndex: number;
-    totalBrands: number;
-    brandsProcessed: number;
-    modelsProcessed: number;
-    enginesProcessed: number;
-    specsProcessed: number;
-    errors: string[];
+    running: boolean; currentBrand: string; brandIndex: number;
+    totalBrands: number; brandsProcessed: number; modelsProcessed: number;
+    enginesProcessed: number; specsProcessed: number; errors: string[];
   } | null>(null);
   const stopRef = useRef(false);
 
   async function startChunkedScrape() {
     stopRef.current = false;
-    const scrapeSpecs = autodataScrapeSpecs;
     let brandIndex = 0;
     let totalBrands = 0;
     let totalModels = 0;
@@ -690,13 +787,11 @@ export default function AdminPanel() {
       try {
         const formData = new FormData();
         formData.append("brand_index", String(brandIndex));
-        formData.append("scrape_specs", scrapeSpecs);
+        formData.append("scrape_specs", autodataScrapeSpecs);
         formData.append("delay_ms", autodataDelay);
 
         const res = await fetch("/app/api/scrape-brand", {
-          method: "POST",
-          body: formData,
-          credentials: "same-origin",
+          method: "POST", body: formData, credentials: "same-origin",
         });
         const result = await res.json();
 
@@ -729,6 +824,7 @@ export default function AdminPanel() {
     revalidator.revalidate();
   }
 
+  // ── Side effects ──
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       const t = setTimeout(() => revalidator.revalidate(), 2000);
@@ -740,21 +836,14 @@ export default function AdminPanel() {
     if (fetcher.state === "idle" && fetcher.data) setDismissed(false);
   }, [fetcher.state, fetcher.data]);
 
+  // ── Derived values ──
   const filteredTenants = tenants.filter((t) => {
+    if (planFilter !== "all" && t.plan !== planFilter) return false;
     if (!search) return true;
     const q = search.toLowerCase();
-    return t.shop_id.toLowerCase().includes(q) || (t.shop_domain ?? "").toLowerCase().includes(q) || t.plan.includes(q);
+    return t.shop_id.toLowerCase().includes(q) || (t.shop_domain ?? "").toLowerCase().includes(q);
   });
 
-  const tabs = [
-    { id: "overview", content: "Overview" },
-    { id: "tenants", content: `Tenants (${totalTenants})` },
-    { id: "ymme", content: "YMME Database" },
-    { id: "activity", content: "Activity" },
-  ];
-
-  const ymmeTotal = ymmeCounts.makes + ymmeCounts.models + ymmeCounts.engines;
-  // Coverage = how many engines have full vehicle specs (the deep scrape fills these)
   const specsCoverage = ymmeCounts.specs > 0 && ymmeCounts.engines > 0
     ? Math.min(100, Math.round((ymmeCounts.specs / ymmeCounts.engines) * 100))
     : 0;
@@ -762,11 +851,74 @@ export default function AdminPanel() {
   const activeTenants = tenants.filter((t) => !t.uninstalled_at).length;
   const paidTenants = tenants.filter((t) => t.plan !== "free" && !t.uninstalled_at).length;
 
+  const tabs = [
+    { id: "overview", content: "Overview" },
+    { id: "tenants", content: `Tenants (${totalTenants})` },
+    { id: "ymme", content: "YMME Database" },
+    { id: "activity", content: "Activity" },
+    { id: "announcements", content: `Announcements (${announcements.length})` },
+    { id: "settings", content: "Settings" },
+  ];
+
+  // ── Announcement form helpers ──
+  function openCreateAnnouncement() {
+    setEditingAnn(null);
+    setAnnForm({
+      title: "", description: "", tone: "info",
+      cta_text: "", cta_url: "",
+      starts_at: new Date().toISOString().slice(0, 16),
+      ends_at: "",
+      target_plans: [],
+      dismissible: true,
+      active: true,
+    });
+    setAnnModalOpen(true);
+  }
+
+  function openEditAnnouncement(ann: Record<string, unknown>) {
+    setEditingAnn(ann);
+    setAnnForm({
+      title: (ann.title as string) ?? "",
+      description: (ann.description as string) ?? "",
+      tone: (ann.tone as string) ?? "info",
+      cta_text: (ann.cta_text as string) ?? "",
+      cta_url: (ann.cta_url as string) ?? "",
+      starts_at: ann.starts_at ? String(ann.starts_at).slice(0, 16) : "",
+      ends_at: ann.ends_at ? String(ann.ends_at).slice(0, 16) : "",
+      target_plans: (ann.target_plans as string[]) ?? [],
+      dismissible: ann.dismissible !== false,
+      active: ann.active !== false,
+    });
+    setAnnModalOpen(true);
+  }
+
+  function submitAnnouncement() {
+    const fd = new FormData();
+    fd.set("intent", editingAnn ? "update_announcement" : "create_announcement");
+    if (editingAnn) fd.set("ann_id", editingAnn.id as string);
+    fd.set("ann_title", annForm.title);
+    fd.set("ann_description", annForm.description);
+    fd.set("ann_tone", annForm.tone);
+    fd.set("ann_cta_text", annForm.cta_text);
+    fd.set("ann_cta_url", annForm.cta_url);
+    fd.set("ann_starts_at", annForm.starts_at ? new Date(annForm.starts_at).toISOString() : "");
+    fd.set("ann_ends_at", annForm.ends_at ? new Date(annForm.ends_at).toISOString() : "");
+    fd.set("ann_target_plans", annForm.target_plans.join(","));
+    fd.set("ann_dismissible", String(annForm.dismissible));
+    fd.set("ann_active", String(annForm.active));
+    fetcher.submit(fd, { method: "post" });
+    setAnnModalOpen(false);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Render
+  // ═══════════════════════════════════════════════════════════════════════
+
   return (
     <Page
       fullWidth
-      title="Admin Panel"
-      subtitle="Operations center — manage tenants, data, and system health"
+      title="Admin Command Center"
+      subtitle="Operations center — manage tenants, data, health, and announcements"
       primaryAction={{
         content: isRefreshing ? "Refreshing..." : "Refresh All",
         icon: RefreshIcon,
@@ -775,721 +927,724 @@ export default function AdminPanel() {
         disabled: isRefreshing,
       }}
       secondaryActions={[
-        {
-          content: "Manage Plans",
-          icon: SettingsIcon,
-          onAction: () => navigate("/app/admin/plans"),
-        },
+        { content: "Manage Plans", icon: SettingsIcon, onAction: () => navigate("/app/admin/plans") },
       ]}
     >
-      <Layout>
-        <Layout.Section>
-          <HowItWorks
-            steps={[
-              {
-                number: 1,
-                title: "Monitor Tenants",
-                description: "View all installed merchants, their plan tiers, product counts, and fitment usage. Drill into any tenant for detailed stats.",
-              },
-              {
-                number: 2,
-                title: "Manage Data",
-                description: "Run the auto-data.net scraper, manage YMME database, clean up tags/metafields/collections across tenants.",
-              },
-              {
-                number: 3,
-                title: "System Health",
-                description: "Track active jobs, scrape progress, and YMME database coverage. Manage plan configurations and billing overrides.",
-                linkText: "Manage Plans",
-                linkUrl: "/app/admin/plans",
-              },
-            ]}
-          />
-        </Layout.Section>
+      <BlockStack gap="400">
+        {/* ── HowItWorks ── */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Monitor Tenants", description: "View all merchants, plan tiers, product counts, and fitment usage." },
+            { number: 2, title: "Manage YMME Data", description: "Run scrapers, browse the vehicle database, check data quality." },
+            { number: 3, title: "System Health", description: "Track jobs, failures, stuck processes, and announcements.", linkText: "Manage Plans", linkUrl: "/app/admin/plans" },
+          ]}
+        />
 
-        {/* Banner */}
+        {/* ── Global Banner ── */}
         {fetcher.data?.message && !dismissed && (
-          <Layout.Section>
-            <Banner
-              title={fetcher.data.message}
-              tone={fetcher.data.ok ? "success" : "critical"}
-              onDismiss={() => setDismissed(true)}
-            />
-          </Layout.Section>
+          <Banner title={fetcher.data.message} tone={fetcher.data.ok ? "success" : "critical"} onDismiss={() => setDismissed(true)} />
         )}
 
-        {/* ═══════════════════ STAT CARDS ═══════════════════ */}
-        <Layout.Section>
-          <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-            <StatCard
-              icon={PersonIcon}
-              value={totalTenants.toLocaleString()}
-              label="Total Tenants"
-              sublabel={`${activeTenants} active · ${paidTenants} paid`}
-              bg="var(--p-color-bg-surface-secondary)"
-              color="var(--p-color-icon-emphasis)"
-            />
-            <StatCard
-              icon={ProductIcon}
-              value={totalProducts.toLocaleString()}
-              label="Total Products"
-              sublabel="All tenants"
-              bg="var(--p-color-bg-surface-secondary)"
-              color="var(--p-color-icon-emphasis)"
-            />
-            <StatCard
-              icon={LinkIcon}
-              value={totalFitments.toLocaleString()}
-              label="Total Fitments"
-              sublabel={totalFitments > 0 ? "Active" : "Empty"}
-              bg="var(--p-color-bg-surface-secondary)"
-              color="var(--p-color-icon-emphasis)"
-            />
-            <StatCard
-              icon={DatabaseIcon}
-              value={ymmeTotal.toLocaleString()}
-              label="YMME Database"
-              sublabel={`${ymmeCounts.makes} makes · ${ymmeCounts.models} models`}
-              bg="var(--p-color-bg-surface-secondary)"
-              color="var(--p-color-icon-emphasis)"
-            />
-          </InlineGrid>
-        </Layout.Section>
+        {/* ═══════════════ TABS ═══════════════ */}
+        <Card padding="0">
+          <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
+            <Box padding="400" minHeight="500px">
 
-        {/* ═══════════════════ PLAN BREAKDOWN BADGES ═══════════════════ */}
-        <Layout.Section>
-          <Card>
-            <InlineStack gap="300" align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingSm">Plan Distribution</Text>
-              <InlineStack gap="200" wrap>
-                {Object.entries(planBreakdown).map(([plan, count]) => (
-                  <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier]}>
-                    {`${cap(plan)}: ${count}`}
-                  </Badge>
-                ))}
-              </InlineStack>
-            </InlineStack>
-          </Card>
-        </Layout.Section>
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 1: OVERVIEW                                            */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 0 && (
+                <BlockStack gap="600">
 
-        {/* ═══════════════════ TABS ═══════════════════ */}
-        <Layout.Section>
-          <Card padding="0">
-            <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-              <Box padding="400" minHeight="400px">
+                  {/* ── System Health Stats ── */}
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">System Health</Text>
 
-                {/* ──── OVERVIEW ──── */}
-                {selectedTab === 0 && (
-                  <BlockStack gap="600">
+                    {/* Stuck jobs warning */}
+                    {systemHealth.stuckJobs.length > 0 && (
+                      <Banner tone="warning" title={`${systemHealth.stuckJobs.length} stuck job${systemHealth.stuckJobs.length === 1 ? "" : "s"} detected`}>
+                        <p>
+                          {systemHealth.stuckJobs.length === 1
+                            ? `Job "${fmtType(systemHealth.stuckJobs[0].type)}" for ${systemHealth.stuckJobs[0].shop_id.replace(".myshopify.com", "")} has been running for over 30 minutes.`
+                            : `${systemHealth.stuckJobs.length} jobs have been running for over 30 minutes. Check Activity tab.`}
+                        </p>
+                      </Banner>
+                    )}
 
-                    {/* ── System Health ── */}
-                    <BlockStack gap="300">
-                      <Text as="h2" variant="headingMd">System Health</Text>
-
-                      {/* Stuck jobs alert */}
-                      {systemHealth.stuckJobs.length > 0 && (
-                        <Banner tone="warning" title={`${systemHealth.stuckJobs.length} stuck job${systemHealth.stuckJobs.length === 1 ? "" : "s"} detected`}>
-                          <p>
-                            {systemHealth.stuckJobs.length === 1
-                              ? `Job "${fmtType(systemHealth.stuckJobs[0].type)}" for ${systemHealth.stuckJobs[0].shop_id.replace(".myshopify.com", "")} has been running for over 30 minutes without progress.`
-                              : `${systemHealth.stuckJobs.length} jobs have been running for over 30 minutes without progress. Check the Activity tab for details.`}
-                          </p>
-                        </Banner>
-                      )}
-
-                      {/* Health stat cards */}
-                      <div style={statGridStyle(4)}>
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Icon source={RefreshIcon} tone="info" />
-                              <Text as="span" variant="headingLg" fontWeight="bold">
-                                {`${systemHealth.jobs24h.running + systemHealth.jobs24h.pending}`}
-                              </Text>
-                            </InlineStack>
-                            <Text as="span" variant="bodySm" tone="subdued">Active Jobs</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {`${systemHealth.jobs24h.running} running · ${systemHealth.jobs24h.pending} pending`}
+                    {/* 4 stat cards */}
+                    <div style={statGridStyle(4)}>
+                      <div style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={RefreshIcon} tone="info" />
+                            <Text as="span" variant="headingLg" fontWeight="bold">
+                              {`${systemHealth.jobs24h.running + systemHealth.jobs24h.pending}`}
                             </Text>
-                          </BlockStack>
-                        </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Icon source={AlertCircleIcon} tone="critical" />
-                              <Text as="span" variant="headingLg" fontWeight="bold">
-                                {`${systemHealth.jobs24h.failed}`}
-                              </Text>
-                            </InlineStack>
-                            <Text as="span" variant="bodySm" tone="subdued">Failed (24h)</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {`${systemHealth.jobs24h.completed} completed`}
-                            </Text>
-                          </BlockStack>
-                        </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Icon source={ClockIcon} tone="warning" />
-                              <Text as="span" variant="headingLg" fontWeight="bold">
-                                {`${systemHealth.stuckJobs.length}`}
-                              </Text>
-                            </InlineStack>
-                            <Text as="span" variant="bodySm" tone="subdued">Stuck Jobs</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">Running &gt;30 min</Text>
-                          </BlockStack>
-                        </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Icon source={DatabaseIcon} tone="base" />
-                              <Text as="span" variant="headingLg" fontWeight="bold">
-                                {`${(systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines).toLocaleString()}`}
-                              </Text>
-                            </InlineStack>
-                            <Text as="span" variant="bodySm" tone="subdued">Database Rows</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {`${systemHealth.dbSizes.products.toLocaleString()} products · ${systemHealth.dbSizes.fitments.toLocaleString()} fitments`}
-                            </Text>
-                          </BlockStack>
-                        </div>
+                          </InlineStack>
+                          <Text as="span" variant="bodySm" tone="subdued">Active Jobs</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`${systemHealth.jobs24h.running} running \u00B7 ${systemHealth.jobs24h.pending} pending`}
+                          </Text>
+                        </BlockStack>
                       </div>
 
-                      {/* Failed jobs table */}
-                      {systemHealth.failedJobs.length > 0 && (
-                        <BlockStack gap="200">
-                          <Text as="h3" variant="headingSm">Recent Failures (24h)</Text>
-                          <DataTable
-                            columnContentTypes={["text", "text", "text", "text"]}
-                            headings={["Tenant", "Type", "Error", "Time"]}
-                            rows={systemHealth.failedJobs.map((j) => [
-                              j.shop_id.replace(".myshopify.com", ""),
-                              fmtType(j.type),
-                              (j.error ?? "Unknown error").slice(0, 80) + ((j.error ?? "").length > 80 ? "..." : ""),
-                              fmtShort(j.created_at),
-                            ])}
-                          />
+                      <div style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={AlertCircleIcon} tone="critical" />
+                            <Text as="span" variant="headingLg" fontWeight="bold">
+                              {`${systemHealth.jobs24h.failed}`}
+                            </Text>
+                          </InlineStack>
+                          <Text as="span" variant="bodySm" tone="subdued">Failed (24h)</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`${systemHealth.jobs24h.completed} completed`}
+                          </Text>
                         </BlockStack>
-                      )}
-                    </BlockStack>
+                      </div>
 
-                    <Divider />
+                      <div style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={ClockIcon} tone="warning" />
+                            <Text as="span" variant="headingLg" fontWeight="bold">
+                              {`${systemHealth.stuckJobs.length}`}
+                            </Text>
+                          </InlineStack>
+                          <Text as="span" variant="bodySm" tone="subdued">Stuck Jobs</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">Running &gt;30 min</Text>
+                        </BlockStack>
+                      </div>
 
-                    {/* Quick Actions */}
-                    <BlockStack gap="300">
-                      <Text as="h2" variant="headingMd">Quick Actions</Text>
-                      <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-                        <QuickActionCard
-                          icon={DatabaseIcon}
-                          label="YMME Database"
-                          description="Browse makes, models, engines"
-                          onClick={() => setSelectedTab(2)}
-                        />
-                        <QuickActionCard
-                          icon={PersonIcon}
-                          label="Manage Tenants"
-                          description="View tenant details and usage"
-                          onClick={() => setSelectedTab(1)}
-                          badge={totalTenants > 0 ? { content: `${totalTenants}`, tone: "success" } : undefined}
-                        />
-                        <QuickActionCard
-                          icon={SettingsIcon}
-                          label="Plan Config"
-                          description="Adjust plan pricing and limits"
-                          onClick={() => navigate("/app/admin/plans")}
-                          primary
-                        />
-                      </InlineGrid>
+                      <div style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Icon source={DatabaseIcon} tone="base" />
+                            <Text as="span" variant="headingLg" fontWeight="bold">
+                              {`${(systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines).toLocaleString()}`}
+                            </Text>
+                          </InlineStack>
+                          <Text as="span" variant="bodySm" tone="subdued">Database Rows</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {`${systemHealth.dbSizes.products.toLocaleString()} products \u00B7 ${systemHealth.dbSizes.fitments.toLocaleString()} fitments`}
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    </div>
+                  </BlockStack>
 
-                      <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-                        <QuickActionCard
-                          icon={ChartVerticalIcon}
-                          label="Activity Log"
-                          description="View recent sync jobs across tenants"
-                          onClick={() => setSelectedTab(3)}
-                        />
-                        <QuickActionCard
-                          icon={SearchIcon}
-                          label="YMME Browser"
-                          description="Browse the global vehicle database"
-                          onClick={() => navigate("/app/vehicles")}
-                        />
-                        <QuickActionCard
-                          icon={GaugeIcon}
-                          label="Analytics"
-                          description="Platform-wide analytics overview"
-                          onClick={() => navigate("/app/analytics")}
-                        />
-                        <QuickActionCard
-                          icon={RefreshIcon}
-                          label="Refresh Data"
-                          description="Reload all admin panel data"
-                          onClick={() => revalidator.revalidate()}
-                          loading={isRefreshing}
-                        />
-                      </InlineGrid>
-                    </BlockStack>
-
-                    <Divider />
-
-                    {/* Merchant Overview Table */}
-                    <BlockStack gap="300">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h2" variant="headingMd">Merchant Overview</Text>
-                        <Button size="slim" onClick={() => setSelectedTab(1)}>View All Tenants</Button>
-                      </InlineStack>
+                  {/* ── Failed Jobs Table ── */}
+                  {systemHealth.failedJobs.length > 0 && (
+                    <BlockStack gap="200">
+                      <Text as="h3" variant="headingSm">Recent Failures (24h)</Text>
                       <DataTable
-                        columnContentTypes={["text", "text", "numeric", "numeric", "numeric", "text", "text"]}
-                        headings={["Merchant", "Plan", "Products", "Fitments", "Providers", "Success Rate", "Last Active"]}
-                        rows={tenantUsage.slice(0, 5).map((t) => [
-                          t.domain.replace(".myshopify.com", ""),
-                          cap(t.plan),
-                          t.products.toLocaleString(),
-                          t.fitments.toLocaleString(),
-                          String(t.providers),
-                          t.recentJobs > 0 ? `${t.jobSuccessRate}%` : "\u2014",
-                          t.lastActivity ? new Date(t.lastActivity).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "\u2014",
+                        columnContentTypes={["text", "text", "text", "text"]}
+                        headings={["Tenant", "Type", "Error", "Time"]}
+                        rows={systemHealth.failedJobs.map((j) => [
+                          j.shop_id.replace(".myshopify.com", ""),
+                          fmtType(j.type),
+                          (j.error ?? "Unknown").slice(0, 80) + ((j.error ?? "").length > 80 ? "..." : ""),
+                          fmtShort(j.created_at),
                         ])}
                       />
                     </BlockStack>
+                  )}
 
-                    <Divider />
-
-                    {/* Recent Activity */}
-                    {recentJobs.length > 0 && (
-                      <BlockStack gap="300">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <Text as="h2" variant="headingMd">Recent Activity</Text>
-                          <Button size="slim" variant="plain" onClick={() => setSelectedTab(3)}>View All</Button>
-                        </InlineStack>
-                        <DataTable
-                          columnContentTypes={["text", "text", "text", "text"]}
-                          headings={["Merchant", "Type", "Status", "When"]}
-                          rows={recentJobs.slice(0, 5).map((j) => [
-                            j.shop_id.replace(".myshopify.com", ""),
-                            fmtType(j.type),
-                            j.status.charAt(0).toUpperCase() + j.status.slice(1),
-                            fmtShort(j.created_at),
-                          ])}
-                        />
-                      </BlockStack>
-                    )}
-
-                    <Divider />
-
-                    {/* System Info — compact */}
-                    <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
-                      <div style={{
-                        padding: "12px 16px",
-                        borderRadius: "var(--p-border-radius-300)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        border: "1px solid var(--p-color-border-secondary)",
-                      }}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={DatabaseIcon} size={22} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" fontWeight="semibold">Database</Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">Supabase (PostgreSQL)</Text>
-                        </BlockStack>
-                      </div>
-                      <div style={{
-                        padding: "12px 16px",
-                        borderRadius: "var(--p-border-radius-300)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        border: "1px solid var(--p-color-border-secondary)",
-                      }}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={ConnectIcon} size={22} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" fontWeight="semibold">Framework</Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">React Router 7 + Polaris</Text>
-                        </BlockStack>
-                      </div>
-                      <div style={{
-                        padding: "12px 16px",
-                        borderRadius: "var(--p-border-radius-300)",
-                        background: "var(--p-color-bg-surface-secondary)",
-                        border: "1px solid var(--p-color-border-secondary)",
-                      }}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={WandIcon} size={22} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="bodySm" fontWeight="semibold">Data Sources</Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">auto-data.net · Manual Entry</Text>
-                        </BlockStack>
-                      </div>
-                    </InlineGrid>
-                  </BlockStack>
-                )}
-
-                {/* ──── TENANTS ──── */}
-                {selectedTab === 1 && (
-                  <BlockStack gap="400">
+                  {/* ── Plan Distribution ── */}
+                  <Card>
                     <InlineStack gap="300" align="space-between" blockAlign="center">
-                      <div style={{ flexGrow: 1, maxWidth: "400px" }}>
-                        <TextField
-                          label="Search" labelHidden
-                          value={search} onChange={setSearch}
-                          placeholder="Search by domain or plan..."
-                          clearButton onClearButtonClick={() => setSearch("")}
-                          autoComplete="off"
-                        />
-                      </div>
-                      <Text as="span" variant="bodySm" tone="subdued">
-                        {`${filteredTenants.length} of ${tenants.length} tenants`}
-                      </Text>
+                      <Text as="h2" variant="headingSm">Plan Distribution</Text>
+                      <InlineStack gap="200" wrap>
+                        {Object.entries(planBreakdown).map(([plan, count]) => (
+                          <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier]}>
+                            {`${cap(plan)}: ${count}`}
+                          </Badge>
+                        ))}
+                      </InlineStack>
                     </InlineStack>
+                  </Card>
 
-                    <IndexTable
-                      resourceName={{ singular: "tenant", plural: "tenants" }}
-                      itemCount={filteredTenants.length}
-                      headings={[
-                        { title: "Shop" },
-                        { title: "Plan" },
-                        { title: "Products" },
-                        { title: "Fitments" },
-                        { title: "Installed" },
-                        { title: "Status" },
-                        { title: "" },
-                      ]}
-                      selectable={false}
-                    >
-                      {filteredTenants.map((t, i) => {
-                        const active = !t.uninstalled_at;
-                        const enc = encodeURIComponent(t.shop_id);
-                        return (
-                          <IndexTable.Row id={t.shop_id} key={t.shop_id} position={i}>
-                            <IndexTable.Cell>
-                              <Button variant="plain" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
-                                {(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
-                              </Button>
-                            </IndexTable.Cell>
-                            <IndexTable.Cell>
-                              <Badge tone={PLAN_BADGE_TONE[t.plan as PlanTier]}>
-                                {cap(t.plan)}
-                              </Badge>
-                            </IndexTable.Cell>
-                            <IndexTable.Cell>{(t.product_count ?? 0).toLocaleString()}</IndexTable.Cell>
-                            <IndexTable.Cell>{(t.fitment_count ?? 0).toLocaleString()}</IndexTable.Cell>
-                            <IndexTable.Cell>
-                              <Text as="span" variant="bodySm" tone="subdued">{fmtDate(t.installed_at)}</Text>
-                            </IndexTable.Cell>
-                            <IndexTable.Cell>
-                              <Badge tone={active ? "success" : "critical"}>
-                                {active ? "Active" : "Uninstalled"}
-                              </Badge>
-                            </IndexTable.Cell>
-                            <IndexTable.Cell>
-                              <InlineStack gap="200" blockAlign="center">
-                                <Button size="slim" variant="primary" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
-                                  Details
-                                </Button>
-                                <fetcher.Form method="post">
-                                  <input type="hidden" name="intent" value="change-plan" />
-                                  <input type="hidden" name="shop_id" value={t.shop_id} />
-                                  <InlineStack gap="100" blockAlign="center">
-                                    <Select label="" labelHidden
-                                      options={[
-                                        { label: "Free", value: "free" },
-                                        { label: "Starter", value: "starter" },
-                                        { label: "Growth", value: "growth" },
-                                        { label: "Pro", value: "professional" },
-                                        { label: "Business", value: "business" },
-                                        { label: "Enterprise", value: "enterprise" },
-                                      ]}
-                                      value={planOverrides[t.shop_id] ?? t.plan} name="new_plan"
-                                      onChange={(v) => setPlanOverrides((prev) => ({ ...prev, [t.shop_id]: v }))}
-                                    />
-                                    <Button submit size="slim" loading={isSyncing}>Set</Button>
-                                  </InlineStack>
-                                </fetcher.Form>
-                                <TenantPurgeActions
-                                  shopId={t.shop_id}
-                                  shopName={(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
-                                />
-                              </InlineStack>
-                            </IndexTable.Cell>
-                          </IndexTable.Row>
-                        );
-                      })}
-                    </IndexTable>
-                  </BlockStack>
-                )}
-
-                {/* ──── YMME DATABASE ──── */}
-                {selectedTab === 2 && (
-                  <BlockStack gap="600">
-                    {/* Scrape complete banner */}
-                    {scrapeState && !scrapeState.running && (
-                      <Banner
-                        title={`Scrape complete — ${scrapeState.brandsProcessed} brands, ${scrapeState.modelsProcessed} models, ${scrapeState.enginesProcessed} engines, ${scrapeState.specsProcessed} specs.${scrapeState.errors.length > 0 ? ` ${scrapeState.errors.length} errors.` : ""}`}
-                        tone={scrapeState.errors.length > 0 ? "warning" : "success"}
-                        onDismiss={() => setScrapeState(null)}
-                      />
-                    )}
-
-                    {/* Live Scrape Progress */}
-                    {(() => {
-                      const runningJob = scrapeJobs.find((j: any) => {
-                        if (j.status !== "running") return false;
-                        // Treat jobs running for more than 24 hours as stale
-                        if (j.started_at) {
-                          const startedMs = new Date(j.started_at).getTime();
-                          if (Date.now() - startedMs > 24 * 60 * 60 * 1000) return false;
-                        }
-                        return true;
-                      });
-                      if (!runningJob) return null;
-                      const r = (runningJob.result ?? {}) as Record<string, any>;
-                      const etaSec = r.etaSeconds ?? 0;
-                      const etaH = Math.floor(etaSec / 3600);
-                      const etaM = Math.floor((etaSec % 3600) / 60);
-                      const etaStr = etaH > 0 ? `${etaH}h ${etaM}m` : etaM > 0 ? `${etaM}m` : "calculating...";
-                      const elapsedMs = r.elapsedMs ?? 0;
-                      const elapsedH = Math.floor(elapsedMs / 3600000);
-                      const elapsedM = Math.floor((elapsedMs % 3600000) / 60000);
-                      const elapsedStr = elapsedH > 0 ? `${elapsedH}h ${elapsedM}m` : `${elapsedM}m`;
-
-                      return (
-                        <Card>
-                          <BlockStack gap="400">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <InlineStack gap="200" blockAlign="center">
-                                <Spinner size="small" />
-                                <Text as="h2" variant="headingMd">Deep Scrape Running</Text>
-                                <Badge tone="attention">{`${runningJob.progress}%`}</Badge>
-                              </InlineStack>
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                {`ETA: ${etaStr} · Elapsed: ${elapsedStr}`}
-                              </Text>
-                            </InlineStack>
-                            <ProgressBar progress={runningJob.progress ?? 0} size="medium" />
-                            <InlineStack gap="600" wrap>
-                              <BlockStack gap="050">
-                                <Text as="p" variant="headingSm">{`${(runningJob.processedItems ?? 0).toLocaleString()} / ${(runningJob.totalItems ?? 0).toLocaleString()}`}</Text>
-                                <Text as="p" variant="bodySm" tone="subdued">Engines processed</Text>
-                              </BlockStack>
-                              <BlockStack gap="050">
-                                <Text as="p" variant="headingSm">{`${(r.specsUpserted ?? 0).toLocaleString()}`}</Text>
-                                <Text as="p" variant="bodySm" tone="subdued">Specs filled</Text>
-                              </BlockStack>
-                              <BlockStack gap="050">
-                                <Text as="p" variant="headingSm">{`${(r.imagesFound ?? 0).toLocaleString()}`}</Text>
-                                <Text as="p" variant="bodySm" tone="subdued">Images scraped</Text>
-                              </BlockStack>
-                              <BlockStack gap="050">
-                                <Text as="p" variant="headingSm">{`${(r.errors ?? 0).toLocaleString()}`}</Text>
-                                <Text as="p" variant="bodySm" tone="subdued">Errors</Text>
-                              </BlockStack>
-                              {runningJob.currentItem && (
-                                <BlockStack gap="050">
-                                  <Text as="p" variant="headingSm" truncate>{runningJob.currentItem}</Text>
-                                  <Text as="p" variant="bodySm" tone="subdued">Current engine</Text>
-                                </BlockStack>
-                              )}
-                            </InlineStack>
-                          </BlockStack>
-                        </Card>
-                      );
-                    })()}
-
-                    {/* YMME Stats — using StatCard pattern */}
-                    <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="300">
-                      {[
-                        { icon: DatabaseIcon, label: "Makes", value: ymmeCounts.makes, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: DatabaseIcon, label: "Models", value: ymmeCounts.models, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: DatabaseIcon, label: "Engines", value: ymmeCounts.engines, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: DatabaseIcon, label: "Specs", value: ymmeCounts.specs, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: DatabaseIcon, label: "Aliases", value: ymmeCounts.aliases, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                        { icon: LinkIcon, label: "Fitments", value: totalFitments, bg: "var(--p-color-bg-surface-secondary)", color: "var(--p-color-icon-emphasis)" },
-                      ].map((s) => (
-                        <div key={s.label} style={{
-                          display: "flex", alignItems: "center", gap: "10px",
-                          padding: "12px 16px", borderRadius: "var(--p-border-radius-300)",
-                          background: "var(--p-color-bg-surface)", border: "1px solid var(--p-color-border-secondary)",
-                        }}>
-                          <IconBadge icon={s.icon} size={28} bg={s.bg} color={s.color} />
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <Text as="span" variant="headingSm">{s.value.toLocaleString()}</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
-                          </div>
-                        </div>
-                      ))}
+                  {/* ── Quick Actions ── */}
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">Quick Actions</Text>
+                    <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
+                      <Button onClick={() => revalidator.revalidate()} loading={isRefreshing} icon={RefreshIcon}>
+                        Refresh Counts
+                      </Button>
+                      <Button onClick={() => setSelectedTab(2)} icon={DatabaseIcon}>
+                        YMME Database
+                      </Button>
+                      <Button onClick={() => setSelectedTab(3)} icon={ChartVerticalIcon}>
+                        View Activity
+                      </Button>
+                      <Button onClick={() => navigate("/app/admin/plans")} icon={SettingsIcon} variant="primary">
+                        Manage Plans
+                      </Button>
                     </InlineGrid>
+                  </BlockStack>
 
-                    {/* Coverage bar */}
-                    <Card>
-                      <BlockStack gap="200">
-                        <InlineStack align="space-between">
-                          <InlineStack gap="200" blockAlign="center">
-                            <IconBadge icon={GaugeIcon} size={22} color="var(--p-color-icon-emphasis)" />
-                            <Text as="p" variant="headingSm">Database Coverage</Text>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeCounts.specs.toLocaleString()} / ${ymmeCounts.engines.toLocaleString()} engines with specs (${specsCoverage}%)`}</Text>
+                  <Divider />
+
+                  {/* ── Top Stats Cards ── */}
+                  <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
+                    <div style={cardRowStyle}>
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={PersonIcon} tone="info" />
+                          <Text as="span" variant="headingLg" fontWeight="bold">{totalTenants.toLocaleString()}</Text>
                         </InlineStack>
-                        <ProgressBar progress={specsCoverage} size="medium" />
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {`${ymmeCounts.makes.toLocaleString()} makes · ${ymmeCounts.models.toLocaleString()} models · ${ymmeCounts.engines.toLocaleString()} engines · Source: auto-data.net`}
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {`${activeTenants} active \u00B7 ${paidTenants} paid`}
                         </Text>
                       </BlockStack>
-                    </Card>
+                    </div>
+                    <div style={cardRowStyle}>
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={ProductIcon} tone="info" />
+                          <Text as="span" variant="headingLg" fontWeight="bold">{totalProducts.toLocaleString()}</Text>
+                        </InlineStack>
+                        <Text as="span" variant="bodySm" tone="subdued">Total Products</Text>
+                      </BlockStack>
+                    </div>
+                    <div style={cardRowStyle}>
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={ConnectIcon} tone="info" />
+                          <Text as="span" variant="headingLg" fontWeight="bold">{totalFitments.toLocaleString()}</Text>
+                        </InlineStack>
+                        <Text as="span" variant="bodySm" tone="subdued">Total Fitments</Text>
+                      </BlockStack>
+                    </div>
+                    <div style={cardRowStyle}>
+                      <BlockStack gap="100">
+                        <InlineStack gap="200" blockAlign="center">
+                          <Icon source={DatabaseIcon} tone="info" />
+                          <Text as="span" variant="headingLg" fontWeight="bold">
+                            {`${(ymmeCounts.makes + ymmeCounts.models + ymmeCounts.engines).toLocaleString()}`}
+                          </Text>
+                        </InlineStack>
+                        <Text as="span" variant="bodySm" tone="subdued">
+                          {`${ymmeCounts.makes} makes \u00B7 ${ymmeCounts.models} models`}
+                        </Text>
+                      </BlockStack>
+                    </div>
+                  </InlineGrid>
 
-                    <Divider />
+                  {/* ── Recent Activity (last 20) ── */}
+                  {recentJobs.length > 0 && (
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h2" variant="headingMd">Recent Activity</Text>
+                        <Button size="slim" variant="plain" onClick={() => setSelectedTab(3)}>View All</Button>
+                      </InlineStack>
+                      {recentJobs.slice(0, 20).map((j, i) => (
+                        <div key={`${j.created_at}-${i}`} style={listRowStyle(i === Math.min(19, recentJobs.length - 1))}>
+                          <InlineStack gap="300" blockAlign="center">
+                            <Text as="span" variant="bodySm" tone="subdued">{fmtShort(j.created_at)}</Text>
+                            <Text as="span" variant="bodySm">{j.shop_id.replace(".myshopify.com", "")}</Text>
+                            <Badge tone={STATUS_TONES[j.status]}>{fmtType(j.type)}</Badge>
+                          </InlineStack>
+                          <Badge tone={STATUS_TONES[j.status]}>
+                            {j.status.charAt(0).toUpperCase() + j.status.slice(1)}
+                          </Badge>
+                        </div>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              )}
 
-                    {/* Data Sources */}
-                    <Text as="h2" variant="headingMd">Data Sources</Text>
-                    <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
-                      {/* Auto-data.net — PRIMARY */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 2: TENANTS                                             */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 1 && (
+                <BlockStack gap="400">
+                  {/* Search + Filter row */}
+                  <InlineStack gap="300" align="space-between" blockAlign="end">
+                    <div style={{ flexGrow: 1, maxWidth: "400px" }}>
+                      <TextField
+                        label="Search" labelHidden value={search} onChange={setSearch}
+                        placeholder="Search by domain..." clearButton onClearButtonClick={() => setSearch("")}
+                        autoComplete="off"
+                      />
+                    </div>
+                    <Select
+                      label="Plan" labelHidden
+                      options={[
+                        { label: "All Plans", value: "all" },
+                        ...PLAN_ORDER.map((p) => ({ label: cap(p), value: p })),
+                      ]}
+                      value={planFilter} onChange={setPlanFilter}
+                    />
+                    <Badge tone="info">{`${filteredTenants.length} tenants`}</Badge>
+                  </InlineStack>
+
+                  {/* Tenant IndexTable */}
+                  <IndexTable
+                    resourceName={{ singular: "tenant", plural: "tenants" }}
+                    itemCount={filteredTenants.length}
+                    headings={[
+                      { title: "Shop" },
+                      { title: "Plan" },
+                      { title: "Products" },
+                      { title: "Fitments" },
+                      { title: "Coverage" },
+                      { title: "Installed" },
+                      { title: "Status" },
+                      { title: "" },
+                    ]}
+                    selectable={false}
+                  >
+                    {filteredTenants.map((t, i) => {
+                      const active = !t.uninstalled_at;
+                      const enc = encodeURIComponent(t.shop_id);
+                      const coverage = (t.product_count ?? 0) > 0 && (t.fitment_count ?? 0) > 0
+                        ? Math.round(((t.fitment_count ?? 0) / (t.product_count ?? 1)) * 100)
+                        : 0;
+                      return (
+                        <IndexTable.Row id={t.shop_id} key={t.shop_id} position={i}>
+                          <IndexTable.Cell>
+                            <Button variant="plain" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
+                              {(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
+                            </Button>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Badge tone={PLAN_BADGE_TONE[t.plan as PlanTier]}>{cap(t.plan)}</Badge>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>{(t.product_count ?? 0).toLocaleString()}</IndexTable.Cell>
+                          <IndexTable.Cell>{(t.fitment_count ?? 0).toLocaleString()}</IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text as="span" variant="bodySm" tone={coverage > 50 ? "success" : "subdued"}>
+                              {`${coverage}%`}
+                            </Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Text as="span" variant="bodySm" tone="subdued">{fmtDate(t.installed_at)}</Text>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <Badge tone={active ? "success" : "critical"}>
+                              {active ? "Active" : "Uninstalled"}
+                            </Badge>
+                          </IndexTable.Cell>
+                          <IndexTable.Cell>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Button size="slim" variant="primary" onClick={() => navigate(`/app/admin/tenant?shop=${enc}`)}>
+                                Details
+                              </Button>
+                              <fetcher.Form method="post">
+                                <input type="hidden" name="intent" value="change-plan" />
+                                <input type="hidden" name="shop_id" value={t.shop_id} />
+                                <InlineStack gap="100" blockAlign="center">
+                                  <Select
+                                    label="" labelHidden
+                                    options={PLAN_ORDER.map((p) => ({ label: cap(p), value: p }))}
+                                    value={planOverrides[t.shop_id] ?? t.plan}
+                                    name="new_plan"
+                                    onChange={(v) => setPlanOverrides((prev) => ({ ...prev, [t.shop_id]: v }))}
+                                  />
+                                  <Button submit size="slim" loading={isSyncing}>Set</Button>
+                                </InlineStack>
+                              </fetcher.Form>
+                              <TenantPurgeActions
+                                shopId={t.shop_id}
+                                shopName={(t.shop_domain ?? t.shop_id).replace(".myshopify.com", "")}
+                              />
+                            </InlineStack>
+                          </IndexTable.Cell>
+                        </IndexTable.Row>
+                      );
+                    })}
+                  </IndexTable>
+                </BlockStack>
+              )}
+
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 3: YMME DATABASE                                       */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 2 && (
+                <BlockStack gap="600">
+
+                  {/* Scrape complete banner */}
+                  {scrapeState && !scrapeState.running && (
+                    <Banner
+                      title={`Scrape complete \u2014 ${scrapeState.brandsProcessed} brands, ${scrapeState.modelsProcessed} models, ${scrapeState.enginesProcessed} engines, ${scrapeState.specsProcessed} specs.${scrapeState.errors.length > 0 ? ` ${scrapeState.errors.length} errors.` : ""}`}
+                      tone={scrapeState.errors.length > 0 ? "warning" : "success"}
+                      onDismiss={() => setScrapeState(null)}
+                    />
+                  )}
+
+                  {/* Live Scrape Progress from scrape_jobs */}
+                  {(() => {
+                    const runningJob = scrapeJobs.find((j: any) => {
+                      if (j.status !== "running") return false;
+                      if (j.started_at) {
+                        const startedMs = new Date(j.started_at).getTime();
+                        if (Date.now() - startedMs > 24 * 60 * 60 * 1000) return false;
+                      }
+                      return true;
+                    });
+                    if (!runningJob) return null;
+                    const r = (runningJob.result ?? {}) as Record<string, any>;
+                    const etaSec = r.etaSeconds ?? 0;
+                    const etaH = Math.floor(etaSec / 3600);
+                    const etaM = Math.floor((etaSec % 3600) / 60);
+                    const etaStr = etaH > 0 ? `${etaH}h ${etaM}m` : etaM > 0 ? `${etaM}m` : "calculating...";
+
+                    return (
                       <Card>
-                        <BlockStack gap="300">
+                        <BlockStack gap="400">
                           <InlineStack align="space-between" blockAlign="center">
                             <InlineStack gap="200" blockAlign="center">
-                              <IconBadge icon={DatabaseIcon} size={28} color="var(--p-color-icon-emphasis)" />
-                              <Text as="h3" variant="headingSm">Auto-Data.net</Text>
+                              <Spinner size="small" />
+                              <Text as="h2" variant="headingMd">Deep Scrape Running</Text>
+                              <Badge tone="attention">{`${runningJob.progress}%`}</Badge>
                             </InlineStack>
-                            <Badge tone="success">Primary Source</Badge>
+                            <Text as="p" variant="bodySm" tone="subdued">{`ETA: ${etaStr}`}</Text>
                           </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            387 global brands with full 4-level deep scraping: brands, models, engines, and 90+ vehicle spec fields.
-                          </Text>
-                          <Divider />
-                          <InlineGrid columns={{ xs: 1, sm: 2 }} gap="200">
-                            <Select
-                              label="Delay between requests"
-                              options={[
-                                { label: "300ms (fast)", value: "300" },
-                                { label: "500ms (default)", value: "500" },
-                                { label: "1.0s", value: "1000" },
-                                { label: "1.5s", value: "1500" },
-                              ]}
-                              value={autodataDelay}
-                              onChange={setAutodataDelay}
-                              disabled={scrapeState?.running ?? false}
-                            />
-                            <Select
-                              label="Scrape specs"
-                              options={[
-                                { label: "Yes (full)", value: "true" },
-                                { label: "No (fast)", value: "false" },
-                              ]}
-                              value={autodataScrapeSpecs}
-                              onChange={setAutodataScrapeSpecs}
-                              disabled={scrapeState?.running ?? false}
-                            />
-                          </InlineGrid>
-                          <InlineStack gap="200">
-                            {!scrapeState?.running ? (
-                              <Button variant="primary" onClick={() => startChunkedScrape()}>
-                                Start Scrape
-                              </Button>
-                            ) : (
-                              <Button variant="primary" tone="critical" onClick={() => { stopRef.current = true; }}>
-                                Stop Scrape
-                              </Button>
-                            )}
-                            <Button onClick={() => revalidator.revalidate()} disabled={isRefreshing}>
-                              {isRefreshing ? "Refreshing..." : "Refresh Counts"}
-                            </Button>
+                          <ProgressBar progress={runningJob.progress ?? 0} size="medium" />
+                          <InlineStack gap="600" wrap>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="headingSm">{`${(runningJob.processedItems ?? 0).toLocaleString()} / ${(runningJob.totalItems ?? 0).toLocaleString()}`}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">Engines processed</Text>
+                            </BlockStack>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="headingSm">{`${(r.specsUpserted ?? 0).toLocaleString()}`}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">Specs filled</Text>
+                            </BlockStack>
+                            <BlockStack gap="050">
+                              <Text as="p" variant="headingSm">{`${(r.imagesFound ?? 0).toLocaleString()}`}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">Images scraped</Text>
+                            </BlockStack>
                           </InlineStack>
-
-                          {/* Progress during scrape */}
-                          {scrapeState?.running && (
-                            <Card>
-                              <BlockStack gap="300">
-                                <InlineStack gap="200" blockAlign="center">
-                                  <Spinner size="small" />
-                                  <Text as="p" variant="bodySm" fontWeight="semibold">
-                                    {`Scraping: ${scrapeState.currentBrand}`}
-                                  </Text>
-                                </InlineStack>
-                                {scrapeState.totalBrands > 0 && (
-                                  <>
-                                    <ProgressBar
-                                      progress={Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}
-                                      size="small"
-                                     
-                                    />
-                                    <Text as="p" variant="bodySm" tone="subdued">
-                                      {`Brand ${scrapeState.brandsProcessed} of ${scrapeState.totalBrands} (${Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)}%)`}
-                                    </Text>
-                                  </>
-                                )}
-                                <InlineGrid columns={{ xs: 1, sm: 3 }} gap="200">
-                                  {[
-                                    { label: "Models", value: scrapeState.modelsProcessed },
-                                    { label: "Engines", value: scrapeState.enginesProcessed },
-                                    { label: "Specs", value: scrapeState.specsProcessed },
-                                  ].map((s) => (
-                                    <div key={s.label} style={{
-                                      ...statMiniStyle, textAlign: "center",
-                                    }}>
-                                      <Text as="p" variant="headingSm" fontWeight="bold">{s.value.toLocaleString()}</Text>
-                                      <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
-                                    </div>
-                                  ))}
-                                </InlineGrid>
-                                {scrapeState.errors.length > 0 && (
-                                  <Text as="p" variant="bodySm" tone="critical">
-                                    {`${scrapeState.errors.length} error(s) so far`}
-                                  </Text>
-                                )}
-                              </BlockStack>
-                            </Card>
-                          )}
                         </BlockStack>
                       </Card>
+                    );
+                  })()}
 
-                      {/* Data source: auto-data.net only */}
-                    </InlineGrid>
+                  {/* ── Stats Grid (6 cards) ── */}
+                  <InlineGrid columns={{ xs: 2, sm: 3, md: 6 }} gap="300">
+                    {[
+                      { label: "Makes", value: ymmeCounts.makes, icon: DatabaseIcon },
+                      { label: "Models", value: ymmeCounts.models, icon: DatabaseIcon },
+                      { label: "Engines", value: ymmeCounts.engines, icon: DatabaseIcon },
+                      { label: "Specs", value: ymmeCounts.specs, icon: DatabaseIcon },
+                      { label: "Aliases", value: ymmeCounts.aliases, icon: DatabaseIcon },
+                      { label: "Fitments", value: totalFitments, icon: ConnectIcon },
+                    ].map((s) => (
+                      <div key={s.label} style={statMiniStyle}>
+                        <BlockStack gap="050">
+                          <Text as="span" variant="headingSm">{s.value.toLocaleString()}</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </InlineGrid>
 
-                    {/* Scrape Job History */}
-                    {scrapeJobs.length > 0 && (
-                      <>
-                        <Divider />
-                        <Text as="h2" variant="headingMd">Scrape Job History</Text>
-                        <DataTable
-                          columnContentTypes={["text", "text", "numeric", "numeric", "text", "text"]}
-                          headings={["Type", "Status", "Processed", "Specs/Images", "Duration", "Started"]}
-                          rows={scrapeJobs.map((j: any) => {
-                            const r = (j.result ?? {}) as Record<string, any>;
-                            const dur = j.completedAt && j.startedAt
-                              ? (() => {
-                                  const s = Math.round((new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime()) / 1000);
-                                  const h = Math.floor(s / 3600);
-                                  const m = Math.floor((s % 3600) / 60);
-                                  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
-                                })()
-                              : j.status === "running" ? "Running..." : "\u2014";
-                            const isDeep = j.type === "deep_specs_backfill";
-                            return [
-                              j.type.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
-                              j.status.charAt(0).toUpperCase() + j.status.slice(1),
-                              String(isDeep ? (r.totalProcessed ?? r.updated ?? j.processedItems ?? 0) : (r.brandsProcessed ?? j.processedItems ?? 0)),
-                              isDeep
-                                ? `${r.specsUpserted ?? 0} / ${r.imagesFound ?? 0}`
-                                : `${r.specsProcessed ?? 0} / ${r.enginesProcessed ?? 0}`,
-                              dur,
-                              j.startedAt ? new Date(j.startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "\u2014",
-                            ];
-                          })}
+                  {/* ── Coverage Bar ── */}
+                  <Card>
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between">
+                        <Text as="p" variant="headingSm">Database Coverage</Text>
+                        <Text as="p" variant="bodySm" fontWeight="bold">
+                          {`${ymmeCounts.specs.toLocaleString()} / ${ymmeCounts.engines.toLocaleString()} engines with specs (${specsCoverage}%)`}
+                        </Text>
+                      </InlineStack>
+                      <ProgressBar progress={specsCoverage} size="medium" />
+                    </BlockStack>
+                  </Card>
+
+                  {/* ── Data Quality Warnings ── */}
+                  <Card>
+                    <BlockStack gap="200">
+                      <Text as="h3" variant="headingSm">Data Quality</Text>
+                      {[
+                        { label: "Makes without logos", value: (browseMakes as any)._qualityMakesNoLogo ?? 0, tone: "warning" as const },
+                        { label: "Models (total)", value: ymmeCounts.models, tone: "info" as const },
+                        { label: "Engines without specs", value: Math.max(0, ymmeCounts.engines - ymmeCounts.specs), tone: ymmeCounts.engines - ymmeCounts.specs > 0 ? "warning" as const : "success" as const },
+                      ].map((item) => (
+                        <div key={item.label} style={listRowStyle(false)}>
+                          <Text as="span" variant="bodySm">{item.label}</Text>
+                          <Badge tone={item.tone}>{item.value.toLocaleString()}</Badge>
+                        </div>
+                      ))}
+                    </BlockStack>
+                  </Card>
+
+                  <Divider />
+
+                  {/* ── Scraper Controls ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="h3" variant="headingSm">Auto-Data.net Scraper</Text>
+                        <Badge tone="success">Primary Source</Badge>
+                      </InlineStack>
+                      <InlineGrid columns={{ xs: 1, sm: 2 }} gap="200">
+                        <Select
+                          label="Delay between requests"
+                          options={[
+                            { label: "300ms (fast)", value: "300" },
+                            { label: "500ms (default)", value: "500" },
+                            { label: "1.0s", value: "1000" },
+                            { label: "1.5s", value: "1500" },
+                          ]}
+                          value={autodataDelay} onChange={setAutodataDelay}
+                          disabled={scrapeState?.running ?? false}
                         />
-                      </>
+                        <Select
+                          label="Scrape specs"
+                          options={[
+                            { label: "Yes (full)", value: "true" },
+                            { label: "No (fast)", value: "false" },
+                          ]}
+                          value={autodataScrapeSpecs} onChange={setAutodataScrapeSpecs}
+                          disabled={scrapeState?.running ?? false}
+                        />
+                      </InlineGrid>
+                      <InlineStack gap="200">
+                        {!scrapeState?.running ? (
+                          <>
+                            <Button variant="primary" onClick={() => startChunkedScrape()}>Start Incremental</Button>
+                            <Button onClick={() => startChunkedScrape()}>Start Full</Button>
+                          </>
+                        ) : (
+                          <Button variant="primary" tone="critical" onClick={() => { stopRef.current = true; }}>Stop Scrape</Button>
+                        )}
+                        <Button onClick={() => revalidator.revalidate()} disabled={isRefreshing}>Refresh</Button>
+                      </InlineStack>
+
+                      {/* Client-side scrape progress */}
+                      {scrapeState?.running && (
+                        <BlockStack gap="200">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Spinner size="small" />
+                            <Text as="p" variant="bodySm" fontWeight="semibold">{`Scraping: ${scrapeState.currentBrand}`}</Text>
+                          </InlineStack>
+                          {scrapeState.totalBrands > 0 && (
+                            <>
+                              <ProgressBar progress={Math.round((scrapeState.brandsProcessed / scrapeState.totalBrands) * 100)} size="small" />
+                              <Text as="p" variant="bodySm" tone="subdued">
+                                {`Brand ${scrapeState.brandsProcessed} of ${scrapeState.totalBrands}`}
+                              </Text>
+                            </>
+                          )}
+                          <div style={statGridStyle(3)}>
+                            {[
+                              { label: "Models", value: scrapeState.modelsProcessed },
+                              { label: "Engines", value: scrapeState.enginesProcessed },
+                              { label: "Specs", value: scrapeState.specsProcessed },
+                            ].map((s) => (
+                              <div key={s.label} style={{ ...statMiniStyle, textAlign: "center" as const }}>
+                                <Text as="p" variant="headingSm" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                              </div>
+                            ))}
+                          </div>
+                        </BlockStack>
+                      )}
+                    </BlockStack>
+                  </Card>
+
+                  {/* ── Scrape History ── */}
+                  {scrapeJobs.length > 0 && (
+                    <BlockStack gap="200">
+                      <Text as="h3" variant="headingSm">Scrape History</Text>
+                      <DataTable
+                        columnContentTypes={["text", "text", "numeric", "text", "text"]}
+                        headings={["Type", "Status", "Processed", "Duration", "Started"]}
+                        rows={scrapeJobs.map((j: any) => {
+                          const r = (j.result ?? {}) as Record<string, any>;
+                          const dur = j.completedAt && j.startedAt
+                            ? (() => {
+                                const s = Math.round((new Date(j.completedAt).getTime() - new Date(j.startedAt).getTime()) / 1000);
+                                const h = Math.floor(s / 3600);
+                                const m = Math.floor((s % 3600) / 60);
+                                return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+                              })()
+                            : j.status === "running" ? "Running..." : "\u2014";
+                          const isDeep = j.type === "deep_specs_backfill";
+                          return [
+                            fmtType(j.type),
+                            j.status.charAt(0).toUpperCase() + j.status.slice(1),
+                            String(isDeep ? (r.totalProcessed ?? j.processedItems ?? 0) : (r.brandsProcessed ?? j.processedItems ?? 0)),
+                            dur,
+                            j.startedAt ? fmtShort(j.startedAt) : "\u2014",
+                          ];
+                        })}
+                      />
+                    </BlockStack>
+                  )}
+
+                  <Divider />
+
+                  {/* ── YMME Browse Section ── */}
+                  <BlockStack gap="300">
+                    {/* Breadcrumb navigation */}
+                    <InlineStack gap="200" blockAlign="center">
+                      <Text as="h2" variant="headingMd">Browse YMME</Text>
+                      {(searchParams.get("make_id") || searchParams.get("model_id") || searchParams.get("engine_id")) && (
+                        <Button size="slim" variant="plain" onClick={() => {
+                          const p = new URLSearchParams(searchParams);
+                          p.delete("make_id"); p.delete("model_id"); p.delete("engine_id");
+                          setSearchParams(p);
+                        }}>
+                          All Makes
+                        </Button>
+                      )}
+                      {browseMakeName && (searchParams.get("model_id") || searchParams.get("engine_id")) && (
+                        <>
+                          <Text as="span" variant="bodySm" tone="subdued">/</Text>
+                          <Button size="slim" variant="plain" onClick={() => {
+                            const p = new URLSearchParams(searchParams);
+                            p.delete("model_id"); p.delete("engine_id");
+                            setSearchParams(p);
+                          }}>
+                            {browseMakeName}
+                          </Button>
+                        </>
+                      )}
+                      {browseModelName && searchParams.get("engine_id") && (
+                        <>
+                          <Text as="span" variant="bodySm" tone="subdued">/</Text>
+                          <Button size="slim" variant="plain" onClick={() => {
+                            const p = new URLSearchParams(searchParams);
+                            p.delete("engine_id");
+                            setSearchParams(p);
+                          }}>
+                            {browseModelName}
+                          </Button>
+                        </>
+                      )}
+                    </InlineStack>
+
+                    {/* Default: make list */}
+                    {!searchParams.get("make_id") && !searchParams.get("engine_id") && (
+                      <div style={{ maxHeight: "500px", overflowY: "auto" }}>
+                        {(browseMakes as Array<{ id: string; name: string; logo_url: string | null }>).map((mk, i, arr) => (
+                          <div key={mk.id} style={listRowStyle(i === arr.length - 1)}>
+                            <InlineStack gap="200" blockAlign="center">
+                              {mk.logo_url && (
+                                <img src={mk.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
+                              )}
+                              <Text as="span" variant="bodySm">{mk.name}</Text>
+                            </InlineStack>
+                            <Button size="slim" variant="plain" onClick={() => {
+                              const p = new URLSearchParams(searchParams);
+                              p.set("make_id", mk.id);
+                              setSearchParams(p);
+                            }}>
+                              Browse
+                            </Button>
+                          </div>
+                        ))}
+                        {browseMakes.length === 0 && (
+                          <Text as="p" variant="bodySm" tone="subdued">No makes found. Run the scraper first.</Text>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Models for a make */}
+                    {searchParams.get("make_id") && !searchParams.get("model_id") && !searchParams.get("engine_id") && (
+                      <BlockStack gap="200">
+                        <Text as="h3" variant="headingSm">{`Models for ${browseMakeName}`}</Text>
+                        <div style={{ maxHeight: "500px", overflowY: "auto" }}>
+                          {(browseModels as Array<{ id: string; name: string }>).map((mdl, i, arr) => (
+                            <div key={mdl.id} style={listRowStyle(i === arr.length - 1)}>
+                              <Text as="span" variant="bodySm">{mdl.name}</Text>
+                              <Button size="slim" variant="plain" onClick={() => {
+                                const p = new URLSearchParams(searchParams);
+                                p.set("model_id", mdl.id);
+                                setSearchParams(p);
+                              }}>
+                                Browse Engines
+                              </Button>
+                            </div>
+                          ))}
+                          {browseModels.length === 0 && (
+                            <Text as="p" variant="bodySm" tone="subdued">No models found for this make.</Text>
+                          )}
+                        </div>
+                      </BlockStack>
+                    )}
+
+                    {/* Engines for a model */}
+                    {searchParams.get("model_id") && !searchParams.get("engine_id") && (
+                      <BlockStack gap="200">
+                        <Text as="h3" variant="headingSm">{`Engines for ${browseMakeName} ${browseModelName}`}</Text>
+                        <div style={{ maxHeight: "500px", overflowY: "auto" }}>
+                          {(browseEngines as Array<{ id: string; name: string; fuel_type?: string; displacement_l?: number; power_hp?: number; year_from?: number; year_to?: number }>).map((eng, i, arr) => (
+                            <div key={eng.id} style={listRowStyle(i === arr.length - 1)}>
+                              <BlockStack gap="050">
+                                <Text as="span" variant="bodySm" fontWeight="semibold">{eng.name}</Text>
+                                <InlineStack gap="200">
+                                  {eng.fuel_type && <Badge tone={eng.fuel_type === "Diesel" ? "info" : eng.fuel_type === "Electric" ? "success" : undefined}>{eng.fuel_type}</Badge>}
+                                  {eng.displacement_l && <Text as="span" variant="bodySm" tone="subdued">{`${eng.displacement_l}L`}</Text>}
+                                  {eng.power_hp && <Text as="span" variant="bodySm" tone="subdued">{`${eng.power_hp} HP`}</Text>}
+                                  {eng.year_from && <Text as="span" variant="bodySm" tone="subdued">{`${eng.year_from}\u2013${eng.year_to ?? "present"}`}</Text>}
+                                </InlineStack>
+                              </BlockStack>
+                              <Button size="slim" variant="plain" onClick={() => {
+                                const p = new URLSearchParams(searchParams);
+                                p.set("engine_id", eng.id);
+                                setSearchParams(p);
+                              }}>
+                                View Specs
+                              </Button>
+                            </div>
+                          ))}
+                          {browseEngines.length === 0 && (
+                            <Text as="p" variant="bodySm" tone="subdued">No engines found for this model.</Text>
+                          )}
+                        </div>
+                      </BlockStack>
+                    )}
+
+                    {/* Full vehicle spec view */}
+                    {searchParams.get("engine_id") && (
+                      <BlockStack gap="300">
+                        <Text as="h3" variant="headingSm">
+                          {`Spec: ${browseMakeName} ${browseModelName} ${browseEngines.length > 0 ? (browseEngines[0] as any).name : ""}`}
+                        </Text>
+                        {browseSpec ? (
+                          <Card>
+                            <BlockStack gap="100">
+                              {Object.entries(browseSpec as Record<string, unknown>)
+                                .filter(([k]) => !["id", "engine_id", "created_at", "updated_at"].includes(k))
+                                .map(([key, val]) => (
+                                  <div key={key} style={listRowStyle(false)}>
+                                    <Text as="span" variant="bodySm" fontWeight="semibold">
+                                      {key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                                    </Text>
+                                    <Text as="span" variant="bodySm" tone="subdued">
+                                      {val != null ? String(val) : "\u2014"}
+                                    </Text>
+                                  </div>
+                                ))}
+                            </BlockStack>
+                          </Card>
+                        ) : (
+                          <Banner tone="info" title="No specs found for this engine">
+                            <p>This engine does not have spec data yet. Run the deep scrape to populate it.</p>
+                          </Banner>
+                        )}
+                      </BlockStack>
                     )}
                   </BlockStack>
-                )}
+                </BlockStack>
+              )}
 
-                {/* ──── ACTIVITY ──── */}
-                {selectedTab === 3 && (
-                  <BlockStack gap="400">
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 4: ACTIVITY                                            */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 3 && (
+                <BlockStack gap="500">
+
+                  {/* ── Recent Sync Jobs ── */}
+                  <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">All Sync Jobs</Text>
-                      <Badge tone="info">{`${recentJobs.length} recent`}</Badge>
+                      <Text as="h2" variant="headingMd">All Sync Jobs (Last 50)</Text>
+                      <Badge tone="info">{`${recentJobs.length} jobs`}</Badge>
                     </InlineStack>
 
                     {recentJobs.length === 0 ? (
@@ -1498,8 +1653,8 @@ export default function AdminPanel() {
                       </Banner>
                     ) : (
                       <DataTable
-                        columnContentTypes={["text", "text", "text", "text", "text"]}
-                        headings={["Merchant", "Type", "Status", "Started", "Duration"]}
+                        columnContentTypes={["text", "text", "text", "text", "text", "text"]}
+                        headings={["Merchant", "Type", "Status", "Items", "Started", "Duration"]}
                         rows={recentJobs.map((j) => {
                           const started = new Date(j.created_at);
                           const dur = j.completed_at
@@ -1509,6 +1664,7 @@ export default function AdminPanel() {
                             j.shop_id.replace(".myshopify.com", ""),
                             fmtType(j.type),
                             j.status.charAt(0).toUpperCase() + j.status.slice(1),
+                            j.processed_items != null ? `${j.processed_items}/${j.total_items ?? "?"}` : "\u2014",
                             fmtShort(j.created_at),
                             dur,
                           ];
@@ -1516,13 +1672,382 @@ export default function AdminPanel() {
                       />
                     )}
                   </BlockStack>
-                )}
 
-              </Box>
-            </Tabs>
-          </Card>
-        </Layout.Section>
-      </Layout>
+                  <Divider />
+
+                  {/* ── Failed Jobs with Full Errors ── */}
+                  {systemHealth.failedJobs.length > 0 && (
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">Error Log (24h)</Text>
+                      {systemHealth.failedJobs.map((j, i) => (
+                        <Card key={`fail-${i}`}>
+                          <BlockStack gap="200">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Badge tone="critical">Failed</Badge>
+                              <Text as="span" variant="bodySm" fontWeight="semibold">{fmtType(j.type)}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{j.shop_id.replace(".myshopify.com", "")}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{fmtShort(j.created_at)}</Text>
+                            </InlineStack>
+                            <div style={{ ...cardRowStyle, fontFamily: "monospace", fontSize: "12px", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                              {j.error ?? "No error message recorded"}
+                            </div>
+                          </BlockStack>
+                        </Card>
+                      ))}
+                    </BlockStack>
+                  )}
+
+                  <Divider />
+
+                  {/* ── Recent Installs/Uninstalls ── */}
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">Recent Tenant Installs</Text>
+                    {recentInstalls.length === 0 ? (
+                      <Text as="p" variant="bodySm" tone="subdued">No install activity recorded.</Text>
+                    ) : (
+                      <DataTable
+                        columnContentTypes={["text", "text", "text"]}
+                        headings={["Tenant", "Installed", "Status"]}
+                        rows={recentInstalls.map((t) => [
+                          t.domain.replace(".myshopify.com", ""),
+                          fmtDate(t.installedAt),
+                          t.uninstalledAt ? `Uninstalled ${fmtDate(t.uninstalledAt)}` : "Active",
+                        ])}
+                      />
+                    )}
+                  </BlockStack>
+
+                  <Divider />
+
+                  {/* ── Admin Activity Log ── */}
+                  <BlockStack gap="300">
+                    <Text as="h2" variant="headingMd">Admin Activity Log</Text>
+                    {adminActivityLog.length === 0 ? (
+                      <Text as="p" variant="bodySm" tone="subdued">No admin actions recorded yet.</Text>
+                    ) : (
+                      adminActivityLog.map((entry: any, i: number) => (
+                        <div key={entry.id ?? i} style={listRowStyle(i === adminActivityLog.length - 1)}>
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {entry.created_at ? fmtShort(entry.created_at) : "\u2014"}
+                            </Text>
+                            <Badge>{fmtType(entry.action ?? "")}</Badge>
+                            {entry.target_shop_id && (
+                              <Text as="span" variant="bodySm">{String(entry.target_shop_id).replace(".myshopify.com", "")}</Text>
+                            )}
+                          </InlineStack>
+                          <Text as="span" variant="bodySm" tone="subdued">
+                            {entry.details ? JSON.stringify(entry.details) : ""}
+                          </Text>
+                        </div>
+                      ))
+                    )}
+                  </BlockStack>
+                </BlockStack>
+              )}
+
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 5: ANNOUNCEMENTS                                       */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 4 && (
+                <BlockStack gap="500">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="h2" variant="headingMd">Announcements</Text>
+                    <Button variant="primary" icon={PlusIcon} onClick={openCreateAnnouncement}>
+                      Create Announcement
+                    </Button>
+                  </InlineStack>
+
+                  {announcements.length === 0 ? (
+                    <Banner title="No announcements" tone="info">
+                      <p>Create announcements to notify tenants about updates, promotions, or maintenance.</p>
+                    </Banner>
+                  ) : (
+                    announcements.map((ann: any) => (
+                      <Card key={ann.id}>
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Badge tone={
+                                ann.tone === "critical" ? "critical"
+                                  : ann.tone === "warning" ? "warning"
+                                    : ann.tone === "promotion" ? "success"
+                                      : "info"
+                              }>
+                                {ann.tone?.charAt(0).toUpperCase() + ann.tone?.slice(1)}
+                              </Badge>
+                              <Text as="h3" variant="headingSm">{ann.title}</Text>
+                              {!ann.active && <Badge tone="critical">Inactive</Badge>}
+                            </InlineStack>
+                            <InlineStack gap="200">
+                              <Button size="slim" icon={EditIcon} onClick={() => openEditAnnouncement(ann)}>Edit</Button>
+                              <Button
+                                size="slim" icon={DeleteIcon} tone="critical"
+                                onClick={() => {
+                                  if (confirm("Delete this announcement?")) {
+                                    fetcher.submit({ intent: "delete_announcement", ann_id: ann.id }, { method: "post" });
+                                  }
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </InlineStack>
+                          </InlineStack>
+
+                          {ann.description && (
+                            <Text as="p" variant="bodySm" tone="subdued">{ann.description}</Text>
+                          )}
+
+                          <InlineStack gap="300" wrap>
+                            {ann.cta_text && (
+                              <Text as="span" variant="bodySm">
+                                {`CTA: "${ann.cta_text}" \u2192 ${ann.cta_url ?? "no URL"}`}
+                              </Text>
+                            )}
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {`Starts: ${ann.starts_at ? fmtShort(ann.starts_at) : "Now"}`}
+                            </Text>
+                            {ann.ends_at && (
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                {`Ends: ${fmtShort(ann.ends_at)}`}
+                              </Text>
+                            )}
+                            {ann.target_plans?.length > 0 && (
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                {`Plans: ${ann.target_plans.join(", ")}`}
+                              </Text>
+                            )}
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {ann.dismissible ? "Dismissible" : "Non-dismissible"}
+                            </Text>
+                          </InlineStack>
+                        </BlockStack>
+                      </Card>
+                    ))
+                  )}
+
+                  {/* ── Announcement Create/Edit Modal ── */}
+                  {annModalOpen && (
+                    <Modal
+                      open
+                      onClose={() => setAnnModalOpen(false)}
+                      title={editingAnn ? "Edit Announcement" : "Create Announcement"}
+                      primaryAction={{
+                        content: editingAnn ? "Save Changes" : "Create",
+                        onAction: submitAnnouncement,
+                        loading: isSyncing,
+                      }}
+                      secondaryActions={[{ content: "Cancel", onAction: () => setAnnModalOpen(false) }]}
+                    >
+                      <Modal.Section>
+                        <BlockStack gap="300">
+                          <TextField
+                            label="Title" value={annForm.title}
+                            onChange={(v) => setAnnForm((f) => ({ ...f, title: v }))}
+                            autoComplete="off"
+                          />
+                          <TextField
+                            label="Description" value={annForm.description} multiline={3}
+                            onChange={(v) => setAnnForm((f) => ({ ...f, description: v }))}
+                            autoComplete="off"
+                          />
+                          <Select
+                            label="Tone"
+                            options={[
+                              { label: "Info", value: "info" },
+                              { label: "Promotion", value: "promotion" },
+                              { label: "Warning", value: "warning" },
+                              { label: "Critical", value: "critical" },
+                            ]}
+                            value={annForm.tone}
+                            onChange={(v) => setAnnForm((f) => ({ ...f, tone: v }))}
+                          />
+                          <InlineGrid columns={2} gap="200">
+                            <TextField
+                              label="CTA Text" value={annForm.cta_text}
+                              onChange={(v) => setAnnForm((f) => ({ ...f, cta_text: v }))}
+                              autoComplete="off" placeholder="e.g. Learn More"
+                            />
+                            <TextField
+                              label="CTA URL" value={annForm.cta_url}
+                              onChange={(v) => setAnnForm((f) => ({ ...f, cta_url: v }))}
+                              autoComplete="off" placeholder="https://..."
+                            />
+                          </InlineGrid>
+                          <InlineGrid columns={2} gap="200">
+                            <TextField
+                              label="Start Date" type="datetime-local" value={annForm.starts_at}
+                              onChange={(v) => setAnnForm((f) => ({ ...f, starts_at: v }))}
+                              autoComplete="off"
+                            />
+                            <TextField
+                              label="End Date" type="datetime-local" value={annForm.ends_at}
+                              onChange={(v) => setAnnForm((f) => ({ ...f, ends_at: v }))}
+                              autoComplete="off"
+                            />
+                          </InlineGrid>
+                          <BlockStack gap="100">
+                            <Text as="p" variant="bodySm" fontWeight="semibold">Target Plans</Text>
+                            <InlineStack gap="300" wrap>
+                              {PLAN_ORDER.map((p) => (
+                                <Checkbox
+                                  key={p}
+                                  label={cap(p)}
+                                  checked={annForm.target_plans.includes(p)}
+                                  onChange={(checked) => {
+                                    setAnnForm((f) => ({
+                                      ...f,
+                                      target_plans: checked
+                                        ? [...f.target_plans, p]
+                                        : f.target_plans.filter((x) => x !== p),
+                                    }));
+                                  }}
+                                />
+                              ))}
+                            </InlineStack>
+                          </BlockStack>
+                          <InlineStack gap="400">
+                            <Checkbox
+                              label="Dismissible" checked={annForm.dismissible}
+                              onChange={(v) => setAnnForm((f) => ({ ...f, dismissible: v }))}
+                            />
+                            {editingAnn && (
+                              <Checkbox
+                                label="Active" checked={annForm.active}
+                                onChange={(v) => setAnnForm((f) => ({ ...f, active: v }))}
+                              />
+                            )}
+                          </InlineStack>
+                        </BlockStack>
+                      </Modal.Section>
+                    </Modal>
+                  )}
+                </BlockStack>
+              )}
+
+              {/* ════════════════════════════════════════════════════════════ */}
+              {/* TAB 6: SETTINGS                                            */}
+              {/* ════════════════════════════════════════════════════════════ */}
+              {selectedTab === 5 && (
+                <BlockStack gap="500">
+
+                  {/* ── System Info ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingSm">System Info</Text>
+                      {[
+                        { label: "Shopify API Version", value: "2025-01" },
+                        { label: "App URL", value: "https://autosync-v3.vercel.app" },
+                        { label: "Supabase Project", value: process.env.SUPABASE_URL ? "Connected" : "Not configured" },
+                        { label: "Framework", value: "React Router 7 + Polaris 13" },
+                        { label: "Database", value: "Supabase (PostgreSQL)" },
+                        { label: "Deployment", value: "Vercel (auto-deploy on push)" },
+                      ].map((item) => (
+                        <div key={item.label} style={listRowStyle(false)}>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">{item.label}</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">{item.value}</Text>
+                        </div>
+                      ))}
+                    </BlockStack>
+                  </Card>
+
+                  {/* ── Cache Management ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingSm">Cache Management</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Clear server-side caches to force fresh data loads. Caches auto-refresh every 5 minutes.
+                      </Text>
+                      <InlineStack gap="200">
+                        <Button onClick={() => revalidator.revalidate()} loading={isRefreshing} icon={RefreshIcon}>
+                          Clear Plan Config Cache
+                        </Button>
+                        <Button onClick={() => revalidator.revalidate()} loading={isRefreshing} icon={RefreshIcon}>
+                          Clear YMME Cache
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Card>
+
+                  {/* ── Scraper Settings ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingSm">Scraper Settings</Text>
+                      <InlineGrid columns={{ xs: 1, sm: 3 }} gap="200">
+                        <Select
+                          label="Default delay"
+                          options={[
+                            { label: "300ms (fast)", value: "300" },
+                            { label: "500ms (default)", value: "500" },
+                            { label: "1.0s (safe)", value: "1000" },
+                            { label: "2.0s (gentle)", value: "2000" },
+                          ]}
+                          value={autodataDelay} onChange={setAutodataDelay}
+                        />
+                        <Select
+                          label="Auto-update schedule"
+                          options={[
+                            { label: "Disabled", value: "disabled" },
+                            { label: "Weekly", value: "weekly" },
+                            { label: "Monthly", value: "monthly" },
+                          ]}
+                          value="disabled" onChange={() => {}}
+                        />
+                        <Select
+                          label="Deep specs on scrape"
+                          options={[
+                            { label: "Yes (full data)", value: "true" },
+                            { label: "No (fast, basics only)", value: "false" },
+                          ]}
+                          value={autodataScrapeSpecs} onChange={setAutodataScrapeSpecs}
+                        />
+                      </InlineGrid>
+                    </BlockStack>
+                  </Card>
+
+                  {/* ── Database Stats Summary ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingSm">Database Summary</Text>
+                      <div style={statGridStyle(3)}>
+                        {[
+                          { label: "Tables", value: "26+" },
+                          { label: "Total Rows", value: (systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines).toLocaleString() },
+                          { label: "Tenants", value: totalTenants.toLocaleString() },
+                        ].map((s) => (
+                          <div key={s.label} style={statMiniStyle}>
+                            <BlockStack gap="050">
+                              <Text as="span" variant="headingSm" fontWeight="bold">{s.value}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </BlockStack>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={statGridStyle(5)}>
+                        {[
+                          { label: "Products", value: systemHealth.dbSizes.products },
+                          { label: "Fitments", value: systemHealth.dbSizes.fitments },
+                          { label: "Makes", value: systemHealth.dbSizes.makes },
+                          { label: "Models", value: systemHealth.dbSizes.models },
+                          { label: "Engines", value: systemHealth.dbSizes.engines },
+                        ].map((s) => (
+                          <div key={s.label} style={statMiniStyle}>
+                            <BlockStack gap="050">
+                              <Text as="span" variant="bodySm" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </BlockStack>
+                          </div>
+                        ))}
+                      </div>
+                    </BlockStack>
+                  </Card>
+                </BlockStack>
+              )}
+
+            </Box>
+          </Tabs>
+        </Card>
+      </BlockStack>
     </Page>
   );
 }
