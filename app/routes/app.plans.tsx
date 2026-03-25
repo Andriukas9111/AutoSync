@@ -210,12 +210,12 @@ const FAQ_ITEMS = [
 // ---------------------------------------------------------------------------
 
 const PLAN_SUBTITLES: Record<PlanTier, string> = {
-  free: "For getting started",
-  starter: "For small stores",
-  growth: "For growing businesses",
-  professional: "For established stores",
-  business: "For large catalogues",
-  enterprise: "For maximum capability",
+  free: "Explore the platform",
+  starter: "Activate your store",
+  growth: "Automate fitment & collections",
+  professional: "Integrate with APIs & data feeds",
+  business: "Convert with advanced features",
+  enterprise: "Complete automotive platform",
 };
 
 // ---------------------------------------------------------------------------
@@ -515,21 +515,14 @@ export default function Plans() {
 
                   {/* Price */}
                   <div style={{ margin: "16px 0" }}>
-                    {config.priceMonthly === 0 ? (
-                      <BlockStack gap="050">
-                        <Text as="span" variant="heading2xl" fontWeight="bold">Free</Text>
-                        <Text as="span" variant="bodySm" tone="subdued">forever</Text>
-                      </BlockStack>
-                    ) : (
-                      <BlockStack gap="050">
-                        <InlineStack gap="100" blockAlign="end">
-                          <Text as="span" variant="heading2xl" fontWeight="bold">
-                            {`$${String(config.priceMonthly)}`}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">USD/month</Text>
-                        </InlineStack>
-                      </BlockStack>
-                    )}
+                    <InlineStack gap="100" blockAlign="end">
+                      <Text as="span" variant="heading2xl" fontWeight="bold">
+                        {config.priceMonthly === 0 ? "$0" : `$${String(config.priceMonthly)}`}
+                      </Text>
+                      <Text as="span" variant="bodySm" tone="subdued">
+                        {config.priceMonthly === 0 ? "free forever" : "USD/month"}
+                      </Text>
+                    </InlineStack>
                   </div>
 
                   {/* Divider */}
@@ -694,35 +687,36 @@ export default function Plans() {
             </InlineStack>
             <Divider />
             <Box overflowX="scroll">
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "650px", fontSize: "13px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", fontSize: "12px" }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid var(--p-color-border)" }}>
-                    <th style={{ textAlign: "left", padding: "10px 8px", fontWeight: 600 }}>Feature</th>
-                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 700, background: "var(--p-color-bg-fill-info)", color: "var(--p-color-text-info)", borderRadius: "6px 6px 0 0" }}>AutoSync</th>
-                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>Convermax</th>
-                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>EasySearch</th>
-                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>PCFitment</th>
+                    {["Feature", "AutoSync", "Convermax", "EasySearch", "C: YMM", "PCFitment", "VFitz", "AutoFit AI", "PartFinder", "SearchAuto"].map((h, i) => (
+                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-info)" : undefined, color: i === 1 ? "var(--p-color-text-info)" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    ["Starting Price", "Free", "$250/mo", "$19/mo", "$15/mo"],
-                    ["YMME Database", "✓", "—", "✓", "✓"],
-                    ["Auto Extraction", "✓", "—", "—", "—"],
-                    ["Smart Collections", "✓", "—", "—", "—"],
-                    ["UK Plate Lookup", "✓", "—", "—", "—"],
-                    ["VIN Decode", "✓", "✓", "—", "✓"],
-                    ["Wheel Finder", "✓", "✓", "—", "—"],
-                    ["Storefront Widgets", "7", "1", "2", "1"],
-                    ["Vehicle Spec Pages", "✓", "✓", "—", "—"],
-                    ["Provider Import (5 formats)", "✓", "—", "—", "—"],
-                    ["Pricing Engine", "✓", "—", "—", "—"],
-                    ["Analytics", "✓", "—", "—", "✓"],
+                    ["Price", "Free–$299", "$250–$850", "$19–$75", "$10–$75", "$15–$150", "$1–$58", "$50–$250", "$49", "$89–$500"],
+                    ["YMME Database", "✓", "—", "✓", "—", "✓", "✓", "—", "—", "—"],
+                    ["Auto Extraction", "✓", "—", "—", "—", "—", "—", "✓", "—", "—"],
+                    ["Smart Collections", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
+                    ["UK Plate Lookup", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
+                    ["VIN Decode", "✓", "✓", "—", "—", "✓", "—", "—", "—", "—"],
+                    ["Wheel Finder", "✓", "✓", "—", "—", "—", "—", "—", "—", "—"],
+                    ["Widgets", "7", "1", "2", "1", "1", "1", "2", "1", "1"],
+                    ["Vehicle Pages", "✓", "✓", "—", "—", "—", "—", "—", "—", "—"],
+                    ["API/FTP Import", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
+                    ["Pricing Engine", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
+                    ["Analytics", "✓", "—", "—", "—", "✓", "✓", "—", "✓", "—"],
+                    ["My Garage", "✓", "—", "✓", "✓", "—", "—", "—", "✓", "—"],
                   ].map(([label, ...vals], i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                      <td style={{ padding: "8px", fontWeight: 500 }}>{label}</td>
+                      <td style={{ padding: "7px 6px", fontWeight: 500, whiteSpace: "nowrap" }}>{label}</td>
                       {vals.map((v, j) => (
-                        <td key={j} style={{ textAlign: "center", padding: "8px", fontWeight: j === 0 ? 600 : 400, color: v === "✓" ? "var(--p-color-text-success)" : v === "—" ? "var(--p-color-text-subdued)" : undefined, background: j === 0 ? "var(--p-color-bg-surface-secondary)" : undefined }}>
+                        <td key={j} style={{ textAlign: "center", padding: "7px 6px", fontWeight: j === 0 ? 600 : 400, color: v === "✓" ? "var(--p-color-text-success)" : v === "—" ? "var(--p-color-text-subdued)" : undefined, background: j === 0 ? "var(--p-color-bg-surface-secondary)" : undefined }}>
                           {v}
                         </td>
                       ))}
@@ -731,9 +725,11 @@ export default function Plans() {
                 </tbody>
               </table>
             </Box>
-            <Text as="p" variant="bodySm" tone="subdued">
-              Comparison based on publicly available pricing and features as of March 2026. AutoSync offers more features at a lower price point than any competitor.
-            </Text>
+            <Banner tone="info">
+              <Text as="p" variant="bodySm">
+                AutoSync offers <strong>more features at a lower price</strong> than any competitor. We&apos;re the only app with smart auto-extraction, 7 storefront widgets, UK plate lookup, and a built-in pricing engine — starting free.
+              </Text>
+            </Banner>
           </BlockStack>
         </Card>
 
