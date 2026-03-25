@@ -550,6 +550,14 @@
     var popover = container.querySelector('[data-autosync-garage-popover]');
     if (!trigger || !popover) return;
 
+    // Plan check — hide garage if not included in tenant's plan (Business+ only)
+    var proxyUrl = container.dataset.proxyUrl;
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'myGarage').then(function (allowed) {
+        if (!allowed) { trigger.style.display = 'none'; popover.style.display = 'none'; }
+      });
+    }
+
     // Accessibility
     trigger.setAttribute('aria-label', 'Open saved vehicles garage');
     trigger.setAttribute('aria-haspopup', 'dialog');

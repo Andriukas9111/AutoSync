@@ -994,7 +994,6 @@ export default function Dashboard() {
                     { label: "YMME Widget", on: limits.features.ymmeWidget },
                     { label: "Fitment Badge", on: limits.features.fitmentBadge },
                     { label: "Compatibility Table", on: limits.features.compatibilityTable },
-                    { label: "Floating Bar", on: limits.features.floatingBar },
                     { label: "My Garage", on: limits.features.myGarage },
                     { label: "Wheel Finder", on: limits.features.wheelFinder },
                     { label: "Plate Lookup", on: limits.features.plateLookup },

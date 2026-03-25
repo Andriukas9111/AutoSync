@@ -89,9 +89,9 @@ function getHighlights(config: PlanConfig): string[] {
   if (f.vinDecode) items.push("VIN Decode");
 
   // Customisation & Analytics
-  if (f.widgetCustomisation === "full_css") items.push("Full CSS widget customisation");
-  else if (f.widgetCustomisation === "full") items.push("Full widget customisation");
-  else if (f.widgetCustomisation === "basic") items.push("Basic widget styling");
+  if (f.widgetCustomisation === "full_css") items.push("Full CSS widget customisation (Coming Soon)");
+  else if (f.widgetCustomisation === "full") items.push("Full widget customisation (Coming Soon)");
+  else if (f.widgetCustomisation === "basic") items.push("Basic widget styling (Coming Soon)");
 
   if (f.dashboardAnalytics === "full_export") items.push("Analytics with export");
   else if (f.dashboardAnalytics === "full") items.push("Full analytics dashboard");

@@ -1246,13 +1246,13 @@ async function handleVehicleSpecs(params: URLSearchParams) {
 
   if (!engineId) return json({ error: "Missing engine_id or handle" }, 400);
 
-  // Verify fitmentBadge feature (Starter+) — powers compatibility table, specs, floating bar
+  // Verify vehiclePages feature (Professional+) — vehicle spec detail pages
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
       const limits = getPlanLimits(tenant.plan);
-      if (!limits.features.fitmentBadge) {
-        return json({ error: "Vehicle specs requires the Starter plan or higher" }, 403);
+      if (!limits.features.vehiclePages) {
+        return json({ error: "Vehicle spec pages require the Professional plan or higher" }, 403);
       }
     }
   }
@@ -1614,6 +1614,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
           ymmeWidget: wLimits.features.ymmeWidget,
           fitmentBadge: wLimits.features.fitmentBadge,
           compatibilityTable: wLimits.features.compatibilityTable,
+          myGarage: wLimits.features.myGarage,
           wheelFinder: wLimits.features.wheelFinder,
           plateLookup: wLimits.features.plateLookup,
           vinDecode: wLimits.features.vinDecode,

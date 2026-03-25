@@ -133,6 +133,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const collectionStrategy = formData.get("collection_strategy") as string || "make";
     const autoCreateCollections = formData.get("auto_create_collections") === "true";
 
+    // Enforce collection strategy level based on plan
+    const tenant = await getTenant(shopId);
+    const limits = getPlanLimits(tenant?.plan ?? "free");
+    const allowedLevel = limits.features.smartCollections; // false | "make" | "make_model" | "full"
+    const strategyLevels: Record<string, number> = { make: 1, make_model: 2, make_model_year: 3 };
+    const allowedLevels: Record<string, number> = { make: 1, make_model: 2, full: 3 };
+    const requestedLevel = strategyLevels[collectionStrategy] ?? 1;
+    const maxLevel = typeof allowedLevel === "string" ? (allowedLevels[allowedLevel] ?? 0) : 0;
+    if (requestedLevel > maxLevel) {
+      return data({ error: `Your ${tenant?.plan ?? "free"} plan allows "${allowedLevel}" collection strategy. "${collectionStrategy}" requires a higher plan.` }, { status: 403 });
+    }
+
     // Upsert app_settings
     const { data: existing } = await db
       .from("app_settings")
