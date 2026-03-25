@@ -532,25 +532,12 @@ export default function Plans() {
                     )}
                   </div>
 
-                  {/* CTA button */}
-                  {isCurrent ? (
-                    <Button disabled fullWidth>Current Plan</Button>
-                  ) : tierIndex > currentIndex ? (
-                    <Button variant="primary" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
-                      {`Select ${config.name}`}
-                    </Button>
-                  ) : (
-                    <Button variant="primary" tone="critical" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
-                      Downgrade
-                    </Button>
-                  )}
-
                   {/* Divider */}
-                  <div style={{ margin: "16px 0 12px" }}>
+                  <div style={{ margin: "4px 0 12px" }}>
                     <Divider />
                   </div>
 
-                  {/* Features list — fills remaining space */}
+                  {/* Features list — fills remaining space, pushes button to bottom */}
                   <div style={{ flex: 1 }}>
                     <BlockStack gap="200">
                       {highlights.map((feature, idx) => (
@@ -572,6 +559,21 @@ export default function Plans() {
                         </InlineStack>
                       ))}
                     </BlockStack>
+                  </div>
+
+                  {/* CTA button — always at bottom of card */}
+                  <div style={{ marginTop: "16px" }}>
+                    {isCurrent ? (
+                      <Button disabled fullWidth>Current Plan</Button>
+                    ) : tierIndex > currentIndex ? (
+                      <Button variant="primary" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
+                        {`Select ${config.name}`}
+                      </Button>
+                    ) : (
+                      <Button variant="primary" tone="critical" fullWidth onClick={() => handlePlanClick(tier)} loading={isSubmitting} disabled={isSubmitting}>
+                        Downgrade
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -684,6 +686,58 @@ export default function Plans() {
         </Card>
 
         {/* ─── FAQ ─── */}
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Why AutoSync?</Text>
+            </InlineStack>
+            <Divider />
+            <Box overflowX="scroll">
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "650px", fontSize: "13px" }}>
+                <thead>
+                  <tr style={{ borderBottom: "2px solid var(--p-color-border)" }}>
+                    <th style={{ textAlign: "left", padding: "10px 8px", fontWeight: 600 }}>Feature</th>
+                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 700, background: "var(--p-color-bg-fill-info)", color: "var(--p-color-text-info)", borderRadius: "6px 6px 0 0" }}>AutoSync</th>
+                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>Convermax</th>
+                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>EasySearch</th>
+                    <th style={{ textAlign: "center", padding: "10px 8px", fontWeight: 500, color: "var(--p-color-text-subdued)" }}>PCFitment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["Starting Price", "Free", "$250/mo", "$19/mo", "$15/mo"],
+                    ["YMME Database", "✓", "—", "✓", "✓"],
+                    ["Auto Extraction", "✓", "—", "—", "—"],
+                    ["Smart Collections", "✓", "—", "—", "—"],
+                    ["UK Plate Lookup", "✓", "—", "—", "—"],
+                    ["VIN Decode", "✓", "✓", "—", "✓"],
+                    ["Wheel Finder", "✓", "✓", "—", "—"],
+                    ["Storefront Widgets", "7", "1", "2", "1"],
+                    ["Vehicle Spec Pages", "✓", "✓", "—", "—"],
+                    ["Provider Import (5 formats)", "✓", "—", "—", "—"],
+                    ["Pricing Engine", "✓", "—", "—", "—"],
+                    ["Analytics", "✓", "—", "—", "✓"],
+                  ].map(([label, ...vals], i) => (
+                    <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                      <td style={{ padding: "8px", fontWeight: 500 }}>{label}</td>
+                      {vals.map((v, j) => (
+                        <td key={j} style={{ textAlign: "center", padding: "8px", fontWeight: j === 0 ? 600 : 400, color: v === "✓" ? "var(--p-color-text-success)" : v === "—" ? "var(--p-color-text-subdued)" : undefined, background: j === 0 ? "var(--p-color-bg-surface-secondary)" : undefined }}>
+                          {v}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Box>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Comparison based on publicly available pricing and features as of March 2026. AutoSync offers more features at a lower price point than any competitor.
+            </Text>
+          </BlockStack>
+        </Card>
+
+        {/* FAQ */}
         <Card>
           <BlockStack gap="300">
             <InlineStack gap="200" blockAlign="center">
