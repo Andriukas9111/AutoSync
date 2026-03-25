@@ -35,9 +35,11 @@
     window.dispatchEvent(new CustomEvent('autosync:vehicle-changed', { detail: null }));
   }
 
+  // Note: Despite the name, this does NOT escape HTML entities.
+  // All callers use textContent (safe from XSS), not innerHTML.
+  // This function strips dedup suffixes like " [92efc5dd]" from engine display names.
   function escapeText(str) {
     if (!str) return '';
-    // Strip dedup suffixes like " [92efc5dd]" from engine names
     return String(str).replace(/\s*\[[0-9a-f]{8}\]$/, '');
   }
 
