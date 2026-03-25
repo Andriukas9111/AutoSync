@@ -117,7 +117,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(50),
     db.from("vehicle_fitments").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("vehicle_fitments")
-      .select("id, make, model, year_from, year_to, engine, confidence, source, created_at, product_id")
+      .select("id, make, model, year_from, year_to, engine, confidence, extraction_method, created_at, product_id")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(30),
@@ -618,7 +618,7 @@ export default function TenantDetail() {
                   ) : (
                     <DataTable
                       columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Source"]}
+                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Method"]}
                       rows={recentFitments.map((f: any) => [
                         f.make || "—",
                         f.model || "—",
@@ -627,7 +627,7 @@ export default function TenantDetail() {
                           : f.year_from ? String(f.year_from) : "—",
                         f.engine || "—",
                         f.confidence ? `${Math.round(f.confidence * 100)}%` : "—",
-                        f.source || "—",
+                        f.extraction_method || "—",
                       ])}
                     />
                   )}
