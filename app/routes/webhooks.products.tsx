@@ -46,6 +46,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .delete()
         .eq("shop_id", shop)
         .eq("shopify_product_id", payload.id);
+      // Recalculate tenant product count after delete
+      try {
+        const { count } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shop);
+        await db.from("tenants").update({ product_count: count ?? 0 }).eq("shop_id", shop);
+      } catch (_e) { /* non-critical */ }
       break;
     }
   }
