@@ -18,6 +18,41 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BATCH_SIZE = 50; // Products per invocation (Supabase Pro: 150s timeout)
 
+/**
+ * Wrapper for Shopify GraphQL API calls with HTTP error handling.
+ * Returns parsed JSON data or throws with descriptive error.
+ */
+async function shopifyGraphQL(
+  shopId: string,
+  accessToken: string,
+  query: string,
+  variables?: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(`SHOPIFY_AUTH_ERROR: ${res.status} — Token may be revoked or store uninstalled. ${text}`);
+    }
+    throw new Error(`SHOPIFY_API_ERROR: ${res.status} ${res.statusText} — ${text}`);
+  }
+
+  const json = await res.json();
+
+  // Check for GraphQL-level errors
+  if (json.errors && json.errors.length > 0) {
+    const errMsg = json.errors.map((e: { message: string }) => e.message).join("; ");
+    console.warn(`[shopify] GraphQL errors for ${shopId}: ${errMsg}`);
+  }
+
+  return json;
+}
+
 // Cache publication IDs per shop (refreshed each Edge Function invocation)
 const pubCache = new Map<string, string[]>();
 
@@ -117,6 +152,24 @@ Deno.serve(async (req) => {
 
     console.log(`[process-jobs] Processing job ${job.id} type=${job.type} shop=${job.shop_id}`);
 
+    // Verify tenant still exists and has a valid plan
+    const { data: tenant } = await db
+      .from("tenants")
+      .select("plan, plan_status, shopify_access_token, uninstalled_at")
+      .eq("shop_id", job.shop_id)
+      .maybeSingle();
+
+    if (!tenant || tenant.uninstalled_at || !tenant.shopify_access_token) {
+      console.warn(`[process-jobs] Tenant ${job.shop_id} not found, uninstalled, or no token — cancelling job`);
+      await db.from("sync_jobs").update({
+        status: "failed",
+        error: "Tenant not found or uninstalled",
+        completed_at: new Date().toISOString(),
+        locked_at: null,
+      }).eq("id", job.id);
+      return new Response(JSON.stringify({ status: "cancelled", reason: "tenant_invalid" }));
+    }
+
     // Route to appropriate processor
     let result: { processed: number; hasMore: boolean; error?: string };
 
@@ -191,6 +244,17 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error("[process-jobs] Fatal error:", err);
+    // Release the lock on fatal error so the job can be retried
+    try {
+      const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      // Try to unlock any job we may have claimed — use the lockTime if available
+      await db.from("sync_jobs")
+        .update({ locked_at: null })
+        .eq("status", "running")
+        .not("locked_at", "is", null);
+    } catch (_unlockErr) {
+      console.error("[process-jobs] Failed to release lock after fatal error");
+    }
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
 });

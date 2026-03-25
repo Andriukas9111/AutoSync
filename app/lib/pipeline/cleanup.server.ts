@@ -306,9 +306,13 @@ export async function removeAllCollections(
       const collections = json?.data?.collections?.edges ?? [];
       for (const edge of collections) {
         const title: string = edge.node.title ?? "";
-        // Only delete collections that match our naming pattern: "X Parts" or "X Y Parts"
-        // and contain a tag rule with _autosync_ prefix
-        if (title.endsWith(" Parts") && !collectionIdsToDelete.has(edge.node.id)) {
+        // Only delete collections that are ours: title ends in " Parts" AND has _autosync_ tag rule
+        const rules = edge.node.rules ?? edge.node.ruleSet?.rules ?? [];
+        const hasAutoSyncRule = Array.isArray(rules) && rules.some(
+          (r: { column?: string; condition?: string }) =>
+            r.column === "TAG" && r.condition?.includes("_autosync_")
+        );
+        if (title.endsWith(" Parts") && hasAutoSyncRule && !collectionIdsToDelete.has(edge.node.id)) {
           collectionIdsToDelete.add(edge.node.id);
         }
       }

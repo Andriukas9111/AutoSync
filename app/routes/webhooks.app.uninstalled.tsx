@@ -25,6 +25,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.error(`[webhook] Vehicle page sync cleanup failed for ${shop}:`, err);
   }
 
+  // Cancel any active sync jobs (prevents Edge Function from making API calls with revoked token)
+  try {
+    await db
+      .from("sync_jobs")
+      .update({ status: "failed", error: "App uninstalled", completed_at: new Date().toISOString(), locked_at: null })
+      .eq("shop_id", shop)
+      .in("status", ["running", "pending"]);
+  } catch (err) {
+    console.error(`[webhook] Job cancellation failed for ${shop}:`, err);
+  }
+
   // Mark tenant as uninstalled in Supabase (preserve data — they might reinstall)
   await db
     .from("tenants")
