@@ -5,7 +5,7 @@
 
 import {
   Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
-  Banner, ProgressBar, Icon,
+  Banner, ProgressBar,
 } from "@shopify/polaris";
 import {
   RefreshIcon, AlertCircleIcon, ClockIcon, DatabaseIcon,
@@ -86,7 +86,7 @@ export function AdminOverview({
               <div key={s.label} style={statMiniStyle}>
                 <BlockStack gap="100">
                   <InlineStack gap="200" blockAlign="center">
-                    <Icon source={s.icon} tone={s.tone} />
+                    <IconBadge icon={s.icon} size={22} color={s.tone === "critical" ? "var(--p-color-icon-critical)" : s.tone === "warning" ? "var(--p-color-icon-warning)" : "var(--p-color-icon-emphasis)"} />
                     <Text as="span" variant="headingLg" fontWeight="bold">{s.value.toLocaleString()}</Text>
                   </InlineStack>
                   <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
