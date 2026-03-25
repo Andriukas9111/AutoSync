@@ -946,211 +946,200 @@ export default function AdminPanel() {
         )}
 
         {/* ═══════════════ TABS ═══════════════ */}
-        <Card padding="0">
-          <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-            <Box padding="400" minHeight="500px">
+        <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
+          <Box paddingBlockStart="400" minHeight="500px">
 
               {/* ════════════════════════════════════════════════════════════ */}
               {/* TAB 1: OVERVIEW                                            */}
               {/* ════════════════════════════════════════════════════════════ */}
               {selectedTab === 0 && (
-                <BlockStack gap="600">
+                <BlockStack gap="500">
 
-                  {/* ── System Health Stats ── */}
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">System Health</Text>
-
-                    {/* Stuck jobs warning */}
-                    {systemHealth.stuckJobs.length > 0 && (
-                      <Banner tone="warning" title={`${systemHealth.stuckJobs.length} stuck job${systemHealth.stuckJobs.length === 1 ? "" : "s"} detected`}>
-                        <p>
-                          {systemHealth.stuckJobs.length === 1
-                            ? `Job "${fmtType(systemHealth.stuckJobs[0].type)}" for ${systemHealth.stuckJobs[0].shop_id.replace(".myshopify.com", "")} has been running for over 30 minutes.`
-                            : `${systemHealth.stuckJobs.length} jobs have been running for over 30 minutes. Check Activity tab.`}
-                        </p>
-                      </Banner>
-                    )}
-
-                    {/* 4 stat cards */}
-                    <div style={statGridStyle(4)}>
-                      <div style={statMiniStyle}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Icon source={RefreshIcon} tone="info" />
-                            <Text as="span" variant="headingLg" fontWeight="bold">
-                              {`${systemHealth.jobs24h.running + systemHealth.jobs24h.pending}`}
-                            </Text>
-                          </InlineStack>
-                          <Text as="span" variant="bodySm" tone="subdued">Active Jobs</Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`${systemHealth.jobs24h.running} running \u00B7 ${systemHealth.jobs24h.pending} pending`}
-                          </Text>
-                        </BlockStack>
-                      </div>
-
-                      <div style={statMiniStyle}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Icon source={AlertCircleIcon} tone="critical" />
-                            <Text as="span" variant="headingLg" fontWeight="bold">
-                              {`${systemHealth.jobs24h.failed}`}
-                            </Text>
-                          </InlineStack>
-                          <Text as="span" variant="bodySm" tone="subdued">Failed (24h)</Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`${systemHealth.jobs24h.completed} completed`}
-                          </Text>
-                        </BlockStack>
-                      </div>
-
-                      <div style={statMiniStyle}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Icon source={ClockIcon} tone="warning" />
-                            <Text as="span" variant="headingLg" fontWeight="bold">
-                              {`${systemHealth.stuckJobs.length}`}
-                            </Text>
-                          </InlineStack>
-                          <Text as="span" variant="bodySm" tone="subdued">Stuck Jobs</Text>
-                          <Text as="span" variant="bodySm" tone="subdued">Running &gt;30 min</Text>
-                        </BlockStack>
-                      </div>
-
-                      <div style={statMiniStyle}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Icon source={DatabaseIcon} tone="base" />
-                            <Text as="span" variant="headingLg" fontWeight="bold">
-                              {`${(systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines).toLocaleString()}`}
-                            </Text>
-                          </InlineStack>
-                          <Text as="span" variant="bodySm" tone="subdued">Database Rows</Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`${systemHealth.dbSizes.products.toLocaleString()} products \u00B7 ${systemHealth.dbSizes.fitments.toLocaleString()} fitments`}
-                          </Text>
-                        </BlockStack>
-                      </div>
-                    </div>
-                  </BlockStack>
-
-                  {/* ── Failed Jobs Table ── */}
-                  {systemHealth.failedJobs.length > 0 && (
-                    <BlockStack gap="200">
-                      <Text as="h3" variant="headingSm">Recent Failures (24h)</Text>
-                      <DataTable
-                        columnContentTypes={["text", "text", "text", "text"]}
-                        headings={["Tenant", "Type", "Error", "Time"]}
-                        rows={systemHealth.failedJobs.map((j) => [
-                          j.shop_id.replace(".myshopify.com", ""),
-                          fmtType(j.type),
-                          (j.error ?? "Unknown").slice(0, 80) + ((j.error ?? "").length > 80 ? "..." : ""),
-                          fmtShort(j.created_at),
-                        ])}
-                      />
-                    </BlockStack>
+                  {/* Stuck jobs warning */}
+                  {systemHealth.stuckJobs.length > 0 && (
+                    <Banner tone="warning" title={`${systemHealth.stuckJobs.length} stuck job${systemHealth.stuckJobs.length === 1 ? "" : "s"} detected`}>
+                      <p>
+                        {systemHealth.stuckJobs.length === 1
+                          ? `Job "${fmtType(systemHealth.stuckJobs[0].type)}" for ${systemHealth.stuckJobs[0].shop_id.replace(".myshopify.com", "")} has been running for over 30 minutes.`
+                          : `${systemHealth.stuckJobs.length} jobs have been running for over 30 minutes. Check Activity tab.`}
+                      </p>
+                    </Banner>
                   )}
 
-                  {/* ── Plan Distribution ── */}
+                  {/* ── Card 1: System Health ── */}
                   <Card>
-                    <InlineStack gap="300" align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingSm">Plan Distribution</Text>
-                      <InlineStack gap="200" wrap>
-                        {Object.entries(planBreakdown).map(([plan, count]) => (
-                          <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier]}>
-                            {`${cap(plan)}: ${count}`}
-                          </Badge>
-                        ))}
+                    <BlockStack gap="300">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={RefreshIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">System Health</Text>
                       </InlineStack>
-                    </InlineStack>
+                      <div style={statGridStyle(4)}>
+                        {[
+                          { icon: RefreshIcon, tone: "info" as const, value: systemHealth.jobs24h.running + systemHealth.jobs24h.pending, label: "Active Jobs", sub: `${systemHealth.jobs24h.running} running \u00B7 ${systemHealth.jobs24h.pending} pending` },
+                          { icon: AlertCircleIcon, tone: "critical" as const, value: systemHealth.jobs24h.failed, label: "Failed (24h)", sub: `${systemHealth.jobs24h.completed} completed` },
+                          { icon: ClockIcon, tone: "warning" as const, value: systemHealth.stuckJobs.length, label: "Stuck Jobs", sub: "Running >30 min" },
+                          { icon: DatabaseIcon, tone: "base" as const, value: systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines, label: "Database Rows", sub: `${systemHealth.dbSizes.products.toLocaleString()} products \u00B7 ${systemHealth.dbSizes.fitments.toLocaleString()} fitments` },
+                        ].map((s) => (
+                          <div key={s.label} style={statMiniStyle}>
+                            <BlockStack gap="100">
+                              <InlineStack gap="200" blockAlign="center">
+                                <Icon source={s.icon} tone={s.tone} />
+                                <Text as="span" variant="headingLg" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                              </InlineStack>
+                              <Text as="span" variant="bodySm" tone="subdued">{s.label}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{s.sub}</Text>
+                            </BlockStack>
+                          </div>
+                        ))}
+                      </div>
+                    </BlockStack>
                   </Card>
 
-                  {/* ── Quick Actions ── */}
-                  <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Quick Actions</Text>
-                    <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
-                      <Button onClick={() => revalidator.revalidate()} loading={isRefreshing} icon={RefreshIcon}>
-                        Refresh Counts
-                      </Button>
-                      <Button onClick={() => setSelectedTab(2)} icon={DatabaseIcon}>
-                        YMME Database
-                      </Button>
-                      <Button onClick={() => setSelectedTab(3)} icon={ChartVerticalIcon}>
-                        View Activity
-                      </Button>
-                      <Button onClick={() => navigate("/app/admin/plans")} icon={SettingsIcon} variant="primary">
-                        Manage Plans
-                      </Button>
-                    </InlineGrid>
-                  </BlockStack>
+                  {/* ── Card 2: Quick Actions ── */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">Quick Actions</Text>
+                      </InlineStack>
+                      <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
+                        <Button onClick={() => revalidator.revalidate()} loading={isRefreshing} icon={RefreshIcon}>Refresh Counts</Button>
+                        <Button onClick={() => setSelectedTab(2)} icon={DatabaseIcon}>YMME Database</Button>
+                        <Button onClick={() => setSelectedTab(3)} icon={ChartVerticalIcon}>View Activity</Button>
+                        <Button onClick={() => navigate("/app/admin/plans")} icon={SettingsIcon} variant="primary">Manage Plans</Button>
+                      </InlineGrid>
+                    </BlockStack>
+                  </Card>
 
-                  <Divider />
+                  {/* ── Card 3: Platform Stats (3-column like dashboard) ── */}
+                  <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
+                    {/* Tenants */}
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={PersonIcon} color="var(--p-color-icon-emphasis)" />
+                            <Text as="h2" variant="headingSm">Tenants</Text>
+                          </InlineStack>
+                          <Button onClick={() => setSelectedTab(1)} variant="plain" size="slim">View all</Button>
+                        </InlineStack>
+                        <div style={statGridStyle(2)}>
+                          {[
+                            { label: "Total", value: totalTenants },
+                            { label: "Active", value: activeTenants },
+                            { label: "Paid", value: paidTenants },
+                          ].map((s) => (
+                            <div key={s.label} style={statMiniStyle}>
+                              <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </div>
+                          ))}
+                        </div>
+                        <InlineStack gap="200" wrap>
+                          {Object.entries(planBreakdown).map(([plan, count]) => (
+                            <Badge key={plan} tone={PLAN_BADGE_TONE[plan as PlanTier]}>{`${cap(plan)}: ${count}`}</Badge>
+                          ))}
+                        </InlineStack>
+                      </BlockStack>
+                    </Card>
 
-                  {/* ── Top Stats Cards ── */}
-                  <InlineGrid columns={{ xs: 2, sm: 4 }} gap="300">
-                    <div style={cardRowStyle}>
-                      <BlockStack gap="100">
+                    {/* Products & Fitments */}
+                    <Card>
+                      <BlockStack gap="300">
                         <InlineStack gap="200" blockAlign="center">
-                          <Icon source={PersonIcon} tone="info" />
-                          <Text as="span" variant="headingLg" fontWeight="bold">{totalTenants.toLocaleString()}</Text>
+                          <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+                          <Text as="h2" variant="headingSm">Products & Fitments</Text>
                         </InlineStack>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {`${activeTenants} active \u00B7 ${paidTenants} paid`}
-                        </Text>
+                        <div style={statGridStyle(2)}>
+                          {[
+                            { label: "Products", value: totalProducts },
+                            { label: "Fitments", value: totalFitments },
+                          ].map((s) => (
+                            <div key={s.label} style={statMiniStyle}>
+                              <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </div>
+                          ))}
+                        </div>
                       </BlockStack>
-                    </div>
-                    <div style={cardRowStyle}>
-                      <BlockStack gap="100">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Icon source={ProductIcon} tone="info" />
-                          <Text as="span" variant="headingLg" fontWeight="bold">{totalProducts.toLocaleString()}</Text>
+                    </Card>
+
+                    {/* YMME Database */}
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
+                            <Text as="h2" variant="headingSm">YMME Database</Text>
+                          </InlineStack>
+                          <Button onClick={() => setSelectedTab(2)} variant="plain" size="slim">Browse</Button>
                         </InlineStack>
-                        <Text as="span" variant="bodySm" tone="subdued">Total Products</Text>
+                        <div style={statGridStyle(2)}>
+                          {[
+                            { label: "Makes", value: ymmeCounts.makes },
+                            { label: "Models", value: ymmeCounts.models },
+                            { label: "Engines", value: ymmeCounts.engines },
+                            { label: "Specs", value: ymmeCounts.specs },
+                          ].map((s) => (
+                            <div key={s.label} style={statMiniStyle}>
+                              <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
+                              <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                            </div>
+                          ))}
+                        </div>
+                        <ProgressBar progress={specsCoverage} size="small" />
+                        <Text as="p" variant="bodySm" tone="subdued">{`${specsCoverage}% engines with full specs`}</Text>
                       </BlockStack>
-                    </div>
-                    <div style={cardRowStyle}>
-                      <BlockStack gap="100">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Icon source={ConnectIcon} tone="info" />
-                          <Text as="span" variant="headingLg" fontWeight="bold">{totalFitments.toLocaleString()}</Text>
-                        </InlineStack>
-                        <Text as="span" variant="bodySm" tone="subdued">Total Fitments</Text>
-                      </BlockStack>
-                    </div>
-                    <div style={cardRowStyle}>
-                      <BlockStack gap="100">
-                        <InlineStack gap="200" blockAlign="center">
-                          <Icon source={DatabaseIcon} tone="info" />
-                          <Text as="span" variant="headingLg" fontWeight="bold">
-                            {`${(ymmeCounts.makes + ymmeCounts.models + ymmeCounts.engines).toLocaleString()}`}
-                          </Text>
-                        </InlineStack>
-                        <Text as="span" variant="bodySm" tone="subdued">
-                          {`${ymmeCounts.makes} makes \u00B7 ${ymmeCounts.models} models`}
-                        </Text>
-                      </BlockStack>
-                    </div>
+                    </Card>
                   </InlineGrid>
 
-                  {/* ── Recent Activity (last 20) ── */}
+                  {/* ── Card 4: Recent Activity ── */}
                   {recentJobs.length > 0 && (
-                    <BlockStack gap="300">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="h2" variant="headingMd">Recent Activity</Text>
-                        <Button size="slim" variant="plain" onClick={() => setSelectedTab(3)}>View All</Button>
-                      </InlineStack>
-                      {recentJobs.slice(0, 20).map((j, i) => (
-                        <div key={`${j.created_at}-${i}`} style={listRowStyle(i === Math.min(19, recentJobs.length - 1))}>
-                          <InlineStack gap="300" blockAlign="center">
-                            <Text as="span" variant="bodySm" tone="subdued">{fmtShort(j.created_at)}</Text>
-                            <Text as="span" variant="bodySm">{j.shop_id.replace(".myshopify.com", "")}</Text>
-                            <Badge tone={STATUS_TONES[j.status]}>{fmtType(j.type)}</Badge>
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="200" blockAlign="center">
+                            <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" />
+                            <Text as="h2" variant="headingMd">Recent Activity</Text>
                           </InlineStack>
-                          <Badge tone={STATUS_TONES[j.status]}>
-                            {j.status.charAt(0).toUpperCase() + j.status.slice(1)}
-                          </Badge>
+                          <Button size="slim" variant="plain" onClick={() => setSelectedTab(3)}>View All</Button>
+                        </InlineStack>
+                        <div style={tableContainerStyle}>
+                          {recentJobs.slice(0, 12).map((j, i) => (
+                            <div key={`${j.created_at}-${i}`} style={listRowStyle(i === Math.min(11, recentJobs.length - 1))}>
+                              <InlineStack gap="300" blockAlign="center">
+                                <Text as="span" variant="bodySm" tone="subdued">{fmtShort(j.created_at)}</Text>
+                                <Text as="span" variant="bodySm">{j.shop_id.replace(".myshopify.com", "")}</Text>
+                                <Badge tone={STATUS_TONES[j.type] ?? undefined}>{fmtType(j.type)}</Badge>
+                              </InlineStack>
+                              <Badge tone={STATUS_TONES[j.status]}>{j.status.charAt(0).toUpperCase() + j.status.slice(1)}</Badge>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </BlockStack>
+                      </BlockStack>
+                    </Card>
+                  )}
+
+                  {/* ── Card 5: Failed Jobs (conditional) ── */}
+                  {systemHealth.failedJobs.length > 0 && (
+                    <Card>
+                      <BlockStack gap="300">
+                        <InlineStack gap="200" blockAlign="center">
+                          <IconBadge icon={AlertCircleIcon} color="var(--p-color-icon-critical)" />
+                          <Text as="h2" variant="headingMd">Recent Failures (24h)</Text>
+                        </InlineStack>
+                        <DataTable
+                          columnContentTypes={["text", "text", "text", "text"]}
+                          headings={["Tenant", "Type", "Error", "Time"]}
+                          rows={systemHealth.failedJobs.map((j) => [
+                            j.shop_id.replace(".myshopify.com", ""),
+                            fmtType(j.type),
+                            (j.error ?? "Unknown").slice(0, 80) + ((j.error ?? "").length > 80 ? "..." : ""),
+                            fmtShort(j.created_at),
+                          ])}
+                        />
+                      </BlockStack>
+                    </Card>
                   )}
                 </BlockStack>
               )}
@@ -1159,28 +1148,37 @@ export default function AdminPanel() {
               {/* TAB 2: TENANTS                                             */}
               {/* ════════════════════════════════════════════════════════════ */}
               {selectedTab === 1 && (
-                <BlockStack gap="400">
-                  {/* Search + Filter row */}
-                  <InlineStack gap="300" align="space-between" blockAlign="end">
-                    <div style={{ flexGrow: 1, maxWidth: "400px" }}>
-                      <TextField
-                        label="Search" labelHidden value={search} onChange={setSearch}
-                        placeholder="Search by domain..." clearButton onClearButtonClick={() => setSearch("")}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <Select
-                      label="Plan" labelHidden
-                      options={[
-                        { label: "All Plans", value: "all" },
-                        ...PLAN_ORDER.map((p) => ({ label: cap(p), value: p })),
-                      ]}
-                      value={planFilter} onChange={setPlanFilter}
-                    />
-                    <Badge tone="info">{`${filteredTenants.length} tenants`}</Badge>
-                  </InlineStack>
+                <BlockStack gap="500">
+                  {/* Card 1: Search + Filter */}
+                  <Card>
+                    <InlineStack gap="300" align="space-between" blockAlign="end">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">Tenants</Text>
+                      </InlineStack>
+                      <InlineStack gap="300" blockAlign="end">
+                        <div style={{ maxWidth: "300px" }}>
+                          <TextField
+                            label="Search" labelHidden value={search} onChange={setSearch}
+                            placeholder="Search by domain..." clearButton onClearButtonClick={() => setSearch("")}
+                            autoComplete="off"
+                          />
+                        </div>
+                        <Select
+                          label="Plan" labelHidden
+                          options={[
+                            { label: "All Plans", value: "all" },
+                            ...PLAN_ORDER.map((p) => ({ label: cap(p), value: p })),
+                          ]}
+                          value={planFilter} onChange={setPlanFilter}
+                        />
+                        <Badge tone="info">{`${filteredTenants.length} tenants`}</Badge>
+                      </InlineStack>
+                    </InlineStack>
+                  </Card>
 
-                  {/* Tenant IndexTable */}
+                  {/* Card 2: Tenant List */}
+                  <Card padding="0">
                   <IndexTable
                     resourceName={{ singular: "tenant", plural: "tenants" }}
                     itemCount={filteredTenants.length}
@@ -1256,6 +1254,7 @@ export default function AdminPanel() {
                       );
                     })}
                   </IndexTable>
+                  </Card>
                 </BlockStack>
               )}
 
@@ -2046,7 +2045,6 @@ export default function AdminPanel() {
 
             </Box>
           </Tabs>
-        </Card>
       </BlockStack>
     </Page>
   );
