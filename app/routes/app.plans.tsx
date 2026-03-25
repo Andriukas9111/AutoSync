@@ -691,43 +691,64 @@ export default function Plans() {
                 <thead>
                   <tr style={{ borderBottom: "2px solid var(--p-color-border)" }}>
                     {["Feature", "AutoSync", "Convermax", "EasySearch", "C: YMM", "PCFitment", "VFitz", "AutoFit AI", "PartFinder", "SearchAuto"].map((h, i) => (
-                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-info)" : undefined, color: i === 1 ? "var(--p-color-text-info)" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
+                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-success)" : undefined, color: i === 1 ? "#fff" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {[
+                  {([
                     ["Price", "Free–$299", "$250–$850", "$19–$75", "$10–$75", "$15–$150", "$1–$58", "$50–$250", "$49", "$89–$500"],
-                    ["YMME Database", "✓", "—", "✓", "—", "✓", "✓", "—", "—", "—"],
-                    ["Auto Extraction", "✓", "—", "—", "—", "—", "—", "✓", "—", "—"],
-                    ["Smart Collections", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
-                    ["UK Plate Lookup", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
-                    ["VIN Decode", "✓", "✓", "—", "—", "✓", "—", "—", "—", "—"],
-                    ["Wheel Finder", "✓", "✓", "—", "—", "—", "—", "—", "—", "—"],
-                    ["Widgets", "7", "1", "2", "1", "1", "1", "2", "1", "1"],
-                    ["Vehicle Pages", "✓", "✓", "—", "—", "—", "—", "—", "—", "—"],
-                    ["API/FTP Import", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
-                    ["Pricing Engine", "✓", "—", "—", "—", "—", "—", "—", "—", "—"],
-                    ["Analytics", "✓", "—", "—", "—", "✓", "✓", "—", "✓", "—"],
-                    ["My Garage", "✓", "—", "✓", "✓", "—", "—", "—", "✓", "—"],
-                  ].map(([label, ...vals], i) => (
+                    ["Rating", "—", "5.0 (12)", "4.8 (133)", "4.8 (92)", "1.0 (1)", "4.9 (27)", "4.1 (4)", "4.9 (15)", "5.0 (5)"],
+                    ["YMME Database", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "yes"],
+                    ["Auto Extraction", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
+                    ["Smart Collections", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
+                    ["UK Plate Lookup", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
+                    ["VIN Decode", "yes", "yes", "no", "no", "yes", "no", "no", "no", "yes"],
+                    ["Wheel Finder", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
+                    ["Fitment Badge", "yes", "yes", "no", "no", "no", "no", "yes", "yes", "yes"],
+                    ["Compatibility Table", "yes", "yes", "$75/mo", "$50/mo", "no", "no", "$80/mo", "no", "no"],
+                    ["My Garage", "yes", "yes", "$75/mo", "$50/mo", "no", "no", "yes", "yes", "yes"],
+                    ["Vehicle Spec Pages", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
+                    ["API/FTP Import", "yes", "yes", "no", "no", "yes", "no", "no", "no", "no"],
+                    ["Pricing Engine", "yes", "no", "no", "no", "no", "no", "no", "no", "no"],
+                    ["Analytics", "yes", "yes", "no", "no", "no", "no", "yes", "yes", "yes"],
+                    ["Widgets", "7", "7+", "2", "2", "1", "1", "2", "2", "1"],
+                  ] as string[][]).map(([label, ...vals], i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                       <td style={{ padding: "7px 6px", fontWeight: 500, whiteSpace: "nowrap" }}>{label}</td>
-                      {vals.map((v, j) => (
-                        <td key={j} style={{ textAlign: "center", padding: "7px 6px", fontWeight: j === 0 ? 600 : 400, color: v === "✓" ? "var(--p-color-text-success)" : v === "—" ? "var(--p-color-text-subdued)" : undefined, background: j === 0 ? "var(--p-color-bg-surface-secondary)" : undefined }}>
-                          {v}
-                        </td>
-                      ))}
+                      {vals.map((v, j) => {
+                        const isAutoSync = j === 0;
+                        const isYes = v === "yes";
+                        const isNo = v === "no";
+                        const isPaidOnly = v.includes("$");
+                        return (
+                          <td key={j} style={{
+                            textAlign: "center", padding: "7px 6px",
+                            fontWeight: isAutoSync ? 600 : 400,
+                            background: isAutoSync ? "var(--p-color-bg-surface-success)" : undefined,
+                          }}>
+                            {isYes ? (
+                              <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>&#10003;</span>
+                            ) : isNo ? (
+                              <span style={{ color: "var(--p-color-text-critical)", fontWeight: 600 }}>&#10007;</span>
+                            ) : isPaidOnly ? (
+                              <span style={{ color: "var(--p-color-text-warning)", fontSize: "11px" }}>{v}</span>
+                            ) : (
+                              <span>{v}</span>
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </Box>
-            <Banner tone="info">
+            <Banner tone="success">
               <Text as="p" variant="bodySm">
-                AutoSync offers <strong>more features at a lower price</strong> than any competitor. We&apos;re the only app with smart auto-extraction, 7 storefront widgets, UK plate lookup, and a built-in pricing engine — starting free.
+                <strong>AutoSync matches Convermax&apos;s $250/mo features — starting free.</strong> We&apos;re the only affordable app with smart auto-extraction, 7 storefront widgets, UK plate lookup, vehicle spec pages, and a built-in pricing engine. Convermax is the only competitor with comparable features, but at 3-10x the price.
               </Text>
             </Banner>
           </BlockStack>
