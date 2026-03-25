@@ -40,7 +40,7 @@ import { pushToShopify } from "../lib/pipeline/push.server";
 import { createSmartCollections } from "../lib/pipeline/collections.server";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
-import { getJobProgressLabel, getJobCompletionMessage } from "../lib/design";
+import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
@@ -333,7 +333,7 @@ export default function Push() {
   const { stats: liveStats, activeJobs, jobs: allJobs } = useAppData(undefined, 3000);
   const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "collections") ?? null;
   const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
-  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(false);
+  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(() => isBannerDismissed("push_complete"));
 
   const isJobRunning = !!activeJob;
 
@@ -377,7 +377,7 @@ export default function Push() {
         {/* Show completion when job just finished */}
         {completedPush && !isJobRunning && !isSubmitting && !dismissedCompletionBanner && (
           <Layout.Section>
-            <Banner tone="success" title="Push completed" onDismiss={() => setDismissedCompletionBanner(true)}>
+            <Banner tone="success" title="Push completed" onDismiss={() => { dismissBanner("push_complete"); setDismissedCompletionBanner(true); }}>
               <p>{getJobCompletionMessage({ type: "push", status: "completed", processed: completedPush.processed_items, total: completedPush.total_items })}</p>
             </Banner>
           </Layout.Section>

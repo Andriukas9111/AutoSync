@@ -28,7 +28,7 @@ import {
 
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { cardRowStyle } from "../lib/design";
+import { cardRowStyle, isBannerDismissed, dismissBanner } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import {
   getTenant,
@@ -332,6 +332,7 @@ export default function Plans() {
   }
 
   const [confirmTier, setConfirmTier] = useState<PlanTier | null>(null);
+  const [billingDismissed, setBillingDismissed] = useState(() => isBannerDismissed("billing_confirmed"));
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   const fetcherData = fetcher.data as
@@ -398,8 +399,8 @@ export default function Plans() {
         />
 
         {/* Banners */}
-        {billingSuccess && (
-          <Banner title="Plan activated successfully" tone="success" onDismiss={() => {}}>
+        {billingSuccess && !billingDismissed && (
+          <Banner title="Plan activated successfully" tone="success" onDismiss={() => { dismissBanner("billing_confirmed"); setBillingDismissed(true); }}>
             <p>Your subscription has been confirmed by Shopify. All features are now active.</p>
           </Banner>
         )}

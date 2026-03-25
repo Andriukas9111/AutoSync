@@ -326,3 +326,17 @@ export function getJobCompletionMessage(ctx: JobContext): string {
     default: return `${processed.toLocaleString()} items processed`;
   }
 }
+
+// ─── Banner Dismiss Persistence (sessionStorage) ────────────────────
+// Banners dismissed within a browser session stay dismissed.
+// Banners reappear in a new session (next day, new tab).
+
+/** Check if a banner was dismissed this session */
+export function isBannerDismissed(key: string): boolean {
+  try { return sessionStorage.getItem(`banner_${key}`) === "1"; } catch { return false; }
+}
+
+/** Mark a banner as dismissed for this session */
+export function dismissBanner(key: string): void {
+  try { sessionStorage.setItem(`banner_${key}`, "1"); } catch { /* SSR-safe */ }
+}
