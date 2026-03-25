@@ -188,6 +188,56 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: "cancelled", reason: "tenant_invalid" }));
     }
 
+    // ── Plan limit enforcement ──────────────────────────────────────
+    // Query plan limits from DB (or use hardcoded defaults if table missing)
+    const planTier = tenant.plan || "free";
+    let planLimits: Record<string, unknown> = {};
+    try {
+      const { data: planConfig } = await db
+        .from("plan_configurations")
+        .select("products_limit, fitments_limit, features")
+        .eq("tier", planTier)
+        .maybeSingle();
+      if (planConfig) {
+        planLimits = planConfig;
+      }
+    } catch (_e) { /* plan_configurations table may not exist yet — use defaults */ }
+
+    // Check if the job type is allowed on this plan
+    const features = (planLimits.features || {}) as Record<string, unknown>;
+    const jobTypeFeatureMap: Record<string, string> = {
+      extract: "autoExtraction",
+      push: "pushTags",
+      collections: "smartCollections",
+      vehicle_pages: "vehiclePages",
+      bulk_push: "pushTags",
+    };
+    const requiredFeature = jobTypeFeatureMap[job.type];
+    if (requiredFeature && features[requiredFeature] === false) {
+      console.warn(`[process-jobs] Job ${job.id} type=${job.type} blocked — feature "${requiredFeature}" not in plan "${planTier}"`);
+      await db.from("sync_jobs").update({
+        status: "failed",
+        error: `Feature "${requiredFeature}" is not available on your ${planTier} plan. Please upgrade.`,
+        completed_at: new Date().toISOString(),
+        locked_at: null,
+      }).eq("id", job.id);
+      return new Response(JSON.stringify({ status: "blocked", reason: "plan_limit", feature: requiredFeature }));
+    }
+
+    // Check product/fitment count limits for relevant job types
+    if (job.type === "push" || job.type === "bulk_push" || job.type === "extract") {
+      const productsLimit = (planLimits.products_limit as number) || 50;
+      const { count: currentProducts } = await db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", job.shop_id);
+
+      if (currentProducts && currentProducts > productsLimit && productsLimit < 999999999) {
+        console.warn(`[process-jobs] Job ${job.id} — tenant has ${currentProducts} products, limit is ${productsLimit}`);
+        // Don't block push (they may be pushing existing data), but log it
+      }
+    }
+
     // Route to appropriate processor
     let result: { processed: number; hasMore: boolean; error?: string };
 
