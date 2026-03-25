@@ -23,7 +23,6 @@ import {
   CheckSmallIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-  InfoIcon,
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
@@ -78,7 +77,7 @@ function getHighlights(config: PlanConfig): string[] {
   if (f.ftpImport) items.push("FTP import");
 
   // Widgets — count them
-  const widgetCount = [f.ymmeWidget, f.fitmentBadge, f.compatibilityTable, f.floatingBar, f.myGarage, f.wheelFinder, f.plateLookup, f.vinDecode].filter(Boolean).length;
+  const widgetCount = [f.ymmeWidget, f.fitmentBadge, f.compatibilityTable, f.myGarage, f.wheelFinder, f.plateLookup, f.vinDecode].filter(Boolean).length;
   if (widgetCount > 0) items.push(`${widgetCount} storefront widget${widgetCount > 1 ? "s" : ""}`);
 
   // Premium features
@@ -138,7 +137,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   { label: "YMME Search Widget", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.ymmeWidget ? "✓" : "—" },
   { label: "Fitment Badge", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.fitmentBadge ? "✓" : "—" },
   { label: "Compatibility Table", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.compatibilityTable ? "✓" : "—" },
-  { label: "Floating Vehicle Bar", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.floatingBar ? "✓" : "—" },
+  // floatingBar removed — widget doesn't exist
   { label: "My Garage", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.myGarage ? "✓" : "—" },
   { label: "Wheel Finder", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.wheelFinder ? "✓" : "—" },
   { label: "Plate Lookup (DVLA + MOT)", category: "STOREFRONT WIDGETS", getValue: (l) => l.features.plateLookup ? "✓" : "—" },
@@ -166,27 +165,43 @@ const COMPARISON_ROWS: ComparisonRow[] = [
 const FAQ_ITEMS = [
   {
     q: "How does billing work?",
-    a: "AutoSync uses Shopify's managed billing. When you upgrade, you'll be redirected to Shopify to approve the charge. All charges appear on your Shopify invoice — no separate payment method needed.",
+    a: "AutoSync uses Shopify's managed billing. When you upgrade, you'll be redirected to Shopify to approve the charge. All charges appear on your Shopify invoice — no separate payment method needed. You can cancel at any time.",
   },
   {
     q: "Can I change plans at any time?",
-    a: "Yes. Upgrades take effect immediately with prorated billing. Downgrades take effect at the end of your current billing cycle. You can downgrade to Free at any time.",
+    a: "Yes. Upgrades take effect immediately with prorated billing. Downgrades take effect at the end of your current billing cycle. You can downgrade to Free at any time — your data stays safe.",
   },
   {
-    q: "What happens if I exceed my product limit?",
-    a: "You won't be able to import or sync new products until you upgrade or remove existing products. Your existing data remains intact.",
+    q: "What happens if I exceed my product or fitment limit?",
+    a: "You won't be able to import new products, add new fitments, or run auto-extraction until you upgrade or remove existing data. Your existing data remains intact and your storefront widgets continue working.",
   },
   {
     q: "What are 'active makes'?",
-    a: "Active makes control how many vehicle makes (e.g., Ford, Toyota, BMW) you can use for fitment mapping and collections. The YMME database itself is always available — this limit controls which makes you can actively assign to products.",
+    a: "Active makes control how many vehicle makes (e.g., Ford, Toyota, BMW) appear in your YMME search widget and can be used for collections. The full YMME database with 374+ makes is always available for reference.",
   },
   {
-    q: "Are widgets included in all plans?",
-    a: "The number of available storefront widgets depends on your plan. Free and Starter plans include basic widgets, while higher plans unlock advanced widgets like My Garage, Wheel Finder, Plate Lookup, and VIN Decode.",
+    q: "Which widgets are included in each plan?",
+    a: "Free: none. Starter: YMME Search + Fitment Badge (2 widgets). Growth: adds Compatibility Table (3 widgets). Professional: adds Wheel Finder + Vehicle Pages (5 widgets). Business: adds My Garage (6 widgets). Enterprise: adds UK Plate Lookup + VIN Decode (all 7 widgets).",
+  },
+  {
+    q: "What are smart collections?",
+    a: "AutoSync automatically creates Shopify collections organized by vehicle make, model, and year range. Growth plan gets collections by make (e.g., 'BMW Parts'). Professional adds model-level (e.g., 'BMW 3 Series Parts'). Business+ adds year ranges (e.g., 'BMW 3 Series 2019-2024 Parts').",
+  },
+  {
+    q: "What is the Pricing Engine?",
+    a: "Available on Business+ plans. Set automated pricing rules with markup, margin, fixed, or MAP (Minimum Advertised Price) strategies. Scope rules by vendor, product type, provider, tag, or SKU prefix. Preview price changes before applying.",
   },
   {
     q: "What is the DVLA Plate Lookup?",
-    a: "Enterprise-exclusive feature for UK stores. Customers can enter their vehicle registration number and instantly find compatible parts. Integrates with DVLA VES API and MOT history.",
+    a: "Enterprise-exclusive feature for UK stores. Customers enter their vehicle registration number and instantly see their vehicle details, MOT status, tax status, and compatible parts. Integrates with DVLA VES API and MOT History API.",
+  },
+  {
+    q: "What happens when I uninstall the app?",
+    a: "App-owned metafields and metaobjects are automatically removed by Shopify. Tags and collections persist on your store. Your data is preserved in our database for 48 hours in case you reinstall, then permanently deleted per GDPR requirements.",
+  },
+  {
+    q: "Is there a free trial?",
+    a: "The Free plan lets you explore AutoSync with up to 50 products at no cost. All paid plans are billed monthly through Shopify with no long-term commitment.",
   },
 ];
 
@@ -718,38 +733,7 @@ export default function Plans() {
           </BlockStack>
         </Card>
 
-        {/* How billing works */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={InfoIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">How Billing Works</Text>
-            </InlineStack>
-            <Divider />
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: "12px",
-            }}>
-              {[
-                { title: "Shopify Managed", desc: "All charges appear on your Shopify invoice. No separate payment method needed." },
-                { title: "Upgrade Instantly", desc: "Upgrades take effect immediately. You'll be redirected to Shopify to approve the charge." },
-                { title: "Downgrade Anytime", desc: "Downgrades take effect at the end of your current billing cycle. Your data stays safe." },
-                { title: "Cancel Anytime", desc: "Cancel your subscription at any time. Downgrade to Free with no penalties." },
-              ].map((item, i) => (
-                <div key={i} style={{
-                  ...cardRowStyle,
-                  border: "1px solid var(--p-color-border-secondary)",
-                }}>
-                  <BlockStack gap="100">
-                    <Text as="span" variant="headingSm">{`${String(i + 1)}. ${item.title}`}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">{item.desc}</Text>
-                  </BlockStack>
-                </div>
-              ))}
-            </div>
-          </BlockStack>
-        </Card>
+        {/* Billing info covered by HowItWorks at top */}
       </BlockStack>
 
       {/* Confirmation modal */}
