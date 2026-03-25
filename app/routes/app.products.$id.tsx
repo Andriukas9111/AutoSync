@@ -212,9 +212,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   let queueData: { totalProducts: number; unmappedCount: number; nextProductId: string | null } | null = null;
   if (isQueueMode) {
     queueData = {
-      totalProducts: (totalResult as any).count ?? 0,
-      unmappedCount: (unmappedResult as any).count ?? 0,
-      nextProductId: (nextResult as any).data?.id ?? null,
+      totalProducts: (totalResult as { count: number | null }).count ?? 0,
+      unmappedCount: (unmappedResult as { count: number | null }).count ?? 0,
+      nextProductId: (nextResult as { data: { id: string } | null }).data?.id ?? null,
     };
   }
 
@@ -409,7 +409,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
 export default function ProductDetails() {
   const { product, fitments, shopDomain, queueData } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean; skipped?: boolean; nextProductId?: string } | undefined;
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -419,7 +420,7 @@ export default function ProductDetails() {
   const isQueueMode = searchParams.get("from") === "fitment";
 
   // Suggestion system
-  const suggestionFetcher = useFetcher();
+  const suggestionFetcher = useFetcher<{ suggestions?: Array<Record<string, unknown>>; hints?: string[]; diagnostics?: string[] }>();
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(new Set());
@@ -451,9 +452,9 @@ export default function ProductDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
 
-  const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
-  const hints = (suggestionFetcher.data as any)?.hints ?? [];
-  const diagnostics: string[] = (suggestionFetcher.data as any)?.diagnostics ?? [];
+  const suggestions = suggestionFetcher.data?.suggestions ?? [];
+  const hints = suggestionFetcher.data?.hints ?? [];
+  const diagnostics: string[] = suggestionFetcher.data?.diagnostics ?? [];
   const suggestionsLoading = suggestionFetcher.state === "submitting" || suggestionFetcher.state === "loading";
 
   const handleVehicleChange = useCallback(
@@ -540,10 +541,9 @@ export default function ProductDetails() {
   // Queue mode: navigate to next product after skip action
   useEffect(() => {
     if (!isQueueMode || !actionData) return;
-    const data = actionData as any;
-    if (data.skipped && data.nextProductId) {
-      navigate(`/app/products/${data.nextProductId}?from=fitment`);
-    } else if (data.skipped && !data.nextProductId) {
+    if (actionData?.skipped && actionData?.nextProductId) {
+      navigate(`/app/products/${actionData.nextProductId}?from=fitment`);
+    } else if (actionData?.skipped && !actionData?.nextProductId) {
       navigate("/app/fitment/manual");
     }
   }, [actionData, isQueueMode, navigate]);
@@ -572,7 +572,7 @@ export default function ProductDetails() {
   const queuePercentage = queueData && queueData.totalProducts > 0
     ? Math.round((queueMapped / queueData.totalProducts) * 100)
     : 0;
-  const nextProductId = queueData?.nextProductId ?? (actionData as any)?.nextProductId ?? null;
+  const nextProductId = queueData?.nextProductId ?? actionData?.nextProductId ?? null;
 
   return (
     <Page
@@ -617,19 +617,19 @@ export default function ProductDetails() {
         {actionData && "error" in actionData && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
-        {actionData && "success" in actionData && actionData.message && !((actionData as any).skipped) && (
+        {actionData && "success" in actionData && actionData.message && !(actionData?.skipped) && (
           <Layout.Section>
             <Banner tone="success">
               <p>
-                {(actionData as any).message}
-                {isQueueMode && (actionData as any).nextProductId && (
+                {actionData?.message}
+                {isQueueMode && actionData?.nextProductId && (
                   <>
                     {" "}
-                    <Link to={`/app/products/${(actionData as any).nextProductId}?from=fitment`}>
+                    <Link to={`/app/products/${actionData?.nextProductId}?from=fitment`}>
                       Map next product
                     </Link>
                   </>

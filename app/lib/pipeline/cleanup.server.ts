@@ -333,8 +333,8 @@ export async function removeAllCollections(
       for (const edge of collections) {
         collectionIdsToDelete.add(edge.node.id);
       }
-    } catch {
-      // This strategy is optional — continue regardless
+    } catch (_e) {
+      console.warn("[cleanup] optional collection scan strategy failed");
     }
 
     if (collectionIdsToDelete.size === 0) {

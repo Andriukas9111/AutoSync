@@ -305,7 +305,8 @@ export default function Push() {
     pushHistory,
   } = useLoaderData<typeof loader>();
 
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const pageLoading = navigation.state === "loading";
@@ -388,7 +389,7 @@ export default function Push() {
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}

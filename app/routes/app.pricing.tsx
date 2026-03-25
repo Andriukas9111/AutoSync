@@ -162,10 +162,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function PricingPage() {
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ preview?: { total_affected: number; avg_markup_percent: number; total_revenue_change: number; changes: Array<{ product_id: string; title: string; old_price: number; new_price: number; rule_name: string }> } }>();
 
   const { plan, hasPricing, limits, rules, stats, alerts, history } = loaderData;
 
@@ -273,14 +274,14 @@ export default function PricingPage() {
       {actionData && "message" in actionData && (
         <Box paddingBlockEnd="400">
           <Banner tone="success" onDismiss={() => {}}>
-            <p>{(actionData as any).message}</p>
+            <p>{actionData?.message}</p>
           </Banner>
         </Box>
       )}
       {actionData && "error" in actionData && (
         <Box paddingBlockEnd="400">
           <Banner tone="critical" onDismiss={() => {}}>
-            <p>{(actionData as any).error}</p>
+            <p>{actionData?.error}</p>
           </Banner>
         </Box>
       )}
@@ -714,18 +715,18 @@ export default function PricingPage() {
         <Modal.Section>
           {fetcher.state === "submitting" || fetcher.state === "loading" ? (
             <SkeletonBodyText lines={6} />
-          ) : fetcher.data && "preview" in fetcher.data ? (
+          ) : fetcher.data?.preview ? (
             <BlockStack gap="400">
               <InlineStack gap="400">
-                <Badge tone="info">{`${(fetcher.data as any).preview.total_affected} products affected`}</Badge>
-                <Badge tone="success">{`Avg markup: ${(fetcher.data as any).preview.avg_markup_percent}%`}</Badge>
-                <Badge>{`Revenue change: ${formatPrice((fetcher.data as any).preview.total_revenue_change)}`}</Badge>
+                <Badge tone="info">{`${fetcher.data.preview.total_affected} products affected`}</Badge>
+                <Badge tone="success">{`Avg markup: ${fetcher.data.preview.avg_markup_percent}%`}</Badge>
+                <Badge>{`Revenue change: ${formatPrice(fetcher.data.preview.total_revenue_change)}`}</Badge>
               </InlineStack>
 
-              {(fetcher.data as any).preview.changes.length > 0 ? (
+              {fetcher.data.preview.changes.length > 0 ? (
                 <IndexTable
                   resourceName={{ singular: "product", plural: "products" }}
-                  itemCount={Math.min((fetcher.data as any).preview.changes.length, 20)}
+                  itemCount={Math.min(fetcher.data.preview.changes.length, 20)}
                   headings={[
                     { title: "Product" },
                     { title: "Current" },
@@ -735,7 +736,7 @@ export default function PricingPage() {
                   ]}
                   selectable={false}
                 >
-                  {(fetcher.data as any).preview.changes.slice(0, 20).map((c: any, i: number) => (
+                  {fetcher.data.preview.changes.slice(0, 20).map((c: any, i: number) => (
                     <IndexTable.Row key={c.product_id} id={c.product_id} position={i}>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm">{c.title}</Text>

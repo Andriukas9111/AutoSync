@@ -50,7 +50,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         const { count } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shop);
         await db.from("tenants").update({ product_count: count ?? 0 }).eq("shop_id", shop);
-      } catch (_e) { /* non-critical */ }
+      } catch (_e) { console.warn("[webhook:products] product_count recount failed"); }
       break;
     }
   }

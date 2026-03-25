@@ -441,7 +441,8 @@ export default function Settings() {
     providers: polledStats?.providers ?? loaderCounts.providers,
   };
 
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -487,14 +488,14 @@ export default function Settings() {
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
         {showSuccess && (
           <Layout.Section>
             <Banner tone="success">
-              <p>{(actionData as any).message}</p>
+              <p>{actionData?.message}</p>
             </Banner>
           </Layout.Section>
         )}

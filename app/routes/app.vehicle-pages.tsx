@@ -461,8 +461,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function VehiclePages() {
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const fetcher = useFetcher();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
+  const fetcher = useFetcher<{ success?: boolean; hasMore?: boolean; created?: number; failed?: number; error?: string; message?: string }>();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const pageLoading = navigation.state === "loading";
@@ -483,11 +484,11 @@ export default function VehiclePages() {
   const showError =
     (actionData && "error" in actionData) || fetcherData?.error;
   const errorMessage =
-    (actionData && "error" in actionData ? (actionData as any).error : null) ||
+    (actionData && "error" in actionData ? actionData?.error : null) ||
     fetcherData?.error;
   const successMessage =
     (actionData && "message" in actionData
-      ? (actionData as any).message
+      ? actionData?.message
       : null) || fetcherData?.message;
 
   // Plan-gated view
@@ -593,18 +594,17 @@ export default function VehiclePages() {
   // Auto-continue pushing when there are more pages
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
-      const d = fetcher.data as any;
-      if (d.hasMore && d.success) {
+      if (fetcher.data.hasMore && fetcher.data.success) {
         setPushProgress((prev) => ({
           running: true,
-          created: prev.created + (d.created || 0),
-          failed: prev.failed + (d.failed || 0),
+          created: prev.created + (fetcher.data?.created || 0),
+          failed: prev.failed + (fetcher.data?.failed || 0),
         }));
         // Auto-trigger next batch after a short delay
         setTimeout(() => {
           fetcher.submit({ intent: "push_all" }, { method: "post" });
         }, 500);
-      } else if (d.success && !d.hasMore) {
+      } else if (fetcher.data.success && !fetcher.data.hasMore) {
         setPushProgress((prev) => ({ ...prev, running: false }));
       } else {
         setPushProgress((prev) => ({ ...prev, running: false }));

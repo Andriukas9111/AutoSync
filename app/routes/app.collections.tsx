@@ -207,7 +207,8 @@ export default function Collections() {
     loaderError,
   } = useLoaderData<typeof loader>();
 
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const pageLoading = navigation.state === "loading";
@@ -320,7 +321,7 @@ export default function Collections() {
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
@@ -335,7 +336,7 @@ export default function Collections() {
         {showSuccess && (
           <Layout.Section>
             <Banner tone="success">
-              <p>{(actionData as any).message}</p>
+              <p>{actionData?.message}</p>
             </Banner>
           </Layout.Section>
         )}
