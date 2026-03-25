@@ -439,12 +439,33 @@ export default function Dashboard() {
     limits.products === Infinity ? 0 : Math.min(100, Math.round((liveTotalProducts / limits.products) * 100));
   const fitmentUsagePercent =
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((liveFitmentCount / limits.fitments) * 100));
+  const isOverProductLimit = limits.products !== Infinity && liveTotalProducts > limits.products;
+  const isOverFitmentLimit = limits.fitments !== Infinity && liveFitmentCount > limits.fitments;
 
   return (
     <Page title="Dashboard" fullWidth>
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
+            {/* Over-limit warning — shows when data exceeds plan limits (e.g., after downgrade) */}
+            {(isOverProductLimit || isOverFitmentLimit) && (
+              <Banner tone="critical" title="Plan limit exceeded">
+                <BlockStack gap="100">
+                  {isOverProductLimit && (
+                    <Text as="p" variant="bodySm">
+                      You have <strong>{liveTotalProducts.toLocaleString()}</strong> products but your {planLabel} plan allows <strong>{limits.products.toLocaleString()}</strong>. You cannot add new products or run imports until you upgrade or remove existing products.
+                    </Text>
+                  )}
+                  {isOverFitmentLimit && (
+                    <Text as="p" variant="bodySm">
+                      You have <strong>{liveFitmentCount.toLocaleString()}</strong> fitments but your {planLabel} plan allows <strong>{limits.fitments.toLocaleString()}</strong>. You cannot add new fitments until you upgrade or remove existing data.
+                    </Text>
+                  )}
+                  <Button variant="primary" url="/app/plans">Upgrade Plan</Button>
+                </BlockStack>
+              </Banner>
+            )}
+
             {/* Welcome banner */}
             {isFirstTime && showWelcome && (
               <Banner

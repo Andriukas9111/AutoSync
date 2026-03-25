@@ -557,14 +557,23 @@ export async function createBillingSubscription(
   const price = getPlanPrice(newPlan);
   const name = `AutoSync ${getPlanName(newPlan)}`;
 
+  // Determine if this is a downgrade (lower plan → defer to end of cycle)
+  const tenant = await getTenant(shopId);
+  const currentPlanIndex = PLAN_ORDER.indexOf(tenant?.plan ?? "free");
+  const newPlanIndex = PLAN_ORDER.indexOf(newPlan);
+  const isDowngrade = newPlanIndex < currentPlanIndex;
+  // Upgrades apply immediately; downgrades defer to end of billing cycle
+  const replacementBehavior = isDowngrade ? "APPLY_ON_NEXT_BILLING_CYCLE" : "APPLY_IMMEDIATELY";
+
   const response = await admin.graphql(
     `#graphql
-      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $replacementBehavior: AppSubscriptionReplacementBehavior) {
         appSubscriptionCreate(
           name: $name
           returnUrl: $returnUrl
           lineItems: $lineItems
           test: $test
+          replacementBehavior: $replacementBehavior
         ) {
           appSubscription {
             id
@@ -582,6 +591,7 @@ export async function createBillingSubscription(
       variables: {
         name,
         returnUrl,
+        replacementBehavior,
         // Billing test mode: explicit env var, fail-fast if accidentally set in production
         test: (() => {
           const testMode = process.env.BILLING_TEST_MODE === "true";
