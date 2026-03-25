@@ -7,16 +7,22 @@ import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 
 // ---------- CORS helpers ----------
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
+// Dynamic CORS: allow the requesting Shopify store domain, not wildcard
+function getCorsHeaders(request?: Request): Record<string, string> {
+  const origin = request?.headers.get("origin") ?? "";
+  // Allow *.myshopify.com and any custom Shopify domain
+  const allowed = origin.includes(".myshopify.com") || origin.includes("shopify.com");
+  return {
+    "Access-Control-Allow-Origin": allowed ? origin : "https://*.myshopify.com",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, request?: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
+    headers: { "Content-Type": "application/json", ...getCorsHeaders(request) },
   });
 }
 

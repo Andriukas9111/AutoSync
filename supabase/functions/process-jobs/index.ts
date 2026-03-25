@@ -53,6 +53,22 @@ async function shopifyGraphQL(
   return json;
 }
 
+/**
+ * Check Shopify GraphQL throttle status and wait if needed.
+ * Prevents 429 errors by pausing when the bucket is low.
+ */
+async function handleThrottle(json: Record<string, unknown>): Promise<void> {
+  const throttle = (json as any)?.extensions?.cost?.throttleStatus;
+  if (throttle) {
+    const available = throttle.currentlyAvailable ?? 1000;
+    if (available < 100) {
+      const waitMs = Math.min(2000, Math.max(500, (100 - available) * 20));
+      console.log(`[throttle] Low bucket: ${available} available, waiting ${waitMs}ms`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
 // Cache publication IDs per shop (refreshed each Edge Function invocation)
 const pubCache = new Map<string, string[]>();
 
@@ -477,9 +493,14 @@ async function processPushChunk(
             variables: { id: gid, tags },
           }),
         });
-        const tagJson = await tagRes.json();
-        if (tagJson?.data?.tagsAdd?.userErrors?.length) {
-          console.error(`[push] Tag errors for ${product.shopify_product_id}:`, tagJson.data.tagsAdd.userErrors);
+        if (!tagRes.ok) {
+          console.error(`[push] Tag HTTP error ${tagRes.status} for ${product.shopify_product_id}`);
+        } else {
+          const tagJson = await tagRes.json();
+          await handleThrottle(tagJson);
+          if (tagJson?.data?.tagsAdd?.userErrors?.length) {
+            console.error(`[push] Tag errors for ${product.shopify_product_id}:`, tagJson.data.tagsAdd.userErrors);
+          }
         }
       }
 
@@ -537,9 +558,14 @@ async function processPushChunk(
             variables: { metafields },
           }),
         });
-        const mfJson = await mfRes.json();
-        if (mfJson?.data?.metafieldsSet?.userErrors?.length) {
-          console.error(`[push] Metafield errors for ${product.shopify_product_id}:`, mfJson.data.metafieldsSet.userErrors);
+        if (!mfRes.ok) {
+          console.error(`[push] Metafield HTTP error ${mfRes.status} for ${product.shopify_product_id}`);
+        } else {
+          const mfJson = await mfRes.json();
+          await handleThrottle(mfJson);
+          if (mfJson?.data?.metafieldsSet?.userErrors?.length) {
+            console.error(`[push] Metafield errors for ${product.shopify_product_id}:`, mfJson.data.metafieldsSet.userErrors);
+          }
         }
       }
 
