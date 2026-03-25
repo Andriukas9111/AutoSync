@@ -773,15 +773,11 @@ export default function Settings() {
 
               <Divider />
 
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm">
-                  Database Cleanup
+              <Banner tone="warning">
+                <Text as="p" variant="bodySm" fontWeight="semibold">
+                  Database cleanup — removes data from AutoSync only. Your Shopify store is not affected.
                 </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Remove data from AutoSync&apos;s database. This does not affect your
-                  Shopify store directly.
-                </Text>
-              </BlockStack>
+              </Banner>
 
               <DangerAction
                 title="Delete All Fitment Data"
