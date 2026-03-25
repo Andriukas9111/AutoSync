@@ -636,16 +636,16 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
         // Try aliases for the make (e.g., "VW" → "Volkswagen")
         const { data: makeAlias } = await db
           .from("ymme_aliases")
-          .select("canonical_name")
-          .ilike("alias_name", dvlaMake)
-          .eq("alias_type", "make")
+          .select("entity_id")
+          .ilike("alias", dvlaMake)
+          .eq("entity_type", "make")
           .limit(1)
           .maybeSingle();
         if (makeAlias) {
           const { data: aliasedMake } = await db
             .from("ymme_makes")
             .select("id, name")
-            .ilike("name", makeAlias.canonical_name)
+            .eq("id", makeAlias.entity_id)
             .eq("active", true)
             .limit(1)
             .maybeSingle();
@@ -830,16 +830,16 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
 
           // Fallback: check aliases
           if (!resolved.modelId) {
-            const { data: aliases } = await db
+            const { data: modelAlias } = await db
               .from("ymme_aliases")
-              .select("canonical_name")
-              .ilike("alias_name", `%${dvlaModel}%`)
-              .eq("alias_type", "model")
+              .select("entity_id")
+              .ilike("alias", `%${dvlaModel}%`)
+              .eq("entity_type", "model")
               .limit(1)
               .maybeSingle();
-            if (aliases) {
+            if (modelAlias) {
               const aliasModel = ymmeModels.find(
-                (m) => m.name.toUpperCase() === aliases.canonical_name.toUpperCase()
+                (m) => m.id === modelAlias.entity_id
               );
               if (aliasModel) {
                 resolved.modelId = aliasModel.id;
@@ -1123,12 +1123,22 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
       console.warn("[proxy] Product search after VIN decode failed:", searchErr);
     }
 
+    // Map product fields to match what vin-decode.liquid expects
+    const mappedProducts = (compatibleProducts as Array<Record<string, unknown>>).map((p) => ({
+      ...p,
+      url: p.handle ? `/products/${p.handle}` : "#",
+      image: p.image_url ?? null,
+    }));
+
     return json({
       vehicle: {
         vin: decoded.vin,
         make: decoded.make,
         model: decoded.model,
-        year: decoded.modelYear,
+        modelYear: decoded.modelYear, // Widget reads vehicle.modelYear
+        year: decoded.modelYear, // Also provide as year for compatibility
+        makeName: decoded.make, // Needed for fitment badge cross-reference
+        modelName: decoded.model, // Needed for fitment badge cross-reference
         bodyClass: decoded.bodyClass,
         driveType: decoded.driveType,
         engineCylinders: decoded.engineCylinders,
@@ -1140,8 +1150,8 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
         vehicleType: decoded.vehicleType,
         plantCountry: decoded.plantCountry,
       },
-      compatibleProducts,
-      compatibleCount: compatibleProducts.length,
+      compatibleProducts: mappedProducts,
+      compatibleCount: mappedProducts.length,
     });
   } catch (err) {
     if (err instanceof VinDecodeError) {

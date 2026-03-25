@@ -59,9 +59,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
   } else {
-    // Always update the access token (it can change on re-auth)
+    // Always update the access token + clear uninstalled state on re-install
     const updates: Record<string, unknown> = {
       shopify_access_token: offlineToken,
+      uninstalled_at: null,        // Clear if re-installing after uninstall
+      plan_status: "active",       // Re-activate plan on re-install
     };
     if (isAdmin && tenant.plan !== "enterprise") {
       updates.plan = "enterprise" as PlanTier;

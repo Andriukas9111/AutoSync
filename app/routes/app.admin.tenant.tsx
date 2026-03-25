@@ -120,7 +120,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .order("created_at", { ascending: false })
       .limit(30),
     db.from("sync_jobs")
-      .select("id, type, status, progress, total, errors, created_at, completed_at")
+      .select("id, type, status, progress, total_items, error, created_at, completed_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(20),

@@ -62,9 +62,12 @@ async function getMotToken(): Promise<string> {
     return cachedToken.token;
   }
 
-  const clientId = process.env.MOT_CLIENT_ID || "4d6feed2-008a-4c53-8a45-76c2ad5d7ad4";
+  const clientId = process.env.MOT_CLIENT_ID;
   const clientSecret = process.env.MOT_CLIENT_SECRET || process.env.MOT_API_KEY;
 
+  if (!clientId) {
+    throw new MotError(500, "MOT_CLIENT_ID not configured", "MISSING_CREDENTIALS");
+  }
   if (!clientSecret) {
     throw new MotError(500, "MOT_CLIENT_SECRET / MOT_API_KEY not configured", "MISSING_CREDENTIALS");
   }

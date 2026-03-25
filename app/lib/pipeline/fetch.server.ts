@@ -118,22 +118,41 @@ export async function fetchProductsFromShopify({
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          fitment_status: "unmapped",
           synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
 
-        // Upsert — update if product already exists
-        const { error } = await db.from("products").upsert(productData, {
-          onConflict: "shop_id,shopify_product_id",
-        });
+        // Check if product already exists (to preserve fitment_status)
+        const { data: existing } = await db
+          .from("products")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("shopify_product_id", shopifyId)
+          .maybeSingle();
 
-        if (error) {
-          errors.push(
-            `Failed to upsert product ${shopifyId}: ${error.message}`,
-          );
+        if (existing) {
+          // UPDATE existing — do NOT overwrite fitment_status
+          const { error } = await db
+            .from("products")
+            .update(productData)
+            .eq("shop_id", shopId)
+            .eq("shopify_product_id", shopifyId);
+          if (error) {
+            errors.push(`Failed to update product ${shopifyId}: ${error.message}`);
+          } else {
+            fetched++;
+          }
         } else {
-          fetched++;
+          // INSERT new — set fitment_status to unmapped
+          const { error } = await db.from("products").insert({
+            ...productData,
+            fitment_status: "unmapped",
+          });
+          if (error) {
+            errors.push(`Failed to insert product ${shopifyId}: ${error.message}`);
+          } else {
+            fetched++;
+          }
         }
       }
 
