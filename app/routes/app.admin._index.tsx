@@ -754,8 +754,10 @@ export default function AdminPanel() {
   ];
 
   const ymmeTotal = ymmeCounts.makes + ymmeCounts.models + ymmeCounts.engines;
-  const ymmeTarget = 65000;
-  const ymmePct = Math.min(100, Math.round((ymmeTotal / ymmeTarget) * 100));
+  // Coverage = how many engines have full vehicle specs (the deep scrape fills these)
+  const specsCoverage = ymmeCounts.specs > 0 && ymmeCounts.engines > 0
+    ? Math.min(100, Math.round((ymmeCounts.specs / ymmeCounts.engines) * 100))
+    : 0;
 
   const activeTenants = tenants.filter((t) => !t.uninstalled_at).length;
   const paidTenants = tenants.filter((t) => t.plan !== "free" && !t.uninstalled_at).length;
@@ -1234,7 +1236,15 @@ export default function AdminPanel() {
 
                     {/* Live Scrape Progress */}
                     {(() => {
-                      const runningJob = scrapeJobs.find((j: any) => j.status === "running");
+                      const runningJob = scrapeJobs.find((j: any) => {
+                        if (j.status !== "running") return false;
+                        // Treat jobs running for more than 24 hours as stale
+                        if (j.started_at) {
+                          const startedMs = new Date(j.started_at).getTime();
+                          if (Date.now() - startedMs > 24 * 60 * 60 * 1000) return false;
+                        }
+                        return true;
+                      });
                       if (!runningJob) return null;
                       const r = (runningJob.result ?? {}) as Record<string, any>;
                       const etaSec = r.etaSeconds ?? 0;
@@ -1321,11 +1331,11 @@ export default function AdminPanel() {
                             <IconBadge icon={GaugeIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="headingSm">Database Coverage</Text>
                           </InlineStack>
-                          <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeTotal.toLocaleString()} / ~65,000 target`}</Text>
+                          <Text as="p" variant="bodySm" fontWeight="bold">{`${ymmeCounts.specs.toLocaleString()} / ${ymmeCounts.engines.toLocaleString()} engines with specs (${specsCoverage}%)`}</Text>
                         </InlineStack>
-                        <ProgressBar progress={ymmePct} size="medium" />
+                        <ProgressBar progress={specsCoverage} size="medium" />
                         <Text as="p" variant="bodySm" tone="subdued">
-                          Target: 387 brands with all models, engines, and full vehicle specs from auto-data.net
+                          {`${ymmeCounts.makes.toLocaleString()} makes · ${ymmeCounts.models.toLocaleString()} models · ${ymmeCounts.engines.toLocaleString()} engines · Source: auto-data.net`}
                         </Text>
                       </BlockStack>
                     </Card>
