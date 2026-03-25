@@ -64,6 +64,7 @@ import {
   cardRowStyle,
   listRowStyle,
   barChartRowStyle,
+  tableContainerStyle,
   STATUS_TONES,
   formatJobType,
 } from "../lib/design";
