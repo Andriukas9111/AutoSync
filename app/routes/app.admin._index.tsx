@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, useRevalidator, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useRevalidator, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -633,7 +633,10 @@ export default function AdminPanel() {
   const isSyncing = fetcher.state !== "idle";
   const isRefreshing = revalidator.state === "loading";
   const [dismissed, setDismissed] = useState(false);
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TAB_IDS = ["overview", "tenants", "ymme", "activity"];
+  const selectedTab = Math.max(0, TAB_IDS.indexOf(searchParams.get("tab") ?? "overview"));
+  const setSelectedTab = (idx: number) => { setSearchParams({ tab: TAB_IDS[idx] ?? "overview" }); };
 
   // Live stats polling for admin dashboard
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);

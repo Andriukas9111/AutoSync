@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -324,7 +324,10 @@ export default function TenantDetail() {
   const fetcher = useFetcher<{ ok: boolean; message: string }>();
   const navigate = useNavigate();
   const isSubmitting = fetcher.state !== "idle";
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TENANT_TAB_IDS = ["overview", "products", "fitments", "sync-jobs", "settings", "actions"];
+  const selectedTab = Math.max(0, TENANT_TAB_IDS.indexOf(searchParams.get("tab") ?? "overview"));
+  const setSelectedTab = (idx: number) => { setSearchParams((prev) => { prev.set("tab", TENANT_TAB_IDS[idx] ?? "overview"); return prev; }); };
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(tenant.plan);
   const [confirmPurgeFitments, setConfirmPurgeFitments] = useState(false);

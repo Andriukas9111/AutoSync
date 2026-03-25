@@ -729,7 +729,7 @@ export default function Plans() {
                           <td key={j} style={{
                             textAlign: "center", padding: "7px 6px",
                             fontWeight: isAutoSync ? 600 : 400,
-                            background: isAutoSync ? "var(--p-color-bg-fill-emphasis-hover)" : undefined,
+                            background: isAutoSync ? "rgba(0, 91, 210, 0.06)" : undefined,
                           }}>
                             {isYes ? (
                               <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>&#10003;</span>
