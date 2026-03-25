@@ -542,10 +542,8 @@ async function handleSearch(params: URLSearchParams) {
     .from("vehicle_fitments")
     .select("product_id, make, model, generation, year_from, year_to, engine_code");
 
-  if (shop) {
-    fitmentQuery = fitmentQuery.eq("shop_id", shop);
-  }
-  fitmentQuery = fitmentQuery.ilike("make", make);
+  if (!shop) return json({ error: "Missing shop parameter" }, 400);
+  fitmentQuery = fitmentQuery.eq("shop_id", shop).ilike("make", make);
   fitmentQuery = fitmentQuery.ilike("model", model);
 
   if (year) {
@@ -572,7 +570,7 @@ async function handleSearch(params: URLSearchParams) {
     .from("products")
     .select("id, shopify_gid, title, handle, image_url, price, status")
     .in("id", productIds)
-    .eq("status", "approved");
+    .neq("fitment_status", "unmapped");
 
   if (shop) {
     prodQuery = prodQuery.eq("shop_id", shop);
@@ -1048,7 +1046,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   }
 
   // Only return approved products
-  query = query.eq("products.status", "approved");
+  query = query.neq("products.fitment_status", "unmapped");
 
   const { data: wheelFitments, error } = await query.limit(100);
 
@@ -1177,7 +1175,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
           .select("id, shopify_gid, title, handle, image_url, price")
           .in("id", productIds.slice(0, 50))
           .eq("shop_id", shop)
-          .eq("status", "approved");
+          .neq("fitment_status", "unmapped");
         compatibleProducts = products ?? [];
       }
     } catch (searchErr) {

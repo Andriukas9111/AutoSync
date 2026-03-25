@@ -1404,7 +1404,7 @@ async function processBulkPush(
     for (const opId of [meta.metafieldsOperationId, meta.tagsOperationId].filter(Boolean)) {
       const res = await fetch(apiUrl, {
         method: "POST", headers,
-        body: JSON.stringify({ query: `{ node(id: "${opId}") { ... on BulkOperation { status objectCount url errorCode } } }` }),
+        body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: opId } }),
       });
       const json = await res.json();
       const op = json?.data?.node;
@@ -1531,10 +1531,9 @@ async function processBulkPush(
   const mfMutation = `mutation call($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { key } userErrors { message } } }`;
   const tagMutation = `mutation call($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`;
 
-  const [mfOpId, tagOpId] = await Promise.all([
-    startOp(mfLines.join("\n"), mfMutation),
-    startOp(tagLines.join("\n"), tagMutation),
-  ]);
+  // Run sequentially — Shopify only allows ONE active bulk operation per app per store
+  const mfOpId = await startOp(mfLines.join("\n"), mfMutation);
+  const tagOpId = await startOp(tagLines.join("\n"), tagMutation);
 
   console.log(`[bulk_push] Started operations: metafields=${mfOpId}, tags=${tagOpId}`);
 

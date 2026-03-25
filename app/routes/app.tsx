@@ -3,7 +3,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider, Frame } from "@shopify/polaris";
+import { AppProvider as PolarisAppProvider, Frame, Banner } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
@@ -44,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .from("tenants")
     .select("*")
     .eq("shop_id", shopId)
-    .single();
+    .maybeSingle();
 
   if (!tenant) {
     // First-time install — admin shops get enterprise, others get free
@@ -76,7 +76,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Auto-discover publication IDs for multi-tenant (runs once per tenant)
-  const currentTenant = tenant ?? (await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).single()).data;
+  const currentTenant = tenant ?? (await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).maybeSingle()).data;
   if (currentTenant && !currentTenant.online_store_publication_id) {
     try {
       const pubRes = await admin.graphql(`{ publications(first: 10) { nodes { id name } } }`);
@@ -215,30 +215,17 @@ export default function App() {
             }
           `}</style>
           <div className="as-app-container">
-            {/* Global announcements from admin */}
+            {/* Global announcements from admin — uses Polaris Banner */}
             {visibleAnnouncements.map(a => (
-              <div key={a.id} style={{ padding: "0 20px", marginBottom: 8 }}>
-                <div style={{
-                  padding: "12px 16px",
-                  borderRadius: 8,
-                  background: a.tone === "critical" ? "#fef2f2" : a.tone === "warning" ? "#fffbeb" : a.tone === "promotion" ? "#f0fdf4" : "#eff6ff",
-                  border: `1px solid ${a.tone === "critical" ? "#fecaca" : a.tone === "warning" ? "#fde68a" : a.tone === "promotion" ? "#bbf7d0" : "#bfdbfe"}`,
-                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-                }}>
-                  <div style={{ flex: 1 }}>
-                    <strong style={{ fontSize: 14, color: "#111" }}>{a.title}</strong>
-                    {a.description && <p style={{ fontSize: 13, color: "#555", margin: "4px 0 0" }}>{a.description}</p>}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    {a.cta_text && a.cta_url && (
-                      <a href={a.cta_url} style={{ padding: "6px 14px", borderRadius: 6, background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>{a.cta_text}</a>
-                    )}
-                    {a.dismissible && (
-                      <button onClick={() => dismissAnnouncement(a.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#999", padding: 4 }}>&times;</button>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <Banner
+                key={a.id}
+                title={a.title}
+                tone={a.tone === "critical" ? "critical" : a.tone === "warning" ? "warning" : a.tone === "promotion" ? "success" : "info"}
+                onDismiss={a.dismissible ? () => dismissAnnouncement(a.id) : undefined}
+                action={a.cta_text && a.cta_url ? { content: a.cta_text, url: a.cta_url } : undefined}
+              >
+                {a.description && <p>{a.description}</p>}
+              </Banner>
             ))}
             <Outlet />
             <PageFooter />
