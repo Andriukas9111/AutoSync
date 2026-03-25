@@ -44,7 +44,7 @@ const SYSTEM_ICONS = [SysIcons.extraction, SysIcons.ymmeDb, SysIcons.collections
 
 // ─── Hooks ───
 function useCounter(end: number, dur?: number) {
-  const actualDur = dur ?? (end > 1000 ? 2500 : 2000);
+  const actualDur = dur ?? (end > 1000 ? 1400 : 1000);
   const [v, setV] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
   const ran = useRef(false);
@@ -54,10 +54,10 @@ function useCounter(end: number, dur?: number) {
       if (e.isIntersecting && !ran.current) {
         ran.current = true;
         const t0 = performance.now();
-        const tick = (now: number) => { const p = Math.min((now - t0) / actualDur, 1); const eased = p === 1 ? 1 : 1 - Math.pow(2, -10 * p); setV(Math.floor(eased * end)); if (p < 1) requestAnimationFrame(tick); };
+        const tick = (now: number) => { const p = Math.min((now - t0) / actualDur, 1); const eased = p === 1 ? 1 : 1 - Math.pow(2, -14 * p); setV(Math.floor(eased * end)); if (p < 1) requestAnimationFrame(tick); };
         requestAnimationFrame(tick);
       }
-    }, { threshold: 0.3 });
+    }, { threshold: 0.15 });
     obs.observe(el); return () => obs.disconnect();
   }, [end, actualDur]);
   return { v, ref };
@@ -68,7 +68,7 @@ function useIOReveal() {
   const [vis, setVis] = useState(false);
   useEffect(() => {
     const el = ref.current; if (!el) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVis(true); obs.disconnect(); } }, { threshold: 0.1 });
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setVis(true); obs.disconnect(); } }, { threshold: 0.02 });
     obs.observe(el); return () => obs.disconnect();
   }, []);
   return { ref, vis };
@@ -649,7 +649,7 @@ export default function LandingPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [faq, setFaq] = useState<number | null>(null);
   const [shop, setShop] = useState("");
-  const [showMorePlans, setShowMorePlans] = useState(false);
+  const [showMorePlans, setShowMorePlans] = useState(true);
 
   const heroRef = useRef<HTMLDivElement>(null);
   const dashSectionRef = useRef<HTMLElement>(null);
