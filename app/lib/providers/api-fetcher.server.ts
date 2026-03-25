@@ -97,12 +97,25 @@ export async function fetchFromApi(
     }
   }
 
+  // Add timeout (30 seconds) and abort controller
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
+  fetchOptions.signal = controller.signal;
+
   const response = await fetch(endpoint, fetchOptions);
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     throw new Error(
       `API request failed: ${response.status} ${response.statusText}`,
     );
+  }
+
+  // Check response size before reading (50MB limit)
+  const contentLength = response.headers.get("content-length");
+  const MAX_RESPONSE_SIZE = 50 * 1024 * 1024;
+  if (contentLength && parseInt(contentLength) > MAX_RESPONSE_SIZE) {
+    throw new Error(`Response too large: ${contentLength} bytes (max ${MAX_RESPONSE_SIZE / 1024 / 1024}MB)`);
   }
 
   // Auto-detect response format from content or config

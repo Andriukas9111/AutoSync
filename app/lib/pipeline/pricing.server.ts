@@ -111,8 +111,9 @@ function calculatePrice(
       break;
     case "margin":
       // Margin: selling price where profit = margin% of selling price
-      // price = cost / (1 - margin/100)
-      newPrice = basePrice / (1 - rule.value / 100);
+      // price = cost / (1 - margin/100). Clamp to 0-99 to prevent Infinity/NaN.
+      { const clampedMargin = Math.min(99, Math.max(0, rule.value));
+        newPrice = basePrice / (1 - clampedMargin / 100); }
       break;
     case "fixed":
       // Fixed: add a fixed amount
