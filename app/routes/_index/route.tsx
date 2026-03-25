@@ -187,33 +187,10 @@ function YMMEDemo() {
 }
 
 function PlateDemo() {
-  const [plate, setPlate] = useState("");
-  const [show, setShow] = useState(true);
   const [motOpen, setMotOpen] = useState(true);
-  const [typed, setTyped] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const ran = useRef(false);
-
-  useEffect(() => {
-    const el = containerRef.current; if (!el) return;
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && !ran.current) {
-        ran.current = true;
-        setShow(false);
-        const text = "AL61 EAJ";
-        let i = 0;
-        const typeNext = () => {
-          if (i < text.length) { i++; setPlate(text.slice(0, i)); setTimeout(typeNext, 120 + Math.random() * 80); }
-          else { setTyped(true); setTimeout(() => setShow(true), 400); }
-        };
-        setTimeout(typeNext, 600);
-      }
-    }, { threshold: 0.3 });
-    obs.observe(el); return () => obs.disconnect();
-  }, []);
 
   return (
-    <div ref={containerRef}>
+    <div>
       <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
       <div className="lp-demo-light demo-plate-light">
         <div className="demo-title" style={{ textAlign: "center" }}>Find Parts by Registration</div>
@@ -221,7 +198,7 @@ function PlateDemo() {
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
           <div className="demo-plate-wrap" style={{ flex: 1 }}>
             <div className="demo-plate-gb"><UKFlag /></div>
-            <input className={`demo-plate-input${!typed ? " plate-typing" : ""}`} placeholder="AB12 CDE" value={plate || "AL61 EAJ"} readOnly />
+            <input className="demo-plate-input" value="AL61 EAJ" readOnly />
           </div>
           <button className="demo-plate-btn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
@@ -233,8 +210,8 @@ function PlateDemo() {
           <div className="demo-recent-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>S777 MNH</span> Porsche Panamera</div>
           <div className="demo-recent-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>AL61 EAJ</span> BMW 3 Series</div>
         </div>
-        <div className={`demo-plate-result-wrap ${show ? "show" : ""}`}>
-          {show && <div className="demo-plate-result">
+        <div className="demo-plate-result-wrap show">
+          <div className="demo-plate-result">
             <div className="demo-plate-badges">
               <span className="demo-plate-gb-badge">GB</span>
               <span className="demo-plate-yellow-badge">AL61 EAJ</span>
@@ -261,7 +238,7 @@ function PlateDemo() {
                 <div className="demo-mot-item"><span className="demo-mot-date">4 Apr 2025</span><span className="demo-mot-pass">PASS</span><span className="demo-mot-miles">72,485 Mi</span></div>
               </div>}
             </div>
-          </div>}
+          </div>
         </div>
         <div className="demo-footer-light">{I.logo(12)} Powered by AutoSync</div>
       </div>
