@@ -41,6 +41,7 @@ import {
   removeAllMetafields,
   removeAllCollections,
 } from "../lib/pipeline/cleanup.server";
+import { deleteVehiclePages } from "../lib/pipeline/vehicle-pages.server";
 import type { PlanTier } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -257,20 +258,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // ---- Full Cleanup — Shopify + DB ----
   if (_action === "full_cleanup") {
     try {
-      // 1. Remove from Shopify first
-      const [tagResult, mfResult, colResult] = await Promise.all([
+      // 1. Remove from Shopify first (tags, metafields, collections, metaobjects)
+      const [tagResult, mfResult, colResult, vpResult] = await Promise.all([
         removeAllTags(shopId, admin),
         removeAllMetafields(shopId, admin),
         removeAllCollections(shopId, admin),
+        deleteVehiclePages(admin, shopId).catch(() => ({ deleted: 0 })),
       ]);
 
       // 2. Delete from DB
       await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
       await db.from("collection_mappings").delete().eq("shop_id", shopId);
+      await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
       await db
         .from("products")
-        .update({ fitment_status: "unmapped" })
+        .update({ fitment_status: "unmapped", synced_at: null })
         .eq("shop_id", shopId);
+
+      // Recalculate tenant counts
+      await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
 
       const totalErrors =
         tagResult.errors.length + mfResult.errors.length + colResult.errors.length;
@@ -279,7 +285,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         success: true,
         message:
           `Full cleanup complete: ${tagResult.removed} tags, ${mfResult.removed} metafields, ` +
-          `${colResult.deleted} collections removed from Shopify. ` +
+          `${colResult.deleted} collections, ${vpResult.deleted} vehicle pages removed from Shopify. ` +
           `All fitments cleared from database.` +
           (totalErrors > 0 ? ` (${totalErrors} errors)` : ""),
       });
@@ -293,21 +299,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Disconnect Store (Nuclear) ----
   if (_action === "disconnect_store") {
-    // Remove from Shopify first (best effort)
+    // Remove from Shopify first (best effort) — tags, metafields, collections, metaobjects
     try {
       await Promise.all([
         removeAllTags(shopId, admin),
         removeAllMetafields(shopId, admin),
         removeAllCollections(shopId, admin),
+        deleteVehiclePages(admin, shopId).catch(() => ({ deleted: 0 })),
       ]);
     } catch {
       // Continue even if Shopify cleanup fails
     }
 
-    // Delete all data for this shop
+    // Delete all data for this shop (order matters — FK dependencies)
+    await db.from("extraction_results").delete().eq("shop_id", shopId);
     await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+    await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
     await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
     await db.from("collection_mappings").delete().eq("shop_id", shopId);
+    await db.from("search_events").delete().eq("shop_id", shopId);
+    await db.from("conversion_events").delete().eq("shop_id", shopId);
+    await db.from("plate_lookups").delete().eq("shop_id", shopId);
+    await db.from("provider_imports").delete().eq("shop_id", shopId);
+    await db.from("provider_column_mappings").delete().eq("shop_id", shopId);
     await db.from("app_settings").delete().eq("shop_id", shopId);
     await db.from("products").delete().eq("shop_id", shopId);
     await db.from("providers").delete().eq("shop_id", shopId);
