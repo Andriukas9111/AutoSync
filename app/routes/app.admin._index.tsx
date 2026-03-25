@@ -948,7 +948,7 @@ export default function AdminPanel() {
         {/* ═══════════════ TABS ═══════════════ */}
         <Card padding="0">
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-            <div style={{ padding: 0 }}>
+            <Box padding="400" minHeight="500px">
 
               {/* ════════════════════════════════════════════════════════════ */}
               {/* TAB 1: OVERVIEW                                            */}
@@ -2059,7 +2059,7 @@ export default function AdminPanel() {
                 </BlockStack>
               )}
 
-            </div>
+            </Box>
           </Tabs>
         </Card>
       </BlockStack>
