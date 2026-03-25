@@ -452,6 +452,29 @@ export async function assertProductLimit(shopId: string): Promise<void> {
   }
 }
 
+/** Throw if the tenant has exceeded their plan's fitment limit. */
+export async function assertFitmentLimit(shopId: string): Promise<void> {
+  const tenant = await getTenant(shopId);
+  if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
+  const limits = getPlanLimits(tenant.plan);
+  if (tenant.fitment_count >= limits.fitments) {
+    const next = getNextPlan(tenant.plan);
+    throw new BillingGateError("fitments", tenant.plan, next);
+  }
+}
+
+/** Throw if the tenant has exceeded their plan's provider limit. */
+export async function assertProviderLimit(shopId: string): Promise<void> {
+  const tenant = await getTenant(shopId);
+  if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
+  const limits = getPlanLimits(tenant.plan);
+  const { count } = await db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId);
+  if ((count ?? 0) >= limits.providers) {
+    const next = getNextPlan(tenant.plan);
+    throw new BillingGateError("providers", tenant.plan, next);
+  }
+}
+
 /** Throw if a boolean/enum feature is not available on the tenant's plan. */
 export async function assertFeature(
   shopId: string,

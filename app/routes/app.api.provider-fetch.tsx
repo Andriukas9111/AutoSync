@@ -6,6 +6,7 @@ import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { assertFeature, BillingGateError } from "../lib/billing.server";
 import { fetchFromApi } from "../lib/providers/api-fetcher.server";
 import { fetchFromFtp, testFtpConnection } from "../lib/providers/ftp-fetcher.server";
 import { parseFile } from "../lib/providers/universal-parser.server";
@@ -37,6 +38,21 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const config = (provider.config as Record<string, unknown>) ?? {};
+
+  // Plan gate: check provider type feature
+  try {
+    if (provider.type === "api") {
+      await assertFeature(shopId, "apiIntegration");
+    }
+    if (provider.type === "ftp") {
+      await assertFeature(shopId, "ftpImport");
+    }
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
 
   // ── Test Connection ─────────────────────────────────────────
   if (actionType === "test") {

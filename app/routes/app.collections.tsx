@@ -31,7 +31,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getTenant, PLAN_LIMITS } from "../lib/billing.server";
+import { getPlanLimits, getTenant, PLAN_LIMITS, assertFeature, BillingGateError } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -116,6 +116,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
+
+  // Plan gate: smartCollections feature required
+  try {
+    await assertFeature(shopId, "smartCollections");
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
 
   const formData = await request.formData();
   const _action = formData.get("_action");

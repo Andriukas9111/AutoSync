@@ -1395,7 +1395,7 @@ export async function upsertVehicleSpecs(
 // ── Background Job System ─────────────────────────────────────────────────────
 
 export async function startScrapeJob(config: {
-  type: "autodata_full" | "autodata_brand" | "nhtsa";
+  type: "autodata_full" | "autodata_brand";
   maxBrands?: number;
   delayMs?: number;
   scrapeSpecs?: boolean;

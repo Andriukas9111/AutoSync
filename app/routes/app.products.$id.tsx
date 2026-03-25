@@ -43,6 +43,7 @@ import {
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { assertFitmentLimit, BillingGateError } from "../lib/billing.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
@@ -236,6 +237,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const intent = formData.get("_action") as string;
 
   if (intent === "add_fitment") {
+    // Plan gate: check fitment limit
+    try {
+      await assertFitmentLimit(shopId);
+    } catch (err: unknown) {
+      if (err instanceof BillingGateError) {
+        return { error: err.message };
+      }
+      throw err;
+    }
+
     const make = formData.get("make") as string;
     const model = formData.get("model") as string;
     const variant = (formData.get("variant") as string) || null;
@@ -285,6 +296,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "add_suggestion") {
+    // Plan gate: check fitment limit
+    try {
+      await assertFitmentLimit(shopId);
+    } catch (err: unknown) {
+      if (err instanceof BillingGateError) {
+        return { error: err.message };
+      }
+      throw err;
+    }
+
     const make = formData.get("make") as string;
     const model = formData.get("model") as string;
     const engineName = (formData.get("engine_name") as string) || null;

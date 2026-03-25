@@ -5,6 +5,7 @@ import db from "../lib/db.server";
 import { parseFile } from "../lib/providers/universal-parser.server";
 import { runProviderImport } from "../lib/providers/import-pipeline.server";
 import type { ColumnMapping } from "../lib/providers/column-mapper.server";
+import { assertProductLimit, BillingGateError } from "../lib/billing.server";
 
 // ---------------------------------------------------------------------------
 // Provider Import API — unified import pipeline
@@ -17,6 +18,16 @@ import type { ColumnMapping } from "../lib/providers/column-mapper.server";
 export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
+
+  // Plan gate: check product limit
+  try {
+    await assertProductLimit(shopId);
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;

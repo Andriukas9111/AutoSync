@@ -662,7 +662,7 @@ export default function AdminPanel() {
   }
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data?.ok && fetcher.data?.intent === "sync-nhtsa") {
+    if (fetcher.state === "idle" && fetcher.data?.ok) {
       const t = setTimeout(() => revalidator.revalidate(), 2000);
       return () => clearTimeout(t);
     }
@@ -724,7 +724,7 @@ export default function AdminPanel() {
               {
                 number: 2,
                 title: "Manage Data",
-                description: "Sync NHTSA vehicle data, run the auto-data scraper, clean up tags/metafields/collections across tenants as needed.",
+                description: "Run the auto-data.net scraper, manage YMME database, clean up tags/metafields/collections across tenants.",
               },
               {
                 number: 3,
@@ -815,14 +815,6 @@ export default function AdminPanel() {
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">Quick Actions</Text>
                       <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-                        <QuickActionCard
-                          icon={ImportIcon}
-                          label="Sync NHTSA"
-                          description="Fetch makes & models from NHTSA"
-                          onClick={() => fetcher.submit({ intent: "sync-nhtsa" }, { method: "post" })}
-                          loading={isSyncing && fetcher.formData?.get("intent") === "sync-nhtsa"}
-                          badge={{ content: "API", tone: "info" }}
-                        />
                         <QuickActionCard
                           icon={DatabaseIcon}
                           label="YMME Database"
@@ -962,7 +954,7 @@ export default function AdminPanel() {
                             <IconBadge icon={WandIcon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="p" variant="bodySm" fontWeight="semibold">Data Sources</Text>
                           </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">NHTSA · auto-data.net · Manual</Text>
+                          <Text as="p" variant="bodySm" tone="subdued">auto-data.net · Manual Entry</Text>
                         </BlockStack>
                       </div>
                     </InlineGrid>
@@ -1278,38 +1270,7 @@ export default function AdminPanel() {
                         </BlockStack>
                       </Card>
 
-                      {/* NHTSA — SECONDARY */}
-                      <Card>
-                        <BlockStack gap="300">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <InlineStack gap="200" blockAlign="center">
-                              <IconBadge icon={ImportIcon} size={28} color="var(--p-color-icon-emphasis)" />
-                              <Text as="h3" variant="headingSm">NHTSA vPIC (USA)</Text>
-                            </InlineStack>
-                            <Badge tone="info">Gap Filler</Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            Free US vehicle data API. Fills gaps for brands auto-data.net may miss. No API key required. Provides makes and models only (no engine specs).
-                          </Text>
-                          <Divider />
-                          <InlineStack gap="200">
-                            <fetcher.Form method="post">
-                              <input type="hidden" name="intent" value="sync-nhtsa" />
-                              <Button submit loading={isSyncing} variant="primary">
-                                {isSyncing ? "Syncing..." : "Sync NHTSA"}
-                              </Button>
-                            </fetcher.Form>
-                          </InlineStack>
-                          {isSyncing && (
-                            <InlineStack gap="200" blockAlign="center">
-                              <Spinner size="small" />
-                              <Text as="p" variant="bodySm" tone="subdued">
-                                Syncing NHTSA data...
-                              </Text>
-                            </InlineStack>
-                          )}
-                        </BlockStack>
-                      </Card>
+                      {/* Data source: auto-data.net only */}
                     </InlineGrid>
 
                     {/* Scrape Job History */}

@@ -3,6 +3,7 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
+import { assertProductLimit, BillingGateError } from "../lib/billing.server";
 
 // TODO: Move to Edge Function for true background processing.
 // Currently runs synchronously with a timeout guard.
@@ -22,6 +23,29 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   const shopId = session.shop;
+
+  // Plan gate: check product limit
+  try {
+    await assertProductLimit(shopId);
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
+
+  // Duplicate job prevention
+  const { data: existingJob } = await db
+    .from("sync_jobs")
+    .select("id")
+    .eq("shop_id", shopId)
+    .eq("type", "fetch")
+    .in("status", ["running", "pending"])
+    .maybeSingle();
+
+  if (existingJob) {
+    return data({ error: "A fetch operation is already in progress" }, { status: 409 });
+  }
 
   // Create a sync job record
   const { data: job, error: jobError } = await db

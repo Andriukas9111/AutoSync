@@ -60,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getTenant(shopId),
     db
       .from("ymme_makes")
-      .select("id, name, slug, country, logo_url, nhtsa_make_id")
+      .select("id, name, slug, country, logo_url")
       .eq("active", true)
       .order("name", { ascending: true }),
     db
@@ -115,7 +115,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Build makes list with enriched data
-  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null; nhtsa_make_id: number | null }) => ({
+  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null }) => ({
     ...make,
     isActive: activeMakeIds.has(make.id),
     productCount: productCountByMake[make.name] || 0,
@@ -281,7 +281,6 @@ interface MakeItem {
   slug: string | null;
   country: string | null;
   logo_url: string | null;
-  nhtsa_make_id: number | null;
   isActive: boolean;
   productCount: number;
 }

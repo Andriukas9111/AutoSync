@@ -28,6 +28,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
 
+  // Duplicate job prevention
+  const { data: existingBulkJob } = await db
+    .from("sync_jobs")
+    .select("id")
+    .eq("shop_id", shopId)
+    .eq("type", "bulk_push")
+    .in("status", ["running", "pending"])
+    .maybeSingle();
+
+  if (existingBulkJob) {
+    return data({ error: "A bulk push operation is already in progress" }, { status: 409 });
+  }
+
   // Ensure metafield definitions exist
   await ensureMetafieldDefinitions(shopId, admin);
 

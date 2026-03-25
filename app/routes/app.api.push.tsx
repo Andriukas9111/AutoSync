@@ -44,6 +44,19 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
+  // Duplicate job prevention
+  const { data: existingPushJob } = await db
+    .from("sync_jobs")
+    .select("id")
+    .eq("shop_id", shopId)
+    .eq("type", "push")
+    .in("status", ["running", "pending"])
+    .maybeSingle();
+
+  if (existingPushJob) {
+    return data({ error: "A push operation is already in progress" }, { status: 409 });
+  }
+
   // Get the total count of pushable products (must match Edge Function worker predicate)
   // Worker uses: .not("fitment_status", "eq", "unmapped") — so we use the same filter
   const { count: mappedCount } = await db

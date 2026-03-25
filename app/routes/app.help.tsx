@@ -448,7 +448,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
     {
       id: "vin-decode",
       title: "10. VIN Decode",
-      keywords: ["vin", "decode", "vehicle", "identification", "number", "nhtsa", "17", "chassis"],
+      keywords: ["vin", "decode", "vehicle", "identification", "number", "17", "chassis"],
       content: (
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">

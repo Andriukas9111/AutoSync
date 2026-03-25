@@ -31,7 +31,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import { stepNumberStyle, infoCardStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError } from "../lib/billing.server";
 import type { ProviderType } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -81,23 +81,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "Provider name is required." }, { status: 400 });
   }
 
+  // Plan gate: check provider limit
+  try {
+    await assertProviderLimit(shopId);
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
+
   const tenant = await getTenant(shopId);
   const plan = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
-
-  const { count } = await db
-    .from("providers")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-
-  if (limits.providers !== Infinity && (count ?? 0) >= limits.providers) {
-    return data(
-      {
-        error: `Your ${plan} plan allows ${limits.providers} provider${limits.providers === 1 ? "" : "s"}. Upgrade to add more.`,
-      },
-      { status: 403 },
-    );
-  }
 
   if (type === "api" && !limits.features.apiIntegration) {
     return data(

@@ -38,7 +38,7 @@ import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, assertFeature } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { SkeletonCard } from "../components/SkeletonCard";
@@ -155,6 +155,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const plan = (tenant?.plan ?? "free") as PlanTier;
   const limits = getPlanLimits(plan);
   const analyticsLevel = limits.features.dashboardAnalytics;
+
+  // Plan gate: dashboardAnalytics feature required
+  try {
+    await assertFeature(shopId, "dashboardAnalytics");
+  } catch {
+    return {
+      gated: true,
+      plan,
+      analyticsLevel,
+      fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
+      statusBreakdown: [],
+      popularMakes: [],
+      popularModels: [],
+      providerMetrics: [],
+      syncJobSummary: [],
+      inventoryGaps: { makesWithoutProducts: 0, productsPerMakeAvg: 0 },
+      totalMakes: 0,
+      totalModels: 0,
+      popularSearches: [],
+      conversionFunnel: { searches: 0, productViews: 0, addToCarts: 0, purchases: 0, searchToViewRate: 0, viewToCartRate: 0, cartToPurchaseRate: 0, overallRate: 0 },
+      conversionBySource: [],
+      conversionByVehicle: [],
+      recentPlateLookups: [],
+      totalPlateLookups: 0,
+      topPlateMakes: [],
+    } satisfies AnalyticsData & { gated: boolean };
+  }
 
   // Gate: "none" means no analytics at all
   if (analyticsLevel === "none") {
