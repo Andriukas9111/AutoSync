@@ -23,7 +23,6 @@ import {
 } from "@shopify/polaris";
 import {
   ExportIcon,
-  CollectionIcon,
   PersonIcon,
   DatabaseIcon,
   AlertDiamondIcon,
@@ -110,12 +109,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const autoPushTags = formData.get("auto_push_tags") === "true";
     const autoPushMetafields = formData.get("auto_push_metafields") === "true";
     const tagPrefix = (formData.get("tag_prefix") as string) || "_autosync_";
-    const collectionStrategy =
-      (formData.get("collection_strategy") as string) || "make";
-    const autoCreateCollections =
-      formData.get("auto_create_collections") === "true";
     const notificationEmail =
       (formData.get("notification_email") as string) || "";
+
+    // Note: collection_strategy and auto_create_collections are managed
+    // on the Collections page only — not duplicated here
 
     const { data: existing } = await db
       .from("app_settings")
@@ -126,10 +124,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const settingsPayload = {
       shop_id: shopId,
       tag_prefix: tagPrefix,
-      collection_strategy: collectionStrategy,
       push_tags: autoPushTags,
       push_metafields: autoPushMetafields,
-      push_collections: autoCreateCollections,
       notification_email: notificationEmail || null,
       updated_at: new Date().toISOString(),
     };
@@ -339,11 +335,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // Component
 // ---------------------------------------------------------------------------
 
-const STRATEGY_OPTIONS = [
-  { label: "By Make", value: "make" },
-  { label: "By Make & Model", value: "make_model" },
-  { label: "By Make, Model & Year", value: "make_model_year" },
-];
+// Collection strategy options moved to Collections page
 
 /** A single danger zone row with a useFetcher submit */
 function DangerAction({
@@ -453,14 +445,6 @@ export default function Settings() {
   );
   const [tagPrefix, setTagPrefix] = useState(appSettings?.tag_prefix ?? "_autosync_");
 
-  // Form state — Collection Settings
-  const [collectionStrategy, setCollectionStrategy] = useState(
-    appSettings?.collection_strategy ?? "make",
-  );
-  const [autoCreateCollections, setAutoCreateCollections] = useState(
-    appSettings?.push_collections ?? false,
-  );
-
   // Form state — Notifications
   const [notificationEmail, setNotificationEmail] = useState(
     appSettings?.notification_email ?? "",
@@ -511,12 +495,7 @@ export default function Settings() {
               value={String(autoPushMetafields)}
             />
             <input type="hidden" name="tag_prefix" value={tagPrefix} />
-            <input type="hidden" name="collection_strategy" value={collectionStrategy} />
-            <input
-              type="hidden"
-              name="auto_create_collections"
-              value={String(autoCreateCollections)}
-            />
+            {/* Collection settings managed on Collections page */}
             <input type="hidden" name="notification_email" value={notificationEmail} />
 
             <BlockStack gap="500">
@@ -556,35 +535,7 @@ export default function Settings() {
                 </BlockStack>
               </Card>
 
-              {/* Collection Settings */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={CollectionIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Collection Settings
-                    </Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Configure how smart collections are created from vehicle fitment data.
-                  </Text>
-                  <FormLayout>
-                    <Select
-                      label="Collection strategy"
-                      options={STRATEGY_OPTIONS}
-                      value={collectionStrategy}
-                      onChange={setCollectionStrategy}
-                      helpText="How collections are organized: by make, make + model, or full YMME"
-                    />
-                    <Checkbox
-                      label="Auto-create collections on push"
-                      helpText="Create or update smart collections when pushing fitment data"
-                      checked={autoCreateCollections}
-                      onChange={setAutoCreateCollections}
-                    />
-                  </FormLayout>
-                </BlockStack>
-              </Card>
+              {/* Collection settings are on the Collections page — no duplication */}
 
               {/* Notifications */}
               <Card>
