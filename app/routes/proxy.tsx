@@ -1555,7 +1555,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Handle CORS preflight
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
   }
 
   // Verify HMAC signature
@@ -1638,7 +1638,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const params = url.searchParams;
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
   }
 
   const secret = process.env.SHOPIFY_API_SECRET;
