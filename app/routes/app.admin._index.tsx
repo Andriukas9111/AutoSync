@@ -1262,7 +1262,7 @@ export default function AdminPanel() {
               {/* TAB 3: YMME DATABASE                                       */}
               {/* ════════════════════════════════════════════════════════════ */}
               {selectedTab === 2 && (
-                <BlockStack gap="600">
+                <BlockStack gap="500">
 
                   {/* Scrape complete banner */}
                   {scrapeState && !scrapeState.running && (
@@ -1475,12 +1475,12 @@ export default function AdminPanel() {
                     </BlockStack>
                   )}
 
-                  <Divider />
-
                   {/* ── YMME Browse Section ── */}
+                  <Card>
                   <BlockStack gap="300">
                     {/* Breadcrumb navigation */}
                     <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
                       <Text as="h2" variant="headingMd">Browse YMME</Text>
                       {(searchParams.get("make_id") || searchParams.get("model_id") || searchParams.get("engine_id")) && (
                         <Button size="slim" variant="plain" onClick={() => {
@@ -1630,6 +1630,7 @@ export default function AdminPanel() {
                       </BlockStack>
                     )}
                   </BlockStack>
+                  </Card>
                 </BlockStack>
               )}
 
@@ -1640,9 +1641,13 @@ export default function AdminPanel() {
                 <BlockStack gap="500">
 
                   {/* ── Recent Sync Jobs ── */}
+                  <Card>
                   <BlockStack gap="300">
                     <InlineStack align="space-between" blockAlign="center">
-                      <Text as="h2" variant="headingMd">All Sync Jobs (Last 50)</Text>
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">All Sync Jobs (Last 50)</Text>
+                      </InlineStack>
                       <Badge tone="info">{`${recentJobs.length} jobs`}</Badge>
                     </InlineStack>
 
@@ -1671,13 +1676,16 @@ export default function AdminPanel() {
                       />
                     )}
                   </BlockStack>
-
-                  <Divider />
+                  </Card>
 
                   {/* ── Failed Jobs with Full Errors ── */}
                   {systemHealth.failedJobs.length > 0 && (
+                    <Card>
                     <BlockStack gap="300">
-                      <Text as="h2" variant="headingMd">Error Log (24h)</Text>
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={AlertCircleIcon} color="var(--p-color-icon-critical)" />
+                        <Text as="h2" variant="headingMd">Error Log (24h)</Text>
+                      </InlineStack>
                       {systemHealth.failedJobs.map((j, i) => (
                         <Card key={`fail-${i}`}>
                           <BlockStack gap="200">
@@ -1694,13 +1702,16 @@ export default function AdminPanel() {
                         </Card>
                       ))}
                     </BlockStack>
+                    </Card>
                   )}
 
-                  <Divider />
-
                   {/* ── Recent Installs/Uninstalls ── */}
+                  <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Recent Tenant Installs</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={PersonIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Recent Tenant Installs</Text>
+                    </InlineStack>
                     {recentInstalls.length === 0 ? (
                       <Text as="p" variant="bodySm" tone="subdued">No install activity recorded.</Text>
                     ) : (
@@ -1715,12 +1726,15 @@ export default function AdminPanel() {
                       />
                     )}
                   </BlockStack>
-
-                  <Divider />
+                  </Card>
 
                   {/* ── Admin Activity Log ── */}
+                  <Card>
                   <BlockStack gap="300">
-                    <Text as="h2" variant="headingMd">Admin Activity Log</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Admin Activity Log</Text>
+                    </InlineStack>
                     {adminActivityLog.length === 0 ? (
                       <Text as="p" variant="bodySm" tone="subdued">No admin actions recorded yet.</Text>
                     ) : (
@@ -1742,6 +1756,7 @@ export default function AdminPanel() {
                       ))
                     )}
                   </BlockStack>
+                  </Card>
                 </BlockStack>
               )}
 
