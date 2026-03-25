@@ -39,12 +39,14 @@ import {
   ConnectIcon,
   WandIcon,
   GaugeIcon,
+  AlertCircleIcon,
+  ClockIcon,
 } from "@shopify/polaris-icons";
 import { DataTable } from "../components/DataTable";
 
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { statMiniStyle } from "../lib/design";
+import { statMiniStyle, statGridStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import type { PlanTier, Tenant } from "../lib/types";
@@ -94,6 +96,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tenantsRes, makesRes, modelsRes, enginesRes, jobsRes, aliasesRes,
     fitmentCountRes, recentJobsRes, providersRes, productCountRes,
     specsCountRes, scrapeJobsData, activeJobsRes, collectionsCountRes,
+    running24hRes, pending24hRes, completed24hRes, failed24hRes,
+    failedJobsDetailRes, stuckJobsRes,
   ] = await Promise.all([
     db.from("tenants").select("*").order("installed_at", { ascending: false }),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
@@ -118,6 +122,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(20),
     // Collections across all tenants
     db.from("collection_mappings").select("id", { count: "exact", head: true }),
+    // ── System Health queries ──
+    // Jobs by status in last 24h
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "running")
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "pending")
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "completed")
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
+    db.from("sync_jobs")
+      .select("status", { count: "exact", head: true })
+      .eq("status", "failed")
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString()),
+    // Failed jobs in last 24h (top 10 with details)
+    db.from("sync_jobs")
+      .select("shop_id, type, status, error, created_at")
+      .eq("status", "failed")
+      .gte("created_at", new Date(Date.now() - 86400000).toISOString())
+      .order("created_at", { ascending: false })
+      .limit(10),
+    // Stuck jobs: running for more than 30 min without progress update
+    db.from("sync_jobs")
+      .select("id, shop_id, type, status, started_at, locked_at, processed_items, total_items, error")
+      .eq("status", "running")
+      .lt("started_at", new Date(Date.now() - 1800000).toISOString())
+      .order("started_at", { ascending: true })
+      .limit(20),
   ]);
 
   const tenantList = (tenantsRes.data ?? []) as Tenant[];
@@ -176,11 +212,39 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     isActive: !t.uninstalled_at,
   }));
 
+  // ── System Health data ──
+  const systemHealth = {
+    jobs24h: {
+      running: running24hRes.count ?? 0,
+      pending: pending24hRes.count ?? 0,
+      completed: completed24hRes.count ?? 0,
+      failed: failed24hRes.count ?? 0,
+    },
+    failedJobs: (failedJobsDetailRes.data ?? []) as Array<{
+      shop_id: string; type: string; status: string;
+      error: string | null; created_at: string;
+    }>,
+    stuckJobs: (stuckJobsRes.data ?? []) as Array<{
+      id: string; shop_id: string; type: string; status: string;
+      started_at: string | null; locked_at: string | null;
+      processed_items: number | null; total_items: number | null;
+      error: string | null;
+    }>,
+    dbSizes: {
+      products: productCountRes.count ?? 0,
+      fitments: fitmentCountRes.count ?? 0,
+      makes: makesRes.count ?? 0,
+      models: modelsRes.count ?? 0,
+      engines: enginesRes.count ?? 0,
+    },
+  };
+
   return {
     tenants: tenantList, totalTenants, totalProducts, totalFitments,
     planBreakdown, ymmeCounts, tenantUsage,
     recentJobs: recentJobs.slice(0, 10),
     scrapeJobs: scrapeJobsData,
+    systemHealth,
     // Live data
     activeJobs: (activeJobsRes.data ?? []) as Array<{
       id: string; shop_id: string; type: string; status: string;
@@ -560,6 +624,7 @@ export default function AdminPanel() {
   const {
     tenants, totalTenants, totalProducts, totalFitments,
     planBreakdown, ymmeCounts, tenantUsage, recentJobs, scrapeJobs,
+    systemHealth,
   } = useLoaderData<typeof loader>();
 
   const fetcher = useFetcher<{ ok: boolean; message: string; intent?: string }>();
@@ -811,6 +876,103 @@ export default function AdminPanel() {
                 {/* ──── OVERVIEW ──── */}
                 {selectedTab === 0 && (
                   <BlockStack gap="600">
+
+                    {/* ── System Health ── */}
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">System Health</Text>
+
+                      {/* Stuck jobs alert */}
+                      {systemHealth.stuckJobs.length > 0 && (
+                        <Banner tone="warning" title={`${systemHealth.stuckJobs.length} stuck job${systemHealth.stuckJobs.length === 1 ? "" : "s"} detected`}>
+                          <p>
+                            {systemHealth.stuckJobs.length === 1
+                              ? `Job "${fmtType(systemHealth.stuckJobs[0].type)}" for ${systemHealth.stuckJobs[0].shop_id.replace(".myshopify.com", "")} has been running for over 30 minutes without progress.`
+                              : `${systemHealth.stuckJobs.length} jobs have been running for over 30 minutes without progress. Check the Activity tab for details.`}
+                          </p>
+                        </Banner>
+                      )}
+
+                      {/* Health stat cards */}
+                      <div style={statGridStyle(4)}>
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Icon source={RefreshIcon} tone="info" />
+                              <Text as="span" variant="headingLg" fontWeight="bold">
+                                {`${systemHealth.jobs24h.running + systemHealth.jobs24h.pending}`}
+                              </Text>
+                            </InlineStack>
+                            <Text as="span" variant="bodySm" tone="subdued">Active Jobs</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {`${systemHealth.jobs24h.running} running · ${systemHealth.jobs24h.pending} pending`}
+                            </Text>
+                          </BlockStack>
+                        </div>
+
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Icon source={AlertCircleIcon} tone="critical" />
+                              <Text as="span" variant="headingLg" fontWeight="bold">
+                                {`${systemHealth.jobs24h.failed}`}
+                              </Text>
+                            </InlineStack>
+                            <Text as="span" variant="bodySm" tone="subdued">Failed (24h)</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {`${systemHealth.jobs24h.completed} completed`}
+                            </Text>
+                          </BlockStack>
+                        </div>
+
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Icon source={ClockIcon} tone="warning" />
+                              <Text as="span" variant="headingLg" fontWeight="bold">
+                                {`${systemHealth.stuckJobs.length}`}
+                              </Text>
+                            </InlineStack>
+                            <Text as="span" variant="bodySm" tone="subdued">Stuck Jobs</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">Running &gt;30 min</Text>
+                          </BlockStack>
+                        </div>
+
+                        <div style={statMiniStyle}>
+                          <BlockStack gap="100">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Icon source={DatabaseIcon} tone="base" />
+                              <Text as="span" variant="headingLg" fontWeight="bold">
+                                {`${(systemHealth.dbSizes.products + systemHealth.dbSizes.fitments + systemHealth.dbSizes.makes + systemHealth.dbSizes.models + systemHealth.dbSizes.engines).toLocaleString()}`}
+                              </Text>
+                            </InlineStack>
+                            <Text as="span" variant="bodySm" tone="subdued">Database Rows</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {`${systemHealth.dbSizes.products.toLocaleString()} products · ${systemHealth.dbSizes.fitments.toLocaleString()} fitments`}
+                            </Text>
+                          </BlockStack>
+                        </div>
+                      </div>
+
+                      {/* Failed jobs table */}
+                      {systemHealth.failedJobs.length > 0 && (
+                        <BlockStack gap="200">
+                          <Text as="h3" variant="headingSm">Recent Failures (24h)</Text>
+                          <DataTable
+                            columnContentTypes={["text", "text", "text", "text"]}
+                            headings={["Tenant", "Type", "Error", "Time"]}
+                            rows={systemHealth.failedJobs.map((j) => [
+                              j.shop_id.replace(".myshopify.com", ""),
+                              fmtType(j.type),
+                              (j.error ?? "Unknown error").slice(0, 80) + ((j.error ?? "").length > 80 ? "..." : ""),
+                              fmtShort(j.created_at),
+                            ])}
+                          />
+                        </BlockStack>
+                      )}
+                    </BlockStack>
+
+                    <Divider />
+
                     {/* Quick Actions */}
                     <BlockStack gap="300">
                       <Text as="h2" variant="headingMd">Quick Actions</Text>
