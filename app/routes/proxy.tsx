@@ -1600,6 +1600,27 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleVehicleSpecs(params);
     case "vehicle-gallery":
       return handleVehicleGallery(params, request);
+    case "widget-check": {
+      // Lightweight plan check for widgets that read metafields directly.
+      // Returns which widget types are allowed on the current plan.
+      const widgetShop = params.get("shop") ?? shop;
+      if (!widgetShop) return json({ allowed: {} });
+      const { data: wTenant } = await db.from("tenants").select("plan").eq("shop_id", widgetShop).maybeSingle();
+      const wPlan = wTenant?.plan ?? "free";
+      const wLimits = getPlanLimits(wPlan);
+      return json({
+        plan: wPlan,
+        allowed: {
+          ymmeWidget: wLimits.features.ymmeWidget,
+          fitmentBadge: wLimits.features.fitmentBadge,
+          compatibilityTable: wLimits.features.compatibilityTable,
+          wheelFinder: wLimits.features.wheelFinder,
+          plateLookup: wLimits.features.plateLookup,
+          vinDecode: wLimits.features.vinDecode,
+          vehiclePages: wLimits.features.vehiclePages,
+        },
+      });
+    }
     case "heartbeat":
       return json({ ok: true, ts: Date.now() });
     default:

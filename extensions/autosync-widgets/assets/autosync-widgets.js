@@ -1071,7 +1071,23 @@
 
   // --------------- Fitment Badge ---------------
 
+  // Cached widget plan check — runs once per page, shared across all widgets
+  var __widgetPlanCache = null;
+  function checkWidgetPlan(proxyUrl, widgetType) {
+    if (__widgetPlanCache) return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
+    __widgetPlanCache = proxyFetch(proxyUrl, 'widget-check', {}).then(function (d) { return d; }).catch(function () { return { allowed: {} }; });
+    return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
+  }
+
   function initFitmentBadge(container) {
+    var proxyUrl = container.dataset.proxyUrl;
+    // Plan check — hide badge if not included in tenant's plan
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'fitmentBadge').then(function (allowed) {
+        if (!allowed) container.style.display = 'none';
+      });
+    }
+
     var productTags = (container.dataset.productTags || '').toLowerCase();
 
     // Parse make_names and model_names as JSON arrays (list.single_line_text_field)
@@ -1136,6 +1152,14 @@
   // --------------- Compatibility Table ---------------
 
   function initCompatTable(container) {
+    var proxyUrl = container.dataset.proxyUrl;
+    // Plan check — hide compatibility table if not included in tenant's plan
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'compatibilityTable').then(function (allowed) {
+        if (!allowed) container.style.display = 'none';
+      });
+    }
+
     var metaVehicles = container.dataset.metafieldVehicles;
     var tbody = container.querySelector('[data-autosync-compat-body]');
     if (!tbody) return;
