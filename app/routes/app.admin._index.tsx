@@ -64,7 +64,6 @@ import {
   cardRowStyle,
   listRowStyle,
   barChartRowStyle,
-  tableContainerStyle,
   STATUS_TONES,
   formatJobType,
 } from "../lib/design";
@@ -949,7 +948,7 @@ export default function AdminPanel() {
         {/* ═══════════════ TABS ═══════════════ */}
         <Card padding="0">
           <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
-            <Box padding="400" minHeight="500px">
+            <div style={{ padding: 0 }}>
 
               {/* ════════════════════════════════════════════════════════════ */}
               {/* TAB 1: OVERVIEW                                            */}
@@ -2060,7 +2059,7 @@ export default function AdminPanel() {
                 </BlockStack>
               )}
 
-            </Box>
+            </div>
           </Tabs>
         </Card>
       </BlockStack>
