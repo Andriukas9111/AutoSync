@@ -554,11 +554,14 @@ export async function createBillingSubscription(
     return { cancelled: true };
   }
 
-  const price = getPlanPrice(newPlan);
-  const name = `AutoSync ${getPlanName(newPlan)}`;
-
   // Determine if this is a downgrade (lower plan → defer to end of cycle)
   const tenant = await getTenant(shopId);
+
+  // Use custom price if admin set one for this tenant, otherwise standard plan price
+  const price = (tenant as Record<string, unknown>)?.custom_price != null
+    ? Number((tenant as Record<string, unknown>).custom_price)
+    : getPlanPrice(newPlan);
+  const name = `AutoSync ${getPlanName(newPlan)}`;
   const currentPlanIndex = PLAN_ORDER.indexOf(tenant?.plan ?? "free");
   const newPlanIndex = PLAN_ORDER.indexOf(newPlan);
   const isDowngrade = newPlanIndex < currentPlanIndex;

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -101,6 +102,28 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     : ((tenant?.plan ?? "free") as PlanTier);
   const limits = getPlanLimits(plan);
 
+  // Load active announcements for this tenant
+  let announcements: Array<{ id: string; title: string; description: string | null; tone: string; cta_text: string | null; cta_url: string | null; dismissible: boolean }> = [];
+  try {
+    const now = new Date().toISOString();
+    const { data: anns } = await db
+      .from("announcements")
+      .select("id, title, description, tone, cta_text, cta_url, dismissible")
+      .eq("active", true)
+      .lte("starts_at", now)
+      .or(`ends_at.is.null,ends_at.gte.${now}`);
+    if (anns) {
+      // Filter by target_plans and target_shops (NULL means all)
+      announcements = anns.filter((a: Record<string, unknown>) => {
+        const targetPlans = a.target_plans as string[] | null;
+        const targetShops = a.target_shops as string[] | null;
+        if (targetPlans && !targetPlans.includes(plan)) return false;
+        if (targetShops && !targetShops.includes(shopId)) return false;
+        return true;
+      });
+    }
+  } catch (_e) { /* announcements table may not exist yet */ }
+
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     shopId,
@@ -110,13 +133,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fitmentCount: tenant?.fitment_count ?? 0,
     isFirstTime: !tenant,
     isAdmin,
+    announcements,
   };
 };
 
 export default function App() {
-  const { apiKey, isAdmin } = useLoaderData<typeof loader>();
+  const { apiKey, isAdmin, announcements } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("autosync_dismissed_announcements");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+  const dismissAnnouncement = (id: string) => {
+    setDismissedAnnouncements(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      try { localStorage.setItem("autosync_dismissed_announcements", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+  const visibleAnnouncements = (announcements ?? []).filter(a => !dismissedAnnouncements.has(a.id));
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -176,6 +215,31 @@ export default function App() {
             }
           `}</style>
           <div className="as-app-container">
+            {/* Global announcements from admin */}
+            {visibleAnnouncements.map(a => (
+              <div key={a.id} style={{ padding: "0 20px", marginBottom: 8 }}>
+                <div style={{
+                  padding: "12px 16px",
+                  borderRadius: 8,
+                  background: a.tone === "critical" ? "#fef2f2" : a.tone === "warning" ? "#fffbeb" : a.tone === "promotion" ? "#f0fdf4" : "#eff6ff",
+                  border: `1px solid ${a.tone === "critical" ? "#fecaca" : a.tone === "warning" ? "#fde68a" : a.tone === "promotion" ? "#bbf7d0" : "#bfdbfe"}`,
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ fontSize: 14, color: "#111" }}>{a.title}</strong>
+                    {a.description && <p style={{ fontSize: 13, color: "#555", margin: "4px 0 0" }}>{a.description}</p>}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                    {a.cta_text && a.cta_url && (
+                      <a href={a.cta_url} style={{ padding: "6px 14px", borderRadius: 6, background: "#2563eb", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>{a.cta_text}</a>
+                    )}
+                    {a.dismissible && (
+                      <button onClick={() => dismissAnnouncement(a.id)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#999", padding: 4 }}>&times;</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
             <Outlet />
             <PageFooter />
           </div>

@@ -39,6 +39,8 @@ import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
+import { getPlanLimits } from "../lib/billing.server";
+import { statMiniStyle, statGridStyle, listRowStyle } from "../lib/design";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -181,6 +183,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 10)
     .map(([make, count]) => ({ make, count }));
 
+  // Get plan limits for this tenant
+  const planLimits = getPlanLimits(tenant.plan ?? "free");
+
   return {
     tenant,
     products,
@@ -195,6 +200,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     coveragePercent,
     topMakes,
     shopId,
+    planLimits,
   };
 };
 
