@@ -54,6 +54,21 @@ export async function fetchFromApi(
     itemsPath,
   } = config;
 
+  // SSRF protection: reject private/internal IPs and non-HTTP protocols
+  try {
+    const parsed = new URL(endpoint);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error(`Unsupported protocol: ${parsed.protocol}`);
+    }
+    const h = parsed.hostname;
+    if (/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.0\.0\.0|localhost|\[::1\])/.test(h)) {
+      throw new Error("Cannot connect to private/internal addresses");
+    }
+  } catch (e) {
+    if (e instanceof Error && (e.message.includes("protocol") || e.message.includes("private"))) throw e;
+    throw new Error(`Invalid API endpoint URL: ${endpoint}`);
+  }
+
   // Build headers
   const headers: Record<string, string> = {
     Accept: "application/json",

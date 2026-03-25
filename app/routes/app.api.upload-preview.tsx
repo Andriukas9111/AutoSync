@@ -23,8 +23,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const delimiter = String(formData.get("delimiter") || "").trim() || undefined;
 
   // Validation
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   if (!file || file.size === 0) {
     return data({ error: "No file uploaded." }, { status: 400 });
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return data({ error: "File exceeds 50MB limit." }, { status: 413 });
   }
 
   if (!providerId) {

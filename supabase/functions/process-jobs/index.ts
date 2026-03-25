@@ -149,6 +149,8 @@ Deno.serve(async (req) => {
     }
 
     const job = claimedJob;
+    // Track claimed job ID for lock release on fatal error
+    (globalThis as Record<string, unknown>).__claimedJobId = job.id;
 
     console.log(`[process-jobs] Processing job ${job.id} type=${job.type} shop=${job.shop_id}`);
 
@@ -244,14 +246,14 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error("[process-jobs] Fatal error:", err);
-    // Release the lock on fatal error so the job can be retried
+    // Release the lock on the specific job we claimed (not ALL jobs)
     try {
-      const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      // Try to unlock any job we may have claimed — use the lockTime if available
-      await db.from("sync_jobs")
-        .update({ locked_at: null })
-        .eq("status", "running")
-        .not("locked_at", "is", null);
+      const jobId = (globalThis as Record<string, unknown>).__claimedJobId as string | undefined;
+      if (jobId) {
+        const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        await db.from("sync_jobs").update({ locked_at: null }).eq("id", jobId);
+        console.log(`[process-jobs] Released lock on job ${jobId} after fatal error`);
+      }
     } catch (_unlockErr) {
       console.error("[process-jobs] Failed to release lock after fatal error");
     }

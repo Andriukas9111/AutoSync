@@ -196,9 +196,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
-// ── Action: backfill logos for makes with null logo_url ──
+// ── Action: backfill logos for makes with null logo_url (admin-only) ──
 export async function action({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
+
+  // Admin guard: only admin shops can modify global YMME data
+  const { isAdminShop } = await import("../lib/admin.server");
+  if (!isAdminShop(session.shop)) {
+    return data({ error: "Admin access required" }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const intent = formData.get("intent");
 

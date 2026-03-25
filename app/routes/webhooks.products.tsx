@@ -33,7 +33,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             tags: payload.tags ? (payload.tags as string).split(", ") : [],
             updated_at: new Date().toISOString(),
           })
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .eq("shop_id", shop);
       }
       break;
     }
