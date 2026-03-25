@@ -37,7 +37,6 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { OperationProgress } from "../components/OperationProgress";
-import { SkeletonCard } from "../components/SkeletonCard";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
@@ -211,7 +210,6 @@ export default function Collections() {
   const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const pageLoading = navigation.state === "loading";
 
   const [strategy, setStrategy] = useState<string>(
     appSettings?.collection_strategy ?? "make"
@@ -402,7 +400,6 @@ export default function Collections() {
 
         {/* Collection Preview stat bar */}
         <Layout.Section>
-          {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
           <Card padding="0">
             <div style={{
               display: "grid",
@@ -433,7 +430,6 @@ export default function Collections() {
               ))}
             </div>
           </Card>
-          )}
         </Layout.Section>
 
 

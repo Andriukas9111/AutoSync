@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import {
   Page,
   Layout,
@@ -45,7 +45,6 @@ import type { PlanTier } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
-import { SkeletonCard } from "../components/SkeletonCard";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
 import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle } from "../lib/design";
 
@@ -176,8 +175,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     pushedProducts: syncedProductsResult.count ?? 0,
     activeMakes: activeMakesResult.count ?? 0,
     vehiclePagesSynced: vehiclePagesResult.count ?? 0,
-    // Unique makes/models from fitments (topMakes already has all makes)
-    uniqueMakes: topMakes.length,
+    // Unique makes/models — same source as job-status.tsx (tenant_active_makes)
+    uniqueMakes: activeMakesResult.count ?? 0,
     uniqueModels: modelCollectionResult.count ?? 0,
   };
 };
@@ -398,8 +397,6 @@ export default function Dashboard() {
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
@@ -549,7 +546,6 @@ export default function Dashboard() {
             )}
 
             {/* ─── System Overview — 3-column status cards ─── */}
-            {pageLoading ? <SkeletonCard variant="stat" count={9} cols={3} /> : (
             <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
               {/* Products & Fitments */}
               <Card>
@@ -633,7 +629,6 @@ export default function Dashboard() {
                 </BlockStack>
               </Card>
             </InlineGrid>
-            )}
 
             {/* ─── Fitment Coverage — Hero Card ─── */}
             <Card>

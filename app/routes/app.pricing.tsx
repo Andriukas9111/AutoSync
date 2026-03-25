@@ -21,7 +21,7 @@ import {
   Checkbox,
   Modal,
   FormLayout,
-  SkeletonBodyText,
+  Spinner,
   Tooltip,
 } from "@shopify/polaris";
 import { HowItWorks } from "../components/HowItWorks";
@@ -714,7 +714,7 @@ export default function PricingPage() {
       >
         <Modal.Section>
           {fetcher.state === "submitting" || fetcher.state === "loading" ? (
-            <SkeletonBodyText lines={6} />
+            <div style={{ textAlign: "center", padding: "var(--p-space-800)" }}><Spinner size="large" /></div>
           ) : fetcher.data?.preview ? (
             <BlockStack gap="400">
               <InlineStack gap="400">

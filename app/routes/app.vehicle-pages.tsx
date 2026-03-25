@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useFetcher, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useFetcher, useNavigate } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -54,7 +54,6 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { SkeletonCard } from "../components/SkeletonCard";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier } from "../lib/types";
 
@@ -465,8 +464,6 @@ export default function VehiclePages() {
   const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const fetcher = useFetcher<{ success?: boolean; hasMore?: boolean; created?: number; failed?: number; error?: string; message?: string }>();
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   // howItWorksOpen state moved to shared HowItWorks component
@@ -737,7 +734,6 @@ export default function VehiclePages() {
         )}
 
         {/* ── Section 2: Stats Dashboard ── */}
-        {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
         <Card padding="0">
           <div style={{
             display: "grid",
@@ -768,7 +764,6 @@ export default function VehiclePages() {
             ))}
           </div>
         </Card>
-        )}
 
         {/* ── Section 3: Vehicle Browser ── */}
         <Card>
