@@ -331,12 +331,17 @@ export function getJobCompletionMessage(ctx: JobContext): string {
 // Banners dismissed within a browser session stay dismissed.
 // Banners reappear in a new session (next day, new tab).
 
-/** Check if a banner was dismissed this session */
+/** Check if a banner was dismissed (persists across sessions via localStorage) */
 export function isBannerDismissed(key: string): boolean {
-  try { return sessionStorage.getItem(`banner_${key}`) === "1"; } catch { return false; }
+  try { return localStorage.getItem(`autosync_banner_${key}`) === "1"; } catch { return false; }
 }
 
-/** Mark a banner as dismissed for this session */
+/** Mark a banner as dismissed (persists until explicitly cleared) */
 export function dismissBanner(key: string): void {
-  try { sessionStorage.setItem(`banner_${key}`, "1"); } catch { /* SSR-safe */ }
+  try { localStorage.setItem(`autosync_banner_${key}`, "1"); } catch { /* SSR-safe */ }
+}
+
+/** Clear a dismissed banner (e.g., when a new job completes) */
+export function clearBannerDismissal(key: string): void {
+  try { localStorage.removeItem(`autosync_banner_${key}`); } catch { /* SSR-safe */ }
 }

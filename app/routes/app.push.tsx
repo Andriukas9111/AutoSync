@@ -333,7 +333,9 @@ export default function Push() {
   const { stats: liveStats, activeJobs, jobs: allJobs } = useAppData(undefined, 3000);
   const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "collections") ?? null;
   const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
-  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(() => isBannerDismissed("push_complete"));
+  // Use job-specific key so dismissing one push doesn't suppress future ones
+  const completedPushKey = completedPush ? `push_complete_${completedPush.id}` : "push_complete";
+  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(() => isBannerDismissed(completedPushKey));
 
   const isJobRunning = !!activeJob;
 
@@ -377,7 +379,7 @@ export default function Push() {
         {/* Show completion when job just finished */}
         {completedPush && !isJobRunning && !isSubmitting && !dismissedCompletionBanner && (
           <Layout.Section>
-            <Banner tone="success" title="Push completed" onDismiss={() => { dismissBanner("push_complete"); setDismissedCompletionBanner(true); }}>
+            <Banner tone="success" title="Push completed" onDismiss={() => { dismissBanner(completedPushKey); setDismissedCompletionBanner(true); }}>
               <p>{getJobCompletionMessage({ type: "push", status: "completed", processed: completedPush.processed_items, total: completedPush.total_items })}</p>
             </Banner>
           </Layout.Section>
