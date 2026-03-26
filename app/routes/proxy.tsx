@@ -259,43 +259,8 @@ async function handleModels(params: URLSearchParams, request?: Request) {
   if (!makeId) return json({ error: "Missing make_id parameter" }, 400);
   const shopId = shop;
 
-  // Only return models that have actual fitments for this merchant's shop.
-  // This prevents dead-end selections where a customer picks a model with no products.
-  if (shopId) {
-    const { data: fitmentModelIds } = await db
-      .from("vehicle_fitments")
-      .select("model_id")
-      .eq("shop_id", shopId)
-      .not("model_id", "is", null);
-
-    const uniqueModelIds = [...new Set((fitmentModelIds ?? []).map((f: any) => f.model_id))];
-
-    if (uniqueModelIds.length > 0) {
-      const { data: models, error } = await db
-        .from("ymme_models")
-        .select("id, name, generation, year_from, year_to, body_type")
-        .eq("make_id", makeId)
-        .in("id", uniqueModelIds)
-        .eq("active", true)
-        .order("name")
-        .order("year_from", { ascending: false });
-
-      if (error) return json({ error: error.message }, 500);
-
-      const cleanModels = (models ?? []).map((m: any) => ({
-        ...m,
-        generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
-      }));
-
-      return json({ models: cleanModels });
-    }
-
-    // No fitments at all — return empty
-    return json({ models: [] });
-  }
-
-  // Fallback: no shop context — return all models (admin/preview mode)
-  const { data: models, error } = await db
+  // First get all models for this make from YMME DB
+  const { data: allModels, error } = await db
     .from("ymme_models")
     .select("id, name, generation, year_from, year_to, body_type")
     .eq("make_id", makeId)
@@ -305,7 +270,48 @@ async function handleModels(params: URLSearchParams, request?: Request) {
 
   if (error) return json({ error: error.message }, 500);
 
-  const cleanModels = (models ?? []).map((m: any) => ({
+  // Filter to only models that have fitments for this shop (by model NAME text match)
+  // vehicle_fitments uses text columns (make, model), not UUID FKs
+  if (shopId) {
+    // Get the make name for this make_id
+    const { data: makeRow } = await db
+      .from("ymme_makes")
+      .select("name")
+      .eq("id", makeId)
+      .maybeSingle();
+
+    if (makeRow?.name) {
+      const { data: fitmentModels } = await db
+        .from("vehicle_fitments")
+        .select("model")
+        .eq("shop_id", shopId)
+        .ilike("make", makeRow.name);
+
+      const fitmentModelNames = new Set(
+        (fitmentModels ?? []).map((f: any) => (f.model ?? "").toLowerCase().trim())
+      );
+
+      if (fitmentModelNames.size > 0) {
+        // Filter YMME models to only those with matching fitments
+        const filteredModels = (allModels ?? []).filter((m: any) =>
+          fitmentModelNames.has((m.name ?? "").toLowerCase().trim())
+        );
+
+        const cleanModels = filteredModels.map((m: any) => ({
+          ...m,
+          generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
+        }));
+
+        return json({ models: cleanModels });
+      }
+    }
+
+    // No fitments found — return empty
+    return json({ models: [] });
+  }
+
+  // Fallback: no shop context — return all models (admin/preview mode)
+  const cleanModels = (allModels ?? []).map((m: any) => ({
     ...m,
     generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
   }));
@@ -328,23 +334,6 @@ async function handleYears(params: URLSearchParams, request?: Request) {
 
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
-  const shopId = shop;
-
-  // Only compute years from engines that have actual fitments for this shop
-  let engineFilter: string[] | null = null;
-  if (shopId) {
-    const { data: fitmentEngineIds } = await db
-      .from("vehicle_fitments")
-      .select("engine_id")
-      .eq("shop_id", shopId)
-      .eq("model_id", modelId)
-      .not("engine_id", "is", null);
-
-    const uniqueEngineIds = [...new Set((fitmentEngineIds ?? []).map((f: any) => f.engine_id))];
-    if (uniqueEngineIds.length > 0) {
-      engineFilter = uniqueEngineIds;
-    }
-  }
 
   // Fetch model's own year range to clamp engine years
   const { data: model } = await db
@@ -356,18 +345,12 @@ async function handleYears(params: URLSearchParams, request?: Request) {
   const modelYearFrom = model?.year_from ?? null;
   const modelYearTo = model?.year_to ?? new Date().getFullYear();
 
-  let engineQuery = db
+  const { data: engines, error } = await db
     .from("ymme_engines")
     .select("year_from, year_to")
     .eq("model_id", modelId)
     .eq("active", true)
     .not("year_from", "is", null);
-
-  if (engineFilter) {
-    engineQuery = engineQuery.in("id", engineFilter);
-  }
-
-  const { data: engines, error } = await engineQuery;
   if (error) return json({ error: error.message }, 500);
 
   const currentYear = new Date().getFullYear();
@@ -414,38 +397,6 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
   const year = params.get("year");
   const shopId = shop;
 
-  // Only return engines that have actual fitments for this merchant's shop.
-  // Prevents dead-end selections where a customer picks an engine with no products.
-  let engineFilter: string[] | null = null;
-  if (shopId) {
-    const { data: fitmentEngineIds } = await db
-      .from("vehicle_fitments")
-      .select("engine_id")
-      .eq("shop_id", shopId)
-      .eq("model_id", modelId)
-      .not("engine_id", "is", null);
-
-    const uniqueEngineIds = [...new Set((fitmentEngineIds ?? []).map((f: any) => f.engine_id))];
-
-    if (uniqueEngineIds.length === 0) {
-      // No fitments with engine_id for this model — check if there are model-level fitments
-      // (fitments mapped to model but not specific engine). If so, show all engines.
-      const { count: modelLevelFitments } = await db
-        .from("vehicle_fitments")
-        .select("id", { count: "exact", head: true })
-        .eq("shop_id", shopId)
-        .eq("model_id", modelId)
-        .is("engine_id", null);
-
-      if ((modelLevelFitments ?? 0) === 0) {
-        return json({ engines: [] });
-      }
-      // Model-level fitments exist — show all engines for this model (any could apply)
-    } else {
-      engineFilter = uniqueEngineIds;
-    }
-  }
-
   let query = db
     .from("ymme_engines")
     .select(
@@ -455,10 +406,6 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
     .eq("active", true)
     .order("name");
 
-  if (engineFilter) {
-    query = query.in("id", engineFilter);
-  }
-
   if (year) {
     const y = parseInt(year, 10);
     if (!isNaN(y)) {
@@ -466,11 +413,60 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
     }
   }
 
-  const { data: engines, error } = await query;
+  const { data: allEngines, error } = await query;
   if (error) return json({ error: error.message }, 500);
 
+  // Filter to only engines that have fitments for this shop (by engine NAME text match)
+  let filteredEngines = allEngines ?? [];
+  if (shopId && filteredEngines.length > 0) {
+    // Get model name for this model_id
+    const { data: modelRow } = await db
+      .from("ymme_models")
+      .select("name, ymme_makes:make_id(name)")
+      .eq("id", modelId)
+      .maybeSingle();
+
+    const makeName = (modelRow as any)?.ymme_makes?.name ?? "";
+    const modelName = modelRow?.name ?? "";
+
+    if (makeName && modelName) {
+      const { data: fitmentEngines } = await db
+        .from("vehicle_fitments")
+        .select("engine")
+        .eq("shop_id", shopId)
+        .ilike("make", makeName)
+        .ilike("model", modelName)
+        .not("engine", "is", null);
+
+      const fitmentEngineNames = new Set(
+        (fitmentEngines ?? []).map((f: any) => (f.engine ?? "").toLowerCase().trim())
+      );
+
+      if (fitmentEngineNames.size > 0) {
+        // Filter to only engines with matching fitments
+        filteredEngines = filteredEngines.filter((e: any) =>
+          fitmentEngineNames.has((e.name ?? "").toLowerCase().trim())
+        );
+      } else {
+        // Check if there are model-level fitments (no engine specified)
+        const { count: modelFitments } = await db
+          .from("vehicle_fitments")
+          .select("id", { count: "exact", head: true })
+          .eq("shop_id", shopId)
+          .ilike("make", makeName)
+          .ilike("model", modelName);
+
+        if ((modelFitments ?? 0) > 0) {
+          // Model-level fitments exist — show all engines (any could apply)
+        } else {
+          filteredEngines = [];
+        }
+      }
+    }
+  }
+
   // Strip dedup suffixes like " [92efc5dd]" from engine names for clean display
-  const cleanEngines = (engines ?? []).map((e: any) => ({
+  const cleanEngines = filteredEngines.map((e: any) => ({
     ...e,
     name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
   }));
