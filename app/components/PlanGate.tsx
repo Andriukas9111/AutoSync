@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import {
   BlockStack,
   InlineStack,
@@ -6,15 +7,17 @@ import {
   Button,
   Badge,
   Box,
+  Collapsible,
+  Icon,
 } from "@shopify/polaris";
-import { LockIcon } from "@shopify/polaris-icons";
+import { LockIcon, CheckSmallIcon, ChevronDownIcon, ChevronUpIcon } from "@shopify/polaris-icons";
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
-import { PLAN_PRICING } from "../lib/design";
+import { PLAN_PRICING, PLAN_HIGHLIGHTS, collapsibleTransition } from "../lib/design";
 import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
-// Display-name lookup maps (all dynamic)
+// Display-name lookup maps (all dynamic — change here, updates everywhere)
 // ---------------------------------------------------------------------------
 
 export const PLAN_NAMES: Record<PlanTier, string> = {
@@ -77,11 +80,15 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate — compact inline upgrade prompt
+// PlanGate — compact upgrade prompt with collapsible benefits
 //
-// Two lines only:
-//   🔒 Feature Name  [Plan+]
-//   Available on Plan (price) · [Upgrade →]
+// Default (collapsed):
+//   🔒 Feature Name  [Plan+]  Available on Plan ($price)  [▼ Details] [Upgrade]
+//
+// Expanded:
+//   ✓ Benefit 1
+//   ✓ Benefit 2
+//   ✓ Benefit 3
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -102,6 +109,7 @@ export function PlanGate({
   allLimits,
 }: PlanGateProps) {
   const navigate = useNavigate();
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   if (isFeatureEnabled(feature, limits)) {
     return <>{children}</>;
@@ -115,33 +123,83 @@ export function PlanGate({
   const requiredPlan = allLimits ? findMinPlan(feature, allLimits) : "starter";
   const requiredPlanName = PLAN_NAMES[requiredPlan];
   const price = PLAN_PRICING[requiredPlan] ?? "";
+  const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
-      <InlineStack align="space-between" blockAlign="center">
-        <InlineStack gap="200" blockAlign="center">
-          <IconBadge
-            icon={LockIcon}
-            bg="var(--p-color-bg-fill-secondary)"
-            tone="subdued"
-            size={24}
-          />
-          <BlockStack gap="0">
-            <InlineStack gap="150" blockAlign="center">
-              <Text as="span" variant="bodySm" fontWeight="semibold">
-                {featureLabel}
+    <Box padding="300" background="bg-surface" borderRadius="200" borderWidth="025" borderColor="border">
+      <BlockStack gap="200">
+        {/* Main row */}
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="300" blockAlign="center">
+            <IconBadge
+              icon={LockIcon}
+              bg="var(--p-color-bg-fill-critical-secondary)"
+              color="var(--p-color-icon-critical)"
+              size={24}
+            />
+            <BlockStack gap="0">
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="span" variant="bodyMd" fontWeight="bold">
+                  {featureLabel}
+                </Text>
+                <Badge size="small" tone="info">
+                  {`${requiredPlanName}+`}
+                </Badge>
+              </InlineStack>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {`Available on the `}
+                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                  {requiredPlanName}
+                </Text>
+                {` plan (${price})`}
               </Text>
-              <Badge size="small">{`${requiredPlanName}+`}</Badge>
-            </InlineStack>
-            <Text as="span" variant="bodySm" tone="subdued">
-              {`Available on ${requiredPlanName} plan (${price})`}
-            </Text>
-          </BlockStack>
+            </BlockStack>
+          </InlineStack>
+
+          <InlineStack gap="200" blockAlign="center">
+            {highlights.length > 0 && (
+              <Button
+                variant="plain"
+                size="slim"
+                icon={detailsOpen ? ChevronUpIcon : ChevronDownIcon}
+                onClick={() => setDetailsOpen(!detailsOpen)}
+              >
+                {detailsOpen ? "Hide" : "Details"}
+              </Button>
+            )}
+            <Button size="slim" onClick={() => navigate("/app/plans")}>
+              Upgrade
+            </Button>
+          </InlineStack>
         </InlineStack>
-        <Button size="slim" onClick={() => navigate("/app/plans")}>
-          Upgrade
-        </Button>
-      </InlineStack>
+
+        {/* Collapsible benefits */}
+        {highlights.length > 0 && (
+          <Collapsible
+            open={detailsOpen}
+            id={`plangate-${feature}`}
+            transition={collapsibleTransition}
+          >
+            <Box paddingBlockStart="200" paddingInlineStart="800">
+              <BlockStack gap="100">
+                <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+                  {`What's included in ${requiredPlanName}:`}
+                </Text>
+                {highlights.map((benefit) => (
+                  <InlineStack key={benefit} gap="200" blockAlign="center" wrap={false}>
+                    <div style={{ flexShrink: 0 }}>
+                      <Icon source={CheckSmallIcon} tone="success" />
+                    </div>
+                    <Text as="span" variant="bodySm">
+                      {benefit}
+                    </Text>
+                  </InlineStack>
+                ))}
+              </BlockStack>
+            </Box>
+          </Collapsible>
+        )}
+      </BlockStack>
     </Box>
   );
 }

@@ -214,15 +214,7 @@ export default function ProvidersIndex() {
         }}
       >
         <BlockStack gap="400">
-          {atLimit && (
-            <Banner tone="warning">
-              <p>
-                Your <strong>{plan}</strong> plan allows{" "}
-                <strong>{limitLabel}</strong> provider
-                {providerLimit === 1 ? "" : "s"}. Upgrade to add more.
-              </p>
-            </Banner>
-          )}
+          {/* Provider limit info shown in usage card below */}
           <Card>
             <EmptyState
               heading="Import your first products"
@@ -348,14 +340,7 @@ export default function ProvidersIndex() {
           </Card>
         )}
 
-        {atLimit && (
-          <Banner tone="warning">
-            <p>
-              You have reached the provider limit for the{" "}
-              <strong>{plan}</strong> plan. Upgrade to add more.
-            </p>
-          </Banner>
-        )}
+        {/* Provider limit banner removed — usage card above shows limit info */}
 
         {/* Provider card grid */}
         <InlineGrid columns={{ xs: 1, sm: 1, md: 2, lg: 3 }} gap="400">
