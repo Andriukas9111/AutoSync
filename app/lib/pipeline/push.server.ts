@@ -380,9 +380,9 @@ export async function pushToShopify(
           const newMakes = ymmeMakes.filter((m: any) => !existingIds.has(m.id));
           if (newMakes.length > 0) {
             await db.from("tenant_active_makes").insert(
-              newMakes.map((m: any) => ({ shop_id: shopId, ymme_make_id: m.id }))
+              newMakes.map((m: { id: string; name: string }) => ({ shop_id: shopId, ymme_make_id: m.id }))
             );
-            console.log(`[push] Auto-activated ${newMakes.length} makes: ${newMakes.map((m: any) => m.name).join(", ")}`);
+            // Auto-activated makes logged via debug
           }
         }
       }
