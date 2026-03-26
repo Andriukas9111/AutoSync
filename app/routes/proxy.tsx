@@ -576,7 +576,7 @@ async function handleSearch(params: URLSearchParams) {
     prodQuery = prodQuery.eq("shop_id", shop);
   }
 
-  const { data: products, error: prodError } = await prodQuery;
+  const { data: products, error: prodError } = await prodQuery.limit(100);
 
   if (prodError) return json({ error: prodError.message }, 500);
 

@@ -227,9 +227,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Total products for this tenant
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
 
-    // Products that have at least one fitment
+    // Products that have at least one fitment (count only)
     db.from("vehicle_fitments")
-      .select("product_id")
+      .select("product_id", { count: "exact", head: true })
       .eq("shop_id", shopId),
 
     // Product fitment status breakdown — server-side counts (no row limit)
@@ -241,15 +241,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ),
     ),
 
-    // Fitments grouped by make (top 15)
+    // Fitments grouped by make (top 15) — limit to prevent memory issues
     db.from("vehicle_fitments")
       .select("make, product_id")
-      .eq("shop_id", shopId),
+      .eq("shop_id", shopId)
+      .limit(5000),
 
-    // Fitments grouped by model (top 15)
+    // Fitments grouped by model (top 15) — limit to prevent memory issues
     db.from("vehicle_fitments")
       .select("make, model, product_id")
-      .eq("shop_id", shopId),
+      .eq("shop_id", shopId)
+      .limit(5000),
 
     // Provider metrics
     db.from("providers")
@@ -260,24 +262,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Sync jobs summary
     db.from("sync_jobs")
       .select("type, status")
-      .eq("shop_id", shopId),
+      .eq("shop_id", shopId)
+      .limit(1000),
 
-    // Global YMME counts
-    db.from("ymme_makes").select("id, name", { count: "exact" }),
+    // Global YMME counts (head-only for count)
+    db.from("ymme_makes").select("id, name", { count: "exact" }).limit(1000),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
 
-    // Search events (last 30 days — silently returns empty if table doesn't exist)
+    // Search events (last 30 days)
     db.from("search_events")
       .select("search_make, search_model")
       .eq("shop_id", shopId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .not("search_make", "is", null),
+      .not("search_make", "is", null)
+      .limit(5000),
 
     // Conversion events (last 30 days)
     db.from("conversion_events")
       .select("event_type, source, vehicle_make, vehicle_model")
       .eq("shop_id", shopId)
-      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(5000),
   ]);
 
   // ── Plate lookup analytics ──────────────────────────────────
