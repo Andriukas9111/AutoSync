@@ -773,6 +773,14 @@ export default function AdminPanel() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
+  // Auto-revalidate when a scrape job is running (updates progress every 5s)
+  const hasRunningScrape = scrapeJobs.some((j: any) => j.status === "running");
+  useEffect(() => {
+    if (!hasRunningScrape) return;
+    const id = setInterval(() => revalidator.revalidate(), 5000);
+    return () => clearInterval(id);
+  }, [hasRunningScrape, revalidator]);
+
   // Scraper state
   const [scrapeState, setScrapeState] = useState<{
     running: boolean; currentBrand: string; brandIndex: number;
