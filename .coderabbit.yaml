@@ -1,0 +1,163 @@
+# CodeRabbit Configuration — AutoSync V3
+# Multi-tenant Shopify SaaS App (React Router 7 + Supabase + Polaris)
+
+language: en-US
+
+reviews:
+  # ASSERTIVE profile = flags EVERYTHING, no matter how small
+  profile: assertive
+
+  # Enable deep architectural analysis
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  sequence_diagrams: true
+
+  # Enable cross-referencing
+  related_issues: true
+  related_prs: true
+  assess_linked_issues: true
+  estimate_code_review_effort: true
+  review_details: true
+
+  # Review status — always auto-review new PRs
+  auto_review:
+    enabled: true
+
+  # Strategic feedback tone
+  tone_instructions: >
+    You are reviewing a multi-tenant Shopify SaaS application for automotive e-commerce.
+    Be extremely thorough. Flag ALL security issues (XSS, injection, SSRF, auth bypass, token exposure),
+    ALL performance issues (N+1 queries, unbounded results, missing .limit()),
+    ALL dead code (unused functions, imports, files that can be deleted),
+    ALL style violations (inline styles instead of design.ts, hardcoded hex colors),
+    ALL accessibility issues (missing aria-labels, keyboard navigation),
+    ALL GDPR compliance gaps (PII retention, data deletion).
+    Treat this as a production-readiness audit. Flag everything no matter how small.
+    Every Supabase query must have .limit() or use { count: "exact", head: true }.
+    Every .single() must be .maybeSingle() with null check.
+    Every route must call authenticate.admin(request) or authenticate.webhook(request).
+    Every console.log in server code should use the structured debug logger.
+
+  # Path-specific deep review instructions
+  path_instructions:
+    - path: "app/routes/**/*.tsx"
+      instructions: >
+        These are React Router 7 route files (loaders, actions, components).
+        Check: 1) Every loader/action calls authenticate.admin(request)
+        2) Every Supabase query has .limit() or pagination
+        3) All .maybeSingle() results are null-checked
+        4) No inline styles — must use design.ts imports
+        5) No hardcoded colors — must use var(--p-color-*)
+        6) Every page has loading states and empty states
+        7) No console.log in production server code
+        8) Error responses don't expose internal DB structure
+        9) formData.get() values are validated/sanitized
+        10) No as any TypeScript casts — use typed interfaces
+
+    - path: "app/routes/proxy.tsx"
+      instructions: >
+        This is the storefront App Proxy — handles ALL widget API requests from customer-facing storefronts.
+        CRITICAL hot path. Check: 1) Rate limiting on all endpoints
+        2) CORS headers properly restrict origins
+        3) XSS prevention in all JSON responses
+        4) HMAC signature validation on incoming requests
+        5) No N+1 queries (SELECT inside loops)
+        6) All queries have .limit()
+        7) Registration plate data is hashed before storage (GDPR)
+        8) No debug info in production responses
+        9) shop parameter is mandatory and validated on every endpoint
+
+    - path: "app/routes/webhooks.*.tsx"
+      instructions: >
+        Shopify webhook handlers. Check: 1) Uses authenticate.webhook(request) for HMAC validation
+        2) No console.log with shop domain or sensitive data
+        3) Idempotent — handles duplicate webhook deliveries gracefully
+        4) shop/redact deletes ALL tables with shop_id column
+        5) Returns 200 quickly — no long-running operations
+
+    - path: "app/lib/**/*.ts"
+      instructions: >
+        Business logic and server-side utilities.
+        Check: 1) No hardcoded secrets or API keys
+        2) All external fetch() calls validate URLs against allowlist
+        3) No unbounded arrays or memory-heavy operations
+        4) Proper error handling with try/catch
+        5) No console.log — use debug.ts structured logger
+        6) Functions under 100 lines — split if longer
+        7) No as any casts — proper TypeScript types
+
+    - path: "app/lib/pipeline/**/*.ts"
+      instructions: >
+        Data processing pipelines (push, fetch, extract, collections, vehicle-pages).
+        Check: 1) All Shopify GraphQL mutations use parameterized variables (no string interpolation)
+        2) Batch operations respect Shopify rate limits
+        3) No loading ALL records into memory — use pagination
+        4) Job status updates are atomic
+        5) Error recovery — partial failures handled gracefully
+
+    - path: "app/lib/billing.server.ts"
+      instructions: >
+        Plan enforcement and Shopify Billing API integration.
+        CRITICAL: 1) billing test:true flag must NOT be hardcoded
+        2) Plan limits correctly enforced for all 6 tiers
+        3) Feature gating works for every plan-gated feature
+        4) Billing mutations use proper Shopify API patterns
+
+    - path: "supabase/functions/**/*.ts"
+      instructions: >
+        Supabase Edge Functions (Deno runtime, 60s timeout).
+        Check: 1) No operations that could exceed 60s timeout
+        2) All queries have .limit() to prevent memory issues
+        3) Job locks are properly acquired and released
+        4) Error handling releases locks on failure
+        5) No globalThis state pollution between invocations
+
+    - path: "supabase/migrations/**/*.sql"
+      instructions: >
+        Database migrations. Check: 1) All tables have proper FK constraints
+        2) Indexes exist for frequently queried columns
+        3) shop_id columns have FK CASCADE to tenants
+        4) No destructive operations without safety checks
+        5) Column types match what code expects
+
+    - path: "extensions/**/*.liquid"
+      instructions: >
+        Shopify Theme App Extension (Liquid blocks for storefront widgets).
+        Check: 1) XSS prevention — all user data properly escaped with | escape filter
+        2) No inline scripts that could be blocked by CSP
+        3) Proper schema validation for block settings
+        4) localStorage usage is safe (no sensitive data)
+        5) API calls go through the App Proxy, not direct to Supabase
+
+    - path: "app/components/**/*.tsx"
+      instructions: >
+        Shared React components. Check: 1) No inline styles — use design.ts
+        2) Proper TypeScript props interfaces
+        3) Accessibility: aria-labels on interactive elements
+        4) Components are actually imported somewhere (flag unused ones for deletion)
+        5) No direct database calls — components are client-side only
+
+    - path: "scripts/**/*"
+      instructions: >
+        Utility scripts. Check: 1) No hardcoded secrets (Supabase keys, API keys)
+        2) Are these still needed or can they be deleted?
+        3) One-time migration scripts that have been applied should be removed
+
+    - path: "app/routes/app.admin.*"
+      instructions: >
+        Admin panel routes. Check: 1) Admin access properly gated via isAdminShop()
+        2) Admin actions logged to admin_activity_log
+        3) No tenant data exposed without authorization
+        4) No XSS through announcement fields
+        5) Scraper has rate limiting
+
+# Ignore paths we don't want reviewed
+path_filters:
+  - "!.agent/**"
+  - "!.claude/**"
+  - "!.codebuddy/**"
+  - "!node_modules/**"
+  - "!build/**"
+  - "!.react-router/**"
+  - "!*.log"
+  - "!.shopify/**"
