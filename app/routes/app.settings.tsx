@@ -180,6 +180,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (error)
       return data({ error: "Failed to delete products: " + error.message }, { status: 500 });
 
+    // Reset cached counters on tenant
+    await db.from("tenants").update({ product_count: 0, fitment_count: 0 }).eq("shop_id", shopId);
+
     return data({
       success: true,
       message: "All products and fitments deleted from AutoSync database.",

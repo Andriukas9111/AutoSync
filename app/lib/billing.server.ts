@@ -446,7 +446,14 @@ export async function assertProductLimit(shopId: string): Promise<void> {
 
   const limits = getPlanLimits(tenant.plan);
 
-  if (tenant.product_count >= limits.products) {
+  // Use REAL count from products table, not cached tenant.product_count
+  // (cached counter can drift after deletes)
+  const { count } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+
+  if ((count ?? 0) >= limits.products) {
     const next = getNextPlan(tenant.plan);
     throw new BillingGateError("products", tenant.plan, next);
   }
@@ -457,7 +464,14 @@ export async function assertFitmentLimit(shopId: string): Promise<void> {
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
   const limits = getPlanLimits(tenant.plan);
-  if (tenant.fitment_count >= limits.fitments) {
+
+  // Use REAL count from vehicle_fitments table, not cached tenant.fitment_count
+  const { count } = await db
+    .from("vehicle_fitments")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+
+  if ((count ?? 0) >= limits.fitments) {
     const next = getNextPlan(tenant.plan);
     throw new BillingGateError("fitments", tenant.plan, next);
   }
