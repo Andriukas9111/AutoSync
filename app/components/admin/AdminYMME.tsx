@@ -39,6 +39,7 @@ interface Props {
   browseModelName?: string;
   // Scraper
   scrapeState: ScrapeState | null;
+  liveScrapeData?: { job: any; counts: any } | null;
   onStartScrape: (delay: string, specs: string) => void;
   onStopScrape: () => void;
   onStartIncremental: () => void;
@@ -53,12 +54,17 @@ interface Props {
 }
 
 export function AdminYMME({
-  ymmeCounts, totalFitments, scrapeJobs, browseMakes, browseModels, browseEngines,
-  browseSpec, browseMakeName, browseModelName, scrapeState,
+  ymmeCounts: loaderYmmeCounts, totalFitments, scrapeJobs, browseMakes, browseModels, browseEngines,
+  browseSpec, browseMakeName, browseModelName, scrapeState, liveScrapeData,
   onStartScrape, onStopScrape, onStartIncremental, onRefresh, isRefreshing,
   onBrowse, onBrowseBack, currentMakeId, currentModelId, currentEngineId,
   scrapeChangelog,
 }: Props) {
+  // Use live polled data when available (no page flash), fall back to loader data
+  const ymmeCounts = liveScrapeData?.counts
+    ? { ...loaderYmmeCounts, makes: liveScrapeData.counts.makes, models: liveScrapeData.counts.models, engines: liveScrapeData.counts.engines, specs: liveScrapeData.counts.specs }
+    : loaderYmmeCounts;
+  const liveJob = liveScrapeData?.job;
   const [delay, setDelay] = useState("500");
   const [scrapeSpecs, setScrapeSpecs] = useState("true");
   const [changelogPage, setChangelogPage] = useState(1);
@@ -89,29 +95,34 @@ export function AdminYMME({
   return (
     <BlockStack gap="500">
 
-      {/* Server-side scrape job progress */}
-      {scrapeJobs.filter((j: any) => j.status === "running").map((job: any) => (
-        <Card key={job.id}>
-          <BlockStack gap="300">
-            <InlineStack align="space-between" blockAlign="center">
-              <InlineStack gap="200" blockAlign="center">
-                <Spinner size="small" />
-                <Text as="h2" variant="headingSm">Incremental Update Running</Text>
+      {/* Server-side scrape job progress — uses live polled data when available */}
+      {(() => {
+        // Prefer live polled data (no page flash), fall back to loader
+        const activeJob = liveJob?.status === "running" ? liveJob
+          : scrapeJobs.find((j: any) => j.status === "running") as any;
+        if (!activeJob) return null;
+        const result = activeJob.result ?? {};
+        return (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack align="space-between" blockAlign="center">
+                <InlineStack gap="200" blockAlign="center">
+                  <Spinner size="small" />
+                  <Text as="h2" variant="headingSm">Incremental Update Running</Text>
+                </InlineStack>
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {(activeJob.currentItem || activeJob.current_item) ? `Processing: ${activeJob.currentItem || activeJob.current_item}` : "Starting..."}
+                </Text>
               </InlineStack>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {job.currentItem ? `Processing: ${job.currentItem}` : "Starting..."}
-              </Text>
-            </InlineStack>
-            {(job.progress ?? 0) > 0 && (
-              <ProgressBar progress={job.progress} size="small" />
-            )}
-            {job.result && (
+              {(activeJob.progress ?? 0) > 0 && (
+                <ProgressBar progress={activeJob.progress} size="small" />
+              )}
               <div style={statGridStyle(4)}>
                 {[
-                  { label: "Brands Checked", value: job.result.brandsChecked ?? 0 },
-                  { label: "New Models", value: job.result.newModels ?? 0 },
-                  { label: "New Engines", value: job.result.newEngines ?? 0 },
-                  { label: "New Specs", value: job.result.newSpecs ?? 0 },
+                  { label: "Brands Checked", value: result.brandsChecked ?? activeJob.processedItems ?? activeJob.processed_items ?? 0 },
+                  { label: "New Models", value: result.newModels ?? 0 },
+                  { label: "New Engines", value: result.newEngines ?? 0 },
+                  { label: "New Specs", value: result.newSpecs ?? 0 },
                 ].map((s) => (
                   <div key={s.label} style={statMiniStyle}>
                     <Text as="p" variant="headingLg" alignment="center">{String(s.value)}</Text>
@@ -119,10 +130,10 @@ export function AdminYMME({
                   </div>
                 ))}
               </div>
-            )}
-          </BlockStack>
-        </Card>
-      ))}
+            </BlockStack>
+          </Card>
+        );
+      })()}
 
       {/* Completed scrape job summary */}
       {scrapeJobs.filter((j: any) => j.status === "completed" || j.status === "failed").slice(0, 1).map((job: any) => (
