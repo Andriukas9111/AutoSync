@@ -251,8 +251,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       browseSpec = specData;
       if (engData) {
         browseEngines = [engData];
-        browseModelName = (engData as any)?.ymme_models?.name ?? "";
-        browseMakeName = (engData as any)?.ymme_models?.ymme_makes?.name ?? "";
+        browseModelName = (engData as Record<string, any>)?.ymme_models?.name ?? "";
+        browseMakeName = (engData as Record<string, any>)?.ymme_models?.ymme_makes?.name ?? "";
       }
     } else if (modelId) {
       // Engines for a model
@@ -263,8 +263,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .limit(200);
       browseEngines = engData ?? [];
       const { data: mdlData } = await db.from("ymme_models").select("name, ymme_makes(name)").eq("id", modelId).maybeSingle();
-      browseModelName = (mdlData as any)?.name ?? "";
-      browseMakeName = (mdlData as any)?.ymme_makes?.name ?? "";
+      browseModelName = (mdlData as Record<string, any>)?.name ?? "";
+      browseMakeName = (mdlData as Record<string, any>)?.ymme_makes?.name ?? "";
     } else if (makeId) {
       // Models for a make
       const { data: mdlData } = await db.from("ymme_models")
@@ -274,7 +274,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .limit(500);
       browseModels = mdlData ?? [];
       const { data: mkData } = await db.from("ymme_makes").select("name").eq("id", makeId).maybeSingle();
-      browseMakeName = (mkData as any)?.name ?? "";
+      browseMakeName = (mkData as Record<string, any>)?.name ?? "";
     } else {
       // All makes
       const { data: mkData } = await db.from("ymme_makes")

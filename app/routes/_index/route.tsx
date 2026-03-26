@@ -887,7 +887,7 @@ export default function LandingPage() {
                 <tbody>
                   <tr><td>Price</td>{COMPS.map((c, i) => <td key={i} className={c.hl ? "hl" : ""}>{c.p}</td>)}</tr>
                   {([["YMME Database", "db"], ["Auto Extraction", "ext"], ["Smart Collections", "col"], ["UK Plate Lookup", "pl"], ["VIN Decode", "vin"], ["Wheel Finder", "wh"], ["API/FTP Import", "api"], ["Analytics", "an"], ["Vehicle Pages", "vp"]] as const).map(([label, key]) =>
-                    <tr key={key}><td>{label}</td>{COMPS.map((c, i) => <td key={i} className={c.hl ? "hl" : ""}>{(c as any)[key] === 1 ? I.chk : (c as any)[key] === 0 ? I.x : (c as any)[key]}</td>)}</tr>
+                    <tr key={key}><td>{label}</td>{COMPS.map((c, i) => <td key={i} className={c.hl ? "hl" : ""}>{(c as Record<string, unknown>)[key] === 1 ? I.chk : (c as Record<string, unknown>)[key] === 0 ? I.x : (c as Record<string, unknown>)[key]}</td>)}</tr>
                   )}
                   <tr><td>Widgets</td>{COMPS.map((c, i) => <td key={i} className={c.hl ? "hl" : ""}>{c.w}</td>)}</tr>
                 </tbody>

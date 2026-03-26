@@ -233,7 +233,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Count unique vehicles — use engine_id if available, else make+model+engine combo
   const allFitments = availableResult.data ?? [];
   const uniqueVehicleKeys = new Set<string>();
-  for (const f of allFitments as any[]) {
+  for (const f of allFitments as Record<string, unknown>[]) {
     if (f.ymme_engine_id) {
       uniqueVehicleKeys.add(`engine:${f.ymme_engine_id}`);
     } else if (f.make && f.model) {
@@ -271,7 +271,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Build vehicle rows — group by engine_id or make+model+engine combo
   const vehicleMap = new Map<string, VehicleRow>();
   if (vehiclesResult.data) {
-    for (const row of vehiclesResult.data as any[]) {
+    for (const row of vehiclesResult.data as Record<string, unknown>[]) {
       // Determine unique key
       let key: string;
       if (row.ymme_engine_id) {
@@ -289,8 +289,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       // Try YMME enrichment first
       const ymme = row.ymme_engine_id ? ymmeEngineData[row.ymme_engine_id] : null;
-      const ymmeModel = ymme?.model as any;
-      const ymmeMake = ymmeModel?.make as any;
+      const ymmeModel = ymme?.model as Record<string, unknown> | undefined;
+      const ymmeMake = ymmeModel?.make as Record<string, unknown> | undefined;
 
       vehicleMap.set(key, {
         engineId: row.ymme_engine_id || key,
@@ -336,7 +336,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Total linked products: count distinct products with fitments linked to synced vehicle pages
   const syncedEngineIdSet = new Set(syncedEngineIds);
   const linkedProductIds = new Set<string>();
-  for (const f of (vehiclesResult.data ?? []) as any[]) {
+  for (const f of (vehiclesResult.data ?? []) as Record<string, unknown>[]) {
     if (f.product_id && f.ymme_engine_id && syncedEngineIdSet.has(f.ymme_engine_id)) {
       linkedProductIds.add(f.product_id);
     }
