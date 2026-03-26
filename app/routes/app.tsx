@@ -66,9 +66,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       uninstalled_at: null,        // Clear if re-installing after uninstall
       plan_status: "active",       // Re-activate plan on re-install
     };
-    if (isAdmin && tenant.plan !== "enterprise") {
-      updates.plan = "enterprise" as PlanTier;
-    }
+    // Note: Admin plan is managed via admin panel, not auto-set here
+    // This allows testing different plan tiers on the admin shop
     await db
       .from("tenants")
       .update(updates)
