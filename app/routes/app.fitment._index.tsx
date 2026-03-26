@@ -426,6 +426,9 @@ export default function Fitment() {
                   Manually assign vehicles to products with full control. Search
                   make, model, year, and engine — then link to products one by one.
                 </Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Available on all plans including Free. No limits on manual mapping.
+                </Text>
                 <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
                   Start Mapping
                 </Button>

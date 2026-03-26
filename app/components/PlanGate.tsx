@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
-  Card,
   BlockStack,
   InlineStack,
   Text,
@@ -18,7 +17,7 @@ import { PLAN_PRICING, PLAN_HIGHLIGHTS, collapsibleTransition } from "../lib/des
 import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
-// Lookup maps — all dynamic, change here updates everywhere
+// Lookup maps — all dynamic, change once here updates everywhere
 // ---------------------------------------------------------------------------
 
 export const PLAN_NAMES: Record<PlanTier, string> = {
@@ -76,8 +75,22 @@ function isFeatureEnabled(
   return value !== false && value !== "none";
 }
 
+/**
+ * Returns the required plan badge text for a feature (e.g. "Starter+").
+ * Use this anywhere you need to show which plan a feature requires
+ * WITHOUT rendering a full PlanGate component.
+ */
+export function getPlanBadgeLabel(
+  feature: keyof PlanLimits["features"],
+  allLimits?: Record<PlanTier, PlanLimits>,
+): string {
+  if (!allLimits) return "";
+  const plan = findMinPlan(feature, allLimits);
+  return `${PLAN_NAMES[plan]}+`;
+}
+
 // ---------------------------------------------------------------------------
-// PlanGate — uses Polaris Card for guaranteed white background
+// PlanGate — renders inline (no Card wrapper) so it works inside any container
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -115,9 +128,9 @@ export function PlanGate({
   const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Card>
+    <Box padding="400" background="bg-surface-secondary" borderRadius="200">
       <BlockStack gap="300">
-        <InlineStack align="space-between" blockAlign="center" wrap={false}>
+        <InlineStack align="space-between" blockAlign="center" wrap>
           <InlineStack gap="300" blockAlign="center" wrap={false}>
             <IconBadge
               icon={LockIcon}
@@ -140,7 +153,7 @@ export function PlanGate({
             </BlockStack>
           </InlineStack>
 
-          <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
             {highlights.length > 0 && (
               <Button
                 variant="plain"
@@ -177,6 +190,6 @@ export function PlanGate({
           </Collapsible>
         )}
       </BlockStack>
-    </Card>
+    </Box>
   );
 }

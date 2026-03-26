@@ -395,15 +395,12 @@ export default function Collections() {
                   limits={limits}
                   allLimits={allLimits}
                 >
-                  <BlockStack gap="200">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Badge tone="info">Professional+</Badge>
-                      <Text as="span" variant="bodyMd">
-                        SEO titles, descriptions, and images are included with
-                        collections on your plan.
-                      </Text>
-                    </InlineStack>
-                  </BlockStack>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge tone="success" size="small">Included</Badge>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      SEO titles, descriptions, and images are included with collections on your plan.
+                    </Text>
+                  </InlineStack>
                 </PlanGate>
               </BlockStack>
             </Card>

@@ -437,6 +437,21 @@ function DangerAction({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Storefront filter config — all dynamic, no hardcoded plan names
+// ---------------------------------------------------------------------------
+
+const STOREFRONT_FILTERS = [
+  { name: "Vehicle Make", description: "Filter products by make (e.g. BMW, Ford)", requiredPlans: ["starter", "growth", "professional", "business", "enterprise"], badgeLabel: "Starter+" },
+  { name: "Vehicle Model", description: "Filter products by model (e.g. 3 Series, Focus)", requiredPlans: ["growth", "professional", "business", "enterprise"], badgeLabel: "Growth+" },
+  { name: "Vehicle Year", description: "Filter products by year range", requiredPlans: ["growth", "professional", "business", "enterprise"], badgeLabel: "Growth+" },
+  { name: "Engine / Generation", description: "Filter by engine type or generation", requiredPlans: ["professional", "business", "enterprise"], badgeLabel: "Professional+" },
+];
+
+function isFilterAvailable(plan: string, requiredPlans: string[]): boolean {
+  return requiredPlans.includes(plan);
+}
+
 export default function Settings() {
   const { plan, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
 
@@ -642,74 +657,26 @@ export default function Settings() {
                   Available filters by plan
                 </Text>
                 <div style={statGridStyle(2)}>
-                  <div style={statMiniStyle}>
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          Vehicle Make
-                        </Text>
-                        <Badge tone={
-                          plan === "free" ? undefined : "success"
-                        }>
-                          {plan === "free" ? "Starter+" : "Available"}
-                        </Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Filter products by make (e.g. BMW, Ford)
-                      </Text>
-                    </BlockStack>
-                  </div>
-                  <div style={statMiniStyle}>
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          Vehicle Model
-                        </Text>
-                        <Badge tone={
-                          ["free", "starter"].includes(plan) ? undefined : "success"
-                        }>
-                          {["free", "starter"].includes(plan) ? "Growth+" : "Available"}
-                        </Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Filter products by model (e.g. 3 Series, Focus)
-                      </Text>
-                    </BlockStack>
-                  </div>
-                  <div style={statMiniStyle}>
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          Vehicle Year
-                        </Text>
-                        <Badge tone={
-                          ["free", "starter"].includes(plan) ? undefined : "success"
-                        }>
-                          {["free", "starter"].includes(plan) ? "Growth+" : "Available"}
-                        </Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Filter products by year range
-                      </Text>
-                    </BlockStack>
-                  </div>
-                  <div style={statMiniStyle}>
-                    <BlockStack gap="100">
-                      <InlineStack gap="200" blockAlign="center">
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
-                          Engine / Generation
-                        </Text>
-                        <Badge tone={
-                          ["free", "starter", "growth"].includes(plan) ? undefined : "success"
-                        }>
-                          {["free", "starter", "growth"].includes(plan) ? "Professional+" : "Available"}
-                        </Badge>
-                      </InlineStack>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Filter by engine type or generation
-                      </Text>
-                    </BlockStack>
-                  </div>
+                  {STOREFRONT_FILTERS.map((filter) => {
+                    const available = isFilterAvailable(plan, filter.requiredPlans);
+                    return (
+                      <div key={filter.name} style={statMiniStyle}>
+                        <BlockStack gap="100">
+                          <InlineStack gap="200" blockAlign="center">
+                            <Text as="p" variant="bodyMd" fontWeight="semibold">
+                              {filter.name}
+                            </Text>
+                            <Badge tone={available ? "success" : undefined} size="small">
+                              {available ? "Available" : filter.badgeLabel}
+                            </Badge>
+                          </InlineStack>
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {filter.description}
+                          </Text>
+                        </BlockStack>
+                      </div>
+                    );
+                  })}
                 </div>
               </BlockStack>
             </BlockStack>

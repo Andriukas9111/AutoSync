@@ -28,7 +28,7 @@ import {
   LockIcon,
 } from "@shopify/polaris-icons";
 import { HowItWorks } from "../components/HowItWorks";
-import { PlanGate } from "../components/PlanGate";
+import { PlanGate, PLAN_NAMES } from "../components/PlanGate";
 import { stepNumberStyle, infoCardStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -181,12 +181,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ---------------------------------------------------------------------------
 // Type card config
 // ---------------------------------------------------------------------------
+// Feature-to-plan mapping for provider types requiring higher plans
+const PROVIDER_PLAN_FEATURES: Partial<Record<ProviderType, keyof PlanLimits["features"]>> = {
+  api: "apiIntegration",
+  ftp: "ftpImport",
+};
+
+// Required plan for each gated provider type (from billing.server.ts)
+const PROVIDER_REQUIRED_PLANS: Partial<Record<ProviderType, PlanTier>> = {
+  api: "professional",
+  ftp: "business",
+};
+
 const TYPE_CARDS: Array<{
   value: ProviderType;
   label: string;
   description: string;
   icon: typeof ImportIcon;
-  badge?: string;
+  planFeature?: keyof PlanLimits["features"];
 }> = [
   {
     value: "csv",
@@ -208,7 +220,7 @@ const TYPE_CARDS: Array<{
     description:
       "Connect to a supplier API endpoint. Supports API key, Bearer, and Basic auth.",
     icon: GlobeIcon,
-    badge: "Professional+",
+    planFeature: "apiIntegration" as const,
   },
   {
     value: "ftp",
@@ -216,7 +228,7 @@ const TYPE_CARDS: Array<{
     description:
       "Connect to an FTP or SFTP server to automatically fetch product feeds.",
     icon: LockIcon,
-    badge: "Business+",
+    planFeature: "ftpImport" as const,
   },
 ];
 
@@ -269,10 +281,11 @@ export default function ProvidersNew() {
 
   const tabs = TYPE_CARDS.map((card) => {
     const disabled = isTypeDisabled(card.value);
+    const requiredPlan = PROVIDER_REQUIRED_PLANS[card.value];
     return {
       id: card.value,
       content: disabled ? `${card.label} (upgrade)` : card.label,
-      badge: card.badge,
+      badge: requiredPlan && disabled ? `${PLAN_NAMES[requiredPlan]}+` : undefined,
       disabled,
     };
   });
