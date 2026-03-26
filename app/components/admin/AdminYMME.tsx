@@ -5,7 +5,7 @@
 import { useState } from "react";
 import {
   Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
-  Banner, ProgressBar, Select, Spinner, Thumbnail,
+  Banner, ProgressBar, Select, Spinner, Thumbnail, Icon,
 } from "@shopify/polaris";
 import {
   DatabaseIcon, GlobeIcon, SearchIcon, ClockIcon, RefreshIcon, ViewIcon, ImportIcon,
