@@ -40,7 +40,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
-import { equalHeightGridStyle } from "../lib/design";
+import { equalHeightGridStyle, listRowStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -493,72 +493,49 @@ export default function Fitment() {
               <BlockStack gap="0">
                 {productFitmentGroups
                   .slice((activityPage - 1) * ACTIVITY_PAGE_SIZE, activityPage * ACTIVITY_PAGE_SIZE)
-                  .map((group) => {
+                  .map((group, idx, arr) => {
                   const isExpanded = expandedProduct === group.product_id;
                   const uniqueMakes = [...new Set(group.fitments.map((f) => f.make).filter(Boolean))];
                   const uniqueModels = [...new Set(group.fitments.map((f) => f.model).filter(Boolean))];
+                  const isLast = idx === arr.length - 1;
 
                   return (
                     <div key={group.product_id}>
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() =>
-                          setExpandedProduct(isExpanded ? null : group.product_id)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            setExpandedProduct(isExpanded ? null : group.product_id);
-                        }}
+                        onClick={() => setExpandedProduct(isExpanded ? null : group.product_id)}
+                        onKeyDown={(e) => { if (e.key === "Enter") setExpandedProduct(isExpanded ? null : group.product_id); }}
                         style={{
-                          padding: "12px 16px",
+                          ...listRowStyle(isLast && !isExpanded),
                           cursor: "pointer",
-                          backgroundColor: isExpanded
-                            ? "var(--p-color-bg-surface-hover)"
-                            : "transparent",
-                          transition: "background-color 0.15s",
-                          borderBottom: "1px solid var(--p-color-border-secondary)",
+                          backgroundColor: isExpanded ? "var(--p-color-bg-surface-hover)" : "var(--p-color-bg-surface)",
+                          flexWrap: "wrap",
                         }}
                       >
-                        <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                        <div style={{ flex: "1 1 0", minWidth: 0 }}>
                           <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {group.product_title.length > 60
-                                  ? group.product_title.slice(0, 60) + "\u2026"
-                                  : group.product_title}
-                              </Text>
-                              <Badge tone={STATUS_TONE[group.fitment_status]}>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
+                              {group.product_title}
+                            </Text>
+                            <InlineStack gap="200" blockAlign="center" wrap>
+                              <Badge tone={STATUS_TONE[group.fitment_status]} size="small">
                                 {STATUS_LABEL[group.fitment_status] ?? group.fitment_status}
                               </Badge>
-                            </InlineStack>
-                            <InlineStack gap="200" wrap>
                               <Text as="span" variant="bodySm" tone="subdued">
-                                {group.fitments.length} fitment{group.fitments.length !== 1 ? "s" : ""}
+                                {`${group.fitments.length} fitment${group.fitments.length !== 1 ? "s" : ""} · ${uniqueMakes.length} make${uniqueMakes.length !== 1 ? "s" : ""} · ${uniqueModels.length} model${uniqueModels.length !== 1 ? "s" : ""}`}
                               </Text>
-                              {uniqueMakes.length > 0 && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  · {uniqueMakes.length} make{uniqueMakes.length !== 1 ? "s" : ""}
-                                </Text>
-                              )}
-                              {uniqueModels.length > 0 && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  · {uniqueModels.length} model{uniqueModels.length !== 1 ? "s" : ""}
-                                </Text>
-                              )}
                             </InlineStack>
                           </BlockStack>
-                          <InlineStack gap="200" blockAlign="center">
-                            <InlineStack gap="100" wrap>
-                              {uniqueMakes.slice(0, 4).map((m) => (
-                                <Badge key={m} tone="info">{m as string}</Badge>
-                              ))}
-                              {uniqueMakes.length > 4 && (
-                                <Badge>{`+${uniqueMakes.length - 4}`}</Badge>
-                              )}
-                            </InlineStack>
-                            <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
-                          </InlineStack>
+                        </div>
+                        <InlineStack gap="200" blockAlign="center">
+                          {uniqueMakes.slice(0, 3).map((m) => (
+                            <Badge key={m} tone="info" size="small">{m as string}</Badge>
+                          ))}
+                          {uniqueMakes.length > 3 && (
+                            <Badge size="small">{`+${uniqueMakes.length - 3}`}</Badge>
+                          )}
+                          <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
                         </InlineStack>
                       </div>
 
