@@ -554,7 +554,7 @@ export default function AnalyticsPage() {
     totalPlateLookups,
     topPlateMakes,
   } = loaderData;
-  const gated = "gated" in loaderData && (loaderData as any).gated === true;
+  const gated = "gated" in loaderData && (loaderData as Record<string, unknown>).gated === true;
 
   const [showExport, setShowExport] = useState(false);
 

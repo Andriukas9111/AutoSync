@@ -13,45 +13,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log(`[webhook] ${topic} — Redacting all shop data`);
 
-  // Delete all tenant-scoped data in order (child tables first).
-  // GDPR compliance: must delete ALL tables with shop_id column.
-  const tables = [
-    "extraction_results",
-    "vehicle_fitments",
-    "wheel_fitments",
-    "vehicle_page_sync",
-    "search_events",
-    "conversion_events",
+  // GDPR compliance: delete ALL tenant data.
+  // Strategy: delete tenant row with FK CASCADE to handle most child tables,
+  // plus explicit deletes for tables that may not have FK constraints.
+  const errors: string[] = [];
+
+  // Explicit deletes for tables that might lack FK CASCADE
+  const explicitTables = [
     "plate_lookups",
     "scrape_changelog",
     "admin_activity_log",
-    "sync_jobs",
-    "provider_column_mappings",
-    "provider_imports",
-    "pricing_rules",
-    "price_history",
-    "price_alerts",
-    "products",
-    "providers",
-    "collection_mappings",
-    "tenant_active_makes",
-    "tenant_custom_vehicles",
-    "app_settings",
-    "tenants",  // Delete tenants LAST (parent table with FK CASCADE)
+    "search_events",
+    "conversion_events",
+    "vehicle_page_sync",
   ] as const;
 
-  for (const table of tables) {
-    const { error } = await db
-      .from(table)
-      .delete()
-      .eq("shop_id", shop);
-
-    if (error) {
-      console.error(`[webhook] ${topic}: Failed to delete from ${table}: ${error.message}`);
-    }
+  for (const table of explicitTables) {
+    const { error } = await db.from(table).delete().eq("shop_id", shop);
+    if (error) errors.push(`${table}: ${error.message}`);
   }
 
-  console.log(`[webhook] ${topic} — All data redacted successfully`);
+  // Delete tenant row — FK CASCADE handles products, providers, fitments, etc.
+  const { error: tenantErr } = await db.from("tenants").delete().eq("shop_id", shop);
+  if (tenantErr) errors.push(`tenants: ${tenantErr.message}`);
+
+  if (errors.length > 0) {
+    console.error(`[webhook] ${topic}: Partial redaction failures:`, errors.join("; "));
+  }
 
   return new Response(JSON.stringify({ message: "Shop data redacted" }), {
     status: 200,
