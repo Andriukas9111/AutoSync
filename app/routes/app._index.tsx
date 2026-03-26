@@ -147,7 +147,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: (tenant?.product_count ?? 0) > 0,
+    hasPushed: (syncedProductsResult.count ?? 0) > 0,
     // Products — real counts for instant render, useAppData updates live
     totalProducts: totalProductsResult.count ?? 0,
     unmapped: unmappedResult.count ?? 0,
