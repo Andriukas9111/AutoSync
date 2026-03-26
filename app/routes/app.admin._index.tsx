@@ -773,13 +773,23 @@ export default function AdminPanel() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
-  // Auto-revalidate when a scrape job is running (updates progress every 5s)
+  // Poll scrape status via fetcher (NOT revalidator — avoids full page refresh)
   const hasRunningScrape = scrapeJobs.some((j: any) => j.status === "running");
+  const scrapePollFetcher = useFetcher();
   useEffect(() => {
     if (!hasRunningScrape) return;
-    const id = setInterval(() => revalidator.revalidate(), 5000);
+    const id = setInterval(() => {
+      scrapePollFetcher.load("/app/api/scrape-status");
+    }, 5000);
     return () => clearInterval(id);
-  }, [hasRunningScrape, revalidator]);
+  }, [hasRunningScrape]);
+
+  // When scrape completes, do ONE full revalidate to refresh all data
+  useEffect(() => {
+    if (scrapePollFetcher.data?.status === "completed" || scrapePollFetcher.data?.status === "failed") {
+      revalidator.revalidate();
+    }
+  }, [scrapePollFetcher.data?.status]);
 
   // Scraper state
   const [scrapeState, setScrapeState] = useState<{
