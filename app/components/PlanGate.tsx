@@ -6,16 +6,15 @@ import {
   Button,
   Badge,
   Box,
-  Icon,
 } from "@shopify/polaris";
-import { LockIcon, CheckSmallIcon } from "@shopify/polaris-icons";
+import { LockIcon } from "@shopify/polaris-icons";
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
-import { PLAN_PRICING, PLAN_HIGHLIGHTS } from "../lib/design";
+import { PLAN_PRICING } from "../lib/design";
 import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
-// Display-name lookup maps (all dynamic — never hardcoded)
+// Display-name lookup maps (all dynamic)
 // ---------------------------------------------------------------------------
 
 export const PLAN_NAMES: Record<PlanTier, string> = {
@@ -78,17 +77,11 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate component
+// PlanGate — compact inline upgrade prompt
 //
-// Renders a compact, clean upgrade prompt that matches the app design:
-//   - IconBadge with LockIcon (same pattern as all section headers)
-//   - Feature name + plan Badge
-//   - Price + short description
-//   - 2-3 key benefits with check icons
-//   - Upgrade button
-//
-// All data comes from PLAN_NAMES, PLAN_PRICING, PLAN_HIGHLIGHTS —
-// nothing is hardcoded, so changing plans/prices updates everywhere.
+// Two lines only:
+//   🔒 Feature Name  [Plan+]
+//   Available on Plan (price) · [Upgrade →]
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -122,57 +115,33 @@ export function PlanGate({
   const requiredPlan = allLimits ? findMinPlan(feature, allLimits) : "starter";
   const requiredPlanName = PLAN_NAMES[requiredPlan];
   const price = PLAN_PRICING[requiredPlan] ?? "";
-  const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Box
-      padding="400"
-      background="bg-surface-secondary"
-      borderRadius="300"
-    >
-      <BlockStack gap="300">
-        {/* Header: lock icon + feature name + plan badge */}
+    <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+      <InlineStack align="space-between" blockAlign="center">
         <InlineStack gap="200" blockAlign="center">
           <IconBadge
             icon={LockIcon}
-            bg="var(--p-color-bg-fill-caution-secondary)"
-            color="var(--p-color-icon-caution)"
-            size={28}
+            bg="var(--p-color-bg-fill-secondary)"
+            tone="subdued"
+            size={24}
           />
-          <Text as="h3" variant="headingSm">
-            {featureLabel}
-          </Text>
-          <Badge size="small" tone="info">
-            {`${requiredPlanName}+`}
-          </Badge>
-        </InlineStack>
-
-        {/* Description */}
-        <Text as="p" variant="bodySm" tone="subdued">
-          {`Unlock with the ${requiredPlanName} plan (${price}). Includes:`}
-        </Text>
-
-        {/* Benefits — compact single-line items with check icons */}
-        {highlights.length > 0 && (
-          <BlockStack gap="100">
-            {highlights.slice(0, 3).map((benefit) => (
-              <InlineStack key={benefit} gap="100" blockAlign="center" wrap={false}>
-                <Icon source={CheckSmallIcon} tone="success" />
-                <Text as="span" variant="bodySm" tone="subdued">
-                  {benefit}
-                </Text>
-              </InlineStack>
-            ))}
+          <BlockStack gap="0">
+            <InlineStack gap="150" blockAlign="center">
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                {featureLabel}
+              </Text>
+              <Badge size="small">{`${requiredPlanName}+`}</Badge>
+            </InlineStack>
+            <Text as="span" variant="bodySm" tone="subdued">
+              {`Available on ${requiredPlanName} plan (${price})`}
+            </Text>
           </BlockStack>
-        )}
-
-        {/* Upgrade button */}
-        <InlineStack>
-          <Button size="slim" onClick={() => navigate("/app/plans")}>
-            {`Upgrade to ${requiredPlanName}`}
-          </Button>
         </InlineStack>
-      </BlockStack>
+        <Button size="slim" onClick={() => navigate("/app/plans")}>
+          Upgrade
+        </Button>
+      </InlineStack>
     </Box>
   );
 }

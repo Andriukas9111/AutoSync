@@ -511,8 +511,8 @@ export default function Push() {
                 />
               </PlanGate>
 
-              {/* Collection strategy (shown when collections is checked) */}
-              {createCollectionsChecked && (
+              {/* Collection strategy (shown only when collections feature is unlocked AND checked) */}
+              {createCollectionsChecked && limits.features.smartCollections && (
                 <Box paddingInlineStart="800">
                   <BlockStack gap="300">
                     <Select

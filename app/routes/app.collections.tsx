@@ -463,14 +463,9 @@ export default function Collections() {
           </Layout.Section>
         )}
 
-        {/* Save Button */}
-        <Layout.Section>
-          <PlanGate
-            feature="smartCollections"
-            currentPlan={plan}
-            limits={limits}
-            allLimits={allLimits}
-          >
+        {/* Save Button — only shown when smartCollections is unlocked */}
+        {limits.features.smartCollections && (
+          <Layout.Section>
             <Form method="post">
               <input type="hidden" name="_action" value="save_collection_settings" />
               <input type="hidden" name="collection_strategy" value={strategy} />
@@ -483,8 +478,8 @@ export default function Collections() {
                 Save Collection Settings
               </Button>
             </Form>
-          </PlanGate>
-        </Layout.Section>
+          </Layout.Section>
+        )}
 
         {/* Existing Collections */}
         <Layout.Section>
