@@ -8,7 +8,7 @@ import {
   Banner, ProgressBar, Select, Spinner, Thumbnail,
 } from "@shopify/polaris";
 import {
-  DatabaseIcon, GlobeIcon, SearchIcon, ClockIcon, RefreshIcon, ViewIcon,
+  DatabaseIcon, GlobeIcon, SearchIcon, ClockIcon, RefreshIcon, ViewIcon, ImportIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../IconBadge";
 import { DataTable } from "../DataTable";
@@ -28,6 +28,7 @@ interface Props {
   ymmeCounts: { makes: number; models: number; engines: number; specs: number; aliases: number };
   totalFitments: number;
   scrapeJobs: Array<Record<string, unknown>>;
+  scrapeChangelog: Array<Record<string, unknown>>;
   // Browse data (loaded conditionally based on URL params)
   browseMakes?: Array<Record<string, unknown>>;
   browseModels?: Array<Record<string, unknown>>;
@@ -55,6 +56,7 @@ export function AdminYMME({
   browseSpec, browseMakeName, browseModelName, scrapeState,
   onStartScrape, onStopScrape, onStartIncremental, onRefresh, isRefreshing,
   onBrowse, onBrowseBack, currentMakeId, currentModelId, currentEngineId,
+  scrapeChangelog,
 }: Props) {
   const [delay, setDelay] = useState("500");
   const [scrapeSpecs, setScrapeSpecs] = useState("true");
@@ -67,11 +69,56 @@ export function AdminYMME({
     <BlockStack gap="500">
 
       {/* Server-side scrape job progress */}
-      {scrapeJobs.some((j: any) => j.status === "running") && (
-        <Banner title="Incremental update running" tone="info">
-          <p>The scraper is checking for new brands and models. This may take a few minutes. Refresh to see updated counts.</p>
+      {scrapeJobs.filter((j: any) => j.status === "running").map((job: any) => (
+        <Card key={job.id}>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <Spinner size="small" />
+                <Text as="h2" variant="headingSm">Incremental Update Running</Text>
+              </InlineStack>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {job.currentItem ? `Processing: ${job.currentItem}` : "Starting..."}
+              </Text>
+            </InlineStack>
+            {(job.progress ?? 0) > 0 && (
+              <ProgressBar progress={job.progress} size="small" />
+            )}
+            {job.result && (
+              <div style={statGridStyle(4)}>
+                {[
+                  { label: "Brands Checked", value: job.result.brandsChecked ?? 0 },
+                  { label: "New Models", value: job.result.newModels ?? 0 },
+                  { label: "New Engines", value: job.result.newEngines ?? 0 },
+                  { label: "New Specs", value: job.result.newSpecs ?? 0 },
+                ].map((s) => (
+                  <div key={s.label} style={statMiniStyle}>
+                    <Text as="p" variant="headingLg" alignment="center">{String(s.value)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued" alignment="center">{s.label}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
+          </BlockStack>
+        </Card>
+      ))}
+
+      {/* Completed scrape job summary */}
+      {scrapeJobs.filter((j: any) => j.status === "completed" || j.status === "failed").slice(0, 1).map((job: any) => (
+        <Banner
+          key={job.id}
+          title={job.status === "completed"
+            ? `Scrape complete — ${job.result?.newBrands ?? 0} new brands, ${job.result?.newModels ?? 0} new models, ${job.result?.newEngines ?? 0} new engines, ${job.result?.newSpecs ?? 0} new specs`
+            : `Scrape failed — ${job.result?.error || "Unknown error"}`}
+          tone={job.status === "completed" ? (job.result?.newModels > 0 || job.result?.newEngines > 0 ? "success" : "info") : "critical"}
+        >
+          <p>
+            {job.status === "completed"
+              ? `Checked ${job.result?.brandsChecked ?? 0} brands in ${Math.round((job.result?.duration_ms ?? 0) / 1000)}s`
+              : `${(job.errors || []).length} errors encountered`}
+          </p>
         </Banner>
-      )}
+      ))}
 
       {/* Client-side scrape completion banner */}
       {scrapeState && !scrapeState.running && (
@@ -215,7 +262,33 @@ export function AdminYMME({
         </Card>
       )}
 
-      {/* ── Card 4: Browse YMME ── */}
+      {/* ── Card 4: Recent Changes (Changelog) ── */}
+      {scrapeChangelog.length > 0 && (
+        <Card>
+          <BlockStack gap="300">
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ImportIcon} color="var(--p-color-icon-success)" />
+                <Text as="h2" variant="headingSm">Recent Changes</Text>
+              </InlineStack>
+              <Badge tone="info">{`${scrapeChangelog.length} entries`}</Badge>
+            </InlineStack>
+            <DataTable
+              columnContentTypes={["text", "text", "text", "text", "text"]}
+              headings={["Action", "Type", "Name", "Parent", "Date"]}
+              rows={scrapeChangelog.map((c: any) => [
+                c.action === "added" ? "➕ Added" : "✏️ Updated",
+                (c.entity_type ?? "").charAt(0).toUpperCase() + (c.entity_type ?? "").slice(1),
+                c.entity_name ?? "—",
+                c.parent_name ?? "—",
+                c.created_at ? fmtShort(c.created_at) : "—",
+              ])}
+            />
+          </BlockStack>
+        </Card>
+      )}
+
+      {/* ── Card 5: Browse YMME ── */}
       <Card>
         <BlockStack gap="300">
           {/* Breadcrumb */}

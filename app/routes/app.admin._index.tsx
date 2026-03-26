@@ -228,6 +228,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Table may not exist yet
   }
 
+  // ── Scrape changelog (recent additions/updates) ──
+  let scrapeChangelog: Array<Record<string, unknown>> = [];
+  try {
+    const { data: clData } = await db
+      .from("scrape_changelog")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    scrapeChangelog = clData ?? [];
+  } catch {
+    // Table may not exist yet
+  }
+
   // ── YMME browse data (conditional on tab=ymme) ──
   let browseMakes: Array<Record<string, unknown>> = [];
   let browseModels: Array<Record<string, unknown>> = [];
@@ -398,6 +411,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tenantUsage,
     recentJobs,
     scrapeJobs: scrapeJobsData,
+    scrapeChangelog,
     systemHealth,
     activeJobs: (activeJobsRes.data ?? []) as Array<{
       id: string; shop_id: string; type: string; status: string;
@@ -722,7 +736,7 @@ export default function AdminPanel() {
   const loaderData = useLoaderData<typeof loader>();
   const {
     tenants, totalTenants, totalProducts, totalFitments,
-    planBreakdown, ymmeCounts, recentJobs, scrapeJobs,
+    planBreakdown, ymmeCounts, recentJobs, scrapeJobs, scrapeChangelog,
     announcements, adminActivityLog, recentInstalls,
     browseMakes, browseModels, browseEngines, browseSpec,
     browseMakeName, browseModelName,
@@ -863,7 +877,7 @@ export default function AdminPanel() {
             <Box padding="400" minHeight="500px">
               {selectedTab === 0 && <AdminOverview tenants={tenants} ymmeCounts={ymmeCounts} recentJobs={recentJobs} planBreakdown={planBreakdown} liveHealth={liveHealth} onSwitchTab={setSelectedTab} onRefresh={() => revalidator.revalidate()} onNavigate={navigate} isRefreshing={isRefreshing} />}
               {selectedTab === 1 && <AdminTenants tenants={tenants} onNavigate={navigate} onChangePlan={(s, p) => fetcher.submit({ intent: "change-plan", shop_id: s, new_plan: p }, { method: "post" })} onPurge={(s, i) => fetcher.submit({ intent: i, shop_id: s }, { method: "post" })} />}
-              {selectedTab === 2 && <AdminYMME ymmeCounts={ymmeCounts} totalFitments={totalFitments} scrapeJobs={scrapeJobs} browseMakes={browseMakes} browseModels={browseModels} browseEngines={browseEngines} browseSpec={browseSpec} browseMakeName={browseMakeName} browseModelName={browseModelName} scrapeState={scrapeState} onStartScrape={() => startChunkedScrape()} onStopScrape={() => { stopRef.current = true; }} onStartIncremental={async () => {
+              {selectedTab === 2 && <AdminYMME ymmeCounts={ymmeCounts} totalFitments={totalFitments} scrapeJobs={scrapeJobs} scrapeChangelog={scrapeChangelog} browseMakes={browseMakes} browseModels={browseModels} browseEngines={browseEngines} browseSpec={browseSpec} browseMakeName={browseMakeName} browseModelName={browseModelName} scrapeState={scrapeState} onStartScrape={() => startChunkedScrape()} onStopScrape={() => { stopRef.current = true; }} onStartIncremental={async () => {
                     try {
                       const res = await fetch("/app/api/scrape-incremental", { method: "POST", credentials: "same-origin", body: new FormData() });
                       const json = await res.json();
