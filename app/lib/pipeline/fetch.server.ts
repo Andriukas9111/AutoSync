@@ -47,6 +47,7 @@ interface FetchProductsOptions {
   jobId: string;
   onProgress?: (processed: number, total: number) => void;
   signal?: AbortSignal; // AbortController signal for timeout cancellation
+  maxProducts?: number; // Plan limit — stop fetching after this many products
 }
 
 export async function fetchProductsFromShopify({
@@ -55,7 +56,8 @@ export async function fetchProductsFromShopify({
   jobId,
   onProgress,
   signal,
-}: FetchProductsOptions): Promise<{ fetched: number; errors: string[] }> {
+  maxProducts,
+}: FetchProductsOptions): Promise<{ fetched: number; errors: string[]; limitReached?: boolean }> {
   let cursor: string | null = null;
   let hasNextPage = true;
   let fetched = 0;
@@ -68,10 +70,18 @@ export async function fetchProductsFromShopify({
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", jobId);
 
+  let limitReached = false;
+
   try {
     while (hasNextPage) {
       // Check if the operation was aborted (timeout)
       if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
+
+      // Check plan product limit
+      if (maxProducts && fetched >= maxProducts) {
+        limitReached = true;
+        break;
+      }
       const response: Response = await admin.graphql(PRODUCTS_QUERY, {
         variables: {
           first: pageSize,
@@ -89,8 +99,11 @@ export async function fetchProductsFromShopify({
       const { edges, pageInfo }: { edges: Array<{ node: Record<string, any> }>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } = gqlData.products;
 
       // Batch upsert entire page at once (250 products per DB call instead of 3 per product)
+      // Trim batch to plan limit if needed
+      const remaining = maxProducts ? maxProducts - fetched : Infinity;
+      const trimmedEdges = remaining < edges.length ? edges.slice(0, remaining) : edges;
       const now = new Date().toISOString();
-      const batchRows = edges.map(({ node: product }: { node: Record<string, any> }) => {
+      const batchRows = trimmedEdges.map(({ node: product }: { node: Record<string, any> }) => {
         const shopifyId = parseInt(product.id.replace("gid://shopify/Product/", ""), 10);
         return {
           shop_id: shopId,
@@ -178,7 +191,7 @@ export async function fetchProductsFromShopify({
       })
       .eq("id", jobId);
 
-    return { fetched, errors };
+    return { fetched, errors, limitReached };
   } catch (err: unknown) {
     // Mark job as failed
     await db

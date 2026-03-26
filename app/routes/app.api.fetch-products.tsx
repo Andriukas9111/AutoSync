@@ -3,7 +3,7 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
-import { assertProductLimit, BillingGateError } from "../lib/billing.server";
+import { assertProductLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 
 // TODO: Move to Edge Function for true background processing.
 // Currently runs synchronously with a timeout guard.
@@ -71,11 +71,17 @@ export async function action({ request }: ActionFunctionArgs) {
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
+    // Get plan product limit to cap the fetch
+    const tenant = await getTenant(shopId);
+    const planLimits = getPlanLimits(tenant?.plan ?? "free");
+    const maxProducts = planLimits.products === Infinity ? undefined : planLimits.products;
+
     const result = await fetchProductsFromShopify({
       admin,
       shopId,
       jobId: job.id,
       signal: controller.signal,
+      maxProducts,
     });
     clearTimeout(timeoutId);
 
