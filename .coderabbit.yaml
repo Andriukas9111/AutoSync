@@ -151,13 +151,13 @@ reviews:
         4) No XSS through announcement fields
         5) Scraper has rate limiting
 
-# Ignore paths we don't want reviewed
-path_filters:
-  - "!.agent/**"
-  - "!.claude/**"
-  - "!.codebuddy/**"
-  - "!node_modules/**"
-  - "!build/**"
-  - "!.react-router/**"
-  - "!*.log"
-  - "!.shopify/**"
+  # Ignore paths we don't want reviewed
+  path_filters:
+    - "!.agent/**"
+    - "!.claude/**"
+    - "!.codebuddy/**"
+    - "!node_modules/**"
+    - "!build/**"
+    - "!.react-router/**"
+    - "!*.log"
+    - "!.shopify/**"
