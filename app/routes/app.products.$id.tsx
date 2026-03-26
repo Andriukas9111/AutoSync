@@ -281,11 +281,25 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .from("products").select("fitment_status")
       .eq("id", productId).eq("shop_id", shopId).maybeSingle();
 
-    if (currentProduct?.fitment_status === "unmapped") {
+    // Update fitment_status: manual mapping always sets manual_mapped,
+    // other methods set auto_mapped if currently unmapped
+    const newStatus = method === "manual" ? "manual_mapped" :
+      (currentProduct?.fitment_status === "unmapped" ? "auto_mapped" : currentProduct?.fitment_status);
+
+    if (newStatus && newStatus !== currentProduct?.fitment_status) {
       await db.from("products")
-        .update({ fitment_status: method === "manual" ? "manual_mapped" : "auto_mapped", updated_at: new Date().toISOString() })
+        .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
         .eq("id", productId).eq("shop_id", shopId);
     }
+
+    // Update tenant fitment count from actual DB count
+    const { count: fitmentCount } = await db
+      .from("vehicle_fitments")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId);
+    await db.from("tenants")
+      .update({ fitment_count: fitmentCount ?? 0, updated_at: new Date().toISOString() })
+      .eq("shop_id", shopId);
 
     // Find next unmapped product AFTER the current one
     const { data: nextAfterAdd } = await db.from("products")
@@ -423,7 +437,17 @@ export default function ProductDetails() {
   const suggestionFetcher = useFetcher<{ suggestions?: Array<Record<string, unknown>>; hints?: string[]; diagnostics?: string[] }>();
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
-  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(new Set());
+  // Pre-populate accepted suggestions from existing fitments so we don't show duplicates
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(() => {
+    const existing = new Set<string>();
+    for (const f of fitments) {
+      // Build a key that matches the suggestion key format: makeId|modelId|engineId
+      // Since fitments store names not IDs, use name-based keys as fallback
+      const key = `${f.make}|${f.model || ""}|${f.engine_code || f.engine || ""}`;
+      existing.add(key);
+    }
+    return existing;
+  });
 
   // Add fitment form state
   const [vehicleSelection, setVehicleSelection] = useState<VehicleSelection | null>(null);
@@ -561,8 +585,21 @@ export default function ProductDetails() {
   const tags = Array.isArray(product.tags) ? product.tags : [];
 
   const availableSuggestions = suggestions.filter((s: any) => {
-    const key = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
-    return !acceptedSuggestions.has(key);
+    // Check against client-side accepted set (uses IDs from suggestion)
+    const idKey = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
+    if (acceptedSuggestions.has(idKey)) return false;
+
+    // Check against existing fitments (uses names from DB)
+    const nameKey = `${s.make.name}|${s.model?.name || ""}|${s.engine?.code || s.engine?.name || ""}`;
+    if (acceptedSuggestions.has(nameKey)) return false;
+
+    // Also check if any existing fitment matches this suggestion by make+model
+    const alreadyMapped = fitments.some(
+      (f) =>
+        f.make?.toLowerCase() === s.make.name?.toLowerCase() &&
+        (f.model?.toLowerCase() === (s.model?.name || "").toLowerCase())
+    );
+    return !alreadyMapped;
   });
 
   const displayedSuggestions = showAllSuggestions ? availableSuggestions : availableSuggestions.slice(0, 5);

@@ -1,6 +1,15 @@
 import type { ReactNode } from "react";
-import { Banner, BlockStack, Button } from "@shopify/polaris";
+import { BlockStack, InlineStack, Text, Button, Icon, Badge } from "@shopify/polaris";
+import { LockIcon, CheckCircleIcon, StarFilledIcon } from "@shopify/polaris-icons";
 import type { PlanTier, PlanLimits } from "../lib/types";
+import {
+  planGateContainerStyle,
+  planGateIconContainerStyle,
+  planGateBenefitStyle,
+  planGateBenefitDotStyle,
+  PLAN_PRICING,
+  PLAN_HIGHLIGHTS,
+} from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Display-name lookup maps
@@ -39,7 +48,7 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Plan tier order (mirrors billing.server.ts but available on the client)
+// Plan tier order
 // ---------------------------------------------------------------------------
 
 const PLAN_ORDER: PlanTier[] = [
@@ -51,15 +60,20 @@ const PLAN_ORDER: PlanTier[] = [
   "enterprise",
 ];
 
+// Badge tones for each tier
+const PLAN_BADGE_TONES: Record<PlanTier, "info" | "success" | "warning" | "critical" | undefined> = {
+  free: undefined,
+  starter: "info",
+  growth: "info",
+  professional: "success",
+  business: "warning",
+  enterprise: "critical",
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Returns the minimum PlanTier that enables a given feature.
- * Requires the full PLAN_LIMITS-style record so this stays a pure function
- * without importing server-only modules.
- */
 export function findMinPlan(
   feature: keyof PlanLimits["features"],
   allLimits: Record<PlanTier, PlanLimits>,
@@ -71,10 +85,6 @@ export function findMinPlan(
   return "enterprise";
 }
 
-/**
- * Returns true when the feature is considered "enabled" for the given limits.
- * A feature is disabled when its value is exactly `false` or `"none"`.
- */
 function isFeatureEnabled(
   feature: keyof PlanLimits["features"],
   limits: PlanLimits,
@@ -84,25 +94,15 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate component
+// PlanGate component — unified upgrade prompt
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
-  /** The feature key to check (must be a key of PlanLimits.features). */
   feature: keyof PlanLimits["features"];
-  /** The merchant's current plan tier. */
   currentPlan: PlanTier;
-  /** The full PlanLimits object for the current plan. */
   limits: PlanLimits;
-  /** Content to render when the feature is available. */
   children: ReactNode;
-  /** Optional custom fallback when the feature is gated. */
   fallback?: ReactNode;
-  /**
-   * Optional: the full limits record for all plans.
-   * When provided, the upgrade banner will name the specific plan required.
-   * When omitted, the banner uses a generic "upgrade" message.
-   */
   allLimits?: Record<PlanTier, PlanLimits>;
 }
 
@@ -118,31 +118,69 @@ export function PlanGate({
     return <>{children}</>;
   }
 
-  // If a custom fallback is provided, render it instead of the default banner.
   if (fallback !== undefined) {
     return <>{fallback}</>;
   }
 
   const featureLabel = FEATURE_NAMES[feature] ?? feature;
-
-  // Build the upgrade message.
-  let upgradeMessage: string;
-  if (allLimits) {
-    const requiredPlan = findMinPlan(feature, allLimits);
-    const requiredPlanName = PLAN_NAMES[requiredPlan];
-    upgradeMessage = `"${featureLabel}" requires the ${requiredPlanName} plan or higher. You are currently on the ${PLAN_NAMES[currentPlan]} plan.`;
-  } else {
-    upgradeMessage = `"${featureLabel}" is not available on your current ${PLAN_NAMES[currentPlan]} plan. Please upgrade to access this feature.`;
-  }
+  const requiredPlan = allLimits ? findMinPlan(feature, allLimits) : "starter";
+  const requiredPlanName = PLAN_NAMES[requiredPlan];
+  const price = PLAN_PRICING[requiredPlan] ?? "";
+  const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
+  const badgeTone = PLAN_BADGE_TONES[requiredPlan];
 
   return (
-    <Banner tone="warning">
-      <BlockStack gap="200">
-        <p>{upgradeMessage}</p>
-        <Button variant="primary" url="/app/plans">
-          View Plans
-        </Button>
+    <div style={planGateContainerStyle}>
+      <BlockStack gap="400">
+        {/* Header row: lock icon + feature name + required plan badge */}
+        <InlineStack gap="300" blockAlign="center" wrap={false}>
+          <div style={planGateIconContainerStyle}>
+            <Icon source={LockIcon} tone="caution" />
+          </div>
+          <BlockStack gap="050">
+            <InlineStack gap="200" blockAlign="center">
+              <Text as="h3" variant="headingSm">
+                {featureLabel}
+              </Text>
+              <Badge tone={badgeTone} size="small">
+                {`${requiredPlanName}+`}
+              </Badge>
+            </InlineStack>
+            <Text as="p" variant="bodySm" tone="subdued">
+              {`Upgrade to the ${requiredPlanName} plan ${price ? `(${price}) ` : ""}to unlock this feature.`}
+            </Text>
+          </BlockStack>
+        </InlineStack>
+
+        {/* Benefits list */}
+        {highlights.length > 0 && (
+          <BlockStack gap="200">
+            <InlineStack gap="200" blockAlign="center">
+              <Icon source={StarFilledIcon} tone="warning" />
+              <Text as="span" variant="bodySm" fontWeight="semibold">
+                {`What you get with ${requiredPlanName}`}
+              </Text>
+            </InlineStack>
+            <div style={{ paddingLeft: "4px" }}>
+              <BlockStack gap="150">
+                {highlights.map((benefit) => (
+                  <div key={benefit} style={planGateBenefitStyle}>
+                    <div style={planGateBenefitDotStyle} />
+                    <span>{benefit}</span>
+                  </div>
+                ))}
+              </BlockStack>
+            </div>
+          </BlockStack>
+        )}
+
+        {/* CTA button */}
+        <div>
+          <Button variant="primary" url="/app/plans" icon={CheckCircleIcon}>
+            {`View ${requiredPlanName} Plan`}
+          </Button>
+        </div>
       </BlockStack>
-    </Banner>
+    </div>
   );
 }

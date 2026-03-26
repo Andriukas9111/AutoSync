@@ -345,3 +345,82 @@ export function dismissBanner(key: string): void {
 export function clearBannerDismissal(key: string): void {
   try { localStorage.removeItem(`autosync_banner_${key}`); } catch { /* SSR-safe */ }
 }
+
+// ── Plan Gate Styles ─────────────────────────────────────────────────────────
+
+export const planGateContainerStyle: CSSProperties = {
+  background: "var(--p-color-bg-surface-secondary)",
+  borderRadius: "var(--p-border-radius-300)",
+  border: "1px solid var(--p-color-border-secondary)",
+  padding: "20px",
+};
+
+export const planGateIconContainerStyle: CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-fill-caution-secondary)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+};
+
+export const planGateBenefitStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  fontSize: "13px",
+  color: "var(--p-color-text-secondary)",
+};
+
+export const planGateBenefitDotStyle: CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: "50%",
+  background: "var(--p-color-icon-emphasis)",
+  flexShrink: 0,
+};
+
+/** Plan pricing for display in the gate component */
+export const PLAN_PRICING: Record<string, string> = {
+  free: "$0/mo",
+  starter: "$19/mo",
+  growth: "$49/mo",
+  professional: "$99/mo",
+  business: "$179/mo",
+  enterprise: "$299/mo",
+};
+
+/** Key highlights for each plan tier (used in PlanGate upgrade prompt) */
+export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
+  starter: [
+    "Up to 500 products & 2,500 fitments",
+    "Push tags & metafields to Shopify",
+    "YMME search widget & fitment badge",
+  ],
+  growth: [
+    "Up to 5,000 products & 25,000 fitments",
+    "Auto fitment extraction from titles",
+    "Smart collections by make",
+    "Compatibility table widget",
+  ],
+  professional: [
+    "Up to 50,000 products & 250,000 fitments",
+    "API integration & custom vehicles",
+    "My Garage & collections by model",
+    "Competitive pricing engine",
+  ],
+  business: [
+    "Up to 200,000 products & 1M fitments",
+    "FTP import & Wheel Finder widget",
+    "Collection SEO images",
+    "Priority support",
+  ],
+  enterprise: [
+    "Unlimited products & fitments",
+    "DVLA plate lookup & VIN decode",
+    "Full CSS widget customisation",
+    "Vehicle specification pages",
+  ],
+};
