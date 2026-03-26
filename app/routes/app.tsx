@@ -111,7 +111,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("id, title, description, tone, cta_text, cta_url, dismissible")
       .eq("active", true)
       .lte("starts_at", now)
-      .or(`ends_at.is.null,ends_at.gte.${now}`);
+      .or(`ends_at.is.null,ends_at.gte.${now}`)
+      .limit(20);
     if (anns) {
       // Filter by target_plans and target_shops (NULL means all)
       announcements = anns.filter((a: Record<string, unknown>) => {

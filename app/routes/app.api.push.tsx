@@ -79,7 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
       started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (jobError || !job) {
     return data({ error: "Failed to create sync job" }, { status: 500 });

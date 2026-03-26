@@ -69,7 +69,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       metadata: JSON.stringify({ method: "bulk_operations" }),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   try {
     // Run bulk push (generates JSONL, uploads, starts operations)

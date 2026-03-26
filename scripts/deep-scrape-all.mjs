@@ -1047,7 +1047,7 @@ async function createScrapeJob(totalItems) {
     result: {},
     errors: [],
     started_at: new Date().toISOString(),
-  }).select("id").single();
+  }).select("id").maybeSingle();
 
   if (error) { console.error("Failed to create scrape job:", error.message); return; }
   scrapeJobId = data.id;

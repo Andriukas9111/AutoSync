@@ -15,7 +15,7 @@ async function shopifyGql(token, query, variables) {
 }
 
 async function main() {
-  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", SHOP).single();
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", SHOP).maybeSingle();
   const token = tenant.shopify_access_token;
 
   // Get unique makes and models

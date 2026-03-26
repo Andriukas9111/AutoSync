@@ -164,7 +164,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       status: "pending",
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (insertError || !provider) {
     console.error("Failed to create provider:", insertError?.message);

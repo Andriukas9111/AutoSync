@@ -555,7 +555,7 @@ async function handleSearch(params: URLSearchParams) {
     }
   }
 
-  const { data: fitments, error: fitError } = await fitmentQuery;
+  const { data: fitments, error: fitError } = await fitmentQuery.limit(500);
   if (fitError) return json({ error: fitError.message }, 500);
 
   if (!fitments || fitments.length === 0) {
@@ -736,18 +736,14 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
             fuel_type: string | null; year_from: number | null;
             year_to: number | null; power_hp: number | null;
           }[] = [];
-          // Batch in small groups — Supabase caps at ~1000 rows per query regardless of .limit()
-          const BATCH_SIZE = 5;
-          for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
-            const batch = modelIds.slice(i, i + BATCH_SIZE);
-            const { data: batchEngines } = await db
-              .from("ymme_engines")
-              .select("id, model_id, name, code, displacement_cc, fuel_type, year_from, year_to, power_hp")
-              .in("model_id", batch)
-              .eq("active", true)
-              .limit(1000);
-            if (batchEngines) allEngines.push(...batchEngines);
-          }
+          // Single query for ALL model engines — avoid N+1 pattern
+          const { data: fetchedEngines } = await db
+            .from("ymme_engines")
+            .select("id, model_id, name, code, displacement_cc, fuel_type, year_from, year_to, power_hp")
+            .in("model_id", modelIds)
+            .eq("active", true)
+            .limit(2000);
+          if (fetchedEngines) allEngines.push(...fetchedEngines);
 
           debugInfo.enginesCount = allEngines.length;
 

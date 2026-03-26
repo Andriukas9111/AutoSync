@@ -349,7 +349,8 @@ async function processExtractChunk(
   const { data: makeRows } = await db
     .from("ymme_makes")
     .select("id, name")
-    .eq("active", true);
+    .eq("active", true)
+    .limit(5000);
   const knownMakes = (makeRows || []).map((r: { name: string }) => r.name);
 
   let autoMapped = 0;
@@ -657,7 +658,8 @@ async function processPushChunk(
       const { data: makeRows } = await db
         .from("ymme_makes")
         .select("id, name")
-        .in("name", [...uniqueMakeNames]);
+        .in("name", [...uniqueMakeNames])
+        .limit(1000);
 
       if (makeRows && makeRows.length > 0) {
         // Clear and re-insert — ensures deactivated makes with no products are removed

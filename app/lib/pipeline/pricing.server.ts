@@ -209,7 +209,7 @@ export async function createPricingRule(
     .from("pricing_rules")
     .insert({ ...rule, shop_id: shopId })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`Failed to create pricing rule: ${error.message}`);
   return data as PricingRule;
@@ -227,7 +227,7 @@ export async function updatePricingRule(
     .eq("id", ruleId)
     .eq("shop_id", shopId)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`Failed to update pricing rule: ${error.message}`);
   return data as PricingRule;

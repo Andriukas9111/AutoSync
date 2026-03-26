@@ -44,7 +44,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         started_at: new Date().toISOString(),
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (jobError || !job) {
       return data(

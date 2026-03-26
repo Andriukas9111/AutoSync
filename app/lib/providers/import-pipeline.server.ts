@@ -81,7 +81,7 @@ export async function runProviderImport(
       started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (importError || !importRecord) {
     throw new Error(`Failed to create import record: ${importError?.message ?? "unknown"}`);

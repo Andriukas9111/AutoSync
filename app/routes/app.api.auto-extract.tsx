@@ -117,7 +117,7 @@ export async function action({ request }: ActionFunctionArgs) {
         started_at: new Date().toISOString(),
       })
       .select("id, total_items")
-      .single();
+      .maybeSingle();
 
     if (jobError || !job) {
       return data({ error: "Failed to create job" }, { status: 500 });

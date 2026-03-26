@@ -148,7 +148,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const isQueueMode = url.searchParams.get("from") === "fitment";
 
   // Base queries
-  const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).single();
+  const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).maybeSingle();
   const fitmentsQuery = db.from("vehicle_fitments").select("*, ymme_engine_id")
     .eq("product_id", productId)
     .order("make", { ascending: true })
@@ -279,7 +279,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { data: currentProduct } = await db
       .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).single();
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
 
     if (currentProduct?.fitment_status === "unmapped") {
       await db.from("products")
@@ -339,7 +339,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { data: currentProduct } = await db
       .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).single();
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
 
     if (currentProduct?.fitment_status === "unmapped" || currentProduct?.fitment_status === "flagged") {
       await db.from("products")

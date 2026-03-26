@@ -1177,7 +1177,7 @@ export async function upsertMake(brand: ScrapedBrand): Promise<string | null> {
       { onConflict: "name" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert make " + brand.name + ":", error.message);
@@ -1210,7 +1210,7 @@ export async function upsertModel(
       { onConflict: "make_id,name,generation" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert model " + model.name + ":", error.message);
@@ -1245,7 +1245,7 @@ export async function upsertEngine(
       { onConflict: "model_id,name" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert engine " + engine.name + ":", error.message);
@@ -1416,7 +1416,7 @@ export async function startScrapeJob(config: {
       started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error || !job) {
     throw new Error("Failed to create scrape job: " + (error?.message ?? "unknown"));

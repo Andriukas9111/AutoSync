@@ -58,7 +58,7 @@ export async function action({ request }: ActionFunctionArgs) {
       started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (jobError || !job) {
     console.error("[fetch-products] Job creation failed:", jobError?.message);
@@ -120,7 +120,7 @@ export async function action({ request }: ActionFunctionArgs) {
         .from("sync_jobs")
         .select("processed_items")
         .eq("id", job.id)
-        .single();
+        .maybeSingle();
       return data({ success: true, fetched: refreshedJob?.processed_items ?? 0, errors: [message], jobId: job.id, partial: true });
     }
 

@@ -109,7 +109,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Top makes used in fitments
     topMakesRes,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).single(),
+    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     db.from("products")
       .select("id, title, handle, vendor, product_type, price, image_url, fitment_status, source, synced_at, created_at, shopify_product_id")
       .eq("shop_id", shopId)
