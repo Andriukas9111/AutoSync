@@ -1954,23 +1954,21 @@ export async function runIncrementalUpdate(options?: {
           );
           brandsWithNewModels++;
 
-          // Load existing model names for comparison
+          // Load existing model names for comparison — compare by NAME ONLY
+          // (generation can differ between scrape runs, causing false "new" matches)
           const { data: existingModels } = await db
             .from("ymme_models")
-            .select("name, generation")
+            .select("name")
             .eq("make_id", makeId);
 
-          const existingModelKeys = new Set(
+          const existingModelNames = new Set(
             (existingModels ?? []).map(
-              (m: { name: string; generation: string | null }) =>
-                `${m.name}|${m.generation ?? ""}`,
+              (m: { name: string }) => m.name.toLowerCase().trim(),
             ),
           );
 
           for (const model of liveModels) {
-            const modelKey = `${model.name}|${model.generation ?? ""}`;
-
-            if (!existingModelKeys.has(modelKey)) {
+            if (!existingModelNames.has(model.name.toLowerCase().trim())) {
               // NEW model
               try {
                 const modelId = await upsertModel(makeId, model);
