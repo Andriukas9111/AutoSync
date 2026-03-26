@@ -17,6 +17,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BATCH_SIZE = 50; // Products per invocation (Supabase Pro: 150s timeout)
+const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
  * Wrapper for Shopify GraphQL API calls with HTTP error handling.
@@ -28,7 +29,7 @@ async function shopifyGraphQL(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+  const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
     body: JSON.stringify({ query, variables }),
@@ -86,7 +87,7 @@ async function getPublicationIds(
 
   // Fallback: query Shopify API
   try {
-    const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+    const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
       body: JSON.stringify({ query: "{ publications(first: 10) { nodes { id name } } }" }),
@@ -145,13 +146,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
     }
 
-    // Step 2: Claim the job by setting locked_at.
-    // The candidate was already verified to match our criteria (status + lock timeout).
-    // Using eq("id") is safe since job IDs are unique UUIDs.
+    // Step 2: Atomically claim the job — only succeeds if still unclaimed.
+    // Adding locked_at filter ensures two workers can't claim the same job.
     const { data: claimedJob, error: lockError } = await db
       .from("sync_jobs")
       .update({ locked_at: lockTime, status: "running" })
       .eq("id", candidate.id)
+      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
       .select("*")
       .maybeSingle();
 
@@ -435,7 +436,7 @@ async function processPushChunk(
   }
 
   const accessToken = tenant.shopify_access_token;
-  const apiUrl = `https://${shopId}/admin/api/2026-01/graphql.json`;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const gqlHeaders = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
   // On first batch, ensure metafield definitions exist (idempotent)
@@ -537,7 +538,7 @@ async function processPushChunk(
     try {
       // Push tags
       if (pushTags && tags.length > 0) {
-        const tagRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+        const tagRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -602,7 +603,7 @@ async function processPushChunk(
           metafields.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engineSet].sort()), ownerId: gid });
         }
 
-        const mfRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+        const mfRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -821,6 +822,17 @@ async function processCollectionsChunk(
     }
   `;
 
+  // Preload ALL make logos in one query (avoid N+1 per-make lookups)
+  const { data: allMakeLogos } = await db
+    .from("ymme_makes")
+    .select("name, logo_url")
+    .in("name", [...uniqueMakes])
+    .limit(1000);
+  const logoMap = new Map<string, string>();
+  for (const m of allMakeLogos ?? []) {
+    if (m.logo_url) logoMap.set(m.name, m.logo_url);
+  }
+
   // Create make-level collections
   for (const make of uniqueMakes) {
     if (existingSet.has(make)) continue;
@@ -849,12 +861,10 @@ async function processCollectionsChunk(
     }
 
     try {
-      // Get make logo
-      const { data: makeRow } = await db.from("ymme_makes").select("logo_url").eq("name", make).maybeSingle();
-
-      // Add logo image if available
-      if (makeRow?.logo_url) {
-        input.image = { src: makeRow.logo_url, altText: `${make} performance parts and accessories` };
+      // Get make logo from preloaded cache (no per-make DB query)
+      const makeLogo = logoMap.get(make);
+      if (makeLogo) {
+        input.image = { src: makeLogo, altText: `${make} performance parts and accessories` };
       }
 
       // Add rich description HTML with SEO keywords
@@ -869,7 +879,7 @@ async function processCollectionsChunk(
 <li><strong>Expert Knowledge</strong> — Specialist ${make} vehicle modification experience</li>
 </ul>`;
 
-      const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+      const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
         body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -879,7 +889,7 @@ async function processCollectionsChunk(
 
       if (collection) {
         // Publish to Online Store
-        await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+        await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -955,7 +965,7 @@ async function processCollectionsChunk(
 
       try {
         // Add make logo for model collections too
-        const { data: makeLogoRow } = await db.from("ymme_makes").select("logo_url").eq("name", make).maybeSingle();
+        const makeLogoRow = { logo_url: logoMap.get(make) ?? null };
         if (makeLogoRow?.logo_url) {
           input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} performance parts and accessories` };
         }
@@ -969,7 +979,7 @@ async function processCollectionsChunk(
 <li><strong>Expert Support</strong> — Specialist knowledge of ${make} ${model} modifications</li>
 </ul>`;
 
-        const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+        const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -979,7 +989,7 @@ async function processCollectionsChunk(
 
         if (collection) {
           // Publish to Online Store + Shop
-          await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+          await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
             body: JSON.stringify({
@@ -1076,12 +1086,12 @@ async function processCollectionsChunk(
       }
 
       try {
-        const { data: makeLogoRow } = await db.from("ymme_makes").select("logo_url").eq("name", make).maybeSingle();
+        const makeLogoRow = { logo_url: logoMap.get(make) ?? null };
         if (makeLogoRow?.logo_url) {
           input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} ${yearRange} parts` };
         }
 
-        const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+        const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -1090,7 +1100,7 @@ async function processCollectionsChunk(
         const collection = json?.data?.collectionCreate?.collection;
 
         if (collection) {
-          await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+          await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
             body: JSON.stringify({
@@ -1244,7 +1254,7 @@ async function processVehiclePagesChunk(
     }
   }`;
 
-  const defRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+  const defRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
     body: JSON.stringify({ query: DEFINITION_QUERY }),
@@ -1286,7 +1296,7 @@ async function processVehiclePagesChunk(
         userErrors { field message }
       }
     }`;
-    const createDefRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+    const createDefRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
       body: JSON.stringify({ query: CREATE_DEF }),
@@ -1325,7 +1335,7 @@ async function processVehiclePagesChunk(
     ].filter(f => f.value);
 
     try {
-      const createRes = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+      const createRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
         body: JSON.stringify({
@@ -1398,7 +1408,7 @@ async function processBulkPush(
   const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
   if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No access token" };
   const accessToken = tenant.shopify_access_token;
-  const apiUrl = `https://${shopId}/admin/api/2026-01/graphql.json`;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
   // Phase 2: If we already have operation IDs, poll for completion
