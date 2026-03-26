@@ -436,32 +436,26 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
     );
 
     if (fitmentEngineNames.size > 0) {
-      // Find ALL model_ids with the same name under the same make
-      const { data: siblingModels } = await db
+      // Search engines across ALL models for this make — not just one model_id.
+      // BMW "M440i" could be under "4 Series Coupe (F32)", "4 Series Gran Coupe (F36)",
+      // or any other sub-model. We search the entire make's engine catalog.
+      const { data: allMakeModels } = await db
         .from("ymme_models")
         .select("id")
-        .eq("make_id", modelRow.make_id)
-        .ilike("name", modelName);
+        .eq("make_id", modelRow.make_id);
 
-      const allModelIds = (siblingModels ?? []).map((m: any) => m.id);
-      if (allModelIds.length === 0) allModelIds.push(modelId);
+      const allMakeModelIds = (allMakeModels ?? []).map((m: any) => m.id);
 
-      // Get ALL engines across all sibling models
+      // Get ALL engines across the entire make (batched if needed)
       let engineQuery = db
         .from("ymme_engines")
         .select(
           "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
         )
-        .in("model_id", allModelIds)
+        .in("model_id", allMakeModelIds)
         .eq("active", true)
-        .order("name");
-
-      if (year) {
-        const y = parseInt(year, 10);
-        if (!isNaN(y)) {
-          engineQuery = engineQuery.lte("year_from", y).or(`year_to.gte.${y},year_to.is.null`);
-        }
-      }
+        .order("name")
+        .limit(5000);
 
       const { data: allEngines, error } = await engineQuery;
       if (error) return json({ error: error.message }, 500);

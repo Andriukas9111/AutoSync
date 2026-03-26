@@ -429,7 +429,7 @@ export async function action({ request }: ActionFunctionArgs) {
             make: s.make.name, model: s.model?.name ?? null,
             variant: s.engine?.name ?? null,
             year_from: s.yearFrom, year_to: s.yearTo,
-            engine: s.engine?.displayName ?? null,
+            engine: s.engine?.displayName ? s.engine.displayName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : null,
             engine_code: s.engine?.code ?? null,
             fuel_type: s.engine?.fuelType ?? null,
             ymme_make_id: s.make.id, ymme_model_id: s.model?.id ?? null,
