@@ -397,6 +397,113 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
   const year = params.get("year");
   const shopId = shop;
 
+  // Get model info (name + make) for this model_id
+  const { data: modelRow } = await db
+    .from("ymme_models")
+    .select("name, make_id")
+    .eq("id", modelId)
+    .maybeSingle();
+
+  if (!modelRow) return json({ engines: [] });
+
+  let makeName = "";
+  const modelName = modelRow.name ?? "";
+  if (modelRow.make_id) {
+    const { data: makeRow } = await db
+      .from("ymme_makes")
+      .select("name")
+      .eq("id", modelRow.make_id)
+      .maybeSingle();
+    makeName = makeRow?.name ?? "";
+  }
+
+  // When shop context exists, use fitment-driven approach:
+  // Search engines across ALL sibling models (same name, same make) — not just this model_id.
+  // This handles cases where engines are under "4 Series Coupe (F32)" but the
+  // widget shows consolidated "4 Series" which is a different model_id.
+  if (shopId && makeName && modelName) {
+    // Get fitment engine names for this shop + make + model
+    const { data: fitmentEngines } = await db
+      .from("vehicle_fitments")
+      .select("engine")
+      .eq("shop_id", shopId)
+      .ilike("make", makeName)
+      .ilike("model", modelName)
+      .not("engine", "is", null);
+
+    const fitmentEngineNames = new Set(
+      (fitmentEngines ?? []).map((f: any) => (f.engine ?? "").toLowerCase().trim())
+    );
+
+    if (fitmentEngineNames.size > 0) {
+      // Find ALL model_ids with the same name under the same make
+      const { data: siblingModels } = await db
+        .from("ymme_models")
+        .select("id")
+        .eq("make_id", modelRow.make_id)
+        .ilike("name", modelName);
+
+      const allModelIds = (siblingModels ?? []).map((m: any) => m.id);
+      if (allModelIds.length === 0) allModelIds.push(modelId);
+
+      // Get ALL engines across all sibling models
+      let engineQuery = db
+        .from("ymme_engines")
+        .select(
+          "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
+        )
+        .in("model_id", allModelIds)
+        .eq("active", true)
+        .order("name");
+
+      if (year) {
+        const y = parseInt(year, 10);
+        if (!isNaN(y)) {
+          engineQuery = engineQuery.lte("year_from", y).or(`year_to.gte.${y},year_to.is.null`);
+        }
+      }
+
+      const { data: allEngines, error } = await engineQuery;
+      if (error) return json({ error: error.message }, 500);
+
+      // Filter to only engines matching fitment names (strip dedup suffix before comparison)
+      const matched = (allEngines ?? []).filter((e: any) => {
+        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+        return fitmentEngineNames.has(cleanName);
+      });
+
+      // Deduplicate by clean name (same engine might appear under multiple sibling models)
+      const seen = new Set<string>();
+      const deduped = matched.filter((e: any) => {
+        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+        if (seen.has(cleanName)) return false;
+        seen.add(cleanName);
+        return true;
+      });
+
+      const cleanEngines = deduped.map((e: any) => ({
+        ...e,
+        name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
+      }));
+
+      return json({ engines: cleanEngines });
+    }
+
+    // Check if there are model-level fitments (engine = null means "all engines")
+    const { count: modelFitments } = await db
+      .from("vehicle_fitments")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .ilike("make", makeName)
+      .ilike("model", modelName);
+
+    if ((modelFitments ?? 0) === 0) {
+      return json({ engines: [] });
+    }
+    // Fall through to show all engines for this model
+  }
+
+  // Fallback: no shop context or model-level fitments — show all engines for this model
   let query = db
     .from("ymme_engines")
     .select(
@@ -413,70 +520,11 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
     }
   }
 
-  const { data: allEngines, error } = await query;
-  if (error) return json({ error: error.message }, 500);
-
-  // Filter to only engines that have fitments for this shop (by engine NAME text match)
-  let filteredEngines = allEngines ?? [];
-  if (shopId && filteredEngines.length > 0) {
-    // Get model name and make name for this model_id (two simple queries — no nested joins)
-    const { data: modelRow } = await db
-      .from("ymme_models")
-      .select("name, make_id")
-      .eq("id", modelId)
-      .maybeSingle();
-
-    let makeName = "";
-    const modelName = modelRow?.name ?? "";
-    if (modelRow?.make_id) {
-      const { data: makeRow } = await db
-        .from("ymme_makes")
-        .select("name")
-        .eq("id", modelRow.make_id)
-        .maybeSingle();
-      makeName = makeRow?.name ?? "";
-    }
-
-    if (makeName && modelName) {
-      const { data: fitmentEngines } = await db
-        .from("vehicle_fitments")
-        .select("engine")
-        .eq("shop_id", shopId)
-        .ilike("make", makeName)
-        .ilike("model", modelName)
-        .not("engine", "is", null);
-
-      const fitmentEngineNames = new Set(
-        (fitmentEngines ?? []).map((f: any) => (f.engine ?? "").toLowerCase().trim())
-      );
-
-      if (fitmentEngineNames.size > 0) {
-        // Filter to only engines with matching fitments
-        // Strip dedup suffix [hex8] BEFORE comparison — fitments don't have it
-        filteredEngines = filteredEngines.filter((e: any) => {
-          const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
-          return fitmentEngineNames.has(cleanName);
-        });
-      } else {
-        // Check if there are model-level fitments (no engine specified)
-        const { count: modelFitments } = await db
-          .from("vehicle_fitments")
-          .select("id", { count: "exact", head: true })
-          .eq("shop_id", shopId)
-          .ilike("make", makeName)
-          .ilike("model", modelName);
-
-        if ((modelFitments ?? 0) > 0) {
-          // Model-level fitments exist — show all engines (any could apply)
-        } else {
-          filteredEngines = [];
-        }
-      }
-    }
-  }
+  const { data: fallbackEngines, error: fallbackError } = await query;
+  if (fallbackError) return json({ error: fallbackError.message }, 500);
 
   // Strip dedup suffixes like " [92efc5dd]" from engine names for clean display
-  const cleanEngines = filteredEngines.map((e: any) => ({
+  const cleanEngines = (fallbackEngines ?? []).map((e: any) => ({
     ...e,
     name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
   }));
