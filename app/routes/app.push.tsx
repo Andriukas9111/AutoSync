@@ -542,35 +542,47 @@ export default function Push() {
 
               <Divider />
 
-              <Form method="post">
-                <input type="hidden" name="_action" value="push" />
-                <input type="hidden" name="pushTags" value={String(pushTags)} />
-                <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
-                <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
-                <input type="hidden" name="strategy" value={strategy} />
-                <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
+              {/* Push button — only show when at least one push feature is unlocked */}
+              {limits.features.pushTags || limits.features.pushMetafields ? (
+                <Form method="post">
+                  <input type="hidden" name="_action" value="push" />
+                  <input type="hidden" name="pushTags" value={String(pushTags)} />
+                  <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
+                  <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
+                  <input type="hidden" name="strategy" value={strategy} />
+                  <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
 
-                <BlockStack gap="300">
-                  <InlineStack align="start" gap="300">
-                    <Button
-                      variant="primary"
-                      submit
-                      disabled={pushDisabled}
-                      loading={isSubmitting}
-                    >
-                      Push to Shopify
-                    </Button>
-                    {noProductsReady && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        No products with fitments to push. Map fitments first.
-                      </Text>
-                    )}
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    All processing happens in the background via our Edge Function. You can close this page — the push will continue automatically.
-                  </Text>
-                </BlockStack>
-              </Form>
+                  <BlockStack gap="300">
+                    <InlineStack align="start" gap="300">
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={pushDisabled}
+                        loading={isSubmitting}
+                      >
+                        Push to Shopify
+                      </Button>
+                      {noProductsReady && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          No products with fitments to push. Map fitments first.
+                        </Text>
+                      )}
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      All processing happens in the background via our Edge Function. You can close this page — the push will continue automatically.
+                    </Text>
+                  </BlockStack>
+                </Form>
+              ) : (
+                <PlanGate
+                  feature="pushTags"
+                  currentPlan={plan}
+                  limits={limits}
+                  allLimits={allLimits}
+                >
+                  <div />
+                </PlanGate>
+              )}
             </BlockStack>
           </Card>
         </Layout.Section>

@@ -31,8 +31,9 @@ import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
-import type { ProviderType } from "../lib/types";
+import type { PlanTier, PlanLimits, ProviderType } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
+import { PlanGate } from "../components/PlanGate";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,6 +166,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     providerCount: providers.length,
     providerLimit: limits.providers,
     plan,
+    limits,
   };
 };
 
@@ -173,7 +175,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export default function ProvidersIndex() {
-  const { providers, providerCount: loaderProviderCount, providerLimit, plan } =
+  const { providers, providerCount: loaderProviderCount, providerLimit, plan, limits } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
@@ -214,7 +216,16 @@ export default function ProvidersIndex() {
         }}
       >
         <BlockStack gap="400">
-          {/* Provider limit info shown in usage card below */}
+          {/* Provider limit gate — show upgrade prompt when limit is 0 */}
+          {providerLimit === 0 && (
+            <PlanGate
+              feature="apiIntegration"
+              currentPlan={plan as PlanTier}
+              limits={limits}
+            >
+              <div />
+            </PlanGate>
+          )}
           <Card>
             <EmptyState
               heading="Import your first products"
