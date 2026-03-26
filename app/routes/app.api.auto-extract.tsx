@@ -231,7 +231,7 @@ export async function action({ request }: ActionFunctionArgs) {
           .range(modelOffset, modelOffset + 999);
         if (!modelBatch || modelBatch.length === 0) break;
         for (const m of modelBatch) {
-          const makeId = (m as any).make_id as string;
+          const makeId = (m as { make_id: string }).make_id;
           if (!preloadedModels.has(makeId)) preloadedModels.set(makeId, []);
           preloadedModels.get(makeId)!.push({ id: m.id, name: m.name });
         }

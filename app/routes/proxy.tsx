@@ -922,7 +922,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     if (shop) {
       db.from("plate_lookups").insert({
         shop_id: shop,
-        plate: registration.toUpperCase(),
+        plate: crypto.createHash("sha256").update(registration.toUpperCase() + (process.env.PLATE_HASH_PEPPER || "autosync")).digest("hex").substring(0, 16),
         make: vehicle.make,
         model: vehicle.model,
         year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,
@@ -1072,7 +1072,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   }>();
 
   for (const wf of wheelFitments ?? []) {
-    const product = (wf as any).products;
+    const product = (wf as Record<string, unknown>).products as { id: string; shopify_gid: string; title: string; handle: string; image_url: string | null; price: number | null; status: string } | undefined;
     if (!product) continue;
 
     const existing = productMap.get(product.id);

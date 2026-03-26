@@ -134,7 +134,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const makeModelSet: Record<string, Set<string>> = {};
   const makeCounts: Record<string, number> = {};
   if (topMakesResult.data) {
-    for (const row of topMakesResult.data as any[]) {
+    for (const row of topMakesResult.data as { make: string; model: string }[]) {
       if (row.make) {
         makeCounts[row.make] = (makeCounts[row.make] || 0) + 1;
         if (!makeModelSet[row.make]) makeModelSet[row.make] = new Set();
