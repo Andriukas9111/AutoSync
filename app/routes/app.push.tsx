@@ -310,13 +310,23 @@ export default function Push() {
   const isSubmitting = navigation.state === "submitting";
 
   // Form state — initialize ALL settings from saved app_settings
-  const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? false);
-  const [pushMetafields, setPushMetafields] = useState(appSettings?.push_metafields ?? false);
+  // Premium features: only restore saved state if the plan supports the feature.
+  // If the plan doesn't include a feature, force it OFF — user can't toggle it.
+  const [pushTags, setPushTags] = useState(
+    limits.features.pushTags ? (appSettings?.push_tags ?? false) : false,
+  );
+  const [pushMetafields, setPushMetafields] = useState(
+    limits.features.pushMetafields ? (appSettings?.push_metafields ?? false) : false,
+  );
   const [createCollectionsChecked, setCreateCollectionsChecked] = useState(
-    appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false,
+    limits.features.smartCollections
+      ? (appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false)
+      : false,
   );
   const [strategy, setStrategy] = useState<string>(appSettings?.collection_strategy ?? "make");
-  const [seoEnabled, setSeoEnabled] = useState(appSettings?.push_collections ?? false);
+  const [seoEnabled, setSeoEnabled] = useState(
+    limits.features.collectionSeoImages ? (appSettings?.push_collections ?? false) : false,
+  );
   const [autoActivateMakes, setAutoActivateMakes] = useState(true);
 
   const nothingSelected = !pushTags && !pushMetafields && !createCollectionsChecked;

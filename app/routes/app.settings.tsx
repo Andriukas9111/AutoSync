@@ -33,7 +33,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant } from "../lib/billing.server";
+import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
@@ -82,9 +82,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ]);
 
   const plan: PlanTier = tenant?.plan ?? "free";
+  const limits = getPlanLimits(plan);
 
   return {
     plan,
+    limits,
     shopId,
     appSettings: appSettingsResult.data,
     counts: {
@@ -455,7 +457,7 @@ function isFilterAvailable(plan: string, requiredPlans: string[]): boolean {
 }
 
 export default function Settings() {
-  const { plan, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
+  const { plan, limits, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
 
   // Live stats polling — updates data counts every 5 seconds
   const { stats: polledStats } = useAppData();
@@ -472,10 +474,12 @@ export default function Settings() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  // Form state — Push Settings
-  const [autoPushTags, setAutoPushTags] = useState(appSettings?.push_tags ?? false);
+  // Form state — Push Settings (respect plan limits — force OFF if feature not available)
+  const [autoPushTags, setAutoPushTags] = useState(
+    limits.features.pushTags ? (appSettings?.push_tags ?? false) : false,
+  );
   const [autoPushMetafields, setAutoPushMetafields] = useState(
-    appSettings?.push_metafields ?? false,
+    limits.features.pushMetafields ? (appSettings?.push_metafields ?? false) : false,
   );
   const [tagPrefix, setTagPrefix] = useState(appSettings?.tag_prefix ?? "_autosync_");
 

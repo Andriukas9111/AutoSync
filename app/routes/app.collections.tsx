@@ -227,7 +227,9 @@ export default function Collections() {
     appSettings?.collection_strategy ?? "make"
   );
   const [autoCreate, setAutoCreate] = useState<boolean>(
-    appSettings?.auto_create_collections ?? false
+    limits.features.smartCollections
+      ? (appSettings?.auto_create_collections ?? false)
+      : false
   );
 
   // Live stats + active jobs polling
