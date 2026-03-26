@@ -922,7 +922,9 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     if (shop) {
       db.from("plate_lookups").insert({
         shop_id: shop,
-        plate: crypto.createHash("sha256").update(registration.toUpperCase() + (process.env.PLATE_HASH_PEPPER || "autosync")).digest("hex").substring(0, 16),
+        plate: process.env.PLATE_HASH_PEPPER
+          ? crypto.createHash("sha256").update(registration.toUpperCase() + process.env.PLATE_HASH_PEPPER).digest("hex").substring(0, 16)
+          : crypto.createHash("sha256").update(registration.toUpperCase()).digest("hex").substring(0, 16),
         make: vehicle.make,
         model: vehicle.model,
         year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,

@@ -69,15 +69,17 @@ async function handleThrottle(json: Record<string, unknown>): Promise<void> {
   }
 }
 
-// Cache publication IDs per shop (refreshed each Edge Function invocation)
-const pubCache = new Map<string, string[]>();
+// Cache publication IDs per shop (TTL: 5 minutes to handle warm invocations)
+const pubCache = new Map<string, { ids: string[]; ts: number }>();
+const PUB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function getPublicationIds(
   shopId: string,
   accessToken: string,
   db?: ReturnType<typeof createClient>,
 ): Promise<string[]> {
-  if (pubCache.has(shopId)) return pubCache.get(shopId)!;
+  const cached = pubCache.get(shopId);
+  if (cached && Date.now() - cached.ts < PUB_CACHE_TTL) return cached.ids;
 
   // Always query Shopify API for ALL publication channels
   // Don't use DB cache (it only stores Online Store, not Shop/POS)
@@ -93,7 +95,7 @@ async function getPublicationIds(
     // Publish to ALL sales channels (Online Store, Shop, Point of Sale, etc.)
     const pubs = (json?.data?.publications?.nodes || [])
       .map((p: { id: string }) => p.id);
-    pubCache.set(shopId, pubs);
+    pubCache.set(shopId, { ids: pubs, ts: Date.now() });
 
     // Save to tenant record for future use
     if (db && pubs.length > 0) {
@@ -114,6 +116,7 @@ async function getPublicationIds(
 }
 
 Deno.serve(async (req) => {
+  let currentJobId: string | null = null;
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -163,8 +166,8 @@ Deno.serve(async (req) => {
     }
 
     const job = claimedJob;
-    // Track claimed job ID for lock release on fatal error
-    (globalThis as Record<string, unknown>).__claimedJobId = job.id;
+    // Track claimed job ID for lock release on fatal error (request-scoped)
+    currentJobId = job.id;
 
     console.log(`[process-jobs] Processing job ${job.id} type=${job.type} shop=${job.shop_id}`);
 
@@ -312,7 +315,7 @@ Deno.serve(async (req) => {
     console.error("[process-jobs] Fatal error:", err);
     // Release the lock on the specific job we claimed (not ALL jobs)
     try {
-      const jobId = (globalThis as Record<string, unknown>).__claimedJobId as string | undefined;
+      const jobId = currentJobId;
       if (jobId) {
         const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
         await db.from("sync_jobs").update({ locked_at: null }).eq("id", jobId);
