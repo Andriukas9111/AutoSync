@@ -6,6 +6,42 @@ import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 
+// ── Rate Limiting (in-memory, per Vercel instance) ──────────────────────
+// Limits per shop per endpoint per minute. Resets on cold starts.
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMITS: Record<string, number> = {
+  "plate-lookup": 30,    // 30 lookups/min per shop (DVLA costs money)
+  "vin-decode": 20,      // 20 VIN decodes/min per shop
+  "search": 120,         // 120 searches/min per shop (normal browsing)
+  "wheel-search": 60,    // 60 wheel searches/min per shop
+  "fitment-check": 200,  // 200 badge checks/min per shop (every product page)
+  "default": 100,        // fallback
+};
+
+function checkRateLimit(shop: string, endpoint: string): boolean {
+  const key = `${shop}:${endpoint}`;
+  const limit = RATE_LIMITS[endpoint] ?? RATE_LIMITS.default;
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+
+  if (entry.count >= limit) return false;
+  entry.count++;
+  return true;
+}
+
+// Clean stale entries every 5 minutes to prevent memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of rateLimitMap) {
+    if (now > val.resetAt) rateLimitMap.delete(key);
+  }
+}, 5 * 60_000);
+
 // ---------- CORS helpers ----------
 // Dynamic CORS: allow the requesting Shopify store domain, not wildcard
 function getCorsHeaders(request?: Request): Record<string, string> {
@@ -1573,6 +1609,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const path = params.get("path");
   if (!path) {
     return json({ error: "Missing path parameter" }, 400);
+  }
+
+  // Rate limiting — per shop per endpoint per minute
+  const rateLimitEndpoint = path.includes("plate") ? "plate-lookup"
+    : path.includes("vin") ? "vin-decode"
+    : path.includes("wheel") ? "wheel-search"
+    : path.includes("fitment") || path.includes("badge") ? "fitment-check"
+    : "search";
+  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
   }
 
   switch (path) {

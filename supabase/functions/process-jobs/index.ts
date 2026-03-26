@@ -1463,10 +1463,11 @@ async function processBulkPush(
 
   if (allProducts.length === 0) return { processed: 0, hasMore: false };
 
-  // Get all fitments (paginated)
+  // Get fitments (paginated with safety cap to prevent OOM in Edge Function)
+  const MAX_FITMENTS = 50_000; // Safety cap — Edge Function has ~150MB memory
   const allFitments: Array<Record<string, unknown>> = [];
   let fOffset = 0;
-  while (true) {
+  while (allFitments.length < MAX_FITMENTS) {
     const { data: batch } = await db.from("vehicle_fitments")
       .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
       .eq("shop_id", shopId).range(fOffset, fOffset + 999);
@@ -1474,6 +1475,9 @@ async function processBulkPush(
     allFitments.push(...batch);
     fOffset += batch.length;
     if (batch.length < 1000) break;
+  }
+  if (allFitments.length >= MAX_FITMENTS) {
+    console.log(`[process-jobs] Fitments capped at ${MAX_FITMENTS} to prevent OOM (total may be higher)`);
   }
 
   // Group fitments by product
