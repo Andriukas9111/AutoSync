@@ -452,9 +452,11 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
 
       if (fitmentEngineNames.size > 0) {
         // Filter to only engines with matching fitments
-        filteredEngines = filteredEngines.filter((e: any) =>
-          fitmentEngineNames.has((e.name ?? "").toLowerCase().trim())
-        );
+        // Strip dedup suffix [hex8] BEFORE comparison — fitments don't have it
+        filteredEngines = filteredEngines.filter((e: any) => {
+          const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+          return fitmentEngineNames.has(cleanName);
+        });
       } else {
         // Check if there are model-level fitments (no engine specified)
         const { count: modelFitments } = await db
