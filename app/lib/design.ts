@@ -346,6 +346,14 @@ export function clearBannerDismissal(key: string): void {
   try { localStorage.removeItem(`autosync_banner_${key}`); } catch { /* SSR-safe */ }
 }
 
+/** CSS grid that forces all children (Cards) to stretch to equal height */
+export const equalHeightGridStyle = (cols: number, gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+  gap,
+  alignItems: "stretch",
+});
+
 // ── Plan Gate Data ───────────────────────────────────────────────────────────
 
 /** Plan pricing for display in the gate component */

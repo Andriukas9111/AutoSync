@@ -9,7 +9,7 @@
 
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams, redirect } from "react-router";
 import {
   Page,
   Card,
@@ -84,6 +84,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const tenant = await getTenant(shopId);
   const plan = (tenant?.plan ?? "free") as PlanTier;
+  const limits = getPlanLimits(plan);
+
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  if (limits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
+  }
+
   const targetFields = getTargetFields();
 
   return {

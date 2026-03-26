@@ -8,7 +8,7 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 import {
   Page,
   Card,
@@ -35,6 +35,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { useAppData } from "../lib/use-app-data";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +79,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   if (!provider) {
     throw new Response("Provider not found", { status: 404 });
+  }
+
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  const tenant = await getTenant(shopId);
+  const planLimits = getPlanLimits(tenant?.plan ?? "free");
+  if (planLimits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
   }
 
   // Parse URL params

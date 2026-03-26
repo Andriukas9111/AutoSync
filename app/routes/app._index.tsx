@@ -805,11 +805,15 @@ export default function Dashboard() {
                   {providers.length === 0 ? (
                     <BlockStack gap="300">
                       <Text as="p" variant="bodySm" tone="subdued">
-                        No providers configured. Add a CSV, API, or FTP provider to import product data from suppliers.
+                        {limits.providers === 0
+                          ? "Providers are available on the Starter plan and above. Upgrade to import product data from CSV, API, or FTP sources."
+                          : "No providers configured. Add a CSV, API, or FTP provider to import product data from suppliers."}
                       </Text>
-                      <Button onClick={() => navigate("/app/providers/new")} size="slim">
-                        Add Provider
-                      </Button>
+                      {limits.providers > 0 && (
+                        <Button onClick={() => navigate("/app/providers/new")} size="slim">
+                          Add Provider
+                        </Button>
+                      )}
                     </BlockStack>
                   ) : (
                     <BlockStack gap="200">

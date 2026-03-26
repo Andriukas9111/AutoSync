@@ -23,6 +23,7 @@ import {
   DatabaseIcon,
   ProductIcon,
   CategoriesIcon,
+  LockIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -212,19 +213,33 @@ export default function ProvidersIndex() {
         primaryAction={{
           content: "Import Products",
           onAction: () => navigate("/app/providers/new"),
-          disabled: atLimit,
+          disabled: atLimit || providerLimit === 0,
         }}
       >
         <BlockStack gap="400">
-          {/* When provider limit is 0, show upgrade prompt only — no empty state */}
+          {/* When provider limit is 0, show upgrade prompt — no empty state */}
           {providerLimit === 0 ? (
-            <PlanGate
-              feature="apiIntegration"
-              currentPlan={plan as PlanTier}
-              limits={limits}
-            >
-              <div />
-            </PlanGate>
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center" wrap={false}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    backgroundColor: "var(--p-color-bg-fill-critical-secondary)", flexShrink: 0,
+                  }}>
+                    <Icon source={LockIcon} tone="critical" />
+                  </div>
+                  <Text as="span" variant="bodyMd" fontWeight="semibold">Data Providers</Text>
+                  <Badge size="small" tone="info">Starter+</Badge>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Import products from CSV, XML, API, or FTP sources. Available on the Starter plan ($19/mo) and above.
+                </Text>
+                <Button size="slim" onClick={() => navigate("/app/plans")}>
+                  Upgrade to Starter
+                </Button>
+              </BlockStack>
+            </Card>
           ) : (
           <Card>
             <EmptyState

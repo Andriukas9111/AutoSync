@@ -56,6 +56,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const atLimit =
     limits.providers !== Infinity && providerCount >= limits.providers;
 
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  if (limits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
+  }
+
   return {
     plan: plan as PlanTier,
     limits,

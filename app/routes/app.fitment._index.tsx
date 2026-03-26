@@ -35,11 +35,12 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getMinimumPlanForFeature, PLAN_LIMITS } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
+import { equalHeightGridStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -204,6 +205,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakes,
     plan,
     limits,
+    allLimits: PLAN_LIMITS,
     autoExtractionAllowed: !!limits.features.autoExtraction,
     requiredPlanForAutoExtract: getMinimumPlanForFeature("autoExtraction"),
   };
@@ -262,6 +264,7 @@ export default function Fitment() {
     topMakes,
     plan,
     limits,
+    allLimits,
     autoExtractionAllowed,
     requiredPlanForAutoExtract,
   } = useLoaderData<typeof loader>();
@@ -379,60 +382,68 @@ export default function Fitment() {
           </BlockStack>
         </Card>
 
-        {/* CTA Cards — InlineGrid for equal-height columns */}
-        <InlineGrid columns={{ xs: 1, md: 2 }} gap="400" alignItems="start">
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">Auto Extraction</Text>
-              </InlineStack>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Automatically extract vehicle fitment data from product titles,
-                descriptions, and tags using pattern matching.
-              </Text>
-              {extractResult && !extractDismissed && "success" in extractResult && (
-                <Banner title="Extraction complete" tone="success" onDismiss={() => setExtractDismissed(true)}>
-                  <p>
-                    Processed {extractResult.processed} products —{" "}
-                    {extractResult.autoMapped} auto-mapped,{" "}
-                    {extractResult.flagged} flagged,{" "}
-                    {extractResult.unmapped} unmapped.
-                  </p>
-                </Banner>
-              )}
-              {extractResult && !extractDismissed && "error" in extractResult && (
-                <Banner title="Extraction failed" tone="critical" onDismiss={() => setExtractDismissed(true)}>
-                  <p>{extractResult.error}</p>
-                </Banner>
-              )}
-              <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits}>
-                <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
-                  {isExtracting ? "Extracting..." : "Run Auto Extract"}
-                </Button>
-              </PlanGate>
-            </BlockStack>
-          </Card>
+        {/* CTA Cards — CSS grid for equal-height columns */}
+        <div style={equalHeightGridStyle(2)}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1 }}>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Auto Extraction</Text>
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Automatically extract vehicle fitment data from product titles,
+                    descriptions, and tags using pattern matching.
+                  </Text>
+                  {extractResult && !extractDismissed && "success" in extractResult && (
+                    <Banner title="Extraction complete" tone="success" onDismiss={() => setExtractDismissed(true)}>
+                      <p>
+                        Processed {extractResult.processed} products —{" "}
+                        {extractResult.autoMapped} auto-mapped,{" "}
+                        {extractResult.flagged} flagged,{" "}
+                        {extractResult.unmapped} unmapped.
+                      </p>
+                    </Banner>
+                  )}
+                  {extractResult && !extractDismissed && "error" in extractResult && (
+                    <Banner title="Extraction failed" tone="critical" onDismiss={() => setExtractDismissed(true)}>
+                      <p>{extractResult.error}</p>
+                    </Banner>
+                  )}
+                  <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits} allLimits={allLimits}>
+                    <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
+                      {isExtracting ? "Extracting..." : "Run Auto Extract"}
+                    </Button>
+                  </PlanGate>
+                </BlockStack>
+              </Card>
+            </div>
+          </div>
 
-          <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">Manual Mapping</Text>
-              </InlineStack>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Manually assign vehicles to products with full control. Search
-                make, model, year, and engine — then link to products one by one.
-              </Text>
-              <Text as="p" variant="bodySm" tone="subdued">
-                Available on all plans including Free. No limits on manual mapping.
-              </Text>
-              <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
-                Start Mapping
-              </Button>
-            </BlockStack>
-          </Card>
-        </InlineGrid>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1 }}>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Manual Mapping</Text>
+                  </InlineStack>
+                  <Text as="p" variant="bodyMd" tone="subdued">
+                    Manually assign vehicles to products with full control. Search
+                    make, model, year, and engine — then link to products one by one.
+                  </Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Available on all plans including Free. No limits on manual mapping.
+                  </Text>
+                  <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
+                    Start Mapping
+                  </Button>
+                </BlockStack>
+              </Card>
+            </div>
+          </div>
+        </div>
 
         {/* Top Makes by Fitment */}
         {topMakes.length > 0 && (

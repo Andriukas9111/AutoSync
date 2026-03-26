@@ -7,6 +7,7 @@ import {
   Button,
   Badge,
   Box,
+  Card,
   Collapsible,
   Icon,
 } from "@shopify/polaris";
@@ -14,7 +15,6 @@ import { LockIcon, CheckSmallIcon, ChevronDownIcon, ChevronUpIcon } from "@shopi
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
 import { PLAN_PRICING, PLAN_HIGHLIGHTS, collapsibleTransition } from "../lib/design";
-import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
 // Lookup maps — all dynamic, change once here updates everywhere
@@ -85,12 +85,7 @@ export function getPlanBadgeLabel(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate — vertical stack layout, works in any container width
-//
-// Row 1: 🔒 Feature Name [Badge]
-// Row 2: Available on Plan ($price)
-// Row 3: [More ▼] [Upgrade →]
-// Collapsible: benefit list
+// PlanGate — clean Card-based layout, works in any container width
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -128,17 +123,23 @@ export function PlanGate({
   const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Box padding="400" background="bg-surface-secondary" borderRadius="300">
+    <Card>
       <BlockStack gap="300">
-        {/* Row 1: Icon + Feature name + Plan badge */}
-        <InlineStack gap="300" blockAlign="center" wrap={false}>
-          <IconBadge
-            icon={LockIcon}
-            bg="var(--p-color-bg-fill-critical-secondary)"
-            color="var(--p-color-icon-critical)"
-            size={28}
-          />
-          <Text as="span" variant="bodyMd" fontWeight="bold">
+        {/* Row 1: Lock icon + Feature name + Plan badge */}
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <div style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "var(--p-color-bg-fill-critical-secondary)",
+            flexShrink: 0,
+          }}>
+            <Icon source={LockIcon} tone="critical" />
+          </div>
+          <Text as="span" variant="bodyMd" fontWeight="semibold">
             {featureLabel}
           </Text>
           <Badge size="small" tone="info">
@@ -148,10 +149,10 @@ export function PlanGate({
 
         {/* Row 2: Description */}
         <Text as="p" variant="bodySm" tone="subdued">
-          {`This feature is available on the ${requiredPlanName} plan (${price}). Upgrade to unlock it.`}
+          {`Available on the ${requiredPlanName} plan (${price}). Upgrade to unlock this feature.`}
         </Text>
 
-        {/* Row 3: Action buttons — always on their own line */}
+        {/* Row 3: Action buttons */}
         <InlineStack gap="300" blockAlign="center">
           <Button size="slim" onClick={() => navigate("/app/plans")}>
             {`Upgrade to ${requiredPlanName}`}
@@ -171,10 +172,10 @@ export function PlanGate({
         {/* Collapsible benefits */}
         {highlights.length > 0 && (
           <Collapsible open={open} id={`plangate-${feature}`} transition={collapsibleTransition}>
-            <Box paddingBlockStart="100">
+            <Box paddingBlockStart="200">
               <BlockStack gap="150">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
-                  {`What's included in ${requiredPlanName}:`}
+                  {`What you get with ${requiredPlanName}:`}
                 </Text>
                 {highlights.map((h) => (
                   <InlineStack key={h} gap="200" blockAlign="start" wrap={false}>
@@ -189,6 +190,6 @@ export function PlanGate({
           </Collapsible>
         )}
       </BlockStack>
-    </Box>
+    </Card>
   );
 }

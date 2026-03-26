@@ -132,6 +132,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  if (limits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
+  }
+
   return {
     provider: providerResult.data as Provider,
     plan,
