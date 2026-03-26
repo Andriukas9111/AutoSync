@@ -66,7 +66,14 @@ export function AdminYMME({
   return (
     <BlockStack gap="500">
 
-      {/* Scrape completion banner */}
+      {/* Server-side scrape job progress */}
+      {scrapeJobs.some((j: any) => j.status === "running") && (
+        <Banner title="Incremental update running" tone="info">
+          <p>The scraper is checking for new brands and models. This may take a few minutes. Refresh to see updated counts.</p>
+        </Banner>
+      )}
+
+      {/* Client-side scrape completion banner */}
       {scrapeState && !scrapeState.running && (
         <Banner
           title={`Scrape complete — ${scrapeState.brandsProcessed} brands, ${scrapeState.enginesProcessed} engines, ${scrapeState.specsProcessed} specs`}

@@ -863,7 +863,20 @@ export default function AdminPanel() {
             <Box padding="400" minHeight="500px">
               {selectedTab === 0 && <AdminOverview tenants={tenants} ymmeCounts={ymmeCounts} recentJobs={recentJobs} planBreakdown={planBreakdown} liveHealth={liveHealth} onSwitchTab={setSelectedTab} onRefresh={() => revalidator.revalidate()} onNavigate={navigate} isRefreshing={isRefreshing} />}
               {selectedTab === 1 && <AdminTenants tenants={tenants} onNavigate={navigate} onChangePlan={(s, p) => fetcher.submit({ intent: "change-plan", shop_id: s, new_plan: p }, { method: "post" })} onPurge={(s, i) => fetcher.submit({ intent: i, shop_id: s }, { method: "post" })} />}
-              {selectedTab === 2 && <AdminYMME ymmeCounts={ymmeCounts} totalFitments={totalFitments} scrapeJobs={scrapeJobs} browseMakes={browseMakes} browseModels={browseModels} browseEngines={browseEngines} browseSpec={browseSpec} browseMakeName={browseMakeName} browseModelName={browseModelName} scrapeState={scrapeState} onStartScrape={() => startChunkedScrape()} onStopScrape={() => { stopRef.current = true; }} onStartIncremental={() => { fetch("/app/api/scrape-incremental", { method: "POST", credentials: "same-origin" }).then(() => revalidator.revalidate()).catch(() => {}); }} onRefresh={() => revalidator.revalidate()} isRefreshing={isRefreshing} onBrowse={onBrowse} onBrowseBack={onBrowseBack} currentMakeId={currentMakeId} currentModelId={currentModelId} currentEngineId={currentEngineId} />}
+              {selectedTab === 2 && <AdminYMME ymmeCounts={ymmeCounts} totalFitments={totalFitments} scrapeJobs={scrapeJobs} browseMakes={browseMakes} browseModels={browseModels} browseEngines={browseEngines} browseSpec={browseSpec} browseMakeName={browseMakeName} browseModelName={browseModelName} scrapeState={scrapeState} onStartScrape={() => startChunkedScrape()} onStopScrape={() => { stopRef.current = true; }} onStartIncremental={async () => {
+                    try {
+                      const res = await fetch("/app/api/scrape-incremental", { method: "POST", credentials: "same-origin", body: new FormData() });
+                      const json = await res.json();
+                      if (json.ok) {
+                        shopify.toast.show("Incremental update started — check progress below");
+                      } else {
+                        shopify.toast.show(json.error || "Failed to start scrape", { isError: true });
+                      }
+                      revalidator.revalidate();
+                    } catch (_e) {
+                      shopify.toast.show("Failed to start incremental update", { isError: true });
+                    }
+                  }} onRefresh={() => revalidator.revalidate()} isRefreshing={isRefreshing} onBrowse={onBrowse} onBrowseBack={onBrowseBack} currentMakeId={currentMakeId} currentModelId={currentModelId} currentEngineId={currentEngineId} />}
               {selectedTab === 3 && <AdminActivity recentJobs={recentJobs} adminActivityLog={adminActivityLog} />}
               {selectedTab === 4 && <AdminAnnouncements announcements={announcements} onCreateAnnouncement={openCreateAnnouncement} onEditAnnouncement={openEditAnnouncement} onDeleteAnnouncement={(id) => fetcher.submit({ intent: "delete_announcement", ann_id: id }, { method: "post" })} />}
               {selectedTab === 5 && <AdminSettings ymmeCounts={ymmeCounts} totalProducts={totalProducts} totalFitments={totalFitments} onRefresh={() => revalidator.revalidate()} isRefreshing={isRefreshing} />}
