@@ -188,9 +188,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return data({ engines: dedupedEngines });
     }
 
+    case "engine_spec": {
+      const engineId = url.searchParams.get("engine_id");
+      if (!engineId) {
+        return data({ error: "Missing engine_id" }, { status: 400 });
+      }
+      const { data: spec, error: specError } = await db
+        .from("ymme_vehicle_specs")
+        .select("*")
+        .eq("engine_id", engineId)
+        .maybeSingle();
+      if (specError) {
+        return data({ error: specError.message }, { status: 500 });
+      }
+      return data({ spec });
+    }
+
     default:
       return data(
-        { error: `Unknown level: '${level}'. Use: makes, models, years, engines` },
+        { error: `Unknown level: '${level}'. Use: makes, models, years, engines, engine_spec` },
         { status: 400 },
       );
   }
