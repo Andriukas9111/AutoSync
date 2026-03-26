@@ -216,8 +216,8 @@ export default function ProvidersIndex() {
         }}
       >
         <BlockStack gap="400">
-          {/* Provider limit gate — show upgrade prompt when limit is 0 */}
-          {providerLimit === 0 && (
+          {/* When provider limit is 0, show upgrade prompt only — no empty state */}
+          {providerLimit === 0 ? (
             <PlanGate
               feature="apiIntegration"
               currentPlan={plan as PlanTier}
@@ -225,7 +225,7 @@ export default function ProvidersIndex() {
             >
               <div />
             </PlanGate>
-          )}
+          ) : (
           <Card>
             <EmptyState
               heading="Import your first products"
@@ -247,6 +247,7 @@ export default function ProvidersIndex() {
               </InlineStack>
             </EmptyState>
           </Card>
+          )}
         </BlockStack>
       </Page>
     );

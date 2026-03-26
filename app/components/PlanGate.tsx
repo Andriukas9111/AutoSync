@@ -75,11 +75,6 @@ function isFeatureEnabled(
   return value !== false && value !== "none";
 }
 
-/**
- * Returns the required plan badge text for a feature (e.g. "Starter+").
- * Use this anywhere you need to show which plan a feature requires
- * WITHOUT rendering a full PlanGate component.
- */
 export function getPlanBadgeLabel(
   feature: keyof PlanLimits["features"],
   allLimits?: Record<PlanTier, PlanLimits>,
@@ -90,7 +85,12 @@ export function getPlanBadgeLabel(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate — renders inline (no Card wrapper) so it works inside any container
+// PlanGate — vertical stack layout, works in any container width
+//
+// Row 1: 🔒 Feature Name [Badge]
+// Row 2: Available on Plan ($price)
+// Row 3: [More ▼] [Upgrade →]
+// Collapsible: benefit list
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -128,51 +128,50 @@ export function PlanGate({
   const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Box padding="400" background="bg-surface-secondary" borderRadius="200">
+    <Box padding="400" background="bg-surface-secondary" borderRadius="300">
       <BlockStack gap="300">
-        <InlineStack align="space-between" blockAlign="center" wrap>
-          <InlineStack gap="300" blockAlign="center" wrap={false}>
-            <IconBadge
-              icon={LockIcon}
-              bg="var(--p-color-bg-fill-critical-secondary)"
-              color="var(--p-color-icon-critical)"
-              size={28}
-            />
-            <BlockStack gap="050">
-              <InlineStack gap="200" blockAlign="center" wrap={false}>
-                <Text as="span" variant="bodyMd" fontWeight="bold">
-                  {featureLabel}
-                </Text>
-                <Badge size="small" tone="info">
-                  {`${requiredPlanName}+`}
-                </Badge>
-              </InlineStack>
-              <Text as="span" variant="bodySm" tone="subdued">
-                {`Available on ${requiredPlanName} plan (${price})`}
-              </Text>
-            </BlockStack>
-          </InlineStack>
-
-          <InlineStack gap="300" blockAlign="center" wrap={false}>
-            {highlights.length > 0 && (
-              <Button
-                variant="plain"
-                size="slim"
-                icon={open ? ChevronUpIcon : ChevronDownIcon}
-                onClick={() => setOpen(!open)}
-              >
-                {open ? "Less" : "More"}
-              </Button>
-            )}
-            <Button size="slim" onClick={() => navigate("/app/plans")}>
-              Upgrade
-            </Button>
-          </InlineStack>
+        {/* Row 1: Icon + Feature name + Plan badge */}
+        <InlineStack gap="300" blockAlign="center" wrap={false}>
+          <IconBadge
+            icon={LockIcon}
+            bg="var(--p-color-bg-fill-critical-secondary)"
+            color="var(--p-color-icon-critical)"
+            size={28}
+          />
+          <Text as="span" variant="bodyMd" fontWeight="bold">
+            {featureLabel}
+          </Text>
+          <Badge size="small" tone="info">
+            {`${requiredPlanName}+`}
+          </Badge>
         </InlineStack>
 
+        {/* Row 2: Description */}
+        <Text as="p" variant="bodySm" tone="subdued">
+          {`This feature is available on the ${requiredPlanName} plan (${price}). Upgrade to unlock it.`}
+        </Text>
+
+        {/* Row 3: Action buttons — always on their own line */}
+        <InlineStack gap="300" blockAlign="center">
+          <Button size="slim" onClick={() => navigate("/app/plans")}>
+            {`Upgrade to ${requiredPlanName}`}
+          </Button>
+          {highlights.length > 0 && (
+            <Button
+              variant="plain"
+              size="slim"
+              icon={open ? ChevronUpIcon : ChevronDownIcon}
+              onClick={() => setOpen(!open)}
+            >
+              {open ? "Hide details" : "View details"}
+            </Button>
+          )}
+        </InlineStack>
+
+        {/* Collapsible benefits */}
         {highlights.length > 0 && (
           <Collapsible open={open} id={`plangate-${feature}`} transition={collapsibleTransition}>
-            <Box paddingInlineStart="1000" paddingBlockStart="100">
+            <Box paddingBlockStart="100">
               <BlockStack gap="150">
                 <Text as="p" variant="bodySm" fontWeight="semibold">
                   {`What's included in ${requiredPlanName}:`}
