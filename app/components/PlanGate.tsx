@@ -1,19 +1,14 @@
 import type { ReactNode } from "react";
 import {
-  Banner,
-  BlockStack,
   InlineStack,
   Text,
   Button,
   Badge,
   Box,
-  Icon,
-  List,
 } from "@shopify/polaris";
-import { LockIcon } from "@shopify/polaris-icons";
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
-import { PLAN_PRICING, PLAN_HIGHLIGHTS } from "../lib/design";
+import { PLAN_PRICING } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Display-name lookup maps
@@ -88,7 +83,12 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate component — pure Polaris Banner, matches app design
+// PlanGate — small inline indicator, NOT a full banner
+//
+// When a feature is locked, renders a single subtle line:
+//   🔒 Feature Name  [Starter+]  Requires Starter ($19/mo)  [Upgrade →]
+//
+// This keeps the layout clean even when multiple gates appear on one page.
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -122,30 +122,34 @@ export function PlanGate({
   const requiredPlan = allLimits ? findMinPlan(feature, allLimits) : "starter";
   const requiredPlanName = PLAN_NAMES[requiredPlan];
   const price = PLAN_PRICING[requiredPlan] ?? "";
-  const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Banner
-      tone="warning"
-      title={featureLabel}
-      icon={LockIcon}
-      action={{
-        content: `Upgrade to ${requiredPlanName}`,
-        onAction: () => navigate("/app/plans"),
-      }}
+    <Box
+      paddingBlock="300"
+      paddingInline="400"
+      background="bg-surface-secondary"
+      borderRadius="200"
     >
-      <BlockStack gap="200">
-        <Text as="p" variant="bodyMd">
-          {`This feature requires the ${requiredPlanName} plan${price ? ` (${price})` : ""}. You're currently on the ${PLAN_NAMES[currentPlan]} plan.`}
-        </Text>
-        {highlights.length > 0 && (
-          <List>
-            {highlights.map((h) => (
-              <List.Item key={h}>{h}</List.Item>
-            ))}
-          </List>
-        )}
-      </BlockStack>
-    </Banner>
+      <InlineStack align="space-between" blockAlign="center" wrap={false}>
+        <InlineStack gap="200" blockAlign="center" wrap={false}>
+          <Text as="span" variant="bodySm" tone="subdued">
+            {featureLabel}
+          </Text>
+          <Badge size="small">
+            {`${requiredPlanName}+`}
+          </Badge>
+          <Text as="span" variant="bodySm" tone="subdued">
+            {price}
+          </Text>
+        </InlineStack>
+        <Button
+          variant="plain"
+          size="slim"
+          onClick={() => navigate("/app/plans")}
+        >
+          Upgrade
+        </Button>
+      </InlineStack>
+    </Box>
   );
 }
