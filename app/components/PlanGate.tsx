@@ -1,17 +1,21 @@
 import type { ReactNode } from "react";
 import {
+  BlockStack,
   InlineStack,
   Text,
   Button,
   Badge,
   Box,
+  Icon,
 } from "@shopify/polaris";
+import { LockIcon, CheckSmallIcon } from "@shopify/polaris-icons";
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
-import { PLAN_PRICING } from "../lib/design";
+import { PLAN_PRICING, PLAN_HIGHLIGHTS } from "../lib/design";
+import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
-// Display-name lookup maps
+// Display-name lookup maps (all dynamic — never hardcoded)
 // ---------------------------------------------------------------------------
 
 export const PLAN_NAMES: Record<PlanTier, string> = {
@@ -46,17 +50,8 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
   vehiclePages: "Vehicle Pages",
 };
 
-// ---------------------------------------------------------------------------
-// Plan tier order
-// ---------------------------------------------------------------------------
-
 const PLAN_ORDER: PlanTier[] = [
-  "free",
-  "starter",
-  "growth",
-  "professional",
-  "business",
-  "enterprise",
+  "free", "starter", "growth", "professional", "business", "enterprise",
 ];
 
 // ---------------------------------------------------------------------------
@@ -83,12 +78,17 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate — small inline indicator, NOT a full banner
+// PlanGate component
 //
-// When a feature is locked, renders a single subtle line:
-//   🔒 Feature Name  [Starter+]  Requires Starter ($19/mo)  [Upgrade →]
+// Renders a compact, clean upgrade prompt that matches the app design:
+//   - IconBadge with LockIcon (same pattern as all section headers)
+//   - Feature name + plan Badge
+//   - Price + short description
+//   - 2-3 key benefits with check icons
+//   - Upgrade button
 //
-// This keeps the layout clean even when multiple gates appear on one page.
+// All data comes from PLAN_NAMES, PLAN_PRICING, PLAN_HIGHLIGHTS —
+// nothing is hardcoded, so changing plans/prices updates everywhere.
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -122,34 +122,57 @@ export function PlanGate({
   const requiredPlan = allLimits ? findMinPlan(feature, allLimits) : "starter";
   const requiredPlanName = PLAN_NAMES[requiredPlan];
   const price = PLAN_PRICING[requiredPlan] ?? "";
+  const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
     <Box
-      paddingBlock="300"
-      paddingInline="400"
+      padding="400"
       background="bg-surface-secondary"
-      borderRadius="200"
+      borderRadius="300"
     >
-      <InlineStack align="space-between" blockAlign="center" wrap={false}>
-        <InlineStack gap="200" blockAlign="center" wrap={false}>
-          <Text as="span" variant="bodySm" tone="subdued">
+      <BlockStack gap="300">
+        {/* Header: lock icon + feature name + plan badge */}
+        <InlineStack gap="200" blockAlign="center">
+          <IconBadge
+            icon={LockIcon}
+            bg="var(--p-color-bg-fill-caution-secondary)"
+            color="var(--p-color-icon-caution)"
+            size={28}
+          />
+          <Text as="h3" variant="headingSm">
             {featureLabel}
           </Text>
-          <Badge size="small">
+          <Badge size="small" tone="info">
             {`${requiredPlanName}+`}
           </Badge>
-          <Text as="span" variant="bodySm" tone="subdued">
-            {price}
-          </Text>
         </InlineStack>
-        <Button
-          variant="plain"
-          size="slim"
-          onClick={() => navigate("/app/plans")}
-        >
-          Upgrade
-        </Button>
-      </InlineStack>
+
+        {/* Description */}
+        <Text as="p" variant="bodySm" tone="subdued">
+          {`Unlock with the ${requiredPlanName} plan (${price}). Includes:`}
+        </Text>
+
+        {/* Benefits — compact single-line items with check icons */}
+        {highlights.length > 0 && (
+          <BlockStack gap="100">
+            {highlights.slice(0, 3).map((benefit) => (
+              <InlineStack key={benefit} gap="100" blockAlign="center" wrap={false}>
+                <Icon source={CheckSmallIcon} tone="success" />
+                <Text as="span" variant="bodySm" tone="subdued">
+                  {benefit}
+                </Text>
+              </InlineStack>
+            ))}
+          </BlockStack>
+        )}
+
+        {/* Upgrade button */}
+        <InlineStack>
+          <Button size="slim" onClick={() => navigate("/app/plans")}>
+            {`Upgrade to ${requiredPlanName}`}
+          </Button>
+        </InlineStack>
+      </BlockStack>
     </Box>
   );
 }
