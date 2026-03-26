@@ -310,8 +310,8 @@ export default function Push() {
   const isSubmitting = navigation.state === "submitting";
 
   // Form state — initialize ALL settings from saved app_settings
-  const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? true);
-  const [pushMetafields, setPushMetafields] = useState(appSettings?.push_metafields ?? true);
+  const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? false);
+  const [pushMetafields, setPushMetafields] = useState(appSettings?.push_metafields ?? false);
   const [createCollectionsChecked, setCreateCollectionsChecked] = useState(
     appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false,
   );
