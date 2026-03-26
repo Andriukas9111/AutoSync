@@ -88,18 +88,14 @@ export async function fetchProductsFromShopify({
 
       const { edges, pageInfo }: { edges: Array<{ node: Record<string, any> }>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } = gqlData.products;
 
-      // Upsert each product into our database
-      for (const { node: product } of edges) {
-        if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
-        // Extract numeric Shopify ID from GID
-        const shopifyId = parseInt(
-          product.id.replace("gid://shopify/Product/", ""),
-          10,
-        );
-
-        const productData = {
+      // Batch upsert entire page at once (250 products per DB call instead of 3 per product)
+      const now = new Date().toISOString();
+      const batchRows = edges.map(({ node: product }: { node: Record<string, any> }) => {
+        const shopifyId = parseInt(product.id.replace("gid://shopify/Product/", ""), 10);
+        return {
           shop_id: shopId,
           shopify_product_id: shopifyId,
+          shopify_gid: product.id,
           title: product.title,
           description: product.descriptionHtml,
           handle: product.handle,
@@ -111,49 +107,31 @@ export async function fetchProductsFromShopify({
           product_type: product.productType,
           tags: product.tags ?? [],
           variants:
-            product.variants?.edges?.map((e: any) => ({
+            product.variants?.edges?.map((e: { node: Record<string, string> }) => ({
               id: e.node.id,
               title: e.node.title,
               price: e.node.price,
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          fitment_status: "unmapped",
+          synced_at: now,
+          updated_at: now,
         };
+      });
 
-        // Check if product already exists (to preserve fitment_status)
-        const { data: existing } = await db
-          .from("products")
-          .select("id")
-          .eq("shop_id", shopId)
-          .eq("shopify_product_id", shopifyId)
-          .maybeSingle();
+      // Single upsert for the entire page — ON CONFLICT preserves fitment_status
+      const { error: upsertError } = await db
+        .from("products")
+        .upsert(batchRows, {
+          onConflict: "shop_id,shopify_product_id",
+          ignoreDuplicates: false,
+        });
 
-        if (existing) {
-          // UPDATE existing — do NOT overwrite fitment_status
-          const { error } = await db
-            .from("products")
-            .update(productData)
-            .eq("shop_id", shopId)
-            .eq("shopify_product_id", shopifyId);
-          if (error) {
-            errors.push(`Failed to update product ${shopifyId}: ${error.message}`);
-          } else {
-            fetched++;
-          }
-        } else {
-          // INSERT new — set fitment_status to unmapped
-          const { error } = await db.from("products").insert({
-            ...productData,
-            fitment_status: "unmapped",
-          });
-          if (error) {
-            errors.push(`Failed to insert product ${shopifyId}: ${error.message}`);
-          } else {
-            fetched++;
-          }
-        }
+      if (upsertError) {
+        errors.push(`Batch upsert failed: ${upsertError.message}`);
+      } else {
+        fetched += batchRows.length;
       }
 
       // Check abort before progress update
