@@ -1430,7 +1430,7 @@ export async function pushThemeTemplate(
 
     if (!accessToken) {
       // Fallback: try GraphQL themeFilesUpsert if no session token available
-      console.error("[vehicle-pages] No session accessToken — falling back to GraphQL themeFilesUpsert");
+      // No session token available — use GraphQL fallback
       return await pushThemeTemplateViaGraphQL(admin, themeGid, templateKey, templateJson, sectionLiquid);
     }
 
@@ -1450,12 +1450,12 @@ export async function pushThemeTemplate(
 
       if (!resp.ok) {
         const errText = await resp.text();
-        console.error(`[vehicle-pages] REST Asset PUT failed for ${key}: ${resp.status} ${errText}`);
+        console.error(`[vehicle-pages] REST Asset PUT failed for ${key}: ${resp.status}`);
         return { ok: false, error: `${key}: ${resp.status} ${errText}` };
       }
 
       const result = await resp.json();
-      console.error(`[vehicle-pages] REST Asset PUT success: ${result?.asset?.key}`);
+      // Asset pushed successfully
       return { ok: true };
     };
 

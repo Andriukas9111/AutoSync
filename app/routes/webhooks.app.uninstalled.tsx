@@ -6,7 +6,7 @@ import db from "../lib/db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, session, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop}`);
+  console.log(`[webhook] ${topic}`);
 
   // Clean up Prisma sessions (Shopify session storage)
   if (session) {

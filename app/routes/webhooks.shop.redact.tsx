@@ -11,7 +11,7 @@ import db from "../lib/db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop} — Redacting all shop data`);
+  console.log(`[webhook] ${topic} — Redacting all shop data`);
 
   // Delete all tenant-scoped data in order (child tables first).
   // GDPR compliance: must delete ALL tables with shop_id column.
@@ -51,7 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
-  console.log(`[webhook] ${topic}: ${shop} — All data redacted successfully`);
+  console.log(`[webhook] ${topic} — All data redacted successfully`);
 
   return new Response(JSON.stringify({ message: "Shop data redacted" }), {
     status: 200,

@@ -5,7 +5,7 @@ import db from "../lib/db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop} product ${payload?.id}`);
+  console.log(`[webhook] ${topic} product ${payload?.id}`);
 
   switch (topic) {
     case "PRODUCTS_CREATE":

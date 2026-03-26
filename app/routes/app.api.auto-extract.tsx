@@ -86,7 +86,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // ── START: Create a new job ───────────────────────────────────
   if (actionType === "start") {
-    // Check for already-running job
+    // Check for already-running job (TOCTOU: narrow race window with immediate insert)
     const { data: running } = await db
       .from("sync_jobs")
       .select("id, status")
@@ -121,6 +121,18 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (jobError || !job) {
       return data({ error: "Failed to create job" }, { status: 500 });
+    }
+
+    // Post-insert duplicate guard: if another job was created concurrently, cancel ours
+    const { count: activeCount } = await db
+      .from("sync_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .eq("type", "extract")
+      .in("status", ["pending", "running"]);
+    if (activeCount && activeCount > 1) {
+      await db.from("sync_jobs").delete().eq("id", job.id);
+      return data({ error: "An extraction job is already running" }, { status: 409 });
     }
 
     return data({ started: true, jobId: job.id, totalItems: job.total_items });

@@ -14,7 +14,7 @@ const CHARGE_NAME_TO_PLAN: Record<string, PlanTier> = {
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, payload, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop}`);
+  console.log(`[webhook] ${topic}`);
 
   const subscription = payload?.app_subscription;
   if (!subscription) return new Response("OK", { status: 200 });
@@ -31,7 +31,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     })
     .eq("shop_id", shop);
 
-  console.log(`[webhook] Tenant ${shop} plan → ${plan} (${status})`);
+  console.log(`[webhook] plan update → ${plan} (${status})`);
 
   return new Response("OK", { status: 200 });
 };

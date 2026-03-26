@@ -11,7 +11,7 @@ import { authenticate } from "../shopify.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop} — No customer PII stored by AutoSync`);
+  console.log(`[webhook] ${topic} — No customer PII stored by AutoSync`);
 
   // AutoSync stores zero customer data.
   // Product fitment data is merchant data, not customer data.
