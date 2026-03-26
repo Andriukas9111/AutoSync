@@ -27,6 +27,8 @@ import {
   DatabaseIcon,
   AlertDiamondIcon,
   SearchIcon,
+  LockIcon,
+  CheckSmallIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -661,19 +663,27 @@ export default function Settings() {
                     const available = isFilterAvailable(plan, filter.requiredPlans);
                     return (
                       <div key={filter.name} style={statMiniStyle}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
-                            <Text as="p" variant="bodyMd" fontWeight="semibold">
-                              {filter.name}
-                            </Text>
-                            <Badge tone={available ? "success" : undefined} size="small">
-                              {available ? "Available" : filter.badgeLabel}
-                            </Badge>
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {filter.description}
-                          </Text>
-                        </BlockStack>
+                        <InlineStack gap="200" blockAlign="center" wrap={false}>
+                          <div style={{
+                            width: 24, height: 24, borderRadius: 6,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            backgroundColor: available
+                              ? "var(--p-color-bg-fill-success-secondary)"
+                              : "var(--p-color-bg-fill-critical-secondary)",
+                            flexShrink: 0,
+                          }}>
+                            <Icon source={available ? CheckSmallIcon : LockIcon} tone={available ? "success" : "critical"} />
+                          </div>
+                          <BlockStack gap="050">
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="p" variant="bodyMd" fontWeight="semibold">{filter.name}</Text>
+                              <Badge tone={available ? "success" : "info"} size="small">
+                                {available ? "Active" : filter.badgeLabel}
+                              </Badge>
+                            </InlineStack>
+                            <Text as="p" variant="bodySm" tone="subdued">{filter.description}</Text>
+                          </BlockStack>
+                        </InlineStack>
                       </div>
                     );
                   })}

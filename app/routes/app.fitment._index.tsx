@@ -384,8 +384,7 @@ export default function Fitment() {
 
         {/* CTA Cards — CSS grid for equal-height columns */}
         <div style={equalHeightGridStyle(2)}>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ flex: 1 }}>
+          <div className="stretch-card" style={{ display: "grid" }}>
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
@@ -418,11 +417,9 @@ export default function Fitment() {
                   </PlanGate>
                 </BlockStack>
               </Card>
-            </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ flex: 1 }}>
+          <div className="stretch-card" style={{ display: "grid" }}>
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
@@ -441,7 +438,6 @@ export default function Fitment() {
                   </Button>
                 </BlockStack>
               </Card>
-            </div>
           </div>
         </div>
 
