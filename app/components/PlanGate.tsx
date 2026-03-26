@@ -17,7 +17,7 @@ import { PLAN_PRICING, PLAN_HIGHLIGHTS, collapsibleTransition } from "../lib/des
 import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
-// Display-name lookup maps (all dynamic — change here, updates everywhere)
+// Lookup maps — all dynamic, change here updates everywhere
 // ---------------------------------------------------------------------------
 
 export const PLAN_NAMES: Record<PlanTier, string> = {
@@ -80,15 +80,7 @@ function isFeatureEnabled(
 }
 
 // ---------------------------------------------------------------------------
-// PlanGate — compact upgrade prompt with collapsible benefits
-//
-// Default (collapsed):
-//   🔒 Feature Name  [Plan+]  Available on Plan ($price)  [▼ Details] [Upgrade]
-//
-// Expanded:
-//   ✓ Benefit 1
-//   ✓ Benefit 2
-//   ✓ Benefit 3
+// PlanGate
 // ---------------------------------------------------------------------------
 
 interface PlanGateProps {
@@ -126,19 +118,21 @@ export function PlanGate({
   const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
-    <Box padding="300" background="bg-surface" borderRadius="200" borderWidth="025" borderColor="border">
-      <BlockStack gap="200">
-        {/* Main row */}
-        <InlineStack align="space-between" blockAlign="center">
-          <InlineStack gap="300" blockAlign="center">
-            <IconBadge
-              icon={LockIcon}
-              bg="var(--p-color-bg-fill-critical-secondary)"
-              color="var(--p-color-icon-critical)"
-              size={24}
-            />
-            <BlockStack gap="0">
-              <InlineStack gap="200" blockAlign="center">
+    <Box padding="400" borderRadius="300" borderWidth="025" borderColor="border">
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="start" wrap={false}>
+          {/* Left side: icon + text */}
+          <InlineStack gap="300" blockAlign="start" wrap={false}>
+            <Box>
+              <IconBadge
+                icon={LockIcon}
+                bg="var(--p-color-bg-fill-critical-secondary)"
+                color="var(--p-color-icon-critical)"
+                size={28}
+              />
+            </Box>
+            <BlockStack gap="100">
+              <InlineStack gap="200" blockAlign="center" wrap={false}>
                 <Text as="span" variant="bodyMd" fontWeight="bold">
                   {featureLabel}
                 </Text>
@@ -147,16 +141,13 @@ export function PlanGate({
                 </Badge>
               </InlineStack>
               <Text as="span" variant="bodySm" tone="subdued">
-                {`Available on the `}
-                <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                  {requiredPlanName}
-                </Text>
-                {` plan (${price})`}
+                {`Available on ${requiredPlanName} plan (${price})`}
               </Text>
             </BlockStack>
           </InlineStack>
 
-          <InlineStack gap="200" blockAlign="center">
+          {/* Right side: buttons */}
+          <InlineStack gap="100" blockAlign="center" wrap={false}>
             {highlights.length > 0 && (
               <Button
                 variant="plain"
@@ -164,7 +155,7 @@ export function PlanGate({
                 icon={detailsOpen ? ChevronUpIcon : ChevronDownIcon}
                 onClick={() => setDetailsOpen(!detailsOpen)}
               >
-                {detailsOpen ? "Hide" : "Details"}
+                {detailsOpen ? "Less" : "More"}
               </Button>
             )}
             <Button size="slim" onClick={() => navigate("/app/plans")}>
@@ -180,16 +171,16 @@ export function PlanGate({
             id={`plangate-${feature}`}
             transition={collapsibleTransition}
           >
-            <Box paddingBlockStart="200" paddingInlineStart="800">
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">
+            <Box paddingInlineStart="1000" paddingBlockStart="100">
+              <BlockStack gap="150">
+                <Text as="p" variant="bodySm" fontWeight="semibold">
                   {`What's included in ${requiredPlanName}:`}
                 </Text>
                 {highlights.map((benefit) => (
-                  <InlineStack key={benefit} gap="200" blockAlign="center" wrap={false}>
-                    <div style={{ flexShrink: 0 }}>
+                  <InlineStack key={benefit} gap="200" blockAlign="start" wrap={false}>
+                    <Box minWidth="16px">
                       <Icon source={CheckSmallIcon} tone="success" />
-                    </div>
+                    </Box>
                     <Text as="span" variant="bodySm">
                       {benefit}
                     </Text>
