@@ -461,7 +461,7 @@ export default function Dashboard() {
                       You have <strong>{liveFitmentCount.toLocaleString()}</strong> fitments but your {planLabel} plan allows <strong>{limits.fitments.toLocaleString()}</strong>. You cannot add new fitments until you upgrade or remove existing data.
                     </Text>
                   )}
-                  <Button variant="primary" url="/app/plans">Upgrade Plan</Button>
+                  <Button variant="primary" onClick={() => navigate("/app/plans")}>Upgrade Plan</Button>
                 </BlockStack>
               </Banner>
             )}

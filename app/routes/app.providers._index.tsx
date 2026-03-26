@@ -333,7 +333,7 @@ export default function ProvidersIndex() {
                 {atLimit && (
                   <Button
                     variant="plain"
-                    url="/app/plans"
+                    onClick={() => navigate("/app/plans")}
                   >
                     Upgrade plan
                   </Button>
