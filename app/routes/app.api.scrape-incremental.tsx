@@ -1,17 +1,16 @@
 /**
  * Incremental Scrape API
- * POST /app/api/scrape-incremental — runs incremental update (new brands + new models only)
+ * POST /app/api/scrape-incremental — creates a scrape_job for the Edge Function to process
  *
- * Admin-only. Creates a scrape_job, starts the scraper in the background
- * (fire-and-forget), and returns immediately with the jobId.
- * The admin panel polls scrape_jobs for progress.
+ * Admin-only. Creates a scrape_job record and returns immediately.
+ * The Supabase Edge Function `process-scrape` picks up the job via pg_cron
+ * and processes brands in batches (no timeout issues).
  */
 
 import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import { isAdminShop } from "../lib/admin.server";
-import { runIncrementalUpdate } from "../lib/scrapers/autodata.server";
 import db from "../lib/db.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -25,14 +24,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const delayMs = parseInt(formData.get("delay_ms") as string || "1500", 10);
     const scrapeSpecs = (formData.get("scrape_specs") as string) !== "false";
 
-    // Check for existing running scrape job
-    // Check for existing running jobs — clean up stuck ones (>30min old) first
+    // Clean up stuck jobs (>30min old)
     await db
       .from("scrape_jobs")
       .update({ status: "failed", completed_at: new Date().toISOString(), result: { error: "Timed out (stuck >30min)" } })
       .eq("status", "running")
       .lt("started_at", new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
+    // Check for existing running jobs
     const { data: existingJobs } = await db
       .from("scrape_jobs")
       .select("id")
@@ -46,7 +45,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Create scrape_job record
+    // Create scrape_job record — Edge Function picks this up via pg_cron
     const { data: job, error: jobError } = await db
       .from("scrape_jobs")
       .insert({
@@ -54,6 +53,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         status: "running",
         config: { delayMs, scrapeSpecs },
         started_at: new Date().toISOString(),
+        processed_items: 0,
+        progress: 0,
       })
       .select("id")
       .maybeSingle();
@@ -65,27 +66,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const jobId = job.id;
-
-    // Fire-and-forget: start the scraper in the background
-    // Don't await — return immediately so Vercel doesn't timeout
-    runIncrementalUpdate({ jobId, delayMs, scrapeSpecs })
-      .then(async (result) => {
-        await db.from("scrape_jobs").update({
-          status: "completed",
-          completed_at: new Date().toISOString(),
-          result,
-        }).eq("id", jobId);
-      })
-      .catch(async (err) => {
-        await db.from("scrape_jobs").update({
-          status: "failed",
-          completed_at: new Date().toISOString(),
-          result: { error: err instanceof Error ? err.message : "Unknown error" },
-        }).eq("id", jobId);
-      });
-
-    return data({ ok: true, jobId, message: "Incremental update started. Check progress in the YMME tab." });
+    // No fire-and-forget! The Edge Function `process-scrape` handles
+    // the actual scraping in batches via pg_cron (every 30s).
+    return data({
+      ok: true,
+      jobId: job.id,
+      message: "Incremental update started. The Edge Function will process brands in batches.",
+    });
   } catch (err) {
     return data(
       { ok: false, error: err instanceof Error ? err.message : "Unknown error" },
