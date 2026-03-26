@@ -419,15 +419,23 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
   // Filter to only engines that have fitments for this shop (by engine NAME text match)
   let filteredEngines = allEngines ?? [];
   if (shopId && filteredEngines.length > 0) {
-    // Get model name for this model_id
+    // Get model name and make name for this model_id (two simple queries — no nested joins)
     const { data: modelRow } = await db
       .from("ymme_models")
-      .select("name, ymme_makes:make_id(name)")
+      .select("name, make_id")
       .eq("id", modelId)
       .maybeSingle();
 
-    const makeName = (modelRow as any)?.ymme_makes?.name ?? "";
+    let makeName = "";
     const modelName = modelRow?.name ?? "";
+    if (modelRow?.make_id) {
+      const { data: makeRow } = await db
+        .from("ymme_makes")
+        .select("name")
+        .eq("id", modelRow.make_id)
+        .maybeSingle();
+      makeName = makeRow?.name ?? "";
+    }
 
     if (makeName && modelName) {
       const { data: fitmentEngines } = await db
