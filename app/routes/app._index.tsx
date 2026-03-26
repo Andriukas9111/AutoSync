@@ -107,8 +107,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
-    // Synced (pushed) products
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
+    // Pushed products — check for completed push jobs (NOT synced_at which is set by fetch too)
+    db.from("sync_jobs").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "push").eq("status", "completed"),
   ]);
 
   const tenant = tenantResult.data;
@@ -147,7 +147,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: (syncedProductsResult.count ?? 0) > 0,
+    hasPushed: (syncedProductsResult.count ?? 0) > 0, // Now checks for completed push JOBS, not synced_at
     // Products — real counts for instant render, useAppData updates live
     totalProducts: totalProductsResult.count ?? 0,
     unmapped: unmappedResult.count ?? 0,
