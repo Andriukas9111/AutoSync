@@ -593,12 +593,22 @@ export default function ProductDetails() {
     const nameKey = `${s.make.name}|${s.model?.name || ""}|${s.engine?.code || s.engine?.name || ""}`;
     if (acceptedSuggestions.has(nameKey)) return false;
 
-    // Also check if any existing fitment matches this suggestion by make+model
-    const alreadyMapped = fitments.some(
-      (f) =>
-        f.make?.toLowerCase() === s.make.name?.toLowerCase() &&
-        (f.model?.toLowerCase() === (s.model?.name || "").toLowerCase())
-    );
+    // Also check if any existing fitment matches this suggestion by make+model+engine
+    const alreadyMapped = fitments.some((f: any) => {
+      // Exact match on ymme_engine_id if both exist
+      if (f.ymme_engine_id && s.engine?.id && f.ymme_engine_id === s.engine.id) return true;
+      // Name-based match: make + model
+      const makeMatch = f.make?.toLowerCase() === s.make.name?.toLowerCase();
+      const modelMatch = f.model?.toLowerCase() === (s.model?.name || "").toLowerCase();
+      if (!makeMatch || !modelMatch) return false;
+      // If suggestion has no engine, make+model match is enough
+      if (!s.engine?.name && !s.engine?.code) return true;
+      // If suggestion has engine, check engine match too
+      const engineMatch =
+        (f.engine_code && s.engine?.code && f.engine_code.toLowerCase() === s.engine.code.toLowerCase()) ||
+        (f.engine && s.engine?.name && f.engine.toLowerCase() === s.engine.name.toLowerCase());
+      return engineMatch;
+    });
     return !alreadyMapped;
   });
 
