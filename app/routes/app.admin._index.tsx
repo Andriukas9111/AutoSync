@@ -235,7 +235,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .from("scrape_changelog")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(500);
     scrapeChangelog = clData ?? [];
   } catch {
     // Table may not exist yet

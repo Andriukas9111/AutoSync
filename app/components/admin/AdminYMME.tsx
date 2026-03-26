@@ -60,6 +60,8 @@ export function AdminYMME({
 }: Props) {
   const [delay, setDelay] = useState("500");
   const [scrapeSpecs, setScrapeSpecs] = useState("true");
+  const [changelogPage, setChangelogPage] = useState(1);
+  const CHANGELOG_PAGE_SIZE = 50;
   const specsCoverage = ymmeCounts.engines > 0 ? Math.round((ymmeCounts.specs / ymmeCounts.engines) * 100) : 0;
 
   // Determine browse level
@@ -273,17 +275,47 @@ export function AdminYMME({
               </InlineStack>
               <Badge tone="info">{`${scrapeChangelog.length} entries`}</Badge>
             </InlineStack>
-            <DataTable
-              columnContentTypes={["text", "text", "text", "text", "text"]}
-              headings={["Action", "Type", "Name", "Parent", "Date"]}
-              rows={scrapeChangelog.map((c: any) => [
-                c.action === "added" ? "➕ Added" : "✏️ Updated",
-                (c.entity_type ?? "").charAt(0).toUpperCase() + (c.entity_type ?? "").slice(1),
-                c.entity_name ?? "—",
-                c.parent_name ?? "—",
-                c.created_at ? fmtShort(c.created_at) : "—",
-              ])}
-            />
+            {(() => {
+              const totalPages = Math.ceil(scrapeChangelog.length / CHANGELOG_PAGE_SIZE);
+              const pageItems = scrapeChangelog.slice(
+                (changelogPage - 1) * CHANGELOG_PAGE_SIZE,
+                changelogPage * CHANGELOG_PAGE_SIZE,
+              );
+              return (
+                <>
+                  <div style={tableContainerStyle}>
+                    {pageItems.map((c: any, i: number) => (
+                      <div key={c.id ?? i} style={listRowStyle(i === pageItems.length - 1)}>
+                        <InlineStack gap="300" blockAlign="center" wrap={false}>
+                          <Badge tone={c.action === "added" ? "success" : "info"} size="small">
+                            {c.action === "added" ? "Added" : "Updated"}
+                          </Badge>
+                          <Badge size="small">
+                            {(c.entity_type ?? "").charAt(0).toUpperCase() + (c.entity_type ?? "").slice(1)}
+                          </Badge>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
+                              {c.entity_name ?? "—"}
+                            </Text>
+                          </div>
+                        </InlineStack>
+                        <InlineStack gap="200" blockAlign="center">
+                          <Text as="span" variant="bodySm" tone="subdued">{c.parent_name ?? ""}</Text>
+                          <Text as="span" variant="bodySm" tone="subdued">{c.created_at ? fmtShort(c.created_at) : ""}</Text>
+                        </InlineStack>
+                      </div>
+                    ))}
+                  </div>
+                  {totalPages > 1 && (
+                    <InlineStack align="center" gap="300" blockAlign="center">
+                      <Button size="slim" disabled={changelogPage <= 1} onClick={() => setChangelogPage(changelogPage - 1)}>Previous</Button>
+                      <Text as="span" variant="bodySm">{`Page ${changelogPage} of ${totalPages}`}</Text>
+                      <Button size="slim" disabled={changelogPage >= totalPages} onClick={() => setChangelogPage(changelogPage + 1)}>Next</Button>
+                    </InlineStack>
+                  )}
+                </>
+              );
+            })()}
           </BlockStack>
         </Card>
       )}
