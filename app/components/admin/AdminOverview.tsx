@@ -12,6 +12,7 @@ import {
   PersonIcon, ProductIcon, WandIcon, SettingsIcon, ChartVerticalIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../IconBadge";
+import { QuickActionCard } from "../QuickActionCard";
 import { DataTable } from "../DataTable";
 import {
   statMiniStyle, statGridStyle, tableContainerStyle, listRowStyle, STATUS_TONES,
@@ -106,35 +107,10 @@ export function AdminOverview({
             <Text as="h2" variant="headingSm">Quick Actions</Text>
           </InlineStack>
           <InlineGrid columns={{ xs: 2, sm: 2, md: 4 }} gap="300">
-            {[
-              { icon: RefreshIcon, label: "Refresh Counts", desc: "Recount all tenant products and fitments", onClick: onRefresh },
-              { icon: DatabaseIcon, label: "YMME Database", desc: "Browse and manage the vehicle database", onClick: () => onSwitchTab(2) },
-              { icon: ChartVerticalIcon, label: "View Activity", desc: "All sync jobs across tenants", onClick: () => onSwitchTab(3) },
-              { icon: SettingsIcon, label: "Manage Plans", desc: "Configure pricing, limits, and features", onClick: () => onNavigate("/app/admin/plans"), primary: true },
-            ].map((a) => (
-              <div key={a.label} onClick={a.onClick} role="button" tabIndex={0}
-                onKeyDown={(e) => { if (e.key === "Enter") a.onClick(); }}
-                style={{
-                  cursor: "pointer", borderRadius: "var(--p-border-radius-300)",
-                  border: a.primary ? "2px solid var(--p-color-border-emphasis)" : "1px solid var(--p-color-border)",
-                  padding: "var(--p-space-400)",
-                  background: a.primary ? "var(--p-color-bg-surface-secondary)" : "var(--p-color-bg-surface)",
-                  transition: "box-shadow 120ms ease, border-color 120ms ease",
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = "none"; (e.currentTarget as HTMLElement).style.borderColor = a.primary ? "var(--p-color-border-emphasis)" : "var(--p-color-border)"; }}
-              >
-                <BlockStack gap="200">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{ width: 36, height: 36, borderRadius: "var(--p-border-radius-200)", background: a.primary ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon source={a.icon} tone={a.primary ? "textInverse" : "base"} />
-                    </div>
-                    <Text as="span" variant="headingSm">{a.label}</Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">{a.desc}</Text>
-                </BlockStack>
-              </div>
-            ))}
+            <QuickActionCard icon={RefreshIcon} label="Refresh Counts" description="Recount all tenant products and fitments" onClick={onRefresh} />
+            <QuickActionCard icon={DatabaseIcon} label="YMME Database" description="Browse and manage the vehicle database" onClick={() => onSwitchTab(2)} />
+            <QuickActionCard icon={ChartVerticalIcon} label="View Activity" description="All sync jobs across tenants" onClick={() => onSwitchTab(3)} />
+            <QuickActionCard icon={SettingsIcon} label="Manage Plans" description="Configure pricing, limits, and features" onClick={() => onNavigate("/app/admin/plans")} primary />
           </InlineGrid>
         </BlockStack>
       </Card>

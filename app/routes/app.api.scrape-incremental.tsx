@@ -26,13 +26,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const scrapeSpecs = (formData.get("scrape_specs") as string) !== "false";
 
     // Check for existing running scrape job
-    const { data: existingJob } = await db
+    // Check for existing running jobs — clean up stuck ones (>30min old) first
+    await db
+      .from("scrape_jobs")
+      .update({ status: "failed", completed_at: new Date().toISOString(), result: { error: "Timed out (stuck >30min)" } })
+      .eq("status", "running")
+      .lt("started_at", new Date(Date.now() - 30 * 60 * 1000).toISOString());
+
+    const { data: existingJobs } = await db
       .from("scrape_jobs")
       .select("id")
       .in("status", ["running", "pending"])
-      .maybeSingle();
+      .limit(1);
 
-    if (existingJob) {
+    if (existingJobs && existingJobs.length > 0) {
       return data(
         { ok: false, error: "A scrape job is already running. Wait for it to complete." },
         { status: 409 },
