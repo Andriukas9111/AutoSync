@@ -265,45 +265,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Full Cleanup — Shopify + DB ----
   if (_action === "full_cleanup") {
-    try {
-      // 1. Remove from Shopify first (tags, metafields, collections, metaobjects)
-      const [tagResult, mfResult, colResult, vpResult] = await Promise.all([
-        removeAllTags(shopId, admin),
-        removeAllMetafields(shopId, admin),
-        removeAllCollections(shopId, admin),
-        deleteVehiclePages(admin, shopId).catch(() => ({ deleted: 0 })),
-      ]);
+    // Create a background cleanup job — Edge Function will process in batches
+    // This handles stores of ANY size without timing out
+    const { data: existingJob } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("type", "cleanup")
+      .in("status", ["running", "pending", "processing"])
+      .maybeSingle();
 
-      // 2. Delete from DB
-      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
-      await db.from("collection_mappings").delete().eq("shop_id", shopId);
-      await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
-      await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
-      await db
-        .from("products")
-        .update({ fitment_status: "unmapped", synced_at: null })
-        .eq("shop_id", shopId);
-
-      // Recalculate tenant counts
-      await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
-
-      const totalErrors =
-        tagResult.errors.length + mfResult.errors.length + colResult.errors.length;
-
-      return data({
-        success: true,
-        message:
-          `Full cleanup complete: ${tagResult.removed} tags, ${mfResult.removed} metafields, ` +
-          `${colResult.deleted} collections, ${vpResult.deleted} vehicle pages removed from Shopify. ` +
-          `All fitments cleared from database.` +
-          (totalErrors > 0 ? ` (${totalErrors} errors)` : ""),
-      });
-    } catch (err) {
-      return data(
-        { error: "Full cleanup failed: " + (err instanceof Error ? err.message : String(err)) },
-        { status: 500 },
-      );
+    if (existingJob) {
+      return data({ error: "A cleanup operation is already in progress" }, { status: 409 });
     }
+
+    // 1. DB cleanup first (instant)
+    await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+    await db.from("collection_mappings").delete().eq("shop_id", shopId);
+    await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
+    await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
+    await db.from("products").update({ fitment_status: "unmapped", synced_at: null }).eq("shop_id", shopId);
+    await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
+
+    // 2. Create Shopify cleanup job for Edge Function
+    // Store the Shopify access token so Edge Function can make API calls
+    const { data: tenant } = await db
+      .from("tenants")
+      .select("shopify_access_token")
+      .eq("shop_id", shopId)
+      .maybeSingle();
+
+    await db.from("sync_jobs").insert({
+      shop_id: shopId,
+      type: "cleanup",
+      status: "pending",
+      progress: 0,
+      metadata: {
+        phases: ["tags", "metafields", "collections", "vehicle_pages"],
+        current_phase: "tags",
+        access_token: tenant?.shopify_access_token ?? null,
+      },
+    });
+
+    return data({
+      success: true,
+      message: "Database cleaned. Shopify cleanup started in background — removing tags, metafields, collections, and vehicle pages. This may take a few minutes for large stores.",
+    });
   }
 
   // ---- Disconnect Store (Nuclear) ----
@@ -483,7 +490,7 @@ export default function Settings() {
   const [autoPushMetafields, setAutoPushMetafields] = useState(
     limits.features.pushMetafields ? (appSettings?.push_metafields ?? false) : false,
   );
-  const [tagPrefix, setTagPrefix] = useState(appSettings?.tag_prefix ?? "_autosync_");
+  // Tag prefix is locked to "_autosync_" — used system-wide, never user-configurable
 
   // Form state — Notifications
   const [notificationEmail, setNotificationEmail] = useState(
@@ -534,7 +541,7 @@ export default function Settings() {
               name="auto_push_metafields"
               value={String(autoPushMetafields)}
             />
-            <input type="hidden" name="tag_prefix" value={tagPrefix} />
+            <input type="hidden" name="tag_prefix" value="_autosync_" />
             {/* Collection settings managed on Collections page */}
             <input type="hidden" name="notification_email" value={notificationEmail} />
 
@@ -564,13 +571,9 @@ export default function Settings() {
                       checked={autoPushMetafields}
                       onChange={setAutoPushMetafields}
                     />
-                    <TextField
-                      label="Tag prefix"
-                      value={tagPrefix}
-                      onChange={setTagPrefix}
-                      helpText="Prefix for all vehicle tags (e.g. _autosync_BMW)"
-                      autoComplete="off"
-                    />
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Tag prefix: <Text as="span" fontWeight="semibold">_autosync_</Text> (e.g. _autosync_BMW). This prefix is used system-wide and cannot be changed.
+                    </Text>
                   </FormLayout>
                 </BlockStack>
               </Card>

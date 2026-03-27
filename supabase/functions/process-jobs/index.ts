@@ -259,6 +259,9 @@ Deno.serve(async (req) => {
       case "bulk_push":
         result = await processBulkPush(db, job);
         break;
+      case "cleanup":
+        result = await processCleanupChunk(db, job);
+        break;
       default:
         result = { processed: 0, hasMore: false, error: `Unknown job type: ${job.type}` };
     }
@@ -1563,4 +1566,191 @@ async function processBulkPush(
   }).eq("id", job.id);
 
   return { processed: 0, hasMore: true };
+}
+
+// ── Cleanup Job Handler ──────────────────────────────────────────────────────
+// Removes AutoSync tags, metafields, collections, and vehicle pages from Shopify.
+// Processes in batches — handles stores with millions of products.
+
+async function processCleanupChunk(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
+  const shopId = job.shop_id as string;
+  const accessToken = meta.access_token;
+
+  if (!accessToken) {
+    return { processed: 0, hasMore: false, error: "No access token for cleanup" };
+  }
+
+  const currentPhase = meta.current_phase ?? "tags";
+  const cursor = meta.cursor ?? null;
+  const CLEANUP_BATCH = 50;
+
+  // Phase 1: Remove _autosync_ tags from products
+  if (currentPhase === "tags") {
+    const searchQuery = `{
+      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "tag:_autosync_*") {
+        edges { node { id tags } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`;
+
+    try {
+      const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
+      const edges = result?.data?.products?.edges ?? [];
+      const pageInfo = result?.data?.products?.pageInfo ?? {};
+      let removed = 0;
+
+      for (const { node } of edges) {
+        const autoTags = (node.tags ?? []).filter((t: string) => t.startsWith("_autosync_"));
+        if (autoTags.length > 0) {
+          await shopifyGraphQL(shopId, accessToken,
+            `mutation($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { message } } }`,
+            { id: node.id, tags: autoTags }
+          );
+          removed += autoTags.length;
+        }
+      }
+
+      if (pageInfo.hasNextPage) {
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
+        }).eq("id", job.id);
+        return { processed: removed, hasMore: true };
+      }
+
+      // Phase 1 done — move to metafields
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "metafields", cursor: null }),
+      }).eq("id", job.id);
+      return { processed: removed, hasMore: true };
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Tag cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  // Phase 2: Remove vehicle_fitment metafields from products
+  if (currentPhase === "metafields") {
+    const searchQuery = `{
+      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "tag:_autosync_*") {
+        edges {
+          node {
+            id
+            metafields(first: 20, namespace: "$app:vehicle_fitment") {
+              edges { node { id namespace key } }
+            }
+          }
+        }
+        pageInfo { hasNextPage endCursor }
+      }
+    }`;
+
+    try {
+      const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
+      const edges = result?.data?.products?.edges ?? [];
+      const pageInfo = result?.data?.products?.pageInfo ?? {};
+      let removed = 0;
+
+      for (const { node } of edges) {
+        const mfEdges = node?.metafields?.edges ?? [];
+        if (mfEdges.length > 0) {
+          const metafields = mfEdges.map((e: Record<string, Record<string, string>>) => ({
+            ownerId: node.id,
+            namespace: e.node.namespace,
+            key: e.node.key,
+          }));
+          await shopifyGraphQL(shopId, accessToken,
+            `mutation($metafields: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $metafields) { deletedMetafields { key } userErrors { message } } }`,
+            { metafields }
+          );
+          removed += mfEdges.length;
+        }
+      }
+
+      if (pageInfo.hasNextPage) {
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
+        }).eq("id", job.id);
+        return { processed: removed, hasMore: true };
+      }
+
+      // Phase 2 done — move to collections
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "collections", cursor: null }),
+      }).eq("id", job.id);
+      return { processed: removed, hasMore: true };
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Metafield cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  // Phase 3: Delete AutoSync smart collections
+  if (currentPhase === "collections") {
+    try {
+      const result = await shopifyGraphQL(shopId, accessToken,
+        `{ collections(first: 50, query: "title:*Parts") { edges { node { id title handle } } } }`
+      );
+      const edges = result?.data?.collections?.edges ?? [];
+      let deleted = 0;
+
+      for (const { node } of edges) {
+        // Only delete collections with handles matching our pattern
+        if (node.handle && (node.handle.includes("-parts") || node.handle.includes("_parts"))) {
+          try {
+            await shopifyGraphQL(shopId, accessToken,
+              `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
+              { input: { id: node.id } }
+            );
+            deleted++;
+          } catch (_e) { /* skip individual failures */ }
+        }
+      }
+
+      // Phase 3 done — move to vehicle pages
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "vehicle_pages", cursor: null }),
+      }).eq("id", job.id);
+      return { processed: deleted, hasMore: true };
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Collection cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  // Phase 4: Delete vehicle spec metaobjects
+  if (currentPhase === "vehicle_pages") {
+    try {
+      const result = await shopifyGraphQL(shopId, accessToken,
+        `{ metaobjects(type: "vehicle_specification", first: 50${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id } } pageInfo { hasNextPage endCursor } } }`
+      );
+      const edges = result?.data?.metaobjects?.edges ?? [];
+      const pageInfo = result?.data?.metaobjects?.pageInfo ?? {};
+      let deleted = 0;
+
+      for (const { node } of edges) {
+        try {
+          await shopifyGraphQL(shopId, accessToken,
+            `mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { message } } }`,
+            { id: node.id }
+          );
+          deleted++;
+        } catch (_e) { /* skip individual failures */ }
+      }
+
+      if (pageInfo.hasNextPage) {
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
+        }).eq("id", job.id);
+        return { processed: deleted, hasMore: true };
+      }
+
+      // All phases complete
+      return { processed: deleted, hasMore: false };
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Vehicle pages cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  return { processed: 0, hasMore: false };
 }
