@@ -165,7 +165,7 @@ export async function removeAllTags(
         const userErrors = removeJson?.data?.tagsRemove?.userErrors;
         if (userErrors?.length > 0) {
           errors.push(
-            `Tags for ${product.shopify_product_id}: ${userErrors[0].message}`,
+            `Tags for ${product.gid}: ${userErrors[0].message}`,
           );
         } else {
           removed += autoSyncTags.length;
@@ -174,7 +174,7 @@ export async function removeAllTags(
       processed++;
     } catch (err) {
       errors.push(
-        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+        `Product ${gid}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -259,7 +259,7 @@ export async function removeAllMetafields(
           const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
           if (userErrors?.length > 0) {
             errors.push(
-              `Metafields (${ns}) for ${product.shopify_product_id}: ${userErrors[0].message}`,
+              `Metafields (${ns}) for ${gid}: ${userErrors[0].message}`,
             );
           } else {
             removed += edges.length;
@@ -269,7 +269,7 @@ export async function removeAllMetafields(
       processed++;
     } catch (err) {
       errors.push(
-        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+        `Product ${gid}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
