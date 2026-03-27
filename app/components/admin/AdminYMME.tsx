@@ -315,7 +315,6 @@ export function AdminYMME({
                     columnContentTypes={["text", "text", "text", "text", "text"]}
                     headings={["Action", "Type", "Name", "Parent", "Date"]}
                     rows={rows}
-                    hoverable
                   />
                   {totalPages > 1 && (
                     <InlineStack align="center" gap="300" blockAlign="center">
