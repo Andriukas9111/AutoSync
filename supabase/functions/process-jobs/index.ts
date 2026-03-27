@@ -1578,7 +1578,18 @@ async function processCleanupChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
   const shopId = job.shop_id as string;
-  const accessToken = meta.access_token;
+
+  // Fetch access token from tenant record at execution time (NOT from job metadata)
+  // This avoids storing sensitive tokens in the sync_jobs table
+  let accessToken = meta.access_token; // legacy fallback
+  if (!accessToken) {
+    const { data: tenant } = await db
+      .from("tenants")
+      .select("shopify_access_token")
+      .eq("shop_id", shopId)
+      .maybeSingle();
+    accessToken = tenant?.shopify_access_token;
+  }
 
   if (!accessToken) {
     return { processed: 0, hasMore: false, error: "No access token for cleanup" };
@@ -1708,15 +1719,20 @@ async function processCleanupChunk(
   }
 
   // Phase 3: Delete AutoSync smart collections
+  // ONLY delete collections that have _autosync_ tag rules — NEVER delete merchant collections
   if (currentPhase === "collections") {
     try {
       const result = await shopifyGraphQL(shopId, accessToken,
-        `{ collections(first: 50, query: "title:*Parts") { edges { node { id title handle } } } }`
+        `{ collections(first: 250, query: "title:*Parts") {
+          edges { node { id title handle ruleSet { rules { column relation condition } } } }
+        } }`
       );
       const edges = result?.data?.collections?.edges ?? [];
-      const toDelete = edges.filter(({ node }: { node: Record<string, string> }) =>
-        node.handle && (node.handle.includes("-parts") || node.handle.includes("_parts"))
-      );
+      // Only delete collections with _autosync_ tag rules
+      const toDelete = edges.filter(({ node }: { node: Record<string, unknown> }) => {
+        const rules = (node.ruleSet as Record<string, unknown>)?.rules as Array<Record<string, string>> ?? [];
+        return rules.some((r) => r.column === "TAG" && r.condition?.startsWith("_autosync_"));
+      });
 
       const deleted = await parallelBatch(toDelete, async ({ node }: { node: Record<string, string> }) => {
         try {
@@ -1742,7 +1758,7 @@ async function processCleanupChunk(
   if (currentPhase === "vehicle_pages") {
     try {
       const result = await shopifyGraphQL(shopId, accessToken,
-        `{ metaobjects(type: "vehicle_specification", first: ${CLEANUP_BATCH}${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id } } pageInfo { hasNextPage endCursor } } }`
+        `{ metaobjects(type: "$app:vehicle_spec", first: ${CLEANUP_BATCH}${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id } } pageInfo { hasNextPage endCursor } } }`
       );
       const edges = result?.data?.metaobjects?.edges ?? [];
       const pageInfo = result?.data?.metaobjects?.pageInfo ?? {};

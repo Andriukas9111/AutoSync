@@ -63,9 +63,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Always update the access token + clear uninstalled state on re-install
     const updates: Record<string, unknown> = {
       shopify_access_token: offlineToken,
-      uninstalled_at: null,        // Clear if re-installing after uninstall
-      plan_status: "active",       // Re-activate plan on re-install
+      updated_at: new Date().toISOString(),
     };
+    // Only clear uninstall state if previously uninstalled (don't reset plan_status on every visit)
+    if (tenant.uninstalled_at) {
+      updates.uninstalled_at = null;
+      updates.plan_status = "active"; // Re-activate on re-install only
+    }
     // Note: Admin plan is managed via admin panel, not auto-set here
     // This allows testing different plan tiers on the admin shop
     await db

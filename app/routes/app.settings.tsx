@@ -288,13 +288,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
 
     // 2. Create Shopify cleanup job for Edge Function
-    // Store the Shopify access token so Edge Function can make API calls
-    const { data: tenant } = await db
-      .from("tenants")
-      .select("shopify_access_token")
-      .eq("shop_id", shopId)
-      .maybeSingle();
-
+    // Edge Function fetches access_token from tenants table at execution time (no secrets in metadata)
     await db.from("sync_jobs").insert({
       shop_id: shopId,
       type: "cleanup",
@@ -303,7 +297,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       metadata: {
         phases: ["tags", "metafields", "collections", "vehicle_pages"],
         current_phase: "tags",
-        access_token: tenant?.shopify_access_token ?? null,
       },
     });
 

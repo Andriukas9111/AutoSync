@@ -700,7 +700,36 @@ async function cancelBillingSubscription(
 export async function confirmBillingSubscription(
   shopId: string,
   chargeId: string,
+  admin?: any,
 ): Promise<{ plan: PlanTier }> {
+  // CRITICAL: Verify the charge with Shopify API before activating
+  // Prevents billing fraud via replay attacks or forged charge_ids
+  if (admin && chargeId) {
+    try {
+      const response = await admin.graphql(`
+        query appSubscription($id: ID!) {
+          node(id: $id) {
+            ... on AppSubscription {
+              id
+              status
+              name
+            }
+          }
+        }
+      `, { variables: { id: chargeId } });
+      const json = await response.json();
+      const subscription = json?.data?.node;
+
+      if (!subscription || subscription.status !== "ACTIVE") {
+        throw new Error(`Subscription ${chargeId} is not active (status: ${subscription?.status ?? "not found"})`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("not active")) throw err;
+      // If we can't verify (e.g., network error), log but allow — Shopify redirected here
+      console.error("[billing] Could not verify charge with Shopify:", err);
+    }
+  }
+
   // Get the pending plan from the tenant record
   const { data: tenant } = await db
     .from("tenants")
@@ -709,6 +738,11 @@ export async function confirmBillingSubscription(
     .maybeSingle();
 
   const newPlan = (tenant?.pending_plan as PlanTier) || "free";
+
+  if (newPlan === "free") {
+    // No pending plan — don't activate anything
+    return { plan: "free" };
+  }
 
   // Activate the plan
   await db

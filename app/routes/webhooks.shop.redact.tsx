@@ -18,14 +18,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // plus explicit deletes for tables that may not have FK constraints.
   const errors: string[] = [];
 
-  // Explicit deletes for tables that might lack FK CASCADE
+  // Explicit deletes for ALL tables with shop_id — belt-and-suspenders approach.
+  // Even if FK CASCADE handles most, explicit deletion ensures no data leaks
+  // if any migration failed to create FK constraints.
   const explicitTables = [
+    "vehicle_fitments",
+    "extraction_results",
     "plate_lookups",
-    "scrape_changelog",
-    "admin_activity_log",
     "search_events",
     "conversion_events",
     "vehicle_page_sync",
+    "tenant_active_makes",
+    "tenant_custom_vehicles",
+    "collection_mappings",
+    "provider_column_mappings",
+    "provider_imports",
+    "pricing_rules",
+    "price_history",
+    "price_alerts",
+    "app_settings",
+    "sync_jobs",
+    "products",
+    "providers",
+    "scrape_changelog",
+    "admin_activity_log",
   ] as const;
 
   for (const table of explicitTables) {

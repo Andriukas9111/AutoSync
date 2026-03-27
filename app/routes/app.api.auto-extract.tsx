@@ -451,7 +451,9 @@ export async function action({ request }: ActionFunctionArgs) {
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
         } else {
-          // Low/no confidence — leave as unmapped (no valid match found)
+          // Low/no confidence — mark as "no_match" to prevent infinite reprocessing
+          // Products can be manually re-scanned later if needed
+          await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
         }
       } catch (err) {

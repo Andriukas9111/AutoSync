@@ -127,7 +127,6 @@ export async function fetchProductsFromShopify({
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          fitment_status: "unmapped",
           synced_at: now,
           updated_at: now,
         };

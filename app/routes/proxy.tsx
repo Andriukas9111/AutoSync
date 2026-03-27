@@ -46,10 +46,11 @@ setInterval(() => {
 // Dynamic CORS: allow the requesting Shopify store domain, not wildcard
 function getCorsHeaders(request?: Request): Record<string, string> {
   const origin = request?.headers.get("origin") ?? "";
-  // Allow *.myshopify.com and any custom Shopify domain
-  const allowed = origin.includes(".myshopify.com") || origin.includes("shopify.com");
+  // Strict domain validation — only allow actual Shopify domains (suffix match)
+  const allowed = /\.myshopify\.com$/.test(origin.replace(/^https?:\/\//, ""))
+    || /\.shopify\.com$/.test(origin.replace(/^https?:\/\//, ""));
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : "https://*.myshopify.com",
+    "Access-Control-Allow-Origin": allowed ? origin : "",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };

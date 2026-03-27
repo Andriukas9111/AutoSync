@@ -224,7 +224,7 @@ const PLAN_SUBTITLES: Record<PlanTier, string> = {
 // ---------------------------------------------------------------------------
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
 
@@ -235,10 +235,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let billingSuccess = false;
   if (billingConfirmed === "true" && chargeId) {
     try {
-      await confirmBillingSubscription(shopId, chargeId);
+      await confirmBillingSubscription(shopId, chargeId, admin);
       billingSuccess = true;
-    } catch {
-      // Confirmation failed
+    } catch (err) {
+      console.error("[plans] Billing confirmation failed:", err);
     }
   }
 
