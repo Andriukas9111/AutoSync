@@ -317,16 +317,21 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error("[process-jobs] Fatal error:", err);
-    // Release the lock on the specific job we claimed (not ALL jobs)
+    // Mark the job as FAILED so it doesn't re-crash infinitely
     try {
       const jobId = currentJobId;
       if (jobId) {
         const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        await db.from("sync_jobs").update({ locked_at: null }).eq("id", jobId);
-        console.log(`[process-jobs] Released lock on job ${jobId} after fatal error`);
+        await db.from("sync_jobs").update({
+          status: "failed",
+          locked_at: null,
+          error: `Fatal error: ${String(err)}`,
+          completed_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        console.log(`[process-jobs] Marked job ${jobId} as failed after fatal error`);
       }
     } catch (_unlockErr) {
-      console.error("[process-jobs] Failed to release lock after fatal error");
+      console.error("[process-jobs] Failed to mark job as failed after fatal error");
     }
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
   }
@@ -388,8 +393,13 @@ async function processExtractChunk(
           .eq("id", product.id)
           .eq("shop_id", shopId);
         flagged++;
+      } else {
+        // No vehicle signals detected — mark as "no_match" to prevent infinite reprocessing
+        await db.from("products")
+          .update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
+          .eq("id", product.id)
+          .eq("shop_id", shopId);
       }
-      // If no makes found, leave as unmapped
     } catch (err) {
       console.error(`[extract] Product ${product.id} failed:`, err);
     }
@@ -445,7 +455,7 @@ async function processPushChunk(
   // On first batch, ensure metafield definitions exist (idempotent)
   if (alreadyProcessed === 0) {
     // Only create definitions for the app-owned namespace (shown in Search & Discovery)
-    // Legacy autosync_fitment namespace metafields are still pushed for Liquid template
+    // Metafield definitions — app-owned namespace only ($app:vehicle_fitment)
     // compatibility but do NOT get definitions (to avoid duplicate filter entries)
     const defs = [
       { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json" },
@@ -916,7 +926,7 @@ async function processCollectionsChunk(
           title: `${make} Parts`,
           shopify_collection_id: numericId,
           handle: collection.handle,
-          image_url: makeRow?.logo_url ?? null,
+          image_url: logoMap.get(make) ?? null,
           seo_title: seoEnabled ? `${make} Performance Parts & Accessories` : null,
           seo_description: seoEnabled ? `Browse our range of performance parts and accessories for ${make} vehicles.` : null,
           synced_at: new Date().toISOString(),
@@ -1418,35 +1428,80 @@ async function processBulkPush(
 
   // Phase 2: If we already have operation IDs, poll for completion
   if (meta.metafieldsOperationId || meta.tagsOperationId) {
-    let allDone = true;
     let totalObjects = 0;
 
-    for (const opId of [meta.metafieldsOperationId, meta.tagsOperationId].filter(Boolean)) {
+    // Check metafields operation
+    if (meta.metafieldsOperationId) {
       const res = await fetch(apiUrl, {
         method: "POST", headers,
-        body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: opId } }),
+        body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: meta.metafieldsOperationId } }),
       });
       const json = await res.json();
       const op = json?.data?.node;
-      if (!op) continue;
+      if (op) {
+        totalObjects += op.objectCount ?? 0;
+        if (op.status === "RUNNING" || op.status === "CREATED") {
+          await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
+          console.log(`[bulk_push] Metafields still running: ${totalObjects} objects`);
+          return { processed: 0, hasMore: true };
+        }
+        if (op.status === "FAILED") return { processed: totalObjects, hasMore: false, error: `Metafields bulk op failed: ${op.errorCode}` };
 
-      totalObjects += op.objectCount ?? 0;
-      if (op.status === "RUNNING" || op.status === "CREATED") allDone = false;
-      if (op.status === "FAILED") return { processed: totalObjects, hasMore: false, error: `Bulk operation failed: ${op.errorCode}` };
+        // Metafields complete — start tags if not yet started
+        if (!meta.tagsOperationId && meta.pendingTagLines && meta.pendingTagMutation) {
+          console.log(`[bulk_push] Metafields done! Starting tags operation...`);
+          const startOp = async (jsonl: string, mutation: string): Promise<string | null> => {
+            const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+              query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "vars.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+            })});
+            const stageJson = await stageRes.json();
+            const target = stageJson?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+            if (!target) return null;
+            const form = new FormData();
+            for (const p of target.parameters) form.append(p.name, p.value);
+            form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
+            await fetch(target.url, { method: "POST", body: form });
+            const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+              query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+              variables: { mutation, stagedUploadPath: target.resourceUrl },
+            })});
+            const bulkJson = await bulkRes.json();
+            return bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id ?? null;
+          };
+          const tagOpId = await startOp(meta.pendingTagLines, meta.pendingTagMutation);
+          await db.from("sync_jobs").update({
+            metadata: JSON.stringify({ ...meta, tagsOperationId: tagOpId, pendingTagLines: null, pendingTagMutation: null }),
+          }).eq("id", job.id);
+          console.log(`[bulk_push] Tags operation started: ${tagOpId}`);
+          return { processed: 0, hasMore: true };
+        }
+      }
     }
 
-    if (allDone) {
-      // Mark all products as synced
-      await db.from("products").update({ synced_at: new Date().toISOString() })
-        .eq("shop_id", shopId).not("fitment_status", "eq", "unmapped");
-      console.log(`[bulk_push] Complete! ${totalObjects} objects processed`);
-      return { processed: totalObjects, hasMore: false };
+    // Check tags operation
+    if (meta.tagsOperationId) {
+      const res = await fetch(apiUrl, {
+        method: "POST", headers,
+        body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: meta.tagsOperationId } }),
+      });
+      const json = await res.json();
+      const op = json?.data?.node;
+      if (op) {
+        totalObjects += op.objectCount ?? 0;
+        if (op.status === "RUNNING" || op.status === "CREATED") {
+          await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
+          console.log(`[bulk_push] Tags still running: ${totalObjects} objects`);
+          return { processed: 0, hasMore: true };
+        }
+        if (op.status === "FAILED") return { processed: totalObjects, hasMore: false, error: `Tags bulk op failed: ${op.errorCode}` };
+      }
     }
 
-    // Still running — update progress and check again next tick
-    await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
-    console.log(`[bulk_push] Polling: ${totalObjects} objects so far`);
-    return { processed: 0, hasMore: true };
+    // Both operations complete
+    await db.from("products").update({ synced_at: new Date().toISOString() })
+      .eq("shop_id", shopId).in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
+    console.log(`[bulk_push] Complete! ${totalObjects} objects processed`);
+    return { processed: totalObjects, hasMore: false };
   }
 
   // Phase 1: Generate JSONL and start operations
@@ -1556,15 +1611,22 @@ async function processBulkPush(
   const tagMutation = `mutation call($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`;
 
   // Run sequentially — Shopify only allows ONE active bulk operation per app per store
+  // Start metafields first; tags will be started after metafields complete (in polling phase)
   const mfOpId = await startOp(mfLines.join("\n"), mfMutation);
-  const tagOpId = await startOp(tagLines.join("\n"), tagMutation);
 
-  console.log(`[bulk_push] Started operations: metafields=${mfOpId}, tags=${tagOpId}`);
+  console.log(`[bulk_push] Started metafields operation: ${mfOpId} (tags will start after completion)`);
 
-  // Save operation IDs to job metadata for polling
+  // Save operation ID and tag JSONL to job metadata for polling
+  // Tags will be started in Phase 2 after metafields complete
   await db.from("sync_jobs").update({
     total_items: allProducts.length,
-    metadata: JSON.stringify({ ...meta, metafieldsOperationId: mfOpId, tagsOperationId: tagOpId }),
+    metadata: JSON.stringify({
+      ...meta,
+      metafieldsOperationId: mfOpId,
+      tagsOperationId: null,
+      pendingTagLines: tagLines.join("\n"),
+      pendingTagMutation: tagMutation,
+    }),
   }).eq("id", job.id);
 
   return { processed: 0, hasMore: true };
@@ -1782,10 +1844,48 @@ async function processCleanupChunk(
         return { processed: deleted, hasMore: true };
       }
 
-      // All phases complete
-      return { processed: deleted, hasMore: false };
+      // Move to Phase 5: database cleanup
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, phase: "database", cursor: null }),
+      }).eq("id", job.id);
+      return { processed: deleted, hasMore: true };
     } catch (err) {
       return { processed: 0, hasMore: false, error: `Vehicle pages cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  // Phase 5: Clean database tables
+  if (currentPhase === "database") {
+    try {
+      console.log(`[cleanup] Phase 5: Cleaning database for ${shopId}`);
+      // Reset all products to unmapped and clear synced_at
+      await db.from("products").update({
+        fitment_status: "unmapped",
+        synced_at: null,
+      }).eq("shop_id", shopId);
+
+      // Delete all fitments
+      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+
+      // Delete collection mappings
+      await db.from("collection_mappings").delete().eq("shop_id", shopId);
+
+      // Delete vehicle page sync records
+      await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
+
+      // Delete active makes
+      await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
+
+      // Reset tenant counts
+      await db.from("tenants").update({
+        product_count: 0,
+        fitment_count: 0,
+      }).eq("shop_id", shopId);
+
+      console.log(`[cleanup] Phase 5 complete — all database records cleaned for ${shopId}`);
+      return { processed: 1, hasMore: false };
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Database cleanup error: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
