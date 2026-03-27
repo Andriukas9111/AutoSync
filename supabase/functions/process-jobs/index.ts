@@ -585,14 +585,9 @@ async function processPushChunk(
         const metafields = [
           // JSON data blob (for display widgets) — app-owned for security
           { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fitmentData), ownerId: gid },
-          // Legacy namespace — Liquid templates read from this (no $app: prefix in Liquid)
-          { namespace: "autosync_fitment", key: "vehicles", type: "json", value: JSON.stringify(fitmentData), ownerId: gid },
           // List metafields (for Search & Discovery filters)
           { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...seenMakes].sort()), ownerId: gid },
           { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...seenModels].sort()), ownerId: gid },
-          // Legacy make/model names for Liquid templates
-          { namespace: "autosync_fitment", key: "make_names", type: "list.single_line_text_field", value: JSON.stringify([...seenMakes].sort()), ownerId: gid },
-          { namespace: "autosync_fitment", key: "model_names", type: "list.single_line_text_field", value: JSON.stringify([...seenModels].sort()), ownerId: gid },
         ];
 
         // Add year metafield if we have year data
@@ -669,11 +664,18 @@ async function processPushChunk(
         .limit(1000);
 
       if (makeRows && makeRows.length > 0) {
-        // Clear and re-insert — ensures deactivated makes with no products are removed
-        await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
-        const inserts = makeRows.map((m: { id: string }) => ({ shop_id: shopId, ymme_make_id: m.id }));
-        await db.from("tenant_active_makes").insert(inserts);
-        console.log(`[push] Synced active makes: ${makeRows.length} (only those with fitments)`);
+        // Upsert active makes — avoids brief empty window that delete+insert causes
+        const upserts = makeRows.map((m: { id: string }) => ({ shop_id: shopId, ymme_make_id: m.id }));
+        await db.from("tenant_active_makes").upsert(upserts, { onConflict: "shop_id,ymme_make_id" });
+
+        // Remove makes that are no longer in the active set
+        const activeMakeIds = makeRows.map((m: { id: string }) => m.id);
+        await db.from("tenant_active_makes")
+          .delete()
+          .eq("shop_id", shopId)
+          .not("ymme_make_id", "in", `(${activeMakeIds.join(",")})`);
+
+        console.log(`[push] Synced active makes: ${makeRows.length} (upserted, stale removed)`);
       }
     }
   } catch (err) {

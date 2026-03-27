@@ -183,7 +183,7 @@ export async function pushToShopify(
         .from("products")
         .select("id, shopify_product_id")
         .eq("shop_id", shopId)
-        .not("fitment_status", "eq", "unmapped")
+        .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"])
         .not("shopify_product_id", "is", null)  // Skip products without Shopify ID (avoids gid://shopify/Product/null)
         .order("id", { ascending: true })
         .range(pOffset, pOffset + 999);

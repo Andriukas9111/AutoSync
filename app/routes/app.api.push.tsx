@@ -44,17 +44,20 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
-  // Duplicate job prevention
-  const { data: existingPushJob } = await db
+  // Concurrency guard — prevent push while cleanup or another push is running
+  const { data: conflictingJob } = await db
     .from("sync_jobs")
-    .select("id")
+    .select("id, type")
     .eq("shop_id", shopId)
-    .eq("type", "push")
-    .in("status", ["running", "pending"])
+    .in("type", ["push", "cleanup"])
+    .in("status", ["running", "pending", "processing"])
     .maybeSingle();
 
-  if (existingPushJob) {
-    return data({ error: "A push operation is already in progress" }, { status: 409 });
+  if (conflictingJob) {
+    const msg = conflictingJob.type === "push"
+      ? "A push operation is already in progress"
+      : `Cannot start push while a ${conflictingJob.type} job is running`;
+    return data({ error: msg }, { status: 409 });
   }
 
   // Get the total count of pushable products (must match Edge Function worker predicate)

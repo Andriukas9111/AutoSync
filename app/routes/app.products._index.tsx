@@ -25,27 +25,20 @@ import {
   Thumbnail,
   Box,
   Button,
-  Filters,
-  ChoiceList,
   Divider,
-  IndexFilters,
   Icon,
-  useSetIndexFiltersMode,
   useIndexResourceState,
-  type IndexFiltersProps,
 } from "@shopify/polaris";
 import {
   SearchIcon,
   ProductIcon,
   FilterIcon,
   ListBulletedIcon,
-  ChartVerticalFilledIcon,
   ImportIcon,
   WandIcon,
   TargetIcon,
   AlertTriangleIcon,
   AlertCircleIcon,
-  FlagIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";

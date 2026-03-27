@@ -15,7 +15,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { assertFeature, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
+import { assertFeature, assertFitmentLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 import {
   buildVehicleProfile,
   buildSearchPatterns,
@@ -424,7 +424,7 @@ export async function action({ request }: ActionFunctionArgs) {
             }
             return true;
           }).slice(0, 5);
-          const inserts = top.map((s) => ({
+          let inserts = top.map((s) => ({
             product_id: product.id, shop_id: shopId,
             make: s.make.name, model: s.model?.name ?? null,
             variant: s.engine?.name ?? null,
@@ -437,6 +437,39 @@ export async function action({ request }: ActionFunctionArgs) {
             extraction_method: "smart", confidence_score: s.confidence,
             source_text: product.title ?? "",
           }));
+
+          // Deduplicate: skip fitments that already exist for this product+engine
+          const existingIds = inserts.filter(i => i.ymme_engine_id).map(i => i.ymme_engine_id);
+          if (existingIds.length > 0) {
+            const { data: existing } = await db.from("vehicle_fitments")
+              .select("ymme_engine_id")
+              .eq("product_id", product.id)
+              .eq("shop_id", shopId)
+              .in("ymme_engine_id", existingIds as string[]);
+            const existingSet = new Set((existing ?? []).map(e => e.ymme_engine_id));
+            inserts = inserts.filter(i => !i.ymme_engine_id || !existingSet.has(i.ymme_engine_id));
+          }
+
+          if (inserts.length === 0) {
+            // All fitments already exist — mark as auto_mapped without inserting duplicates
+            await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkAutoMapped++;
+            continue;
+          }
+
+          // Enforce fitment limit before inserting
+          try {
+            await assertFitmentLimit(shopId);
+          } catch (limitErr) {
+            if (limitErr instanceof BillingGateError) {
+              // Plan limit reached — flag remaining products instead of inserting
+              await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkFlagged++;
+              continue;
+            }
+            throw limitErr;
+          }
+
           const { error: fitErr } = await db.from("vehicle_fitments").insert(inserts);
           if (!fitErr) {
             chunkFitments += inserts.length;

@@ -36,14 +36,11 @@ import db from "../lib/db.server";
 import { getPlanLimits, getTenant, assertFeature, PLAN_LIMITS } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
-import { pushToShopify } from "../lib/pipeline/push.server";
-import { createSmartCollections } from "../lib/pipeline/collections.server";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
-import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner } from "../lib/design";
+import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner, formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -194,7 +191,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
-    .not("fitment_status", "eq", "unmapped");
+    .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
 
   // Create push job — Edge Function will process it
   if (pushTags || pushMetafields) {
@@ -561,6 +558,7 @@ export default function Push() {
                   <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
                   <input type="hidden" name="strategy" value={strategy} />
                   <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
+                  <input type="hidden" name="autoActivateMakes" value={autoActivateMakes ? "true" : "false"} />
 
                   <BlockStack gap="300">
                     <InlineStack align="start" gap="300">

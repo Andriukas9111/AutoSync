@@ -265,18 +265,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Full Cleanup — Shopify + DB ----
   if (_action === "full_cleanup") {
-    // Create a background cleanup job — Edge Function will process in batches
-    // This handles stores of ANY size without timing out
-    const { data: existingJob } = await db
+    // Check for ANY conflicting job (cleanup, push, or collections)
+    const { data: conflictingJob } = await db
       .from("sync_jobs")
-      .select("id")
+      .select("id, type")
       .eq("shop_id", shopId)
-      .eq("type", "cleanup")
+      .in("type", ["push", "collections", "cleanup"])
       .in("status", ["running", "pending", "processing"])
       .maybeSingle();
 
-    if (existingJob) {
-      return data({ error: "A cleanup operation is already in progress" }, { status: 409 });
+    if (conflictingJob) {
+      return data({ error: `Cannot start cleanup while a ${conflictingJob.type} job is running` }, { status: 409 });
     }
 
     // 1. DB cleanup first (instant)

@@ -139,6 +139,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     config.host = String(formData.get("ftp_host") || "").trim();
     config.port = parseInt(String(formData.get("ftp_port") || "21"), 10);
     config.username = String(formData.get("ftp_username") || "").trim();
+    // TODO: FTP passwords are stored in plaintext in the providers.config JSONB column.
+    // This needs encryption at rest (e.g. AES-256 via a KMS key) before production launch.
+    // Never log the config object or password value.
     config.password = String(formData.get("ftp_password") || "").trim();
     config.remotePath = String(formData.get("ftp_path") || "").trim();
     config.protocol = String(formData.get("ftp_protocol") || "ftp");
