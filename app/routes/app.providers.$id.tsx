@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useFetcher } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, Outlet, useLocation } from "react-router";
 import { data, redirect } from "react-router";
 import {
   Page, Card, InlineStack, BlockStack, Text,
@@ -224,6 +224,7 @@ export default function ProviderDetail() {
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
+  const location = useLocation();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -286,6 +287,12 @@ export default function ProviderDetail() {
       setTestingConnection(false);
     }
   }, [provider.id]);
+
+  // If we're on a child route (import, products, imports), render the child only
+  const isChildRoute = /\/(import|products|imports)(\/|$|\?)/.test(location.pathname);
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   return (
     <Page
