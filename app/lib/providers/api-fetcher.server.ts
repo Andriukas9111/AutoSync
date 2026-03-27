@@ -69,9 +69,10 @@ export async function fetchFromApi(
     throw new Error(`Invalid API endpoint URL: ${endpoint}`);
   }
 
-  // Build headers
+  // Build headers — include User-Agent to avoid 403 blocks from APIs that reject default Node UA
   const headers: Record<string, string> = {
-    Accept: "application/json",
+    Accept: "application/json, text/csv, text/xml, */*",
+    "User-Agent": "AutoSync/3.0 (Shopify App; +https://autosync-v3.vercel.app)",
     ...extraHeaders,
   };
 
