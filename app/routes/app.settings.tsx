@@ -677,16 +677,12 @@ export default function Settings() {
                     return (
                       <div key={filter.name} style={statMiniStyle}>
                         <InlineStack gap="200" blockAlign="center" wrap={false}>
-                          <div style={{
-                            width: 24, height: 24, borderRadius: 6,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            backgroundColor: available
-                              ? "var(--p-color-bg-fill-success-secondary)"
-                              : "var(--p-color-bg-fill-critical-secondary)",
-                            flexShrink: 0,
-                          }}>
-                            <Icon source={available ? CheckSmallIcon : LockIcon} tone={available ? "success" : "critical"} />
-                          </div>
+                          <IconBadge
+                            icon={available ? CheckSmallIcon : LockIcon}
+                            bg={available ? "var(--p-color-bg-fill-success-secondary)" : "var(--p-color-bg-fill-critical-secondary)"}
+                            color={available ? "var(--p-color-icon-success)" : "var(--p-color-icon-critical)"}
+                            size={24}
+                          />
                           <BlockStack gap="050">
                             <InlineStack gap="200" blockAlign="center">
                               <Text as="p" variant="bodyMd" fontWeight="semibold">{filter.name}</Text>
