@@ -1586,7 +1586,19 @@ async function processCleanupChunk(
 
   const currentPhase = meta.current_phase ?? "tags";
   const cursor = meta.cursor ?? null;
-  const CLEANUP_BATCH = 50;
+  const CLEANUP_BATCH = 250; // Fetch 250 per page for speed
+  const PARALLEL = 10; // Process 10 concurrent Shopify API calls
+
+  // Helper: process array in parallel batches
+  async function parallelBatch<T>(items: T[], fn: (item: T) => Promise<number>): Promise<number> {
+    let total = 0;
+    for (let i = 0; i < items.length; i += PARALLEL) {
+      const chunk = items.slice(i, i + PARALLEL);
+      const results = await Promise.all(chunk.map(fn));
+      total += results.reduce((a, b) => a + b, 0);
+    }
+    return total;
+  }
 
   // Phase 1: Remove _autosync_ tags from products
   if (currentPhase === "tags") {
@@ -1601,18 +1613,19 @@ async function processCleanupChunk(
       const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
       const edges = result?.data?.products?.edges ?? [];
       const pageInfo = result?.data?.products?.pageInfo ?? {};
-      let removed = 0;
 
-      for (const { node } of edges) {
-        const autoTags = (node.tags ?? []).filter((t: string) => t.startsWith("_autosync_"));
-        if (autoTags.length > 0) {
+      // Process tag removals in parallel batches of 10
+      const removed = await parallelBatch(edges, async ({ node }: { node: Record<string, unknown> }) => {
+        const autoTags = ((node.tags as string[]) ?? []).filter((t: string) => t.startsWith("_autosync_"));
+        if (autoTags.length === 0) return 0;
+        try {
           await shopifyGraphQL(shopId, accessToken,
             `mutation($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { message } } }`,
-            { id: node.id, tags: autoTags }
+            { id: node.id as string, tags: autoTags }
           );
-          removed += autoTags.length;
-        }
-      }
+          return autoTags.length;
+        } catch (_e) { return 0; }
+      });
 
       if (pageInfo.hasNextPage) {
         await db.from("sync_jobs").update({
@@ -1651,23 +1664,23 @@ async function processCleanupChunk(
       const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
       const edges = result?.data?.products?.edges ?? [];
       const pageInfo = result?.data?.products?.pageInfo ?? {};
-      let removed = 0;
-
-      for (const { node } of edges) {
-        const mfEdges = node?.metafields?.edges ?? [];
-        if (mfEdges.length > 0) {
-          const metafields = mfEdges.map((e: Record<string, Record<string, string>>) => ({
-            ownerId: node.id,
-            namespace: e.node.namespace,
-            key: e.node.key,
-          }));
+      // Process metafield removals in parallel batches of 10
+      const removed = await parallelBatch(edges, async ({ node }: { node: Record<string, unknown> }) => {
+        const mfEdges = (node?.metafields as Record<string, unknown>)?.edges as Array<Record<string, Record<string, string>>> ?? [];
+        if (mfEdges.length === 0) return 0;
+        const metafields = mfEdges.map((e) => ({
+          ownerId: node.id as string,
+          namespace: e.node.namespace,
+          key: e.node.key,
+        }));
+        try {
           await shopifyGraphQL(shopId, accessToken,
             `mutation($metafields: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $metafields) { deletedMetafields { key } userErrors { message } } }`,
             { metafields }
           );
-          removed += mfEdges.length;
-        }
-      }
+          return mfEdges.length;
+        } catch (_e) { return 0; }
+      });
 
       if (pageInfo.hasNextPage) {
         await db.from("sync_jobs").update({
@@ -1693,20 +1706,19 @@ async function processCleanupChunk(
         `{ collections(first: 50, query: "title:*Parts") { edges { node { id title handle } } } }`
       );
       const edges = result?.data?.collections?.edges ?? [];
-      let deleted = 0;
+      const toDelete = edges.filter(({ node }: { node: Record<string, string> }) =>
+        node.handle && (node.handle.includes("-parts") || node.handle.includes("_parts"))
+      );
 
-      for (const { node } of edges) {
-        // Only delete collections with handles matching our pattern
-        if (node.handle && (node.handle.includes("-parts") || node.handle.includes("_parts"))) {
-          try {
-            await shopifyGraphQL(shopId, accessToken,
-              `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
-              { input: { id: node.id } }
-            );
-            deleted++;
-          } catch (_e) { /* skip individual failures */ }
-        }
-      }
+      const deleted = await parallelBatch(toDelete, async ({ node }: { node: Record<string, string> }) => {
+        try {
+          await shopifyGraphQL(shopId, accessToken,
+            `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
+            { input: { id: node.id } }
+          );
+          return 1;
+        } catch (_e) { return 0; }
+      });
 
       // Phase 3 done — move to vehicle pages
       await db.from("sync_jobs").update({
@@ -1722,21 +1734,20 @@ async function processCleanupChunk(
   if (currentPhase === "vehicle_pages") {
     try {
       const result = await shopifyGraphQL(shopId, accessToken,
-        `{ metaobjects(type: "vehicle_specification", first: 50${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id } } pageInfo { hasNextPage endCursor } } }`
+        `{ metaobjects(type: "vehicle_specification", first: ${CLEANUP_BATCH}${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id } } pageInfo { hasNextPage endCursor } } }`
       );
       const edges = result?.data?.metaobjects?.edges ?? [];
       const pageInfo = result?.data?.metaobjects?.pageInfo ?? {};
-      let deleted = 0;
 
-      for (const { node } of edges) {
+      const deleted = await parallelBatch(edges, async ({ node }: { node: Record<string, string> }) => {
         try {
           await shopifyGraphQL(shopId, accessToken,
             `mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { message } } }`,
             { id: node.id }
           );
-          deleted++;
-        } catch (_e) { /* skip individual failures */ }
-      }
+          return 1;
+        } catch (_e) { return 0; }
+      });
 
       if (pageInfo.hasNextPage) {
         await db.from("sync_jobs").update({
