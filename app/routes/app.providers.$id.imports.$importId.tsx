@@ -35,6 +35,7 @@ import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { formatDate } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -65,18 +66,6 @@ const FITMENT_STATUS_CONFIG: Record<
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "\u2014";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatDuration(start: string | null, end: string | null): string {
   if (!start || !end) return "\u2014";

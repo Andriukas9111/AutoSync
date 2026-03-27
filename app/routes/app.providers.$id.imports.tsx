@@ -18,6 +18,7 @@ import {
 } from "@shopify/polaris";
 
 import { authenticate } from "../shopify.server";
+import { formatDate } from "../lib/design";
 import db from "../lib/db.server";
 
 // ---------------------------------------------------------------------------
@@ -89,18 +90,6 @@ export default function ProviderImportHistory() {
   const { provider, imports, totalImports, totalPages, currentPage } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
-
-  function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
 
   function formatDuration(start: string | null, end: string | null): string {
     if (!start || !end) return "—";

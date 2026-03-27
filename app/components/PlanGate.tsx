@@ -15,6 +15,7 @@ import { LockIcon, CheckSmallIcon, ChevronDownIcon, ChevronUpIcon } from "@shopi
 import { useNavigate } from "react-router";
 import type { PlanTier, PlanLimits } from "../lib/types";
 import { PLAN_PRICING, PLAN_HIGHLIGHTS, collapsibleTransition } from "../lib/design";
+import { IconBadge } from "./IconBadge";
 
 // ---------------------------------------------------------------------------
 // Lookup maps — all dynamic, change once here updates everywhere
@@ -127,18 +128,7 @@ export function PlanGate({
       <BlockStack gap="300">
         {/* Row 1: Lock icon + Feature name + Plan badge */}
         <InlineStack gap="200" blockAlign="center" wrap={false}>
-          <div style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "var(--p-color-bg-fill-critical-secondary)",
-            flexShrink: 0,
-          }}>
-            <Icon source={LockIcon} tone="critical" />
-          </div>
+          <IconBadge icon={LockIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
           <Text as="span" variant="bodyMd" fontWeight="semibold">
             {featureLabel}
           </Text>

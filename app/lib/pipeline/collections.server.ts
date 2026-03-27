@@ -557,54 +557,6 @@ async function publishablePublishFallback(admin: any, resourceId: string, public
   }
 }
 
-/**
- * Legacy: Publishes a resource to all active sales channels (queries each time).
- * Kept as fallback. Prefer publishResourceFast with pre-cached IDs.
- */
-async function publishToAllChannels(admin: any, resourceId: string) {
-  try {
-    // Get all available publications (sales channels)
-    const pubResp = await admin.graphql(`query {
-      publications(first: 20) {
-        nodes { id name }
-      }
-    }`);
-    const pubJson = await pubResp.json();
-    const publications = pubJson?.data?.publications?.nodes ?? [];
-
-    console.log(`[collections] Found ${publications.length} sales channels:`, publications.map((p: any) => p.name).join(", "));
-
-    if (publications.length === 0) {
-      console.warn("[collections] No sales channels found — collection will not be visible");
-      return;
-    }
-
-    // Publish to each channel
-    const publishResp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
-      publishablePublish(id: $id, input: $input) {
-        publishable { availablePublicationsCount { count } }
-        userErrors { field message }
-      }
-    }`, {
-      variables: {
-        id: resourceId,
-        input: publications.map((p: any) => ({ publicationId: p.id })),
-      },
-    });
-
-    const publishJson = await publishResp.json();
-    const publishErrors = publishJson?.data?.publishablePublish?.userErrors;
-    if (publishErrors?.length) {
-      console.error(`[collections] Publish errors for ${resourceId}:`, publishErrors.map((e: any) => e.message).join(", "));
-    } else {
-      const pubCount = publishJson?.data?.publishablePublish?.publishable?.availablePublicationsCount?.count;
-      console.log(`[collections] Published ${resourceId} to ${pubCount ?? "?"} channels`);
-    }
-  } catch (err) {
-    console.error("[collections] publishToAllChannels error:", err instanceof Error ? err.message : err);
-  }
-}
-
 // ── Shopify Lookups ─────────────────────────────────────────
 
 async function findExistingCollection(

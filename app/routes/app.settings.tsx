@@ -171,6 +171,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .update({ fitment_status: "unmapped" })
       .eq("shop_id", shopId);
 
+    // Reset fitment_count to 0 (was drifting — only incremented, never decremented)
+    await db
+      .from("tenants")
+      .update({ fitment_count: 0 })
+      .eq("shop_id", shopId);
+
+    // Also clean tenant_active_makes since fitments are gone
+    await db
+      .from("tenant_active_makes")
+      .delete()
+      .eq("shop_id", shopId);
+
     return data({
       success: true,
       message: "All fitment data deleted and product statuses reset to unmapped.",

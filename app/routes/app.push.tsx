@@ -38,7 +38,7 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
-import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner, formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner, formatJobType, formatDate, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
@@ -268,19 +268,6 @@ const JOB_STATUS_BADGES: Record<string, { tone: "success" | "info" | "warning" |
   cancelled: { tone: "warning", label: "Cancelled" },
 };
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  const d = new Date(dateStr);
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// formatJobType imported from ../lib/design
 
 
 // ---------------------------------------------------------------------------

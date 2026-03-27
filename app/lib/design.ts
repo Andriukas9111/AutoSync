@@ -367,6 +367,14 @@ export const PLAN_PRICING: Record<string, string> = {
 };
 
 /** Key highlights for each plan tier (used in PlanGate upgrade prompt) */
+/** Format a date string for display (e.g., "26 Mar, 23:15") */
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "\u2014";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
 export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
   starter: [
     "Up to 500 products & 2,500 fitments",

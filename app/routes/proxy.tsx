@@ -1835,7 +1835,20 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ error: "Invalid signature" }, 401);
   }
 
+  const shop = params.get("shop");
+  if (!shop) {
+    return json({ error: "Missing shop parameter" }, 400);
+  }
+
   const path = params.get("path");
+
+  // Rate limiting on POST endpoints (DVLA plate lookups cost money per request)
+  const rateLimitEndpoint = path === "plate-lookup" ? "plate-lookup"
+    : path === "vin-decode" ? "vin-decode"
+    : "track";
+  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
+  }
 
   const body = await request.text();
 

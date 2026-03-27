@@ -46,7 +46,7 @@ import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
-import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle, formatJobType, formatDate } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Loader — aggregate ALL system stats for the dashboard
@@ -185,32 +185,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "\u2014";
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-function formatJobType(type: string): string {
-  const labels: Record<string, string> = {
-    fetch: "Fetch Products",
-    extract: "Auto Extract",
-    push: "Push to Shopify",
-    collections: "Create Collections",
-  };
-  return labels[type] ?? type;
-}
 
 // ---------------------------------------------------------------------------
 // Quick Action Card sub-component
