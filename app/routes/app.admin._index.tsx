@@ -80,6 +80,8 @@ import type { PlanTier, Tenant } from "../lib/types";
 import { PLAN_ORDER } from "../lib/types";
 import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server";
 import { isAdminShop } from "../lib/admin.server";
+import { removeAllTags, removeAllMetafields, removeAllCollections } from "../lib/pipeline/cleanup.server";
+import { deleteVehiclePages } from "../lib/pipeline/vehicle-pages.server";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -471,6 +473,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "admin-purge-tenant": {
       const targetShop = formData.get("shop_id") as string;
       if (!targetShop) return data({ ok: false, intent: "admin-purge-tenant", message: "No shop specified" });
+
+      // If purging own store, also clean Shopify (tags, metafields, collections, metaobjects)
+      let shopifyCleanupMsg = "";
+      if (targetShop === session.shop) {
+        try {
+          const [tagResult, mfResult, colResult, vpResult] = await Promise.all([
+            removeAllTags(targetShop, admin).catch(() => ({ removed: 0, errors: [] })),
+            removeAllMetafields(targetShop, admin).catch(() => ({ removed: 0, errors: [] })),
+            removeAllCollections(targetShop, admin).catch(() => ({ deleted: 0, errors: [] })),
+            deleteVehiclePages(admin, targetShop).catch(() => ({ deleted: 0 })),
+          ]);
+          shopifyCleanupMsg = ` Shopify: ${tagResult.removed} tags, ${mfResult.removed} metafields, ${colResult.deleted} collections, ${(vpResult as any).deleted ?? 0} vehicle pages removed.`;
+        } catch (err) {
+          shopifyCleanupMsg = " Shopify cleanup had errors: " + (err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      // Database cleanup
       await db.from("vehicle_fitments").delete().eq("shop_id", targetShop);
       await db.from("tenant_active_makes").delete().eq("shop_id", targetShop);
       await db.from("collection_mappings").delete().eq("shop_id", targetShop);
@@ -478,12 +498,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await db.from("products").delete().eq("shop_id", targetShop);
       await db.from("providers").delete().eq("shop_id", targetShop);
       await db.from("sync_jobs").delete().eq("shop_id", targetShop);
+      await db.from("vehicle_page_sync").delete().eq("shop_id", targetShop);
+      await db.from("tenants").update({ fitment_count: 0, product_count: 0 }).eq("shop_id", targetShop);
       try {
         await db.from("admin_activity_log").insert({
           admin_shop_id: session.shop, action: "purge_tenant", target_shop_id: targetShop, details: {},
         });
       } catch { /* graceful */ }
-      return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.` });
+      return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.${shopifyCleanupMsg}` });
     }
     case "admin-purge-fitments": {
       const targetShop = formData.get("shop_id") as string;

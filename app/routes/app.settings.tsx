@@ -20,6 +20,7 @@ import {
   Badge,
   ProgressBar,
   List,
+  Icon,
 } from "@shopify/polaris";
 import {
   ExportIcon,
