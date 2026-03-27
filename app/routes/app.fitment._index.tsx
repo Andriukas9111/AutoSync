@@ -397,9 +397,9 @@ export default function Fitment() {
 
         {/* CTA Cards — CSS grid for equal-height columns */}
         <div style={equalHeightGridStyle(2)}>
-          <div className="stretch-card" style={{ display: "grid" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
               <Card>
-                <BlockStack gap="400">
+                <div style={{ display: "flex", flexDirection: "column", minHeight: "100%", gap: "16px" }}>
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">Auto Extraction</Text>
@@ -423,18 +423,20 @@ export default function Fitment() {
                       <p>{extractResult.error}</p>
                     </Banner>
                   )}
-                  <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits} allLimits={allLimits}>
-                    <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
-                      {isExtracting ? "Extracting..." : "Run Auto Extract"}
-                    </Button>
-                  </PlanGate>
-                </BlockStack>
+                  <div style={{ marginTop: "auto" }}>
+                    <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits} allLimits={allLimits}>
+                      <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
+                        {isExtracting ? "Extracting..." : "Run Auto Extract"}
+                      </Button>
+                    </PlanGate>
+                  </div>
+                </div>
               </Card>
           </div>
 
-          <div className="stretch-card" style={{ display: "grid" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
               <Card>
-                <BlockStack gap="400">
+                <div style={{ display: "flex", flexDirection: "column", minHeight: "100%", gap: "16px" }}>
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">Manual Mapping</Text>
@@ -446,10 +448,12 @@ export default function Fitment() {
                   <Text as="p" variant="bodySm" tone="subdued">
                     Available on all plans including Free. No limits on manual mapping.
                   </Text>
-                  <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
-                    Start Mapping
-                  </Button>
-                </BlockStack>
+                  <div style={{ marginTop: "auto" }}>
+                    <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
+                      Start Mapping
+                    </Button>
+                  </div>
+                </div>
               </Card>
           </div>
         </div>
