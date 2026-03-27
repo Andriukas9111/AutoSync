@@ -1645,13 +1645,18 @@ async function processCleanupChunk(
   }
 
   // Phase 2: Remove vehicle_fitment metafields from products
+  // Search by metafield existence (NOT by tags — tags may already be removed in phase 1)
+  // Clean BOTH app-owned ($app:vehicle_fitment) AND legacy (autosync_fitment) namespaces
   if (currentPhase === "metafields") {
     const searchQuery = `{
-      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "tag:_autosync_*") {
+      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "metafield_namespace:vehicle_fitment OR metafield_namespace:autosync_fitment") {
         edges {
           node {
             id
-            metafields(first: 20, namespace: "$app:vehicle_fitment") {
+            mfApp: metafields(first: 20, namespace: "$app:vehicle_fitment") {
+              edges { node { id namespace key } }
+            }
+            mfLegacy: metafields(first: 20, namespace: "autosync_fitment") {
               edges { node { id namespace key } }
             }
           }
@@ -1665,10 +1670,13 @@ async function processCleanupChunk(
       const edges = result?.data?.products?.edges ?? [];
       const pageInfo = result?.data?.products?.pageInfo ?? {};
       // Process metafield removals in parallel batches of 10
+      // Combine both app-owned and legacy metafields
       const removed = await parallelBatch(edges, async ({ node }: { node: Record<string, unknown> }) => {
-        const mfEdges = (node?.metafields as Record<string, unknown>)?.edges as Array<Record<string, Record<string, string>>> ?? [];
-        if (mfEdges.length === 0) return 0;
-        const metafields = mfEdges.map((e) => ({
+        const appEdges = ((node?.mfApp as Record<string, unknown>)?.edges ?? []) as Array<Record<string, Record<string, string>>>;
+        const legacyEdges = ((node?.mfLegacy as Record<string, unknown>)?.edges ?? []) as Array<Record<string, Record<string, string>>>;
+        const allEdges = [...appEdges, ...legacyEdges];
+        if (allEdges.length === 0) return 0;
+        const metafields = allEdges.map((e) => ({
           ownerId: node.id as string,
           namespace: e.node.namespace,
           key: e.node.key,
@@ -1678,7 +1686,7 @@ async function processCleanupChunk(
             `mutation($metafields: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $metafields) { deletedMetafields { key } userErrors { message } } }`,
             { metafields }
           );
-          return mfEdges.length;
+          return allEdges.length;
         } catch (_e) { return 0; }
       });
 
