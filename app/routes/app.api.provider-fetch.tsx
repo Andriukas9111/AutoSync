@@ -22,6 +22,67 @@ export async function action({ request }: ActionFunctionArgs) {
   const providerId = String(formData.get("provider_id") || "").trim();
   const actionType = String(formData.get("_action") || "").trim();
 
+  // ── Inline test (no provider ID needed — for creation page) ──
+  if (!providerId && actionType === "test") {
+    const type = String(formData.get("type") || "").trim();
+    if (type === "ftp") {
+      try {
+        const host = String(formData.get("host") || "").trim();
+        const port = parseInt(String(formData.get("port") || "21"), 10);
+        const username = String(formData.get("username") || "").trim();
+        const password = String(formData.get("password") || "").trim();
+        const remotePath = String(formData.get("remotePath") || "").trim();
+        const protocol = String(formData.get("protocol") || "ftp").trim();
+
+        if (protocol === "sftp") {
+          return data({ success: false, error: "SFTP is not yet supported. Please use standard FTP." });
+        }
+
+        const result = await testFtpConnection({
+          host, port, username, password, remotePath,
+        });
+
+        return data({
+          success: true,
+          message: `Connected! Found ${result.files.length} files.`,
+          files: result.files.slice(0, 20),
+        });
+      } catch (err) {
+        return data({
+          success: false,
+          error: `Connection failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+    if (type === "api") {
+      try {
+        const endpoint = String(formData.get("endpoint") || "").trim();
+        const authType = String(formData.get("authType") || "none") as "none" | "api_key" | "bearer" | "basic";
+        const authValue = String(formData.get("authValue") || "").trim();
+
+        if (!endpoint) {
+          return data({ success: false, error: "API endpoint URL is required." });
+        }
+
+        const result = await fetchFromApi({
+          endpoint, authType, authValue, itemsPath: "", responseFormat: "json",
+        });
+
+        return data({
+          success: true,
+          message: `Connected! Found ${result.itemCount} items.`,
+          itemCount: result.itemCount,
+        });
+      } catch (err) {
+        return data({
+          success: false,
+          error: `Connection failed: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+    return data({ error: "Unsupported provider type for inline test." }, { status: 400 });
+  }
+
   if (!providerId) {
     return data({ error: "Provider ID is required." }, { status: 400 });
   }
