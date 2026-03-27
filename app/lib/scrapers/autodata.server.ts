@@ -829,10 +829,12 @@ export async function fetchModelsForBrand(brandPageUrl: string): Promise<Scraped
       // Extract years from the red div, e.g. "2019 - 2024" or "2019 -"
       const yearText = yearDiv || rawName;
       const yearMatch = yearText.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?\)?/i);
-      const yearFrom = yearMatch ? parseInt(yearMatch[1], 10) : 0;
-      const yearTo = yearMatch && yearMatch[2] && /\d{4}/.test(yearMatch[2])
-        ? parseInt(yearMatch[2], 10)
-        : null;
+      const rawYearFrom = yearMatch ? parseInt(yearMatch[1], 10) : null;
+      const rawYearTo = yearMatch && yearMatch[2] && /\d{4}/.test(yearMatch[2])
+        ? parseInt(yearMatch[2], 10) : null;
+      // Validate years are in sane range (1885-2028) — prevents model numbers like "1500", "3008" being stored as years
+      const yearFrom = rawYearFrom && rawYearFrom >= 1885 && rawYearFrom <= new Date().getFullYear() + 2 ? rawYearFrom : null;
+      const yearTo = rawYearTo && rawYearTo >= 1885 && rawYearTo <= new Date().getFullYear() + 2 ? rawYearTo : null;
 
       // Clean the name
       const cleanName = rawName
@@ -1019,8 +1021,10 @@ async function parseEngineVariantsFromPage(
       powerHp: hp ? parseInt(hp[1], 10) : null,
       powerKw: kw ? parseInt(kw[1], 10) : null,
       torqueNm: nm ? parseInt(nm[1], 10) : null,
-      yearFrom: yr ? parseInt(yr[1], 10) : 0,
-      yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) ? parseInt(yr[2], 10) : null,
+      yearFrom: yr && parseInt(yr[1], 10) >= 1885 && parseInt(yr[1], 10) <= new Date().getFullYear() + 2
+        ? parseInt(yr[1], 10) : null,
+      yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) && parseInt(yr[2], 10) >= 1885 && parseInt(yr[2], 10) <= new Date().getFullYear() + 2
+        ? parseInt(yr[2], 10) : null,
       modification: name,
       powertrainType,
       specPageUrl,
