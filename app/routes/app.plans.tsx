@@ -693,7 +693,7 @@ export default function Plans() {
                 <thead>
                   <tr style={{ borderBottom: "2px solid var(--p-color-border)" }}>
                     {["Feature", "AutoSync", "Convermax", "EasySearch", "C: YMM", "PCFitment", "VFitz", "AutoFit AI", "PartFinder", "SearchAuto"].map((h, i) => (
-                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-emphasis)" : undefined, color: i === 1 ? "#fff" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
+                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-emphasis)" : undefined, color: i === 1 ? "var(--p-color-text-inverse)" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
                         {h}
                       </th>
                     ))}
@@ -729,7 +729,7 @@ export default function Plans() {
                           <td key={j} style={{
                             textAlign: "center", padding: "7px 6px",
                             fontWeight: isAutoSync ? 600 : 400,
-                            background: isAutoSync ? "rgba(0, 91, 210, 0.06)" : undefined,
+                            background: isAutoSync ? "var(--p-color-bg-surface-secondary)" : undefined,
                           }}>
                             {isYes ? (
                               <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>&#10003;</span>

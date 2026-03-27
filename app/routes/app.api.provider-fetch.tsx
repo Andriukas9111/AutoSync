@@ -6,12 +6,13 @@ import type { ActionFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { assertFeature, BillingGateError } from "../lib/billing.server";
+import { assertFeature, assertProductLimit, BillingGateError } from "../lib/billing.server";
 import { fetchFromApi } from "../lib/providers/api-fetcher.server";
 import { fetchFromFtp, testFtpConnection } from "../lib/providers/ftp-fetcher.server";
 import { parseFile } from "../lib/providers/universal-parser.server";
-import { getSmartMappings } from "../lib/providers/import-pipeline.server";
+import { getSmartMappings, runProviderImport } from "../lib/providers/import-pipeline.server";
 import { detectDuplicates, getTargetFields } from "../lib/providers/column-mapper.server";
+import type { ColumnMapping } from "../lib/providers/column-mapper.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -196,7 +197,115 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "Fetch is only available for API and FTP providers." }, { status: 400 });
   }
 
-  return data({ error: "Invalid action. Use 'test' or 'fetch'." }, { status: 400 });
+  // ── Import (re-fetch + run import pipeline) ────────────────
+  if (actionType === "import") {
+    // Plan gate: check product limit
+    try {
+      await assertProductLimit(shopId);
+    } catch (err: unknown) {
+      if (err instanceof BillingGateError) {
+        return data({ error: err.message }, { status: 403 });
+      }
+      throw err;
+    }
+
+    const mappingsRaw = String(formData.get("mappings") || "").trim();
+    const duplicateStrategy = String(
+      formData.get("duplicate_strategy") || "skip",
+    ).trim() as "skip" | "update" | "create_new";
+
+    let mappings: ColumnMapping[];
+    try {
+      mappings = JSON.parse(mappingsRaw) as ColumnMapping[];
+      if (!Array.isArray(mappings)) throw new Error("Mappings must be an array.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid JSON";
+      return data({ error: `Invalid mappings: ${message}` }, { status: 400 });
+    }
+
+    // Re-fetch data from the provider
+    let content: string;
+    let fileName: string;
+
+    if (provider.type === "api") {
+      const endpoint = String(config.endpoint ?? "");
+      if (!endpoint) {
+        return data({ error: "No API endpoint configured." }, { status: 400 });
+      }
+      try {
+        const result = await fetchFromApi({
+          endpoint,
+          authType: String(config.authType ?? "none") as "none" | "api_key" | "bearer" | "basic",
+          authValue: String(config.authValue ?? ""),
+          itemsPath: String(config.itemsPath ?? ""),
+          responseFormat: String(config.responseFormat ?? "json") as "json" | "csv" | "xml",
+        });
+        if (result.items.length === 0) {
+          return data({ error: "API returned no items." });
+        }
+        content = JSON.stringify(result.items);
+        fileName = `${provider.name}-api-import.json`;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Fetch failed";
+        return data({ error: message }, { status: 500 });
+      }
+    } else if (provider.type === "ftp") {
+      const host = String(config.host ?? "");
+      const remotePath = String(config.remotePath ?? "");
+      if (!host || !remotePath) {
+        return data({ error: "FTP host or remote path not configured." }, { status: 400 });
+      }
+      try {
+        const result = await fetchFromFtp({
+          host,
+          port: Number(config.port) || 21,
+          username: String(config.username ?? ""),
+          password: String(config.password ?? ""),
+          remotePath,
+          protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
+        });
+        if (!result.content || result.content.trim().length === 0) {
+          return data({ error: "FTP download returned empty file." });
+        }
+        content = result.content;
+        fileName = result.filename;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "FTP fetch failed";
+        return data({ error: message }, { status: 500 });
+      }
+    } else {
+      return data({ error: "Import action is only available for API and FTP providers." }, { status: 400 });
+    }
+
+    // Parse the fetched content
+    const parsed = await parseFile(content, fileName, {
+      maxPreviewRows: undefined, // No limit — import all rows
+    });
+
+    if (parsed.rows.length === 0) {
+      return data({ error: "No rows found in the fetched data." });
+    }
+
+    // Run import pipeline
+    try {
+      const result = await runProviderImport({
+        shopId,
+        providerId,
+        fileName,
+        fileSize: Buffer.byteLength(content, "utf-8"),
+        fileType: parsed.format,
+        mappings,
+        duplicateStrategy,
+        rows: parsed.rows,
+      });
+      return data(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Import failed";
+      return data({ error: `Import failed: ${message}` }, { status: 500 });
+    }
+  }
+
+  return data({ error: "Invalid action. Use 'test', 'fetch', or 'import'." }, { status: 400 });
 }
 
 // ---------------------------------------------------------------------------

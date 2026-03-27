@@ -5,7 +5,7 @@
  * and inventory gap analysis. Gated by dashboardAnalytics plan feature.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import {
@@ -44,6 +44,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import { statGridStyle, statMiniStyle } from "../lib/design";
 import type { PlanTier, PlanLimits } from "../lib/types";
+import { useAppData } from "../lib/use-app-data";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -563,28 +564,11 @@ export default function AnalyticsPage() {
 
   const [showExport, setShowExport] = useState(false);
 
-  // Live stats polling
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [liveCoverage, setLiveCoverage] = useState<{ total: number; mapped: number; fitments: number } | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) {
-          const r = await res.json();
-          if (r.stats) {
-            setLiveCoverage({
-              total: r.stats.total,
-              mapped: r.stats.autoMapped + r.stats.smartMapped + r.stats.manualMapped,
-              fitments: r.stats.fitments,
-            });
-          }
-        }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // Live stats polling via unified hook
+  const { stats: liveStats } = useAppData({
+    total: fitmentCoverage.total,
+    fitments: fitmentCoverage.withFitments,
+  });
 
   // ── Plan gate ──────────────────────────────────────────────
   if (gated || analyticsLevel === "none") {

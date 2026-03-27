@@ -1940,60 +1940,55 @@ export async function runIncrementalUpdate(options?: {
         // ── EXISTING BRAND: check for new models ──
         const makeId = existing.id;
 
-        // Get DB model count
-        const { count: dbModelCount } = await db
-          .from("ymme_models")
-          .select("id", { count: "exact", head: true })
-          .eq("make_id", makeId);
-
         // Scrape live model list
         await sleep(delayMs);
         const liveModels = await fetchModelsForBrand(brand.pageUrl);
-        const liveModelCount = liveModels.length;
 
-        if (liveModelCount > (dbModelCount ?? 0)) {
-          // ── Model count differs — find and scrape new models ──
+        // Load existing model names for comparison — compare by NAME ONLY
+        // (generation can differ between scrape runs, causing false "new" matches)
+        // NOTE: We compare NAME SETS, not counts. This catches new models even when
+        // old ones were removed (count stays the same) or names changed.
+        const { data: existingModels } = await db
+          .from("ymme_models")
+          .select("name")
+          .eq("make_id", makeId);
+
+        const existingModelNames = new Set(
+          (existingModels ?? []).map(
+            (m: { name: string }) => m.name.toLowerCase().trim(),
+          ),
+        );
+
+        const newModels = liveModels.filter(
+          (m) => !existingModelNames.has(m.name.toLowerCase().trim()),
+        );
+
+        if (newModels.length > 0) {
           console.log(
-            `[incremental] ${brand.name}: live=${liveModelCount} vs db=${dbModelCount ?? 0} — checking for new models`,
+            `[incremental] ${brand.name}: ${newModels.length} new model(s) found (live=${liveModels.length}, db=${existingModels?.length ?? 0})`,
           );
           brandsWithNewModels++;
 
-          // Load existing model names for comparison — compare by NAME ONLY
-          // (generation can differ between scrape runs, causing false "new" matches)
-          const { data: existingModels } = await db
-            .from("ymme_models")
-            .select("name")
-            .eq("make_id", makeId);
+          for (const model of newModels) {
+            try {
+              const modelId = await upsertModel(makeId, model);
+              if (!modelId) continue;
 
-          const existingModelNames = new Set(
-            (existingModels ?? []).map(
-              (m: { name: string }) => m.name.toLowerCase().trim(),
-            ),
-          );
+              newModelsCount++;
+              console.log(`[incremental]   NEW model: ${brand.name} ${model.name}`);
 
-          for (const model of liveModels) {
-            if (!existingModelNames.has(model.name.toLowerCase().trim())) {
-              // NEW model
-              try {
-                const modelId = await upsertModel(makeId, model);
-                if (!modelId) continue;
+              await logChange({
+                entity_type: "model",
+                entity_id: modelId,
+                action: "added",
+                entity_name: model.name,
+                parent_name: brand.name,
+              });
 
-                newModelsCount++;
-                console.log(`[incremental]   NEW model: ${brand.name} ${model.name}`);
-
-                await logChange({
-                  entity_type: "model",
-                  entity_id: modelId,
-                  action: "added",
-                  entity_name: model.name,
-                  parent_name: brand.name,
-                });
-
-                await sleep(delayMs);
-                await deepScrapeModel(modelId, model, brand.name);
-              } catch (err) {
-                errors.push(`Model error (${brand.name} ${model.name}): ${err instanceof Error ? err.message : String(err)}`);
-              }
+              await sleep(delayMs);
+              await deepScrapeModel(modelId, model, brand.name);
+            } catch (err) {
+              errors.push(`Model error (${brand.name} ${model.name}): ${err instanceof Error ? err.message : String(err)}`);
             }
           }
         }

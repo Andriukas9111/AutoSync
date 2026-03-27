@@ -15,7 +15,6 @@ import {
   Banner,
   Divider,
   Box,
-  Icon,
 } from "@shopify/polaris";
 import {
   ProductIcon,
@@ -239,24 +238,12 @@ function QuickActionCard({
       <BlockStack gap="200">
         <InlineStack gap="200" blockAlign="center" align="space-between">
           <InlineStack gap="200" blockAlign="center">
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: primary
-                  ? "var(--p-color-bg-fill-emphasis)"
-                  : "var(--p-color-bg-surface-secondary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: primary
-                  ? "var(--p-color-text-inverse)"
-                  : "var(--p-color-icon-emphasis)",
-              }}
-            >
-              <Icon source={icon} />
-            </div>
+            <IconBadge
+              icon={icon}
+              size={36}
+              bg={primary ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)"}
+              color={primary ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
+            />
             <Text as="span" variant="headingSm">
               {label}
             </Text>

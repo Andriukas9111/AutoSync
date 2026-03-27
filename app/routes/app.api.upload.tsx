@@ -116,7 +116,7 @@ export async function action({ request }: ActionFunctionArgs) {
   // Insert products in batches of 500
   const BATCH_SIZE = 500;
   let inserted = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
     const batch = products.slice(i, i + BATCH_SIZE);

@@ -39,6 +39,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
 import { equalHeightGridStyle, listRowStyle } from "../lib/design";
+import { useAppData } from "../lib/use-app-data";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -232,7 +233,7 @@ function formatYearRange(from: number | null, to: number | null): string {
 
 const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | undefined> = {
   unmapped: undefined,
-  auto_mapped: "info",
+  auto_mapped: "success",
   smart_mapped: "success",
   manual_mapped: "success",
   partial: "warning",
@@ -274,6 +275,17 @@ export default function Fitment() {
   const [activityPage, setActivityPage] = useState(1);
   const ACTIVITY_PAGE_SIZE = 10;
 
+  // Live polling — use polled data with loader fallback
+  const { stats, activeJobs } = useAppData({
+    total: totalProducts,
+    unmapped: getCount(statusCounts, "unmapped"),
+    autoMapped: getCount(statusCounts, "auto_mapped"),
+    smartMapped: getCount(statusCounts, "smart_mapped"),
+    manualMapped: getCount(statusCounts, "manual_mapped"),
+    flagged: getCount(statusCounts, "flagged"),
+    fitments: totalFitments,
+  });
+
   const isExtracting = extractFetcher.state !== "idle";
   const extractResult = extractFetcher.data as
     | { success: true; processed: number; autoMapped: number; flagged: number; unmapped: number }
@@ -288,20 +300,23 @@ export default function Fitment() {
     setExtractDismissed(false);
   }, [extractFetcher]);
 
-  const autoMapped = getCount(statusCounts, "auto_mapped");
-  const smartMapped = getCount(statusCounts, "smart_mapped");
-  const manualMapped = getCount(statusCounts, "manual_mapped");
-  const flagged = getCount(statusCounts, "flagged");
-  const partial = getCount(statusCounts, "partial");
-  const unmapped = getCount(statusCounts, "unmapped");
+  // Use live polled stats (falls back to loader values via useAppData initial state)
+  const autoMapped = stats.autoMapped;
+  const smartMapped = stats.smartMapped;
+  const manualMapped = stats.manualMapped;
+  const flagged = stats.flagged;
+  const partial = getCount(statusCounts, "partial"); // partial not in AppStats, keep from loader
+  const unmapped = stats.unmapped;
+  const liveTotal = stats.total;
+  const liveFitments = stats.fitments;
   const totalMapped = autoMapped + smartMapped + manualMapped;
-  const coveragePercent = totalProducts > 0 ? Math.round((totalMapped / totalProducts) * 100) : 0;
+  const coveragePercent = liveTotal > 0 ? Math.round((totalMapped / liveTotal) * 100) : 0;
 
   return (
     <Page
       fullWidth
       title="Fitment Overview"
-      subtitle={`${totalFitments.toLocaleString()} fitments across ${totalProducts.toLocaleString()} products`}
+      subtitle={`${liveFitments.toLocaleString()} fitments across ${liveTotal.toLocaleString()} products`}
       primaryAction={{
         content: "Manual Mapping",
         onAction: () => navigate("/app/fitment/manual"),
@@ -331,8 +346,8 @@ export default function Fitment() {
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { icon: ProductIcon, label: "Total", count: totalProducts },
-              { icon: ConnectIcon, label: "Fitments", count: totalFitments },
+              { icon: ProductIcon, label: "Total", count: liveTotal },
+              { icon: ConnectIcon, label: "Fitments", count: liveFitments },
               { icon: AlertCircleIcon, label: "Needs Review", count: unmapped + flagged + partial, critical: true as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },
               { icon: WandIcon, label: "Smart", count: smartMapped },
@@ -374,8 +389,8 @@ export default function Fitment() {
             </InlineStack>
             <ProgressBar progress={coveragePercent} size="medium" />
             <Text as="p" variant="bodySm" tone="subdued">
-              {totalMapped.toLocaleString()} of {totalProducts.toLocaleString()} products have
-              fitment data · Average {totalMapped > 0 ? (totalFitments / totalMapped).toFixed(1) : "0"} fitments per product
+              {totalMapped.toLocaleString()} of {liveTotal.toLocaleString()} products have
+              fitment data · Average {totalMapped > 0 ? (liveFitments / totalMapped).toFixed(1) : "0"} fitments per product
             </Text>
           </BlockStack>
         </Card>

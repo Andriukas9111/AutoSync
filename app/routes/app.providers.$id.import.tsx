@@ -385,12 +385,66 @@ export default function ProviderImportWizard() {
   // ---------------------------------------------------------------------------
 
   const handleStartImport = useCallback(async () => {
-    if (!file || !preview) return;
+    if (!preview) return;
     setStep("importing");
     setImportProgress(10);
     setError(null);
 
     try {
+      // For API/FTP providers without a local file, use the server-side
+      // import action which re-fetches data and runs the import pipeline
+      if (!file && (providerType === "api" || providerType === "ftp")) {
+        setImportProgress(20);
+
+        const formData = new FormData();
+        formData.set("provider_id", provider.id);
+        formData.set("_action", "import");
+        formData.set("mappings", JSON.stringify(mappings));
+        formData.set("duplicate_strategy", duplicateStrategy);
+
+        const response = await fetch("/app/api/provider-fetch", {
+          method: "POST",
+          body: formData,
+        });
+
+        setImportProgress(80);
+
+        if (!response.ok) {
+          let errorMessage = `Import failed (${response.status})`;
+          try {
+            const errResult = await response.json();
+            errorMessage = errResult.error || errorMessage;
+          } catch {
+            if (response.status === 401 || response.status === 403) {
+              errorMessage = "Session expired — please reload the page";
+            }
+          }
+          setError(errorMessage);
+          setStep("validate");
+          return;
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+          setError(result.error);
+          setStep("validate");
+          return;
+        }
+
+        setImportResult(result);
+        setImportProgress(100);
+        setStep("complete");
+        return;
+      }
+
+      // File-based import (CSV, XML, JSON upload)
+      if (!file) {
+        setError("No file selected. Please upload a file first.");
+        setStep("validate");
+        return;
+      }
+
       const formData = new FormData();
       formData.set("file", file);
       formData.set("provider_id", provider.id);
@@ -437,7 +491,7 @@ export default function ProviderImportWizard() {
       setError(`Import failed: ${message}`);
       setStep("validate");
     }
-  }, [file, preview, provider.id, mappings, duplicateStrategy]);
+  }, [file, preview, provider.id, providerType, mappings, duplicateStrategy]);
 
   // ---------------------------------------------------------------------------
   // Render

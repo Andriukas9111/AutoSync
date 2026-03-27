@@ -15,7 +15,6 @@ import {
   TextField,
   Select,
   Checkbox,
-  Icon,
   Tabs,
 } from "@shopify/polaris";
 import {
@@ -307,18 +306,12 @@ function PlanSelectorCard({
     >
       <BlockStack gap="200">
         <InlineStack gap="200" blockAlign="center" align="space-between">
-          <div style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "var(--p-border-radius-200)",
-            background: isSelected ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: isSelected ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)",
-          }}>
-            <Icon source={SettingsIcon} />
-          </div>
+          <IconBadge
+            icon={SettingsIcon}
+            size={32}
+            bg={isSelected ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)"}
+            color={isSelected ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
+          />
           {config.badge && (
             <Badge tone={badgeTone} size="small">{config.badge}</Badge>
           )}
@@ -370,19 +363,7 @@ function FeatureToggleRow({
       role="button"
       tabIndex={0}
     >
-      <div style={{
-        width: "24px",
-        height: "24px",
-        borderRadius: "var(--p-border-radius-200)",
-        background: "var(--p-color-bg-surface-secondary)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: checked ? "var(--p-color-icon-emphasis)" : "var(--p-color-icon-subdued)",
-        flexShrink: 0,
-      }}>
-        <Icon source={icon} />
-      </div>
+      <IconBadge icon={icon} size={24} color={checked ? "var(--p-color-icon-emphasis)" : "var(--p-color-icon-subdued)"} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <Text as="span" variant="bodySm" fontWeight={checked ? "semibold" : "regular"}>{label}</Text>
       </div>

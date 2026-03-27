@@ -49,7 +49,7 @@ const STATUS_CONFIG: Record<
   { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   review: { tone: "warning", label: "Review" },

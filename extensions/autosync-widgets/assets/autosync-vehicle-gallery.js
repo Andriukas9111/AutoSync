@@ -43,10 +43,11 @@
     }
 
     
-    function svgEl(html) {
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      return tmp.firstChild;
+    // SVG parser for hardcoded icon markup only (never used with API data)
+    function svgEl(svgMarkup) {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+      return doc.documentElement;
     }
 
     var PER_PAGE = 18;

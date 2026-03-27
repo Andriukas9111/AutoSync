@@ -222,13 +222,7 @@ export default function ProvidersIndex() {
             <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center" wrap={false}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 8,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    backgroundColor: "var(--p-color-bg-fill-critical-secondary)", flexShrink: 0,
-                  }}>
-                    <Icon source={LockIcon} tone="critical" />
-                  </div>
+                  <IconBadge icon={LockIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
                   <Text as="span" variant="bodyMd" fontWeight="semibold">Data Providers</Text>
                   <Badge size="small" tone="info">Starter+</Badge>
                 </InlineStack>
@@ -336,7 +330,7 @@ export default function ProvidersIndex() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={DatabaseIcon} tone="base" />
+                  <Icon source={DatabaseIcon} tone="subdued" />
                   <Text variant="bodySm" as="span">
                     Using{" "}
                     <Text variant="bodySm" as="span" fontWeight="semibold">

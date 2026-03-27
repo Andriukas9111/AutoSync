@@ -5,16 +5,16 @@
 import { useState } from "react";
 import {
   Card, BlockStack, InlineStack, InlineGrid, Text, Badge, Button,
-  Banner, ProgressBar, Select, Spinner, Thumbnail, Icon,
+  Banner, ProgressBar, Select, Spinner, Icon,
 } from "@shopify/polaris";
 import {
   DatabaseIcon, GlobeIcon, SearchIcon, ClockIcon, RefreshIcon, ViewIcon, ImportIcon,
-  ChevronUpIcon, ChevronDownIcon,
+  PlusCircleIcon, EditIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../IconBadge";
 import { DataTable } from "../DataTable";
 import { OperationProgress } from "../OperationProgress";
-import { statMiniStyle, statGridStyle, tableContainerStyle, listRowStyle, cardRowStyle } from "../../lib/design";
+import { statMiniStyle, statGridStyle } from "../../lib/design";
 
 const fmtShort = (d: string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const fmtType = (t: string) => t.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
@@ -68,25 +68,8 @@ export function AdminYMME({
   const [delay, setDelay] = useState("500");
   const [scrapeSpecs, setScrapeSpecs] = useState("true");
   const [changelogPage, setChangelogPage] = useState(1);
-  const [expandedChangelogId, setExpandedChangelogId] = useState<string | null>(null);
-  const [specData, setSpecData] = useState<Record<string, Record<string, unknown>>>({});
   const CHANGELOG_PAGE_SIZE = 50;
 
-  // Fetch spec data when expanding an engine/spec changelog entry
-  const handleExpandChangelog = async (entry: any) => {
-    const key = entry.entity_id;
-    if (!key) return;
-    if (expandedChangelogId === key) { setExpandedChangelogId(null); return; }
-    setExpandedChangelogId(key);
-    if (specData[key]) return; // Already loaded
-    try {
-      const res = await fetch(`/app/api/ymme?level=engine_spec&engine_id=${key}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.spec) setSpecData((prev) => ({ ...prev, [key]: json.spec }));
-      }
-    } catch { /* non-critical */ }
-  };
   const specsCoverage = ymmeCounts.engines > 0 ? Math.round((ymmeCounts.specs / ymmeCounts.engines) * 100) : 0;
 
   // Determine browse level
@@ -311,68 +294,29 @@ export function AdminYMME({
                 (changelogPage - 1) * CHANGELOG_PAGE_SIZE,
                 changelogPage * CHANGELOG_PAGE_SIZE,
               );
+              const rows = pageItems.map((c: any) => [
+                // Action column with icon
+                <InlineStack key="action" gap="200" blockAlign="center" wrap={false}>
+                  <Icon source={c.action === "added" ? PlusCircleIcon : EditIcon} tone={c.action === "added" ? "success" : "info"} />
+                  <Text as="span" variant="bodySm">{c.action === "added" ? "Added" : "Updated"}</Text>
+                </InlineStack>,
+                // Type column
+                (c.entity_type ?? "").charAt(0).toUpperCase() + (c.entity_type ?? "").slice(1),
+                // Name column
+                c.entity_name ?? "\u2014",
+                // Parent column
+                c.parent_name ?? "\u2014",
+                // Date column
+                c.created_at ? fmtShort(c.created_at) : "\u2014",
+              ]);
               return (
                 <>
-                  <div style={tableContainerStyle}>
-                    {pageItems.map((c: any, i: number) => {
-                      const isExpandable = (c.entity_type === "engine" || c.entity_type === "spec") && c.entity_id;
-                      const isExpanded = expandedChangelogId === c.entity_id;
-                      const spec = c.entity_id ? specData[c.entity_id] : null;
-                      return (
-                        <div key={c.id ?? i}>
-                          <div
-                            style={{
-                              ...listRowStyle(i === pageItems.length - 1 && !isExpanded),
-                              cursor: isExpandable ? "pointer" : "default",
-                              backgroundColor: isExpanded ? "var(--p-color-bg-surface-hover)" : "var(--p-color-bg-surface)",
-                            }}
-                            onClick={isExpandable ? () => handleExpandChangelog(c) : undefined}
-                            role={isExpandable ? "button" : undefined}
-                            tabIndex={isExpandable ? 0 : undefined}
-                            onKeyDown={isExpandable ? (e) => { if (e.key === "Enter") handleExpandChangelog(c); } : undefined}
-                          >
-                            <InlineStack gap="300" blockAlign="center" wrap={false}>
-                              <Badge tone={c.action === "added" ? "success" : "info"} size="small">
-                                {c.action === "added" ? "Added" : "Updated"}
-                              </Badge>
-                              <Badge size="small">
-                                {(c.entity_type ?? "").charAt(0).toUpperCase() + (c.entity_type ?? "").slice(1)}
-                              </Badge>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
-                                  {c.entity_name ?? "—"}
-                                </Text>
-                              </div>
-                            </InlineStack>
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="span" variant="bodySm" tone="subdued">{c.parent_name ?? ""}</Text>
-                              <Text as="span" variant="bodySm" tone="subdued">{c.created_at ? fmtShort(c.created_at) : ""}</Text>
-                              {isExpandable && <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />}
-                            </InlineStack>
-                          </div>
-                          {isExpanded && (
-                            <Box padding="400" background="bg-surface-secondary" borderBlockEndWidth="025" borderColor="border">
-                              {spec ? (
-                                <div style={statGridStyle(3)}>
-                                  {Object.entries(spec)
-                                    .filter(([k]) => !["id", "engine_id", "created_at", "updated_at", "autodata_url"].includes(k) && spec[k] != null)
-                                    .map(([k, v]) => (
-                                      <div key={k} style={{ padding: "4px 0" }}>
-                                        <Text as="span" variant="bodySm" tone="subdued">{k.replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase())}</Text>
-                                        <br />
-                                        <Text as="span" variant="bodySm" fontWeight="semibold">{String(v)}</Text>
-                                      </div>
-                                    ))}
-                                </div>
-                              ) : (
-                                <Text as="p" variant="bodySm" tone="subdued">Loading spec data...</Text>
-                              )}
-                            </Box>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "text", "text"]}
+                    headings={["Action", "Type", "Name", "Parent", "Date"]}
+                    rows={rows}
+                    hoverable
+                  />
                   {totalPages > 1 && (
                     <InlineStack align="center" gap="300" blockAlign="center">
                       <Button size="slim" disabled={changelogPage <= 1} onClick={() => setChangelogPage(changelogPage - 1)}>Previous</Button>

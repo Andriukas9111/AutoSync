@@ -355,7 +355,7 @@ export default function ProviderDetail() {
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" tone="subdued">Products</Text>
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ProductIcon} tone="emphasis" />
+                  <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" size={22} />
                   <Text as="p" variant="headingLg" fontWeight="bold">
                     {totalProducts.toLocaleString()}
                   </Text>
@@ -366,7 +366,7 @@ export default function ProviderDetail() {
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" tone="subdued">Total Imports</Text>
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ImportIcon} tone="emphasis" />
+                  <IconBadge icon={ImportIcon} color="var(--p-color-icon-emphasis)" size={22} />
                   <Text as="p" variant="headingLg" fontWeight="bold">
                     {(provider.import_count ?? 0).toLocaleString()}
                   </Text>
@@ -377,7 +377,7 @@ export default function ProviderDetail() {
               <BlockStack gap="100">
                 <Text as="p" variant="bodySm" tone="subdued">Last Import</Text>
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={ClockIcon} tone="emphasis" />
+                  <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" size={22} />
                   <Text as="p" variant="headingLg" fontWeight="bold">
                     {formatTimeAgo(provider.last_fetch_at)}
                   </Text>

@@ -82,6 +82,7 @@ import { pauseScrapeJob, listScrapeJobs } from "../lib/scrapers/autodata.server"
 import { isAdminShop } from "../lib/admin.server";
 import { removeAllTags, removeAllMetafields, removeAllCollections } from "../lib/pipeline/cleanup.server";
 import { deleteVehiclePages } from "../lib/pipeline/vehicle-pages.server";
+import { useAppData } from "../lib/use-app-data";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -780,20 +781,20 @@ export default function AdminPanel() {
     setSearchParams(p);
   }, [searchParams, setSearchParams]);
 
-  // Client-side polling for live health
-  const [liveHealth, setLiveHealth] = useState<Record<string, unknown> | null>(null);
-  useEffect(() => {
-    let active = true;
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok && active) setLiveHealth(await res.json());
-      } catch { /* non-critical */ }
-    };
-    poll();
-    const id = setInterval(poll, 5000);
-    return () => { active = false; clearInterval(id); };
-  }, []);
+  // Live polling via unified hook
+  const { stats: liveStats, jobs: liveJobs, activeJobs: liveActiveJobs } = useAppData({
+    total: totalProducts,
+    fitments: totalFitments,
+    ymmeMakes: ymmeCounts.makes,
+    ymmeModels: ymmeCounts.models,
+    ymmeEngines: ymmeCounts.engines,
+  });
+  // Build liveHealth object matching the shape AdminOverview expects
+  const liveHealth: Record<string, unknown> = {
+    stats: liveStats,
+    jobs: liveJobs,
+    activeJobs: liveActiveJobs,
+  };
 
   // Poll scrape status via fetcher (NOT revalidator — avoids full page refresh)
   const hasRunningScrape = scrapeJobs.some((j: any) => j.status === "running");

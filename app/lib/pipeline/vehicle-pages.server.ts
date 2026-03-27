@@ -564,17 +564,38 @@ export async function ensureMetaobjectDefinition(
 export async function getVehiclesForPages(
   shopId: string,
 ): Promise<VehiclePageData[]> {
-  // Get ALL fitments for this shop — both with and without ymme_engine_id
-  const { data: fitments, error: fitmentError } = await db
-    .from("vehicle_fitments")
-    .select("ymme_engine_id, product_id, make, model, engine, engine_code, fuel_type, year_from, year_to, variant")
-    .eq("shop_id", shopId);
+  // Get ALL fitments for this shop in batches (Supabase default limit is 1000)
+  const fitments: Array<{
+    ymme_engine_id: string | null;
+    product_id: string;
+    make: string | null;
+    model: string | null;
+    engine: string | null;
+    engine_code: string | null;
+    fuel_type: string | null;
+    year_from: number | null;
+    year_to: number | null;
+    variant: string | null;
+  }> = [];
+  let fitmentOffset = 0;
+  const fitmentBatchSize = 500;
+  while (true) {
+    const { data: batch, error: fitmentError } = await db
+      .from("vehicle_fitments")
+      .select("ymme_engine_id, product_id, make, model, engine, engine_code, fuel_type, year_from, year_to, variant")
+      .eq("shop_id", shopId)
+      .range(fitmentOffset, fitmentOffset + fitmentBatchSize - 1);
 
-  if (fitmentError) {
-    throw new Error(`Failed to query fitments: ${fitmentError.message}`);
+    if (fitmentError) {
+      throw new Error(`Failed to query fitments: ${fitmentError.message}`);
+    }
+    if (!batch || batch.length === 0) break;
+    fitments.push(...batch);
+    if (batch.length < fitmentBatchSize) break;
+    fitmentOffset += fitmentBatchSize;
   }
 
-  if (!fitments || fitments.length === 0) {
+  if (fitments.length === 0) {
     return [];
   }
 
