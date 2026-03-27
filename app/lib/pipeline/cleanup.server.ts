@@ -108,26 +108,40 @@ export async function removeAllTags(
   let removed = 0;
   let processed = 0;
 
-  // Only process products that have actually been pushed (have fitments)
-  // Paginated to avoid Supabase 1000-row limit
-  const products: any[] = [];
-  let tagOffset = 0;
-  while (true) {
-    const { data: batch, error: batchErr } = await db
-      .from("products")
-      .select("shopify_product_id")
-      .eq("shop_id", shopId)
-      .neq("fitment_status", "unmapped")
-      .order("id", { ascending: true })
-      .range(tagOffset, tagOffset + 999);
-    if (batchErr) {
-      console.error("[cleanup] Batch query error:", batchErr.message);
-      return { removed: 0, processed: 0, errors: [batchErr.message] };
+  // Search Shopify directly for products with _autosync_ tags (don't rely on DB)
+  const SEARCH_QUERY = `
+    query searchProducts($query: String!, $first: Int!, $after: String) {
+      products(first: $first, after: $after, query: $query) {
+        edges { node { id tags } }
+        pageInfo { hasNextPage endCursor }
+      }
     }
-    if (!batch || batch.length === 0) break;
-    products.push(...batch);
-    tagOffset += batch.length;
-    if (batch.length < 1000) break;
+  `;
+
+  const products: { gid: string; tags: string[] }[] = [];
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  while (hasNext) {
+    try {
+      const resp = await admin.graphql(SEARCH_QUERY, {
+        variables: { query: `tag:${tagPrefix}*`, first: 100, after: cursor },
+      });
+      const json = await resp.json();
+      const edges = json?.data?.products?.edges ?? [];
+      for (const { node } of edges) {
+        const autoTags = (node.tags ?? []).filter((t: string) => t.startsWith(tagPrefix));
+        if (autoTags.length > 0) {
+          products.push({ gid: node.id, tags: autoTags });
+        }
+      }
+      hasNext = json?.data?.products?.pageInfo?.hasNextPage ?? false;
+      cursor = json?.data?.products?.pageInfo?.endCursor ?? null;
+      await handleRateLimit(json);
+    } catch (err) {
+      errors.push("Search error: " + (err instanceof Error ? err.message : String(err)));
+      break;
+    }
   }
 
   if (products.length === 0) {
@@ -135,20 +149,11 @@ export async function removeAllTags(
   }
 
   for (const product of products) {
-    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+    const gid = product.gid;
 
     try {
-      // Fetch current tags for this product
-      const tagsResponse = await admin.graphql(PRODUCT_TAGS_QUERY, {
-        variables: { id: gid },
-      });
-      const tagsJson = await tagsResponse.json();
-      await handleRateLimit(tagsJson);
-
-      const currentTags: string[] = tagsJson?.data?.product?.tags ?? [];
-      const autoSyncTags = currentTags.filter((t: string) =>
-        t.startsWith(tagPrefix),
-      );
+      // We already have the autosync tags from the search query
+      const autoSyncTags = product.tags;
 
       if (autoSyncTags.length > 0) {
         const removeResponse = await admin.graphql(TAGS_REMOVE_MUTATION, {
@@ -187,34 +192,45 @@ export async function removeAllMetafields(
   let removed = 0;
   let processed = 0;
 
-  // Only process products that have actually been pushed (have fitments)
-  // Paginated to avoid Supabase 1000-row limit
-  const products: any[] = [];
-  let mfOffset = 0;
-  while (true) {
-    const { data: batch, error: batchErr } = await db
-      .from("products")
-      .select("shopify_product_id")
-      .eq("shop_id", shopId)
-      .neq("fitment_status", "unmapped")
-      .order("id", { ascending: true })
-      .range(mfOffset, mfOffset + 999);
-    if (batchErr) {
-      console.error("[cleanup] Metafield batch query error:", batchErr.message);
-      return { removed: 0, processed: 0, errors: [batchErr.message] };
+  // Search Shopify directly for products with vehicle_fitment metafields (don't rely on DB)
+  const SEARCH_QUERY = `
+    query searchProducts($query: String!, $first: Int!, $after: String) {
+      products(first: $first, after: $after, query: $query) {
+        edges { node { id } }
+        pageInfo { hasNextPage endCursor }
+      }
     }
-    if (!batch || batch.length === 0) break;
-    products.push(...batch);
-    mfOffset += batch.length;
-    if (batch.length < 1000) break;
+  `;
+
+  const productGids: string[] = [];
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  // Search for products that have our metafield namespace
+  while (hasNext) {
+    try {
+      const resp = await admin.graphql(SEARCH_QUERY, {
+        variables: { query: `tag:_autosync_* OR metafield_namespace:vehicle_fitment`, first: 100, after: cursor },
+      });
+      const json = await resp.json();
+      const edges = json?.data?.products?.edges ?? [];
+      for (const { node } of edges) {
+        productGids.push(node.id);
+      }
+      hasNext = json?.data?.products?.pageInfo?.hasNextPage ?? false;
+      cursor = json?.data?.products?.pageInfo?.endCursor ?? null;
+      await handleRateLimit(json);
+    } catch (err) {
+      errors.push("Search error: " + (err instanceof Error ? err.message : String(err)));
+      break;
+    }
   }
 
-  if (products.length === 0) {
+  if (productGids.length === 0) {
     return { removed: 0, processed: 0, errors: [] };
   }
 
-  for (const product of products) {
-    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+  for (const gid of productGids) {
 
     try {
       // Query metafields in both current ($app:vehicle_fitment) and legacy (autosync_fitment) namespaces
