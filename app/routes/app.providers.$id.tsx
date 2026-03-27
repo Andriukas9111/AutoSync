@@ -305,7 +305,7 @@ export default function ProviderDetail() {
       primaryAction={{
         content: "Import Products",
         icon: PlusCircleIcon,
-        onAction: () => navigate(`/app/providers/new?from=${provider.id}`),
+        onAction: () => navigate(`/app/providers/${provider.id}/import?step=upload`),
       }}
     >
       <BlockStack gap="400">
@@ -322,7 +322,7 @@ export default function ProviderDetail() {
               title: "Import Products",
               description: "Fetch products, map columns, and import into your catalog.",
               linkText: "Import Now",
-              linkUrl: `/app/providers/new?from=${provider.id}`,
+              linkUrl: `/app/providers/${provider.id}/import?step=upload`,
             },
             {
               number: 3,
@@ -413,7 +413,7 @@ export default function ProviderDetail() {
             <Button
               variant="primary"
               icon={PlusCircleIcon}
-              onClick={() => navigate(`/app/providers/new?from=${provider.id}`)}
+              onClick={() => navigate(`/app/providers/${provider.id}/import?step=upload`)}
             >
               {type === "api" ? "Fetch & Import" : "Import Products"}
             </Button>
