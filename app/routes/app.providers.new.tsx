@@ -1,13 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   useLoaderData,
-  useActionData,
-  useNavigation,
   useNavigate,
-  Form,
+  useFetcher,
 } from "react-router";
-import { redirect, data } from "react-router";
+import { data } from "react-router";
 import {
   Page,
   Card,
@@ -182,8 +180,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Redirect to the import wizard so merchant can immediately start importing
-  return redirect(`/app/providers/${provider.id}/import?step=upload`);
+  // Return success with redirect URL — client navigates (more reliable in Shopify iframe)
+  return data({
+    success: true,
+    providerId: provider.id,
+    redirectTo: `/app/providers/${provider.id}/import?step=upload`,
+  });
 };
 
 // ---------------------------------------------------------------------------
@@ -246,10 +248,12 @@ const TYPE_CARDS: Array<{
 export default function ProvidersNew() {
   const { plan, limits, providerCount, providerLimit, atLimit, canUseApi, canUseFtp } =
     useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
   const navigate = useNavigate();
-  const isSubmitting = navigation.state === "submitting";
+  const fetcher = useFetcher();
+  const testFetcher = useFetcher();
+  const isSubmitting = fetcher.state === "submitting";
+  const actionData = fetcher.data as { success?: boolean; redirectTo?: string; error?: string } | undefined;
+  const testResult = testFetcher.data as { success?: boolean; error?: string; files?: Array<{ name: string; size: number }> } | undefined;
 
   // Tab index maps to TYPE_CARDS order: csv=0, xml=1, api=2, ftp=3
   const [selectedTab, setSelectedTab] = useState(0);
@@ -277,6 +281,34 @@ export default function ProvidersNew() {
   const [ftpPassword, setFtpPassword] = useState("");
   const [ftpPath, setFtpPath] = useState("");
   const [ftpFilePattern, setFtpFilePattern] = useState("");
+
+  // Navigate on successful creation
+  useEffect(() => {
+    if (actionData?.success && actionData.redirectTo) {
+      navigate(actionData.redirectTo);
+    }
+  }, [actionData, navigate]);
+
+  // Test connection handler
+  const handleTestConnection = useCallback(() => {
+    const formData = new FormData();
+    formData.set("_action", "test");
+    if (providerType === "ftp") {
+      formData.set("type", "ftp");
+      formData.set("host", ftpHost);
+      formData.set("port", ftpPort);
+      formData.set("username", ftpUsername);
+      formData.set("password", ftpPassword);
+      formData.set("remotePath", ftpPath);
+      formData.set("protocol", ftpProtocol);
+    } else if (providerType === "api") {
+      formData.set("type", "api");
+      formData.set("endpoint", apiEndpoint);
+      formData.set("authType", apiAuthType);
+      formData.set("authValue", apiAuthValue);
+    }
+    testFetcher.submit(formData, { method: "POST", action: "/app/api/provider-fetch" });
+  }, [providerType, ftpHost, ftpPort, ftpUsername, ftpPassword, ftpPath, ftpProtocol, apiEndpoint, apiAuthType, apiAuthValue, testFetcher]);
 
   const limitLabel =
     providerLimit === Infinity ? "Unlimited" : String(providerLimit);
@@ -347,13 +379,29 @@ export default function ProvidersNew() {
         )}
 
         {/* Action error */}
-        {actionData && "error" in actionData && (
+        {actionData?.error && (
           <Banner tone="critical">
-            <p>{(actionData as { error: string }).error}</p>
+            <p>{actionData.error}</p>
           </Banner>
         )}
 
-        <Form method="post">
+        {/* Test connection result */}
+        {testResult?.success && (
+          <Banner tone="success" title="Connection successful">
+            <p>Connected to server. {testResult.files?.length ? `Found ${testResult.files.length} files.` : ""}</p>
+          </Banner>
+        )}
+        {testResult?.error && (
+          <Banner tone="critical" title="Connection failed">
+            <p>{testResult.error}</p>
+          </Banner>
+        )}
+
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.currentTarget);
+          fetcher.submit(formData, { method: "POST" });
+        }}>
           <BlockStack gap="500">
             {/* Hidden fields */}
             <input type="hidden" name="type" value={providerType} />
@@ -492,6 +540,18 @@ export default function ProvidersNew() {
                             helpText="How often to re-fetch data from the API."
                           />
                         </FormLayout.Group>
+                        <InlineStack gap="300" blockAlign="center">
+                          <Button
+                            onClick={handleTestConnection}
+                            loading={testFetcher.state !== "idle"}
+                            disabled={!apiEndpoint.trim()}
+                          >
+                            Test Connection
+                          </Button>
+                          {testResult?.success && (
+                            <Badge tone="success">Connected</Badge>
+                          )}
+                        </InlineStack>
                       </FormLayout>
                   </PlanGate>
                 )}
@@ -565,6 +625,18 @@ export default function ProvidersNew() {
                             helpText="Filter by name pattern. Leave blank for all files."
                           />
                         </FormLayout.Group>
+                        <InlineStack gap="300" blockAlign="center">
+                          <Button
+                            onClick={handleTestConnection}
+                            loading={testFetcher.state !== "idle"}
+                            disabled={!ftpHost.trim() || !ftpUsername.trim()}
+                          >
+                            Test Connection
+                          </Button>
+                          {testResult?.success && (
+                            <Badge tone="success">Connected</Badge>
+                          )}
+                        </InlineStack>
                       </FormLayout>
                   </PlanGate>
                 )}
@@ -607,7 +679,7 @@ export default function ProvidersNew() {
               </BlockStack>
             </Card>
           </BlockStack>
-        </Form>
+        </form>
       </BlockStack>
     </Page>
   );
