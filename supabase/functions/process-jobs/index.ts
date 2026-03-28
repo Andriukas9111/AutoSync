@@ -173,7 +173,14 @@ async function processProviderAutoFetch(
 }
 
 // ---------------------------------------------------------------------------
-// Provider Import — fetch from API/FTP, parse, and import products directly
+// Provider Import — Chunked page-by-page processing across invocations
+//
+// Each invocation fetches ONE page from the API, inserts products, then
+// returns hasMore=true so pg_cron picks up the next page. This ensures:
+// - No timeout issues (each invocation handles ~250 products max)
+// - Multi-tenant safe (each job is scoped by shop_id)
+// - Resumable (state stored in job.metadata.currentOffset)
+// - User can close browser — processing continues server-side
 // ---------------------------------------------------------------------------
 
 async function processProviderImport(
@@ -184,6 +191,9 @@ async function processProviderImport(
   const providerId = meta.provider_id;
   const mappings = meta.mappings || [];
   const duplicateStrategy = meta.duplicate_strategy || "skip";
+  const currentOffset = meta.current_offset ?? 0; // Resume from where we left off
+  const importId = meta.import_id || null; // Set after first chunk creates the import record
+  const PAGE_SIZE = 250;
 
   if (!providerId) return { processed: 0, hasMore: false, error: "Missing provider_id" };
 
@@ -199,7 +209,6 @@ async function processProviderImport(
 
   const config = provider.config || {};
 
-  // Only handle API providers for now (FTP/CSV need different approach)
   if (provider.type !== "api") {
     return { processed: 0, hasMore: false, error: `Edge Function import not yet supported for ${provider.type} providers` };
   }
@@ -208,18 +217,18 @@ async function processProviderImport(
   if (!endpoint) return { processed: 0, hasMore: false, error: "No API endpoint configured" };
 
   try {
-    // Smart URL enrichment: add fields=* and limit=250
+    // Build URL for THIS page — enriched with fields=* and limit + offset
     const urlObj = new URL(endpoint);
     if (!urlObj.searchParams.has("fields")) urlObj.searchParams.set("fields", "*");
-    if (!urlObj.searchParams.has("limit")) urlObj.searchParams.set("limit", "250");
-    let fetchUrl = urlObj.toString();
+    urlObj.searchParams.set("limit", String(PAGE_SIZE));
+    urlObj.searchParams.set("offset", String(currentOffset));
+    const fetchUrl = urlObj.toString();
 
     const headers: Record<string, string> = {
       "Accept": "application/json",
       "User-Agent": "AutoSync/3.0 (Shopify App)",
     };
 
-    // Auth
     const authType = String(config.authType || "none");
     const authValue = String(config.authValue || "");
     if (authType === "api_key" && authValue) headers["X-API-Key"] = authValue;
@@ -228,164 +237,163 @@ async function processProviderImport(
       headers["Authorization"] = `Basic ${btoa(authValue)}`;
     }
 
-    // Fetch all pages
-    const allItems: Record<string, unknown>[] = [];
-    let pageCount = 0;
-    let nextHref: string | null = fetchUrl;
-
-    while (nextHref && pageCount < 500) {
-      pageCount++;
-      const res = await fetch(nextHref, { headers });
-      if (!res.ok) break;
-
-      const json = await res.json();
-      const items = extractItemsFromJson(json, String(config.itemsPath || ""));
-      if (items.length === 0) break;
-
-      // Flatten nested objects
-      const flatItems = items.map((item: Record<string, unknown>) => flattenObject(item));
-      allItems.push(...flatItems);
-
-      // Check for next page
-      const paging = json?.paging;
-      if (paging?.next_page_href) {
-        const nextUrl = new URL(paging.next_page_href, urlObj.origin);
-        // Preserve auth params
-        urlObj.searchParams.forEach((v: string, k: string) => {
-          if (!nextUrl.searchParams.has(k)) nextUrl.searchParams.set(k, v);
-        });
-        nextHref = nextUrl.toString();
-      } else {
-        nextHref = null;
-      }
-
-      // Update progress
-      await db.from("sync_jobs").update({
-        processed_items: allItems.length,
-        metadata: { ...meta, pages_fetched: pageCount, items_fetched: allItems.length },
-      }).eq("id", job.id);
+    // ── Fetch ONE page ──
+    console.log(`[provider_import] Fetching page at offset=${currentOffset} for provider ${provider.name}`);
+    const res = await fetch(fetchUrl, { headers });
+    if (!res.ok) {
+      return { processed: 0, hasMore: false, error: `API request failed: ${res.status} ${res.statusText}` };
     }
 
-    if (allItems.length === 0) {
+    const json = await res.json();
+    const items = extractItemsFromJson(json, String(config.itemsPath || ""));
+
+    if (items.length === 0 && currentOffset === 0) {
       return { processed: 0, hasMore: false, error: "API returned no items" };
     }
 
-    // Create import record
-    const { data: importRecord } = await db
-      .from("provider_imports")
-      .insert({
-        shop_id: job.shop_id,
-        provider_id: providerId,
-        file_name: `${provider.name}-api-import.json`,
-        file_size_bytes: 0,
-        file_type: "json",
-        total_rows: allItems.length,
-        column_mapping: mappings,
-        status: "processing",
-        started_at: new Date().toISOString(),
-      })
-      .select("id")
-      .maybeSingle();
+    // Get total count if available (for progress tracking)
+    const totalCount = json?.total_count ?? json?.count ?? meta.total_count ?? 0;
 
-    const importId = importRecord?.id || "unknown";
+    // Flatten nested objects (e.g., price.normal → price_normal)
+    const flatItems = items.map((item: Record<string, unknown>) => flattenObject(item));
 
-    // Apply column mappings and insert products in batches
-    let insertedCount = 0;
-    const BATCH = 500;
-
-    for (let i = 0; i < allItems.length; i += BATCH) {
-      const batch = allItems.slice(i, i + BATCH);
-      const products = batch.map((item) => {
-        const mapped: Record<string, string> = {};
-        for (const m of mappings) {
-          if (m.targetField && item[m.sourceColumn] !== undefined && item[m.sourceColumn] !== null) {
-            mapped[m.targetField] = String(item[m.sourceColumn]);
-          }
-        }
-
-        const title = mapped.title || mapped.name || String(item.name || item.title || "Untitled");
-        const sku = mapped.sku || String(item.code || item.sku || "");
-        const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-        return {
+    // ── Create import record on FIRST chunk only ──
+    let activeImportId = importId;
+    if (!activeImportId && currentOffset === 0) {
+      const { data: importRecord } = await db
+        .from("provider_imports")
+        .insert({
           shop_id: job.shop_id,
           provider_id: providerId,
-          import_id: importId,
-          title,
-          handle,
-          sku: sku || null,
-          provider_sku: sku || null,
-          price: mapped.price ? parseFloat(mapped.price) : (item.price_normal ? parseFloat(String(item.price_normal)) : null),
-          cost_price: mapped.cost_price ? parseFloat(mapped.cost_price) : null,
-          compare_at_price: mapped.compare_at_price ? parseFloat(mapped.compare_at_price) : null,
-          vendor: mapped.vendor || String(item.manufacturer_name || "") || null,
-          product_type: mapped.product_type || null,
-          description: mapped.description || String(item.short_desc || item.desc || "") || null,
-          image_url: mapped.image_url || String(item.image || "") || null,
-          weight: mapped.weight || (item.weight ? String(item.weight) : null),
-          tags: mapped.tags || null,
-          source: "api",
-          fitment_status: "unmapped",
-          status: "staged",
-          raw_data: item,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-      });
-
-      // Skip duplicates if strategy is "skip"
-      if (duplicateStrategy === "skip" && products.length > 0) {
-        const skus = products.map(p => p.sku).filter(Boolean);
-        if (skus.length > 0) {
-          const { data: existing } = await db
-            .from("products")
-            .select("sku")
-            .eq("shop_id", job.shop_id)
-            .in("sku", skus);
-          const existingSkus = new Set((existing || []).map((e: any) => e.sku));
-          const filtered = products.filter(p => !p.sku || !existingSkus.has(p.sku));
-          if (filtered.length > 0) {
-            await db.from("products").insert(filtered);
-            insertedCount += filtered.length;
-          }
-        } else {
-          await db.from("products").insert(products);
-          insertedCount += products.length;
-        }
-      } else {
-        await db.from("products").insert(products);
-        insertedCount += products.length;
-      }
-
-      // Update progress
-      await db.from("sync_jobs").update({
-        processed_items: insertedCount,
-      }).eq("id", job.id);
+          file_name: `${provider.name}-api-import.json`,
+          file_size_bytes: 0,
+          file_type: "json",
+          total_rows: totalCount || items.length,
+          column_mapping: mappings,
+          status: "processing",
+          started_at: new Date().toISOString(),
+        })
+        .select("id")
+        .maybeSingle();
+      activeImportId = importRecord?.id || "unknown";
     }
 
-    // Update import record
-    await db.from("provider_imports").update({
-      imported_rows: insertedCount,
-      skipped_rows: allItems.length - insertedCount,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-    }).eq("id", importId);
+    // ── Map columns and insert products ──
+    let insertedCount = 0;
+    const products = flatItems.map((item: Record<string, unknown>) => {
+      const mapped: Record<string, string> = {};
+      for (const m of mappings) {
+        if (m.targetField && item[m.sourceColumn] !== undefined && item[m.sourceColumn] !== null) {
+          mapped[m.targetField] = String(item[m.sourceColumn]);
+        }
+      }
 
-    // Update provider counts
-    const { count: productCount } = await db
-      .from("products")
-      .select("id", { count: "exact", head: true })
-      .eq("provider_id", providerId)
-      .eq("shop_id", job.shop_id);
+      const title = mapped.title || mapped.name || String(item.name || item.title || "Untitled");
+      const sku = mapped.sku || String(item.code || item.sku || "");
+      const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-    await db.from("providers").update({
-      product_count: productCount ?? 0,
-      import_count: (provider.import_count ?? 0) + 1,
-      last_fetch_at: new Date().toISOString(),
-      status: "active",
-    }).eq("id", providerId);
+      return {
+        shop_id: job.shop_id,
+        provider_id: providerId,
+        import_id: activeImportId,
+        title,
+        handle,
+        sku: sku || null,
+        provider_sku: sku || null,
+        price: mapped.price ? parseFloat(mapped.price) : (item.price_normal ? parseFloat(String(item.price_normal)) : null),
+        cost_price: mapped.cost_price ? parseFloat(mapped.cost_price) : null,
+        compare_at_price: mapped.compare_at_price ? parseFloat(mapped.compare_at_price) : null,
+        vendor: mapped.vendor || String(item.manufacturer_name || "") || null,
+        product_type: mapped.product_type || null,
+        description: mapped.description || String(item.short_desc || item.desc || "") || null,
+        image_url: mapped.image_url || String(item.image || "") || null,
+        weight: mapped.weight || (item.weight ? String(item.weight) : null),
+        tags: mapped.tags || null,
+        source: "api",
+        fitment_status: "unmapped",
+        status: "staged",
+        raw_data: item,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    });
 
-    return { processed: insertedCount, hasMore: false };
+    // Deduplicate by SKU if strategy is "skip"
+    if (duplicateStrategy === "skip" && products.length > 0) {
+      const skus = products.map((p: any) => p.sku).filter(Boolean) as string[];
+      if (skus.length > 0) {
+        const { data: existing } = await db
+          .from("products")
+          .select("sku")
+          .eq("shop_id", job.shop_id)
+          .in("sku", skus);
+        const existingSkus = new Set((existing || []).map((e: any) => e.sku));
+        const filtered = products.filter((p: any) => !p.sku || !existingSkus.has(p.sku));
+        if (filtered.length > 0) {
+          const { error: insertErr } = await db.from("products").insert(filtered);
+          if (insertErr) console.error(`[provider_import] Insert error: ${insertErr.message}`);
+          else insertedCount = filtered.length;
+        }
+      } else {
+        const { error: insertErr } = await db.from("products").insert(products);
+        if (insertErr) console.error(`[provider_import] Insert error: ${insertErr.message}`);
+        else insertedCount = products.length;
+      }
+    } else if (products.length > 0) {
+      const { error: insertErr } = await db.from("products").insert(products);
+      if (insertErr) console.error(`[provider_import] Insert error: ${insertErr.message}`);
+      else insertedCount = products.length;
+    }
+
+    // ── Check if there are more pages ──
+    const paging = json?.paging;
+    const hasNextPage = !!(paging?.next_page_href) && items.length >= PAGE_SIZE;
+    const nextOffset = currentOffset + items.length;
+
+    console.log(`[provider_import] Inserted ${insertedCount}/${items.length} products (offset=${currentOffset}, hasNext=${hasNextPage})`);
+
+    // ── Update job metadata with next offset ──
+    await db.from("sync_jobs").update({
+      total_items: totalCount || nextOffset,
+      metadata: {
+        ...meta,
+        current_offset: nextOffset,
+        import_id: activeImportId,
+        total_count: totalCount,
+        pages_completed: (meta.pages_completed ?? 0) + 1,
+      },
+    }).eq("id", job.id);
+
+    if (!hasNextPage) {
+      // ── FINAL chunk — update import record and provider counts ──
+      if (activeImportId) {
+        const totalInserted = (job.processed_items ?? 0) + insertedCount;
+        await db.from("provider_imports").update({
+          imported_rows: totalInserted,
+          total_rows: totalCount || nextOffset,
+          status: "completed",
+          completed_at: new Date().toISOString(),
+        }).eq("id", activeImportId);
+      }
+
+      // Update provider stats
+      const { count: productCount } = await db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("provider_id", providerId)
+        .eq("shop_id", job.shop_id);
+
+      await db.from("providers").update({
+        product_count: productCount ?? 0,
+        import_count: (provider.import_count ?? 0) + 1,
+        last_fetch_at: new Date().toISOString(),
+        status: "active",
+      }).eq("id", providerId);
+
+      console.log(`[provider_import] COMPLETED: ${productCount} total products for ${provider.name}`);
+    }
+
+    return { processed: insertedCount, hasMore: hasNextPage };
   } catch (err) {
     return { processed: 0, hasMore: false, error: `Import error: ${err instanceof Error ? err.message : String(err)}` };
   }

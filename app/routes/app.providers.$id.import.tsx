@@ -1086,22 +1086,32 @@ export default function ProviderImportWizard() {
         {/* ============================================================ */}
         {step === "complete" && importResult && (
           <>
-            <Banner
-              tone={importResult.errorRows > 0 ? "warning" : "success"}
-              title={
-                importResult.errorRows > 0
-                  ? "Import completed with some issues"
-                  : "Import completed successfully"
-              }
-            >
-              <p>
-                {`Imported ${importResult.importedRows.toLocaleString()} of ${importResult.totalRows.toLocaleString()} products.`}
-                {importResult.skippedRows > 0 &&
-                  ` Skipped ${importResult.skippedRows} duplicates.`}
-                {importResult.errorRows > 0 &&
-                  ` ${importResult.errorRows} rows had errors.`}
-              </p>
-            </Banner>
+            {/* Background import (via Edge Function) shows processing message */}
+            {importResult.totalRows === 0 && (importResult as Record<string, unknown>).jobId ? (
+              <Banner tone="info" title="Import processing in background">
+                <p>
+                  Your import has started and is being processed server-side. You can safely close this page — the import will continue.
+                  Check the provider detail page to monitor progress.
+                </p>
+              </Banner>
+            ) : (
+              <Banner
+                tone={importResult.errorRows > 0 ? "warning" : "success"}
+                title={
+                  importResult.errorRows > 0
+                    ? "Import completed with some issues"
+                    : "Import completed successfully"
+                }
+              >
+                <p>
+                  {`Imported ${importResult.importedRows.toLocaleString()} of ${importResult.totalRows.toLocaleString()} products.`}
+                  {importResult.skippedRows > 0 &&
+                    ` Skipped ${importResult.skippedRows} duplicates.`}
+                  {importResult.errorRows > 0 &&
+                    ` ${importResult.errorRows} rows had errors.`}
+                </p>
+              </Banner>
+            )}
 
             <Card>
               <BlockStack gap="400">

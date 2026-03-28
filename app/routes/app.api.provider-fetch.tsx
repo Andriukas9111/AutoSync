@@ -270,7 +270,7 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "Fetch is only available for API and FTP providers." }, { status: 400 });
   }
 
-  // ── Import (re-fetch + run import pipeline) ────────────────
+  // ── Import — create background job + invoke Edge Function directly ──
   if (actionType === "import") {
     // Plan gate: check product limit
     try {
@@ -296,88 +296,56 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: `Invalid mappings: ${message}` }, { status: 400 });
     }
 
-    // Re-fetch data from the provider
-    let content: string;
-    let fileName: string;
+    // Create sync_job — Edge Function processes it page-by-page in the background
+    const { data: job, error: jobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "provider_import",
+        status: "pending",
+        total_items: 0,
+        processed_items: 0,
+        metadata: {
+          provider_id: providerId,
+          provider_name: provider.name,
+          provider_type: provider.type,
+          mappings,
+          duplicate_strategy: duplicateStrategy,
+          current_offset: 0,
+        },
+      })
+      .select("id")
+      .maybeSingle();
 
-    if (provider.type === "api") {
-      const endpoint = String(config.endpoint ?? "");
-      if (!endpoint) {
-        return data({ error: "No API endpoint configured." }, { status: 400 });
-      }
-      try {
-        // Import fetches ALL pages with fields=* for full product data
-        const result = await fetchFromApi({
-          endpoint,
-          authType: String(config.authType ?? "none") as "none" | "api_key" | "bearer" | "basic",
-          authValue: String(config.authValue ?? ""),
-          itemsPath: String(config.itemsPath ?? ""),
-          responseFormat: String(config.responseFormat ?? "json") as "json" | "csv" | "xml",
-          fetchFullDetails: true, // fields=* + limit=250 for full data
-        });
-        if (result.items.length === 0) {
-          return data({ error: "API returned no items." });
-        }
-        content = JSON.stringify(result.items);
-        fileName = `${provider.name}-api-import.json`;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Fetch failed";
-        return data({ error: message }, { status: 500 });
-      }
-    } else if (provider.type === "ftp") {
-      const host = String(config.host ?? "");
-      const remotePath = String(config.remotePath ?? "");
-      if (!host || !remotePath) {
-        return data({ error: "FTP host or remote path not configured." }, { status: 400 });
-      }
-      try {
-        const result = await fetchFromFtp({
-          host,
-          port: Number(config.port) || 21,
-          username: String(config.username ?? ""),
-          password: String(config.password ?? ""),
-          remotePath,
-          protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
-        });
-        if (!result.content || result.content.trim().length === 0) {
-          return data({ error: "FTP download returned empty file." });
-        }
-        content = result.content;
-        fileName = result.filename;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "FTP fetch failed";
-        return data({ error: message }, { status: 500 });
-      }
-    } else {
-      return data({ error: "Import action is only available for API and FTP providers." }, { status: 400 });
+    if (jobError || !job) {
+      return data({ error: `Failed to create import job: ${jobError?.message ?? "unknown"}` }, { status: 500 });
     }
 
-    // Parse the fetched content
-    const parsed = await parseFile(content, fileName, {
-      maxPreviewRows: undefined, // No limit — import all rows
+    // Invoke Edge Function DIRECTLY for instant start (don't wait for pg_cron 30s)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+        },
+      }).catch(() => {}); // Fire-and-forget — don't block the response
+    }
+
+    return data({
+      success: true,
+      jobId: job.id,
+      message: `Import started in background. Processing ${provider.name} products...`,
+      importId: job.id,
+      totalRows: 0,
+      importedRows: 0,
+      skippedRows: 0,
+      duplicateRows: 0,
+      errorRows: 0,
+      errors: [],
     });
-
-    if (parsed.rows.length === 0) {
-      return data({ error: "No rows found in the fetched data." });
-    }
-
-    // Run import pipeline
-    try {
-      const result = await runProviderImport({
-        shopId,
-        providerId,
-        fileName,
-        fileSize: Buffer.byteLength(content, "utf-8"),
-        fileType: parsed.format,
-        mappings,
-        duplicateStrategy,
-        rows: parsed.rows,
-      });
-      return data(result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Import failed";
-      return data({ error: `Import failed: ${message}` }, { status: 500 });
-    }
   }
 
   return data({ error: "Invalid action. Use 'test', 'fetch', or 'import'." }, { status: 400 });
