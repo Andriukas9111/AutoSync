@@ -905,6 +905,7 @@ export default function ProviderImportWizard() {
                   Map each source column to a product field. Unmapped columns are stored in raw data for future use.
                 </Text>
 
+                <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                 <DataTable
                   columnContentTypes={["text", "text", "text"]}
                   headings={["Source Column", "Sample Value", "Map To"]}
@@ -931,6 +932,7 @@ export default function ProviderImportWizard() {
                     />,
                   ])}
                 />
+                </div>
               </BlockStack>
             </Card>
 
