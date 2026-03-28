@@ -504,46 +504,71 @@ export default function ProviderDetail() {
             </InlineStack>
             <Divider />
 
-            {/* Connection summary */}
-            <BlockStack gap="300">
-              <Box paddingInline="200">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    {connectionSummary(type, cfg)}
-                  </Text>
-                </BlockStack>
-              </Box>
-
-              {(provider.website_url || provider.contact_email) && (
-                <Box paddingInline="200">
-                  <InlineStack gap="400" wrap>
-                    {provider.website_url && (
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={GlobeIcon} tone="subdued" />
-                        <Button variant="plain" url={provider.website_url} external>
-                          {provider.website_url.replace(/^https?:\/\//, "")}
-                        </Button>
-                      </InlineStack>
-                    )}
-                    {provider.contact_email && (
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={EmailIcon} tone="subdued" />
-                        <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
-                      </InlineStack>
-                    )}
-                    {type === "api" && cfg.authType && cfg.authType !== "none" && (
-                      <InlineStack gap="200" blockAlign="center">
-                        <Icon source={LockIcon} tone="subdued" />
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Auth: {String(cfg.authType).replace("_", " ").toUpperCase()}
-                        </Text>
-                      </InlineStack>
-                    )}
+            {/* Connection info — 2 columns: Data Source | Quick Access */}
+            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+              {/* LEFT: Data Source */}
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  {connectionSummary(type, cfg)}
+                </Text>
+                {provider.website_url && (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={GlobeIcon} tone="subdued" />
+                    <Button variant="plain" url={provider.website_url} external>
+                      {provider.website_url.replace(/^https?:\/\//, "")}
+                    </Button>
                   </InlineStack>
-                </Box>
+                )}
+                {provider.contact_email && (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={EmailIcon} tone="subdued" />
+                    <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
+                  </InlineStack>
+                )}
+              </BlockStack>
+
+              {/* RIGHT: Portal Quick Access — username, password, portal URL with copy */}
+              {(portalUrl || portalUsername || portalPassword) && (
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" tone="subdued">Portal Quick Access</Text>
+                  {portalUrl && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={LinkIcon} tone="subdued" />
+                      <Button variant="plain" url={portalUrl} external>
+                        {portalUrl.replace(/^https?:\/\//, "").slice(0, 40)}
+                      </Button>
+                    </InlineStack>
+                  )}
+                  {portalUsername && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={PersonIcon} tone="subdued" />
+                      <Text as="p" variant="bodyMd">{portalUsername}</Text>
+                      <Button
+                        variant="plain"
+                        size="slim"
+                        onClick={() => navigator.clipboard.writeText(portalUsername)}
+                      >
+                        Copy
+                      </Button>
+                    </InlineStack>
+                  )}
+                  {portalPassword && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={LockIcon} tone="subdued" />
+                      <Text as="p" variant="bodyMd">••••••••</Text>
+                      <Button
+                        variant="plain"
+                        size="slim"
+                        onClick={() => navigator.clipboard.writeText(portalPassword)}
+                      >
+                        Copy password
+                      </Button>
+                    </InlineStack>
+                  )}
+                </BlockStack>
               )}
-            </BlockStack>
+            </InlineGrid>
 
             <Divider />
 
