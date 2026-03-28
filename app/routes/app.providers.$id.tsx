@@ -1,7 +1,7 @@
 /**
- * Provider Detail Page — Simplified single-view layout.
+ * Provider Detail Page — Polished single-view layout.
  *
- * No tabs. Clear sections: header, stats, connection, recent imports, settings, danger zone.
+ * Sections: header stats, connection info, recent imports, settings (split by category), danger zone.
  */
 
 import { useState, useCallback } from "react";
@@ -11,12 +11,15 @@ import { data, redirect } from "react-router";
 import {
   Page, Card, InlineStack, InlineGrid, BlockStack, Text,
   TextField, Select, Button, Badge, Banner, Divider, Modal,
-  FormLayout, Box,
+  FormLayout, Box, Icon,
 } from "@shopify/polaris";
 import {
   ProductIcon, ImportIcon, ClockIcon,
   ViewIcon, PlusCircleIcon, DeleteIcon, GlobeIcon,
-  ConnectIcon, AlertDiamondIcon,
+  ConnectIcon, AlertDiamondIcon, DataTableIcon,
+  LinkIcon, EmailIcon, NoteIcon, CalendarIcon,
+  SettingsIcon, DatabaseIcon, LockIcon, ImageIcon,
+  PersonIcon,
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
@@ -26,7 +29,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import type { ProviderType, PlanTier } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
-import { statMiniStyle, statGridStyle, listRowStyle, statusDotStyle } from "../lib/design";
+import { listRowStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +70,7 @@ interface ProviderImport {
 const STATUS_OPTIONS = [
   { label: "Active", value: "active" },
   { label: "Inactive", value: "inactive" },
+  { label: "Pending", value: "pending" },
 ];
 const DUPLICATE_OPTIONS = [
   { label: "Skip duplicates", value: "skip" },
@@ -74,14 +78,38 @@ const DUPLICATE_OPTIONS = [
   { label: "Create new entries", value: "create" },
 ];
 
+const DELIMITER_OPTIONS = [
+  { label: "Comma (,) — most common", value: "," },
+  { label: "Tab (\\t)", value: "\t" },
+  { label: "Semicolon (;)", value: ";" },
+  { label: "Pipe (|)", value: "|" },
+  { label: "Custom", value: "custom" },
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function statusBadgeTone(s: string): "success" | "warning" | "critical" | "info" | undefined {
+  if (s === "active") return "success";
+  if (s === "pending") return "info";
+  if (s === "error") return "critical";
+  return undefined;
+}
+
+function statusLabel(s: string): string {
+  if (s === "active") return "Active";
+  if (s === "inactive") return "Inactive";
+  if (s === "pending") return "Pending";
+  if (s === "error") return "Error";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 function typeBadgeTone(t: string): "info" | "success" | "attention" | "warning" | undefined {
   if (t === "api") return "info";
   if (t === "ftp") return "attention";
   if (t === "csv") return "success";
+  if (t === "xml") return "warning";
   return undefined;
 }
 
@@ -108,7 +136,8 @@ function connectionSummary(type: ProviderType, cfg: Record<string, unknown>): st
   }
   if (type === "csv") {
     const delim = String(cfg.delimiter || ",");
-    return `CSV upload (delimiter: "${delim}")`;
+    const delimLabel = delim === "," ? "comma" : delim === "\t" ? "tab" : delim === ";" ? "semicolon" : delim === "|" ? "pipe" : `"${delim}"`;
+    return `CSV upload (delimiter: ${delimLabel})`;
   }
   if (type === "xml") return "XML feed";
   return type.toUpperCase();
@@ -140,7 +169,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const plan: PlanTier = tenant?.plan ?? "free";
   const limits = getPlanLimits(plan);
 
-  // Server-side enforcement: redirect if plan doesn't allow providers
   if (limits.providers === 0) {
     throw redirect("/app/providers?error=plan_limit");
   }
@@ -181,14 +209,22 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const websiteUrl = String(formData.get("website_url") || "").trim();
     const contactEmail = String(formData.get("contact_email") || "").trim();
     const notes = String(formData.get("notes") || "").trim();
+    const logoUrl = String(formData.get("logo_url") || "").trim();
     if (!name) return data({ error: "Provider name is required." }, { status: 400 });
 
     const existing = (await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).maybeSingle()).data;
     const type = existing?.type as ProviderType || "csv";
     const config: Record<string, unknown> = { ...(existing?.config as Record<string, unknown> || {}) };
 
+    // Portal credentials (stored in config JSONB)
+    config.portalUrl = String(formData.get("portal_url") || "").trim() || undefined;
+    config.portalUsername = String(formData.get("portal_username") || "").trim() || undefined;
+    config.portalPassword = String(formData.get("portal_password") || "").trim() || undefined;
+
     if (type === "csv") {
-      config.delimiter = formData.get("delimiter") || ",";
+      const delimValue = String(formData.get("delimiter") || ",");
+      const customDelim = String(formData.get("custom_delimiter") || "").trim();
+      config.delimiter = delimValue === "custom" && customDelim ? customDelim : delimValue;
     } else if (type === "api") {
       config.endpoint = String(formData.get("api_endpoint") || "").trim();
       config.authType = String(formData.get("api_auth_type") || "none");
@@ -198,20 +234,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       config.host = String(formData.get("ftp_host") || "").trim();
       config.port = parseInt(String(formData.get("ftp_port") || "21"), 10);
       config.username = String(formData.get("ftp_username") || "").trim();
-      // TODO: FTP passwords are stored in plaintext in the providers.config JSONB column.
-      // This needs encryption at rest (e.g. AES-256 via a KMS key) before production launch.
-      // Never log the config object or password value.
       config.password = String(formData.get("ftp_password") || "").trim();
       config.remotePath = String(formData.get("ftp_path") || "").trim();
       config.protocol = String(formData.get("ftp_protocol") || "ftp");
     }
 
-    // Handle auto-fetch schedule
     const fetchSchedule = String(formData.get("fetch_schedule") || "manual");
-    const scheduleIntervals: Record<string, string> = {
-      "6h": "6 hours", "12h": "12 hours", "24h": "24 hours", "168h": "7 days",
-    };
-    const nextFetch = fetchSchedule !== "manual" && scheduleIntervals[fetchSchedule]
+    const nextFetch = fetchSchedule !== "manual"
       ? new Date(Date.now() + parseDuration(fetchSchedule)).toISOString()
       : null;
 
@@ -222,6 +251,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       website_url: websiteUrl || null,
       contact_email: contactEmail || null,
       notes: notes || null,
+      logo_url: logoUrl || null,
       fetch_schedule: fetchSchedule,
       next_scheduled_fetch: nextFetch,
       updated_at: new Date().toISOString(),
@@ -246,7 +276,6 @@ export default function ProviderDetail() {
   const location = useLocation();
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [_settingsOpen, _setSettingsOpen] = useState(false); // kept for hook order
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{
     success: boolean;
@@ -261,9 +290,19 @@ export default function ProviderDetail() {
   const [websiteUrl, setWebsiteUrl] = useState(provider.website_url || "");
   const [contactEmail, setContactEmail] = useState(provider.contact_email || "");
   const [notes, setNotes] = useState(provider.notes || "");
+  const [logoUrl, setLogoUrl] = useState(provider.logo_url || "");
 
   const cfg = (provider.config || {}) as Record<string, unknown>;
-  const [delimiter, setDelimiter] = useState(String(cfg.delimiter || ","));
+
+  // Portal credentials (stored in config JSONB)
+  const [portalUrl, setPortalUrl] = useState(String(cfg.portalUrl || ""));
+  const [portalUsername, setPortalUsername] = useState(String(cfg.portalUsername || ""));
+  const [portalPassword, setPortalPassword] = useState(String(cfg.portalPassword || ""));
+  const currentDelimiter = String(cfg.delimiter || ",");
+  const isStandardDelimiter = [",", "\t", ";", "|"].includes(currentDelimiter);
+  const [delimiterChoice, setDelimiterChoice] = useState(isStandardDelimiter ? currentDelimiter : "custom");
+  const [customDelimiter, setCustomDelimiter] = useState(isStandardDelimiter ? "" : currentDelimiter);
+
   const [apiEndpoint, setApiEndpoint] = useState(String(cfg.endpoint || ""));
   const [apiAuthType, setApiAuthType] = useState(String(cfg.authType || "none"));
   const [apiAuthValue, setApiAuthValue] = useState(String(cfg.authValue || ""));
@@ -274,6 +313,7 @@ export default function ProviderDetail() {
   const [ftpPassword, setFtpPassword] = useState(String(cfg.password || ""));
   const [ftpPath, setFtpPath] = useState(String(cfg.remotePath || "/"));
   const [ftpProtocol, setFtpProtocol] = useState(String(cfg.protocol || "ftp"));
+  const [fetchSchedule, setFetchSchedule] = useState(provider.fetch_schedule || "manual");
 
   const isSubmitting = fetcher.state !== "idle";
   const fetcherData = fetcher.data as { success: true; message: string } | { error: string } | undefined;
@@ -320,8 +360,8 @@ export default function ProviderDetail() {
       backAction={{ content: "Providers", onAction: () => navigate("/app/providers") }}
       titleMetadata={
         <InlineStack gap="200">
-          <Badge tone={provider.status === "active" ? "success" : "warning"}>
-            {provider.status === "active" ? "Active" : "Inactive"}
+          <Badge tone={statusBadgeTone(provider.status)}>
+            {statusLabel(provider.status)}
           </Badge>
           <Badge tone={typeBadgeTone(type)}>
             {type.toUpperCase()}
@@ -374,118 +414,114 @@ export default function ProviderDetail() {
           </Banner>
         )}
 
-        {/* Stats Row */}
-        <Card>
-          <div style={statGridStyle(3)}>
-            <div style={statMiniStyle}>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Products</Text>
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" size={22} />
+        {/* Stats Row — bordered grid matching providers list */}
+        <Card padding="0">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            borderBottom: "1px solid var(--p-color-border-secondary)",
+          }}>
+            {[
+              { icon: ProductIcon, value: totalProducts.toLocaleString(), label: "Products" },
+              { icon: ImportIcon, value: (provider.import_count ?? 0).toLocaleString(), label: "Total Imports" },
+              { icon: ClockIcon, value: formatTimeAgo(provider.last_fetch_at), label: "Last Import" },
+            ].map((item, i) => (
+              <div key={item.label} style={{
+                padding: "var(--p-space-400)",
+                borderRight: i < 2 ? "1px solid var(--p-color-border-secondary)" : "none",
+                textAlign: "center",
+              }}>
+                <BlockStack gap="200" inlineAlign="center">
+                  <IconBadge icon={item.icon} />
                   <Text as="p" variant="headingLg" fontWeight="bold">
-                    {totalProducts.toLocaleString()}
+                    {item.value}
                   </Text>
-                </InlineStack>
-              </BlockStack>
-            </div>
-            <div style={statMiniStyle}>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Total Imports</Text>
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={ImportIcon} color="var(--p-color-icon-emphasis)" size={22} />
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {(provider.import_count ?? 0).toLocaleString()}
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {item.label}
                   </Text>
-                </InlineStack>
-              </BlockStack>
-            </div>
-            <div style={statMiniStyle}>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Last Import</Text>
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" size={22} />
-                  <Text as="p" variant="headingLg" fontWeight="bold">
-                    {formatTimeAgo(provider.last_fetch_at)}
-                  </Text>
-                </InlineStack>
-              </BlockStack>
-            </div>
+                </BlockStack>
+              </div>
+            ))}
           </div>
         </Card>
 
-        {/* Provider Info + Connection */}
+        {/* Connection & Quick Actions */}
         <Card>
           <BlockStack gap="400">
             <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={GlobeIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">Provider Information</Text>
+              <IconBadge icon={ConnectIcon} />
+              <Text as="h2" variant="headingMd">Connection</Text>
             </InlineStack>
             <Divider />
-            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">Connection</Text>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">{connectionSummary(type, cfg)}</Text>
-                {type === "api" && cfg.authType && cfg.authType !== "none" && (
-                  <Text as="p" variant="bodySm" tone="subdued">Auth: {String(cfg.authType).replace("_", " ").toUpperCase()}</Text>
-                )}
-              </BlockStack>
-              <BlockStack gap="200">
-                {provider.website_url && (
-                  <>
-                    <Text as="p" variant="bodySm" tone="subdued">Website</Text>
-                    <Button variant="plain" url={provider.website_url} external>{provider.website_url}</Button>
-                  </>
-                )}
-                {provider.contact_email && (
-                  <>
-                    <Text as="p" variant="bodySm" tone="subdued">Contact</Text>
-                    <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
-                  </>
-                )}
-              </BlockStack>
-            </InlineGrid>
-            {provider.description && (
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Description</Text>
-                <Text as="p" variant="bodyMd">{provider.description}</Text>
-              </BlockStack>
-            )}
-            {provider.notes && (
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">Notes</Text>
-                <Text as="p" variant="bodyMd">{provider.notes}</Text>
-              </BlockStack>
-            )}
-          </BlockStack>
-        </Card>
 
-        {/* Actions */}
-        <Card>
-          <InlineStack gap="300" wrap>
-            <Button
-              variant="primary"
-              icon={PlusCircleIcon}
-              onClick={() => navigate(`/app/providers/${provider.id}/import?step=upload`)}
-            >
-              {type === "api" ? "Fetch & Import" : "Import Products"}
-            </Button>
-            {(type === "api" || type === "ftp") && (
+            {/* Connection summary */}
+            <Box paddingInline="200">
+              <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">
+                    {connectionSummary(type, cfg)}
+                  </Text>
+                  {type === "api" && cfg.authType && cfg.authType !== "none" && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={LockIcon} tone="subdued" />
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Auth: {String(cfg.authType).replace("_", " ").toUpperCase()}
+                      </Text>
+                    </InlineStack>
+                  )}
+                </BlockStack>
+                <BlockStack gap="200">
+                  {provider.website_url && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={GlobeIcon} tone="subdued" />
+                      <Button variant="plain" url={provider.website_url} external>
+                        {provider.website_url.replace(/^https?:\/\//, "")}
+                      </Button>
+                    </InlineStack>
+                  )}
+                  {provider.contact_email && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={EmailIcon} tone="subdued" />
+                      <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
+                    </InlineStack>
+                  )}
+                  {provider.description && (
+                    <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>
+                  )}
+                </BlockStack>
+              </InlineGrid>
+            </Box>
+
+            <Divider />
+
+            {/* Action buttons */}
+            <InlineStack gap="300" wrap>
               <Button
-                icon={ConnectIcon}
-                onClick={handleTestConnection}
-                loading={testingConnection}
-                disabled={testingConnection}
+                variant="primary"
+                icon={PlusCircleIcon}
+                onClick={() => navigate(`/app/providers/${provider.id}/import?step=upload`)}
               >
-                Test Connection
+                {type === "api" ? "Fetch & Import" : "Import Products"}
               </Button>
-            )}
-            <Button
-              icon={ViewIcon}
-              onClick={() => navigate(`/app/providers/${provider.id}/products`)}
-            >
-              View Products
-            </Button>
-          </InlineStack>
+              {(type === "api" || type === "ftp") && (
+                <Button
+                  icon={ConnectIcon}
+                  onClick={handleTestConnection}
+                  loading={testingConnection}
+                  disabled={testingConnection}
+                >
+                  Test Connection
+                </Button>
+              )}
+              <Button
+                icon={ViewIcon}
+                onClick={() => navigate(`/app/providers/${provider.id}/products`)}
+              >
+                View Products ({totalProducts.toLocaleString()})
+              </Button>
+            </InlineStack>
+          </BlockStack>
         </Card>
 
         {/* Recent Imports */}
@@ -493,7 +529,7 @@ export default function ProviderDetail() {
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
               <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={ImportIcon} color="var(--p-color-icon-emphasis)" />
+                <IconBadge icon={ImportIcon} />
                 <Text as="h2" variant="headingMd">Recent Imports</Text>
               </InlineStack>
               <Button variant="plain" onClick={() => navigate(`/app/providers/${provider.id}/imports`)}>
@@ -534,69 +570,131 @@ export default function ProviderDetail() {
           </BlockStack>
         </Card>
 
-        {/* Settings — Always visible */}
-        <Card>
+        {/* Settings Form */}
+        <fetcher.Form method="POST">
+          <input type="hidden" name="_action" value="update" />
           <BlockStack gap="400">
-            <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={ConnectIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">Settings</Text>
-            </InlineStack>
-            <Divider />
-            <fetcher.Form method="POST">
-              <input type="hidden" name="_action" value="update" />
-              <FormLayout>
-                <FormLayout.Group>
-                  <TextField label="Provider Name" name="name" value={name} onChange={setName} autoComplete="off" />
-                  <Select label="Status" name="status" options={STATUS_OPTIONS} value={status} onChange={setStatus} />
-                </FormLayout.Group>
-                <TextField label="Description" name="description" value={description} onChange={setDescription} multiline={2} autoComplete="off" />
 
-                {/* Type-specific connection fields */}
-                {type === "csv" && (
-                  <TextField label="CSV Delimiter" name="delimiter" value={delimiter} onChange={setDelimiter}
-                    helpText='comma, tab, semicolon, pipe' autoComplete="off" />
-                )}
-                {type === "api" && (
-                  <>
-                    <TextField label="API Endpoint" name="api_endpoint" value={apiEndpoint} onChange={setApiEndpoint}
-                      placeholder="https://api.example.com/products" autoComplete="off" />
-                    <FormLayout.Group>
-                      <Select label="Auth Type" name="api_auth_type" options={[
-                        { label: "None", value: "none" }, { label: "API Key", value: "api_key" },
-                        { label: "Bearer Token", value: "bearer" }, { label: "Basic Auth", value: "basic" },
-                      ]} value={apiAuthType} onChange={setApiAuthType} />
-                      {apiAuthType !== "none" && (
+            {/* General Settings */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={SettingsIcon} />
+                  <Text as="h2" variant="headingMd">General Settings</Text>
+                </InlineStack>
+                <Divider />
+                <FormLayout>
+                  <FormLayout.Group>
+                    <TextField label="Provider Name" name="name" value={name} onChange={setName} autoComplete="off" requiredIndicator />
+                    <Select label="Status" name="status" options={STATUS_OPTIONS} value={status} onChange={setStatus} />
+                  </FormLayout.Group>
+                </FormLayout>
+              </BlockStack>
+            </Card>
+
+            {/* Connection Settings — type-specific */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={DataTableIcon} />
+                  <Text as="h2" variant="headingMd">
+                    {type === "csv" ? "CSV Settings" : type === "api" ? "API Connection" : type === "ftp" ? "FTP Connection" : "Connection Settings"}
+                  </Text>
+                </InlineStack>
+                <Divider />
+                <FormLayout>
+                  {type === "csv" && (
+                    <>
+                      <Select
+                        label="Column Delimiter"
+                        name="delimiter"
+                        options={DELIMITER_OPTIONS}
+                        value={delimiterChoice}
+                        onChange={(val) => {
+                          setDelimiterChoice(val);
+                          if (val !== "custom") setCustomDelimiter("");
+                        }}
+                        helpText="Auto-detected on import, but you can set a default here"
+                      />
+                      {delimiterChoice === "custom" && (
                         <TextField
-                          label={apiAuthType === "basic" ? "Credentials (user:pass)" : apiAuthType === "bearer" ? "Bearer Token" : "API Key"}
-                          name="api_auth_value" value={apiAuthValue} onChange={setApiAuthValue} type="password" autoComplete="off" />
+                          label="Custom Delimiter"
+                          name="custom_delimiter"
+                          value={customDelimiter}
+                          onChange={setCustomDelimiter}
+                          autoComplete="off"
+                          placeholder="Enter custom delimiter character"
+                          helpText="Single character used to separate columns"
+                        />
                       )}
-                    </FormLayout.Group>
-                    <TextField label="Items JSON Path" name="api_items_path" value={apiItemsPath} onChange={setApiItemsPath}
-                      placeholder="data.products" helpText="Leave blank for auto-detect" autoComplete="off" />
-                  </>
-                )}
-                {type === "ftp" && (
-                  <>
-                    <FormLayout.Group>
-                      <TextField label="Host" name="ftp_host" value={ftpHost} onChange={setFtpHost} placeholder="ftp.example.com" autoComplete="off" />
-                      <TextField label="Port" name="ftp_port" value={ftpPort} onChange={setFtpPort} type="number" autoComplete="off" />
-                    </FormLayout.Group>
-                    <FormLayout.Group>
-                      <TextField label="Username" name="ftp_username" value={ftpUsername} onChange={setFtpUsername} autoComplete="off" />
-                      <TextField label="Password" name="ftp_password" value={ftpPassword} onChange={setFtpPassword} type="password" autoComplete="off" />
-                    </FormLayout.Group>
-                    <TextField label="Remote Path" name="ftp_path" value={ftpPath} onChange={setFtpPath} placeholder="/data/products/" autoComplete="off" />
-                  </>
-                )}
+                    </>
+                  )}
+                  {type === "api" && (
+                    <>
+                      <TextField label="API Endpoint" name="api_endpoint" value={apiEndpoint} onChange={setApiEndpoint}
+                        placeholder="https://api.example.com/products" autoComplete="off" />
+                      <FormLayout.Group>
+                        <Select label="Auth Type" name="api_auth_type" options={[
+                          { label: "None", value: "none" }, { label: "API Key (query param)", value: "api_key" },
+                          { label: "Bearer Token", value: "bearer" }, { label: "Basic Auth", value: "basic" },
+                        ]} value={apiAuthType} onChange={setApiAuthType} />
+                        {apiAuthType !== "none" && (
+                          <TextField
+                            label={apiAuthType === "basic" ? "Credentials (user:pass)" : apiAuthType === "bearer" ? "Bearer Token" : "API Key"}
+                            name="api_auth_value" value={apiAuthValue} onChange={setApiAuthValue} type="password" autoComplete="off" />
+                        )}
+                      </FormLayout.Group>
+                      <TextField label="Items JSON Path" name="api_items_path" value={apiItemsPath} onChange={setApiItemsPath}
+                        placeholder="data.products" helpText="Dot-notation path to the array of products. Leave blank for auto-detect." autoComplete="off" />
+                    </>
+                  )}
+                  {type === "ftp" && (
+                    <>
+                      <FormLayout.Group>
+                        <Select label="Protocol" name="ftp_protocol" options={[
+                          { label: "FTP", value: "ftp" }, { label: "SFTP", value: "sftp" },
+                        ]} value={ftpProtocol} onChange={setFtpProtocol} />
+                        <TextField label="Host" name="ftp_host" value={ftpHost} onChange={setFtpHost}
+                          placeholder="ftp.supplier.com" autoComplete="off" />
+                      </FormLayout.Group>
+                      <FormLayout.Group>
+                        <TextField label="Port" name="ftp_port" value={ftpPort} onChange={setFtpPort} type="number" autoComplete="off" />
+                        <TextField label="Remote Path" name="ftp_path" value={ftpPath} onChange={setFtpPath}
+                          placeholder="/data/products/" autoComplete="off" />
+                      </FormLayout.Group>
+                      <FormLayout.Group>
+                        <TextField label="Username" name="ftp_username" value={ftpUsername} onChange={setFtpUsername} autoComplete="off" />
+                        <TextField label="Password" name="ftp_password" value={ftpPassword} onChange={setFtpPassword} type="password" autoComplete="off" />
+                      </FormLayout.Group>
+                    </>
+                  )}
+                </FormLayout>
+              </BlockStack>
+            </Card>
 
-                {(type === "api" || type === "ftp") && (
-                  <>
-                    <Divider />
+            {/* Import & Scheduling */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ImportIcon} />
+                  <Text as="h2" variant="headingMd">Import Settings</Text>
+                </InlineStack>
+                <Divider />
+                <FormLayout>
+                  <Select
+                    label="Duplicate Strategy"
+                    name="duplicate_strategy"
+                    options={DUPLICATE_OPTIONS}
+                    value={duplicateStrategy}
+                    onChange={setDuplicateStrategy}
+                    helpText="How to handle products with matching SKUs that already exist"
+                  />
+                  {(type === "api" || type === "ftp") && (
                     <Select
                       label="Auto-Fetch Schedule"
                       name="fetch_schedule"
-                      value={provider.fetch_schedule || "manual"}
-                      onChange={() => {}}
+                      value={fetchSchedule}
+                      onChange={setFetchSchedule}
                       options={[
                         { label: "Manual only", value: "manual" },
                         { label: "Every 6 hours", value: "6h" },
@@ -609,30 +707,86 @@ export default function ProviderDetail() {
                         : "Set a schedule to automatically re-fetch products from this provider"
                       }
                     />
-                  </>
-                )}
+                  )}
+                </FormLayout>
+              </BlockStack>
+            </Card>
 
-                <Divider />
-                <FormLayout.Group>
-                  <Select label="Duplicate Strategy" name="duplicate_strategy" options={DUPLICATE_OPTIONS} value={duplicateStrategy}
-                    onChange={setDuplicateStrategy} helpText="How to handle products that already exist" />
-                  <TextField label="Website URL" name="website_url" value={websiteUrl} onChange={setWebsiteUrl}
-                    placeholder="https://supplier.com" autoComplete="off" />
-                </FormLayout.Group>
-                <FormLayout.Group>
-                  <TextField label="Contact Email" name="contact_email" value={contactEmail} onChange={setContactEmail}
-                    placeholder="sales@supplier.com" type="email" autoComplete="off" />
-                  <TextField label="Notes" name="notes" value={notes} onChange={setNotes} multiline={2}
-                    autoComplete="off" placeholder="Internal notes about this provider..." />
-                </FormLayout.Group>
-
-                <InlineStack align="end">
-                  <Button variant="primary" submit loading={isSubmitting} disabled={isSubmitting}>Save Changes</Button>
+            {/* Supplier Profile */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={PersonIcon} />
+                  <Text as="h2" variant="headingMd">Supplier Profile</Text>
                 </InlineStack>
-              </FormLayout>
-            </fetcher.Form>
+                <Divider />
+                <FormLayout>
+                  <FormLayout.Group>
+                    <TextField label="Logo URL" name="logo_url" value={logoUrl} onChange={setLogoUrl}
+                      placeholder="https://supplier.com/logo.png" autoComplete="off"
+                      helpText="Direct URL to the supplier's logo image" />
+                    <TextField label="Website URL" name="website_url" value={websiteUrl} onChange={setWebsiteUrl}
+                      placeholder="https://supplier.com" autoComplete="off" />
+                  </FormLayout.Group>
+                  <FormLayout.Group>
+                    <TextField label="Contact Email" name="contact_email" value={contactEmail} onChange={setContactEmail}
+                      placeholder="sales@supplier.com" type="email" autoComplete="off" />
+                    <TextField label="Description" name="description" value={description} onChange={setDescription}
+                      placeholder="Automotive exhaust manufacturer based in UK" autoComplete="off" />
+                  </FormLayout.Group>
+                </FormLayout>
+              </BlockStack>
+            </Card>
+
+            {/* Portal Access */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={LockIcon} />
+                  <Text as="h2" variant="headingMd">Portal Access</Text>
+                  <Badge tone="info">Optional</Badge>
+                </InlineStack>
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Store your login credentials for the supplier's website or B2B portal. These are for your reference only and are stored securely.
+                </Text>
+                <FormLayout>
+                  <TextField label="Portal / Login URL" name="portal_url" value={portalUrl} onChange={setPortalUrl}
+                    placeholder="https://b2b.supplier.com/login" autoComplete="off" />
+                  <FormLayout.Group>
+                    <TextField label="Username" name="portal_username" value={portalUsername} onChange={setPortalUsername}
+                      autoComplete="off" placeholder="your-username" />
+                    <TextField label="Password" name="portal_password" value={portalPassword} onChange={setPortalPassword}
+                      type="password" autoComplete="off" placeholder="your-password" />
+                  </FormLayout.Group>
+                </FormLayout>
+              </BlockStack>
+            </Card>
+
+            {/* Notes */}
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={NoteIcon} />
+                  <Text as="h2" variant="headingMd">Notes</Text>
+                </InlineStack>
+                <Divider />
+                <FormLayout>
+                  <TextField label="Internal Notes" name="notes" value={notes} onChange={setNotes} multiline={4}
+                    autoComplete="off" placeholder="Pricing agreements, discount codes, contact persons, delivery terms, special instructions..."
+                    helpText="Only visible to you — not shared with the supplier" />
+                </FormLayout>
+              </BlockStack>
+            </Card>
+
+            {/* Save button */}
+            <InlineStack align="end">
+              <Button variant="primary" submit loading={isSubmitting} disabled={isSubmitting}>
+                Save Changes
+              </Button>
+            </InlineStack>
           </BlockStack>
-        </Card>
+        </fetcher.Form>
 
         {/* Danger Zone */}
         <Card>

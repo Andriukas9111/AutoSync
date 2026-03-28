@@ -157,7 +157,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (type === "csv") {
-    config.delimiter = String(formData.get("csv_delimiter") || ",");
+    const delimValue = String(formData.get("csv_delimiter") || ",");
+    const customDelim = String(formData.get("csv_custom_delimiter") || "").trim();
+    config.delimiter = delimValue === "custom" && customDelim ? customDelim : delimValue;
   }
 
   const { data: provider, error: insertError } = await db
@@ -606,9 +608,21 @@ export default function ProvidersNew() {
                           { label: "Tab (\\t)", value: "\t" },
                           { label: "Semicolon (;) — European standard", value: ";" },
                           { label: "Pipe (|)", value: "|" },
+                          { label: "Custom", value: "custom" },
                         ]}
                         helpText="Auto-detected on import, but you can set a default here."
                       />
+                      {csvDelimiter === "custom" && (
+                        <TextField
+                          label="Custom Delimiter"
+                          name="csv_custom_delimiter"
+                          value=""
+                          onChange={() => {}}
+                          autoComplete="off"
+                          placeholder="Enter custom delimiter character"
+                          helpText="Single character used to separate columns"
+                        />
+                      )}
                     </FormLayout>
                   </>
                 )}
