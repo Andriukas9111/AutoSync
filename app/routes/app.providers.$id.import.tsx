@@ -106,11 +106,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .from("provider-uploads")
     .createSignedUploadUrl(uploadToken);
 
-  // Build full URL from relative signed URL
-  const supabaseUrl = process.env.SUPABASE_URL || "";
-  const fullUploadUrl = signedUrl?.signedUrl
-    ? `${supabaseUrl}/storage/v1${signedUrl.signedUrl}`
-    : null;
+  // signedUrl already contains the full URL from Supabase JS client
+  const fullUploadUrl = signedUrl?.signedUrl || null;
 
   return {
     provider,
