@@ -226,6 +226,64 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return data({ success: true, deletedAll: true });
   }
 
+  if (actionType === "bulk_archive") {
+    const ids = JSON.parse(String(formData.get("ids") || "[]")) as string[];
+    if (ids.length === 0) {
+      return data({ error: "No products selected" }, { status: 400 });
+    }
+
+    // Get product SKUs for archiving
+    const { data: productsToArchive } = await db
+      .from("products")
+      .select("sku, title")
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .in("id", ids)
+      .not("sku", "is", null);
+
+    if (productsToArchive && productsToArchive.length > 0) {
+      // Insert into archived products (upsert to avoid duplicates)
+      const archiveRows = productsToArchive
+        .filter((p) => p.sku)
+        .map((p) => ({
+          shop_id: shopId,
+          provider_id: providerId,
+          provider_sku: p.sku,
+          title: p.title,
+          reason: "user_excluded",
+        }));
+
+      if (archiveRows.length > 0) {
+        await db
+          .from("provider_archived_products")
+          .upsert(archiveRows, { onConflict: "provider_id,provider_sku" });
+      }
+    }
+
+    // Delete the products
+    await db
+      .from("products")
+      .delete()
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .in("id", ids);
+
+    // Update provider product count
+    const { count } = await db
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    await db
+      .from("providers")
+      .update({ product_count: count ?? 0, updated_at: new Date().toISOString() })
+      .eq("id", providerId)
+      .eq("shop_id", shopId);
+
+    return data({ success: true, archived: ids.length });
+  }
+
   return data({ error: "Unknown action" }, { status: 400 });
 };
 
@@ -295,7 +353,20 @@ export default function ProviderProducts() {
     setDeleteModalOpen(false);
   }, [fetcher]);
 
+  const handleBulkArchive = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    fetcher.submit(
+      { _action: "bulk_archive", ids: JSON.stringify(selectedResources) },
+      { method: "POST" },
+    );
+    clearSelection();
+  }, [selectedResources, fetcher, clearSelection]);
+
   const promotedBulkActions = [
+    {
+      content: `Archive ${selectedResources.length} selected`,
+      onAction: handleBulkArchive,
+    },
     {
       content: `Delete ${selectedResources.length} selected`,
       onAction: handleBulkDelete,
