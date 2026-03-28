@@ -172,9 +172,18 @@ Deno.serve(async (req) => {
         }
       }
 
-      const title = mapped.title || String(item.name || item.title || "Untitled");
+      // Decode HTML entities in mapped values
+      const decodeEntities = (s: string) => s
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'");
+      const stripHtml = (s: string) => decodeEntities(s).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+      const rawTitle = mapped.title || String(item.name || item.title || "Untitled");
+      const title = decodeEntities(rawTitle);
       const sku = mapped.sku || String(item.code || item.sku || "");
       const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const rawDesc = mapped.description || String(item.short_desc || item.desc || "");
+      const description = rawDesc ? stripHtml(rawDesc) : null;
 
       return {
         shop_id,
@@ -189,7 +198,7 @@ Deno.serve(async (req) => {
         compare_at_price: mapped.compare_at_price ? parseFloat(mapped.compare_at_price) : null,
         vendor: mapped.vendor || null,
         product_type: mapped.product_type || null,
-        description: mapped.description || String(item.short_desc || item.desc || "") || null,
+        description,
         image_url: mapped.image_url || String(item.image || "") || null,
         weight: mapped.weight || (item.weight ? String(item.weight) : null),
         source: "api",
