@@ -601,6 +601,7 @@ export default function ProviderProducts() {
                     key={id}
                     selected={selectedResources.includes(id)}
                     position={index}
+                    onClick={() => navigate(`/app/products/${id}`)}
                   >
                     <IndexTable.Cell>
                       <InlineStack gap="300" blockAlign="center">

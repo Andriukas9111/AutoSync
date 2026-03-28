@@ -73,6 +73,11 @@ interface Product {
   variants: any[] | null;
   fitment_status: FitmentStatus;
   source: string | null;
+  provider_id: string | null;
+  status: string | null;
+  cost_price: number | null;
+  weight: string | null;
+  raw_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -418,6 +423,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, message: "Status updated" };
   }
 
+  if (intent === "approve_to_catalog") {
+    const { error: approveError } = await db
+      .from("products")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("id", productId).eq("shop_id", shopId);
+
+    if (approveError) return { error: "Failed to approve" };
+    return { success: true, message: "Product approved and added to catalog" };
+  }
+
   return { error: "Unknown action" };
 };
 
@@ -627,8 +642,22 @@ export default function ProductDetails() {
     <Page
       fullWidth
       title={product.title}
-      backAction={{ onAction: () => navigate(isQueueMode ? "/app/fitment" : "/app/products") }}
-      titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      backAction={{ onAction: () => navigate(
+        isQueueMode ? "/app/fitment"
+          : product.provider_id ? `/app/providers/${product.provider_id}/products`
+          : "/app/products"
+      ) }}
+      titleMetadata={
+        <InlineStack gap="200">
+          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          {product.status === "staged" && <Badge tone="attention">Staged</Badge>}
+        </InlineStack>
+      }
+      primaryAction={product.status === "staged" ? {
+        content: "Approve to Catalog",
+        icon: CheckCircleIcon,
+        onAction: () => submit({ _action: "approve_to_catalog" }, { method: "POST" }),
+      } : undefined}
       secondaryActions={isQueueMode ? [
         {
           content: "Skip",
@@ -1214,6 +1243,65 @@ export default function ProductDetails() {
                 </BlockStack>
               </BlockStack>
             </Card>
+
+            {/* Provider Raw Data Card — shows ALL data fetched from the API */}
+            {product.raw_data && typeof product.raw_data === "object" && Object.keys(product.raw_data).length > 0 && (
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ConnectIcon} />
+                    <Text as="h2" variant="headingSm" fontWeight="semibold">
+                      {`Provider Data (${Object.keys(product.raw_data).length} fields)`}
+                    </Text>
+                  </InlineStack>
+
+                  {/* Missing fields indicator */}
+                  {(!product.image_url || !product.description) && (
+                    <Banner tone="warning">
+                      <p>
+                        {[
+                          !product.image_url && "No image",
+                          !product.description && "No description",
+                          !product.vendor && "No vendor",
+                        ].filter(Boolean).join(" · ")}
+                        {" — check raw data below for available fields"}
+                      </p>
+                    </Banner>
+                  )}
+
+                  {/* Staged product approval */}
+                  {product.status === "staged" && (
+                    <Banner tone="info">
+                      <p>This product is <strong>staged</strong> — it's not visible in the main catalog yet. Approve it to add to your catalog.</p>
+                    </Banner>
+                  )}
+
+                  <div style={{ maxHeight: "300px", overflowY: "auto", borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
+                    <BlockStack gap="0">
+                      {Object.entries(product.raw_data)
+                        .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                        .filter(([, v]) => typeof v !== "object") // Skip nested objects — show only flat values
+                        .slice(0, 100)
+                        .map(([key, value], i) => (
+                          <div key={key} style={{
+                            display: "flex",
+                            padding: "6px 12px",
+                            borderBottom: "1px solid var(--p-color-border-secondary)",
+                            background: i % 2 === 0 ? "var(--p-color-bg-surface)" : "var(--p-color-bg-surface-secondary)",
+                          }}>
+                            <Text as="span" variant="bodySm" tone="subdued" breakWord>
+                              <span style={{ fontWeight: 600, minWidth: "160px", display: "inline-block" }}>{key}</span>
+                            </Text>
+                            <Text as="span" variant="bodySm" breakWord>
+                              {String(value).length > 120 ? String(value).slice(0, 120) + "…" : String(value)}
+                            </Text>
+                          </div>
+                        ))}
+                    </BlockStack>
+                  </div>
+                </BlockStack>
+              </Card>
+            )}
 
             {/* Shopify Link Card */}
             {product.shopify_product_id && (
