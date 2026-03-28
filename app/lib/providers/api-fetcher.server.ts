@@ -145,6 +145,47 @@ export async function fetchFromApi(
     }
   }
 
+  // Auto-pagination: if response has paging.next_page_href, follow it
+  if (!responseFormat || responseFormat === "json") {
+    try {
+      const json = JSON.parse(rawText);
+      const paging = json?.paging;
+      if (paging?.next_page_href && items.length > 0) {
+        const baseUrl = new URL(endpoint);
+        let nextHref = paging.next_page_href;
+        const MAX_PAGES = 50; // Safety limit
+        let pageCount = 1;
+
+        while (nextHref && pageCount < MAX_PAGES) {
+          pageCount++;
+          // Build full URL from relative href
+          const nextUrl = new URL(nextHref, baseUrl.origin);
+          // Preserve API key and other query params from original URL
+          baseUrl.searchParams.forEach((v, k) => {
+            if (!nextUrl.searchParams.has(k)) nextUrl.searchParams.set(k, v);
+          });
+
+          const pageController = new AbortController();
+          const pageTimeout = setTimeout(() => pageController.abort(), 30_000);
+          const pageResponse = await fetch(nextUrl.toString(), {
+            method: "GET", headers, signal: pageController.signal,
+          });
+          clearTimeout(pageTimeout);
+
+          if (!pageResponse.ok) break;
+          const pageText = await pageResponse.text();
+          try {
+            const pageJson = JSON.parse(pageText);
+            const pageItems = extractItems(pageJson, itemsPath);
+            if (pageItems.length === 0) break;
+            items.push(...pageItems);
+            nextHref = pageJson?.paging?.next_page_href ?? null;
+          } catch { break; }
+        }
+      }
+    } catch { /* not paginated JSON, ignore */ }
+  }
+
   return {
     items,
     itemCount: items.length,
