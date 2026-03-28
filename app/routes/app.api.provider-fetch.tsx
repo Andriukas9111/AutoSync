@@ -307,14 +307,13 @@ export async function action({ request }: ActionFunctionArgs) {
       }
       try {
         // Import fetches ALL pages with fields=* for full product data
-        // Disable detail endpoint enrichment (too slow for full import)
         const result = await fetchFromApi({
           endpoint,
           authType: String(config.authType ?? "none") as "none" | "api_key" | "bearer" | "basic",
           authValue: String(config.authValue ?? ""),
           itemsPath: String(config.itemsPath ?? ""),
           responseFormat: String(config.responseFormat ?? "json") as "json" | "csv" | "xml",
-          fetchFullDetails: true, // Add fields=* and limit=250 for enriched data
+          fetchFullDetails: true, // fields=* + limit=250 for full data
         });
         if (result.items.length === 0) {
           return data({ error: "API returned no items." });
