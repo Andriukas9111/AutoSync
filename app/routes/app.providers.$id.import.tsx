@@ -527,21 +527,12 @@ export default function ProviderImportWizard() {
       formData.set("mappings", JSON.stringify(mappings));
       formData.set("duplicate_strategy", duplicateStrategy);
 
-      if (file.size > 4 * 1024 * 1024 && uploadUrl && uploadToken) {
-        // Upload to Supabase Storage via signed URL
-        const upResp = await fetch(uploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": file.type || "application/octet-stream" },
-          body: file,
-        });
-        if (!upResp.ok) {
-          setError(`File upload failed (${upResp.status}). File may be too large.`);
-          setStep("validate");
-          return;
-        }
-        formData.set("storage_path", uploadToken);
+      if (storagePath) {
+        // File already in Supabase Storage from the preview step — reuse it
+        formData.set("storage_path", storagePath);
         formData.set("file_name", file.name);
       } else {
+        // Small file or no storage path — send directly
         formData.set("file", file);
       }
 
