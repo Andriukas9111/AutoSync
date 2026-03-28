@@ -601,7 +601,6 @@ export default function ProviderProducts() {
                     key={id}
                     selected={selectedResources.includes(id)}
                     position={index}
-                    onClick={() => navigate(`/app/products/${id}`)}
                   >
                     <IndexTable.Cell>
                       <InlineStack gap="300" blockAlign="center">
@@ -617,9 +616,12 @@ export default function ProviderProducts() {
                           </div>
                         )}
                         <BlockStack gap="050">
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                          <Button
+                            variant="plain"
+                            onClick={() => navigate(`/app/products/${id}`)}
+                          >
                             {((product.title as string) || "Untitled").slice(0, 60)}
-                          </Text>
+                          </Button>
                           {typeof product.product_type === "string" && product.product_type && (
                             <Text as="span" variant="bodySm" tone="subdued">
                               {product.product_type}
