@@ -16,18 +16,24 @@ export async function action({ request }: ActionFunctionArgs) {
   const shopId = session.shop;
 
   const formData = await request.formData();
-  const file = formData.get("file") as File | null;
   const providerId = String(formData.get("provider_id") || "").trim();
   const itemsPath = String(formData.get("items_path") || "").trim() || undefined;
   const sheetName = String(formData.get("sheet_name") || "").trim() || undefined;
   const delimiter = String(formData.get("delimiter") || "").trim() || undefined;
 
-  // Validation
-  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-  if (!file || file.size === 0) {
+  // Support two modes:
+  // 1. Direct file upload (small files, under Vercel 4.5MB limit)
+  // 2. Storage path (large files uploaded via Supabase Edge Function)
+  const storagePath = String(formData.get("storage_path") || "").trim();
+  const file = formData.get("file") as File | null;
+  const fileNameOverride = String(formData.get("file_name") || "").trim();
+
+  if (!storagePath && (!file || file.size === 0)) {
     return data({ error: "No file uploaded." }, { status: 400 });
   }
-  if (file.size > MAX_FILE_SIZE) {
+
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+  if (file && file.size > MAX_FILE_SIZE) {
     return data({ error: "File exceeds 50MB limit." }, { status: 413 });
   }
 
@@ -47,14 +53,33 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: "Provider not found." }, { status: 404 });
   }
 
-  // Read file content
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const format = detectFormat(file.name, buffer);
+  // Get file content — either from direct upload or Supabase Storage
+  let buffer: Buffer;
+  let fileName: string;
+
+  if (storagePath) {
+    // Download from Supabase Storage
+    const { data: fileData, error: downloadError } = await db.storage
+      .from("provider-uploads")
+      .download(storagePath);
+
+    if (downloadError || !fileData) {
+      return data({ error: `Failed to download file from storage: ${downloadError?.message || "Unknown error"}` }, { status: 500 });
+    }
+
+    buffer = Buffer.from(await fileData.arrayBuffer());
+    fileName = fileNameOverride || storagePath.split("/").pop() || "unknown";
+  } else {
+    buffer = Buffer.from(await file!.arrayBuffer());
+    fileName = file!.name;
+  }
+
+  const format = detectFormat(fileName, buffer);
 
   // Parse file using universal parser
   let parsed;
   try {
-    parsed = await parseFile(buffer, file.name, {
+    parsed = await parseFile(buffer, fileName, {
       itemsPath,
       sheetName,
       delimiter,
@@ -107,13 +132,14 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
-  const fileSizeKb = (file.size / 1024).toFixed(1);
-  const fileSizeMb = file.size > 1024 * 1024 ? (file.size / (1024 * 1024)).toFixed(1) : null;
+  const fileSize = file ? file.size : buffer.length;
+  const fileSizeKb = (fileSize / 1024).toFixed(1);
+  const fileSizeMb = fileSize > 1024 * 1024 ? (fileSize / (1024 * 1024)).toFixed(1) : null;
 
   return data({
     success: true,
     preview: {
-      fileName: file.name,
+      fileName,
       fileSize: fileSizeMb ? `${fileSizeMb} MB` : `${fileSizeKb} KB`,
       format: parsed.format,
       totalRows: parsed.rowCount,

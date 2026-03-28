@@ -98,10 +98,20 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const targetFields = getTargetFields();
 
+  // Generate a signed upload URL for Supabase Storage
+  // This lets the client upload large files directly to Supabase,
+  // bypassing Vercel's 4.5MB body size limit
+  const uploadToken = `uploads/${providerId}/${Date.now()}_file`;
+  const { data: signedUrl } = await db.storage
+    .from("provider-uploads")
+    .createSignedUploadUrl(uploadToken);
+
   return {
     provider,
     plan,
     targetFields,
+    uploadUrl: signedUrl?.signedUrl || null,
+    uploadToken: signedUrl ? uploadToken : null,
   };
 };
 
@@ -132,7 +142,7 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 export default function ProviderImportWizard() {
-  const { provider, targetFields } = useLoaderData<typeof loader>();
+  const { provider, targetFields, uploadUrl, uploadToken } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -208,29 +218,64 @@ export default function ProviderImportWizard() {
     [],
   );
 
+  // Storage path from uploaded file (set after Supabase upload)
+  const [storagePath, setStoragePath] = useState<string | null>(null);
+
   const handlePreviewFile = useCallback(async () => {
     if (!file) return;
     setLoading(true);
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("provider_id", provider.id);
+      let usedStoragePath: string | null = null;
+
+      // For large files (>4MB), upload to Supabase Storage first via signed URL
+      // This bypasses Vercel's 4.5MB body size limit
+      if (file.size > 4 * 1024 * 1024 && uploadUrl && uploadToken) {
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+
+        if (!uploadResponse.ok) {
+          setError(`File upload failed (${uploadResponse.status}). Please try a smaller file or contact support.`);
+          setLoading(false);
+          return;
+        }
+
+        usedStoragePath = uploadToken;
+        setStoragePath(uploadToken);
+      } else if (file.size > 4 * 1024 * 1024) {
+        setError("File is too large for direct upload. Please try again or use a smaller file.");
+        setLoading(false);
+        return;
+      }
+
+      // Send to Vercel API for parsing/preview
+      const previewForm = new FormData();
+      previewForm.set("provider_id", provider.id);
+
+      if (usedStoragePath) {
+        // Large file: send storage path only
+        previewForm.set("storage_path", usedStoragePath);
+        previewForm.set("file_name", file.name);
+      } else {
+        // Small file: send directly
+        previewForm.set("file", file);
+      }
 
       const response = await fetch("/app/api/upload-preview", {
         method: "POST",
-        body: formData,
+        body: previewForm,
       });
 
       if (!response.ok) {
-        // Try to parse error response, but handle HTML/redirect responses gracefully
         let errorMessage = `Server error (${response.status})`;
         try {
           const result = await response.json();
           errorMessage = result.error || errorMessage;
         } catch {
-          // Response wasn't JSON (likely auth redirect)
           if (response.status === 401 || response.status === 403) {
             errorMessage = "Session expired — please reload the page";
           }
@@ -274,7 +319,7 @@ export default function ProviderImportWizard() {
     } finally {
       setLoading(false);
     }
-  }, [file, provider.id]);
+  }, [file, provider.id, uploadUrl, uploadToken]);
 
   // ---------------------------------------------------------------------------
   // API Fetch — fetch data directly from provider's configured API endpoint
