@@ -596,7 +596,14 @@ export default function ProductDetails() {
   const statusBadge = STATUS_BADGES[product.fitment_status] ?? STATUS_BADGES.unmapped;
 
   const cleanDescription = product.description
-    ? product.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+    ? product.description
+        // 1. Decode HTML entities first (&lt; → <, &amp; → &, etc.)
+        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+        // 2. Then strip HTML tags
+        .replace(/<[^>]*>/g, " ")
+        // 3. Clean up whitespace
+        .replace(/\s+/g, " ").trim()
     : null;
 
   const variants = Array.isArray(product.variants) ? product.variants : [];
@@ -1277,27 +1284,49 @@ export default function ProductDetails() {
                     </Banner>
                   )}
 
-                  <div style={{ maxHeight: "300px", overflowY: "auto", borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
+                  <div style={{ maxHeight: "400px", overflowY: "auto", borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
                     <BlockStack gap="0">
                       {Object.entries(product.raw_data)
                         .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                        .filter(([, v]) => typeof v !== "object") // Skip nested objects — show only flat values
+                        .filter(([, v]) => typeof v !== "object")
+                        // Sort: important fields first (name, desc, image, price, code, status, link)
+                        .sort(([a], [b]) => {
+                          const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "status", "availability", "link", "weight"];
+                          const ai = priority.indexOf(a);
+                          const bi = priority.indexOf(b);
+                          if (ai !== -1 && bi !== -1) return ai - bi;
+                          if (ai !== -1) return -1;
+                          if (bi !== -1) return 1;
+                          return a.localeCompare(b);
+                        })
                         .slice(0, 100)
-                        .map(([key, value], i) => (
-                          <div key={key} style={{
-                            display: "flex",
-                            padding: "6px 12px",
-                            borderBottom: "1px solid var(--p-color-border-secondary)",
-                            background: i % 2 === 0 ? "var(--p-color-bg-surface)" : "var(--p-color-bg-surface-secondary)",
-                          }}>
-                            <Text as="span" variant="bodySm" tone="subdued" breakWord>
-                              <span style={{ fontWeight: 600, minWidth: "160px", display: "inline-block" }}>{key}</span>
-                            </Text>
-                            <Text as="span" variant="bodySm" breakWord>
-                              {String(value).length > 120 ? String(value).slice(0, 120) + "…" : String(value)}
-                            </Text>
-                          </div>
-                        ))}
+                        .map(([key, value], i) => {
+                          // Decode HTML entities for display
+                          let display = String(value)
+                            .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                            .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+                            .replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+                            .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                          if (display.length > 200) display = display.slice(0, 200) + "…";
+
+                          return (
+                            <div key={key} style={{
+                              display: "grid",
+                              gridTemplateColumns: "180px 1fr",
+                              gap: "8px",
+                              padding: "8px 12px",
+                              borderBottom: "1px solid var(--p-color-border-secondary)",
+                              background: i % 2 === 0 ? "var(--p-color-bg-surface)" : "var(--p-color-bg-surface-secondary)",
+                            }}>
+                              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
+                                {key}
+                              </Text>
+                              <Text as="span" variant="bodySm" breakWord>
+                                {display}
+                              </Text>
+                            </div>
+                          );
+                        })}
                     </BlockStack>
                   </div>
                 </BlockStack>
