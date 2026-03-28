@@ -3,7 +3,7 @@
  */
 
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, Outlet, useLocation } from "react-router";
 import {
   Page,
   Card,
@@ -93,6 +93,13 @@ export default function ProviderImportHistory() {
   const { provider, imports, totalImports, totalPages, currentPage } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // If on a child route (import detail), render the child
+  const isChildRoute = /\/imports\/[a-f0-9-]+/.test(location.pathname);
+  if (isChildRoute) {
+    return <Outlet />;
+  }
 
   function formatDuration(start: string | null, end: string | null): string {
     if (!start || !end) return "—";

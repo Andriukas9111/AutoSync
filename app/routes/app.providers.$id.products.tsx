@@ -538,11 +538,17 @@ export default function ProviderProducts() {
                   >
                     <IndexTable.Cell>
                       <InlineStack gap="300" blockAlign="center">
-                        <Thumbnail
-                          source={(product.image_url as string) || ""}
-                          alt={(product.title as string) || ""}
-                          size="small"
-                        />
+                        {product.image_url ? (
+                          <Thumbnail
+                            source={product.image_url as string}
+                            alt={(product.title as string) || ""}
+                            size="small"
+                          />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-surface-secondary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--p-color-text-subdued)", fontSize: 11, fontWeight: 600 }}>
+                            {((product.title as string) || "?").slice(0, 3).toUpperCase()}
+                          </div>
+                        )}
                         <BlockStack gap="050">
                           <Text as="span" variant="bodyMd" fontWeight="semibold">
                             {((product.title as string) || "Untitled").slice(0, 60)}
