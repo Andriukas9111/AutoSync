@@ -19,7 +19,6 @@ import {
 } from "@shopify/polaris";
 import {
   ImportIcon,
-  ViewIcon,
   DatabaseIcon,
   ProductIcon,
   CategoriesIcon,
@@ -114,22 +113,9 @@ function getStatusLabel(status: string): string {
   }
 }
 
-/** Polaris-safe background color token per provider type for the initial avatar */
-function getAvatarBackground(type: string): string {
-  switch (type) {
-    case "csv":
-      return "var(--p-color-bg-fill-info)";
-    case "json":
-      return "var(--p-color-bg-fill-success)";
-    case "xml":
-      return "var(--p-color-bg-fill-warning)";
-    case "api":
-      return "var(--p-color-bg-fill-caution)";
-    case "ftp":
-      return "var(--p-color-bg-fill-info)";
-    default:
-      return "var(--p-color-bg-fill-info)";
-  }
+/** Polaris-safe background color token for provider avatar — consistent blue theme */
+function getAvatarBackground(): string {
+  return "var(--p-color-bg-fill-info)";
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +381,33 @@ function ProviderCard({
   const timeAgo = formatTimeAgo(provider.last_fetch_at);
 
   return (
-    <Card>
+    <div
+      onClick={() => onNavigate(`/app/providers/${provider.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onNavigate(`/app/providers/${provider.id}`);
+        }
+      }}
+      role="link"
+      tabIndex={0}
+      style={{
+        cursor: "pointer",
+        borderRadius: "var(--p-border-radius-300)",
+        border: "1px solid var(--p-color-border)",
+        padding: "var(--p-space-400)",
+        background: "var(--p-color-bg-surface)",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border)";
+      }}
+    >
       <BlockStack gap="300">
         {/* Top row: logo / name / type badge */}
         <InlineStack gap="300" blockAlign="center" wrap={false}>
@@ -411,7 +423,7 @@ function ProviderCard({
                 width: 40,
                 height: 40,
                 borderRadius: "50%",
-                background: getAvatarBackground(provider.type),
+                background: getAvatarBackground(),
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -471,32 +483,21 @@ function ProviderCard({
           </Text>
         </InlineStack>
 
-        {/* Status badge */}
-        <Box>
+        {/* Status badge + Quick action */}
+        <InlineStack align="space-between" blockAlign="center">
           <Badge tone={statusTone}>{statusLabel}</Badge>
-        </Box>
-
-        {/* Action buttons */}
-        <InlineStack gap="200">
           <Button
             icon={ImportIcon}
-            onClick={() =>
-              onNavigate(`/app/providers/${provider.id}/import`)
-            }
+            size="slim"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(`/app/providers/${provider.id}/import`);
+            }}
           >
             Import
           </Button>
-          <Button
-            variant="plain"
-            icon={ViewIcon}
-            onClick={() =>
-              onNavigate(`/app/providers/${provider.id}`)
-            }
-          >
-            View
-          </Button>
         </InlineStack>
       </BlockStack>
-    </Card>
+    </div>
   );
 }
