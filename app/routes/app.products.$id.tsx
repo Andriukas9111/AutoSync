@@ -449,6 +449,7 @@ export default function ProductDetails() {
   const isSubmitting = navigation.state === "submitting";
 
   const isQueueMode = searchParams.get("from") === "fitment";
+  const isStaged = product.status === "staged"; // Provider imports — show data only, no fitment mapping
 
   // Suggestion system
   const suggestionFetcher = useFetcher<{ suggestions?: Array<Record<string, unknown>>; hints?: string[]; diagnostics?: string[] }>();
@@ -847,8 +848,8 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>
 
-            {/* ── Smart Suggestions Card ── */}
-            <Card>
+            {/* ── Smart Suggestions Card — hidden for staged provider products ── */}
+            {!isStaged && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -948,10 +949,10 @@ export default function ProductDetails() {
                   </BlockStack>
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
 
-            {/* Current Fitments Card */}
-            <Card>
+            {/* Current Fitments Card — hidden for staged provider products */}
+            {!isStaged && <Card>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -1043,10 +1044,10 @@ export default function ProductDetails() {
                   />
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
 
-            {/* Manual Add Fitment Card — collapsible */}
-            <Card>
+            {/* Manual Add Fitment Card — hidden for staged provider products */}
+            {!isStaged && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -1119,15 +1120,15 @@ export default function ProductDetails() {
                   </>
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
           </BlockStack>
         </Layout.Section>
 
         {/* ── Right Sidebar ── */}
         <Layout.Section variant="oneThird">
           <BlockStack gap="400">
-            {/* Status Card */}
-            <Card>
+            {/* Status Card — hidden for staged provider products */}
+            {!isStaged && <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
                   <IconBadge icon={StatusIcon} color="var(--p-color-icon-emphasis)" bg="var(--p-color-bg-surface-secondary)" />
@@ -1148,10 +1149,10 @@ export default function ProductDetails() {
                   onChange={handleStatusChange}
                 />
               </BlockStack>
-            </Card>
+            </Card>}
 
-            {/* Mapping Summary */}
-            <Card>
+            {/* Mapping Summary — hidden for staged products */}
+            {!isStaged && <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
                   <IconBadge icon={TargetIcon} color="var(--p-color-icon-info)" bg="var(--p-color-bg-fill-info-secondary)" />
@@ -1185,7 +1186,7 @@ export default function ProductDetails() {
                   </InlineStack>
                 </BlockStack>
               </BlockStack>
-            </Card>
+            </Card>}
 
             {/* Product Details Card */}
             <Card>
