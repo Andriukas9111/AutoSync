@@ -409,34 +409,35 @@ function ProviderCard({
       }}
     >
       <BlockStack gap="300">
-        {/* Top row: logo / name / type badge */}
+        {/* Top row: logo + name + badge */}
         <InlineStack gap="300" blockAlign="center" wrap={false}>
-          {provider.logo_url ? (
-            <Thumbnail
-              source={provider.logo_url}
-              alt={provider.name}
-              size="small"
-            />
-          ) : (
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                background: getAvatarBackground(),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Text variant="bodySm" as="span" fontWeight="bold">
-                {getProviderInitials(provider.name)}
-              </Text>
-            </div>
-          )}
+          <div style={{ flexShrink: 0, borderRadius: "var(--p-border-radius-200)", overflow: "hidden" }}>
+            {provider.logo_url ? (
+              <Thumbnail
+                source={provider.logo_url}
+                alt={provider.name}
+                size="small"
+              />
+            ) : (
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: getAvatarBackground(),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text variant="bodySm" as="span" fontWeight="bold">
+                  {getProviderInitials(provider.name)}
+                </Text>
+              </div>
+            )}
+          </div>
 
-          <BlockStack gap="0">
+          <BlockStack gap="100">
             <InlineStack gap="200" blockAlign="center" wrap={false}>
               <Text variant="headingMd" as="h3">
                 {provider.name}
@@ -445,47 +446,36 @@ function ProviderCard({
                 {provider.type.toUpperCase()}
               </Badge>
             </InlineStack>
+            {provider.description && (
+              <Text variant="bodySm" as="p" tone="subdued">
+                {provider.description.length > 60
+                  ? provider.description.slice(0, 60) + "..."
+                  : provider.description}
+              </Text>
+            )}
           </BlockStack>
         </InlineStack>
 
-        {/* Description */}
-        {provider.description && (
-          <Box>
-            <div
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <Text variant="bodySm" as="p" tone="subdued">
-                {provider.description}
-              </Text>
-            </div>
-          </Box>
-        )}
-
-        {/* Stats row */}
-        <InlineStack gap="300" wrap={true}>
-          <InlineStack gap="100" blockAlign="center">
-            <Icon source={ProductIcon} tone="subdued" />
+        {/* Stats + status on one row */}
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="300" blockAlign="center">
             <Text variant="bodySm" as="span" tone="subdued">
-              {provider.product_count.toLocaleString()}{" "}
-              {provider.product_count === 1 ? "product" : "products"}
+              {provider.product_count.toLocaleString()} products
+            </Text>
+            <Text variant="bodySm" as="span" tone="subdued">·</Text>
+            <Text variant="bodySm" as="span" tone="subdued">
+              {provider.import_count ?? 0} {(provider.import_count ?? 0) === 1 ? "import" : "imports"}
+            </Text>
+            <Text variant="bodySm" as="span" tone="subdued">·</Text>
+            <Text variant="bodySm" as="span" tone="subdued">
+              {timeAgo}
             </Text>
           </InlineStack>
-          <Text variant="bodySm" as="span" tone="subdued">
-            {provider.import_count ?? 0}{" "}
-            {(provider.import_count ?? 0) === 1 ? "import" : "imports"}
-          </Text>
-          <Text variant="bodySm" as="span" tone="subdued">
-            Last: {timeAgo}
-          </Text>
+          <Badge tone={statusTone}>{statusLabel}</Badge>
         </InlineStack>
 
-        {/* Status badge + Quick action */}
-        <InlineStack align="space-between" blockAlign="center">
-          <Badge tone={statusTone}>{statusLabel}</Badge>
+        {/* Import button */}
+        <InlineStack align="end">
           <Button
             icon={ImportIcon}
             size="slim"
