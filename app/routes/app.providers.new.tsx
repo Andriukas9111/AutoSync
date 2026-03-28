@@ -815,10 +815,10 @@ export default function ProvidersNew() {
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
                   <IconBadge
-                    icon={CheckSmallIcon}
+                    icon={ImportIcon}
                     size={32}
-                    bg="var(--p-color-bg-fill-success-secondary)"
-                    color="var(--p-color-icon-success)"
+                    bg="var(--p-color-bg-fill-info-secondary)"
+                    color="var(--p-color-icon-emphasis)"
                   />
                   <Text variant="headingMd" as="h2">
                     Import settings
