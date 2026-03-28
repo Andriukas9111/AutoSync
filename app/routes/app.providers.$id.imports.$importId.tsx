@@ -30,7 +30,13 @@ import {
   DeleteIcon,
   ImportIcon,
   ArrowLeftIcon,
+  NoteIcon,
+  LinkIcon,
+  AlertCircleIcon,
+  ProductIcon,
+  SettingsIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
@@ -322,7 +328,10 @@ export default function ImportDetail() {
         {/* Import Details */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Import Details</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={NoteIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Import Details</Text>
+            </InlineStack>
             <Divider />
             <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
               <BlockStack gap="200">
@@ -378,7 +387,10 @@ export default function ImportDetail() {
         {columnMapping && Array.isArray(columnMapping) && columnMapping.length > 0 && (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Column Mapping Snapshot</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={LinkIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Column Mapping Snapshot</Text>
+              </InlineStack>
               <Divider />
               <DataTable
                 columnContentTypes={["text", "text"]}
@@ -399,9 +411,12 @@ export default function ImportDetail() {
           <Card>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd" tone="critical">
-                  {`Errors (${errorRows.toLocaleString()})`}
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={AlertCircleIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
+                  <Text as="h2" variant="headingMd" tone="critical">
+                    {`Errors (${errorRows.toLocaleString()})`}
+                  </Text>
+                </InlineStack>
                 {errors.length > MAX_ERRORS_SHOWN && (
                   <Text as="span" variant="bodySm" tone="subdued">
                     {`Showing first ${MAX_ERRORS_SHOWN} of ${errors.length}`}
@@ -426,9 +441,12 @@ export default function ImportDetail() {
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                {`Products from This Import (${totalProducts.toLocaleString()})`}
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">
+                  {`Products from This Import (${totalProducts.toLocaleString()})`}
+                </Text>
+              </InlineStack>
             </InlineStack>
             <Divider />
 
@@ -546,7 +564,10 @@ export default function ImportDetail() {
         {/* Actions */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Actions</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Actions</Text>
+            </InlineStack>
             <Divider />
             <InlineStack gap="300">
               <Button

@@ -17,6 +17,9 @@ import {
   Pagination,
 } from "@shopify/polaris";
 
+import { ClockIcon } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
+
 import { authenticate } from "../shopify.server";
 import { formatDate } from "../lib/design";
 import db from "../lib/db.server";
@@ -114,6 +117,10 @@ export default function ProviderImportHistory() {
       }}
     >
       <BlockStack gap="400">
+        <InlineStack gap="200" blockAlign="center">
+          <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" />
+          <Text as="h2" variant="headingMd">{`Import History (${totalImports})`}</Text>
+        </InlineStack>
         {imports.length === 0 ? (
           <Card>
             <EmptyState

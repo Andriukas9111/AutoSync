@@ -31,7 +31,10 @@ import {
   SearchIcon,
   DeleteIcon,
   ImportIcon,
+  ProductIcon,
+  FilterIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
@@ -343,6 +346,11 @@ export default function ProviderProducts() {
         {/* Status Breakdown */}
         {totalProducts > 0 && (
           <Card>
+            <BlockStack gap="300">
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={FilterIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Filter by Status</Text>
+            </InlineStack>
             <InlineStack gap="400" wrap>
               {Object.entries(statusBreakdown).map(([status, count]) => {
                 const config = STATUS_CONFIG[status] ?? { tone: undefined, label: status };
@@ -373,6 +381,7 @@ export default function ProviderProducts() {
                 </Button>
               )}
             </InlineStack>
+            </BlockStack>
           </Card>
         )}
 
@@ -401,6 +410,10 @@ export default function ProviderProducts() {
         </Card>
 
         {/* Products Table */}
+        <InlineStack gap="200" blockAlign="center">
+          <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+          <Text as="h2" variant="headingMd">{`Products (${totalProducts.toLocaleString()})`}</Text>
+        </InlineStack>
         {products.length === 0 ? (
           <Card>
             <EmptyState

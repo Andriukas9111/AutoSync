@@ -34,7 +34,11 @@ import {
   DeleteIcon,
   RefreshIcon,
   ConnectIcon,
+  LinkIcon,
+  ViewIcon,
+  AlertCircleIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 import { DataTable } from "../components/DataTable";
 import { HowItWorks } from "../components/HowItWorks";
 
@@ -570,7 +574,10 @@ export default function ProviderImportWizard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Fetch from API</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ConnectIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Fetch from API</Text>
+                    </InlineStack>
                     <Badge tone="info">API</Badge>
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
@@ -630,7 +637,10 @@ export default function ProviderImportWizard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Fetch from FTP</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ConnectIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Fetch from FTP</Text>
+                    </InlineStack>
                     <Badge tone="info">FTP</Badge>
                   </InlineStack>
 
@@ -700,8 +710,10 @@ export default function ProviderImportWizard() {
             {/* ── File Upload (all provider types) ── */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={FileIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">
+                    {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
                 </Text>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
