@@ -148,7 +148,7 @@ export async function action({ request }: ActionFunctionArgs) {
       shopId,
       providerId,
       fileName,
-      fileSize: file.size,
+      fileSize: file ? file.size : (typeof content === "string" ? Buffer.byteLength(content) : (content as Buffer).length),
       fileType: parsedFile.format,
       mappings,
       duplicateStrategy,
