@@ -642,6 +642,14 @@ export default function ProductDetails() {
   const variants = Array.isArray(product.variants) ? product.variants : [];
   const tags = Array.isArray(product.tags) ? product.tags : [];
 
+  // Editable fields for staged products — populated with imported data
+  const [editTitle, setEditTitle] = useState(product.title);
+  const [editSku, setEditSku] = useState(product.sku || "");
+  const [editPrice, setEditPrice] = useState(product.price?.toString() || "");
+  const [editVendor, setEditVendor] = useState(product.vendor || "");
+  const [editDescription, setEditDescription] = useState(cleanDescription || "");
+  const [editImageUrl, setEditImageUrl] = useState(product.image_url || "");
+
   const availableSuggestions = suggestions.filter((s: any) => {
     // Check against client-side accepted set (uses IDs from suggestion)
     const idKey = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
@@ -915,11 +923,11 @@ export default function ProductDetails() {
                         </div>
                       )}
                       <BlockStack gap="200" inlineAlign="stretch">
-                        <TextField label="Title" name="title" defaultValue={product.title} autoComplete="off" />
+                        <TextField label="Title" name="title" value={editTitle} onChange={setEditTitle} autoComplete="off" />
                         <InlineGrid columns={3} gap="200">
-                          <TextField label="SKU" name="sku" defaultValue={product.sku || ""} autoComplete="off" />
-                          <TextField label="Price" name="price" defaultValue={product.price?.toString() || ""} type="number" autoComplete="off" />
-                          <TextField label="Vendor" name="vendor" defaultValue={product.vendor || ""} autoComplete="off" />
+                          <TextField label="SKU" name="sku" value={editSku} onChange={setEditSku} autoComplete="off" />
+                          <TextField label="Price" name="price" value={editPrice} onChange={setEditPrice} type="number" autoComplete="off" />
+                          <TextField label="Vendor" name="vendor" value={editVendor} onChange={setEditVendor} autoComplete="off" />
                         </InlineGrid>
                       </BlockStack>
                     </InlineStack>
@@ -930,7 +938,8 @@ export default function ProductDetails() {
                     <TextField
                       label="Description"
                       name="description"
-                      defaultValue={cleanDescription || ""}
+                      value={editDescription}
+                      onChange={setEditDescription}
                       multiline={6}
                       autoComplete="off"
                       helpText="The extraction engine scans this for vehicle makes, models, and years"
@@ -952,7 +961,7 @@ export default function ProductDetails() {
                     )}
 
                     {/* Image URL editable */}
-                    <TextField label="Image URL" name="image_url" defaultValue={product.image_url || ""} autoComplete="off" />
+                    <TextField label="Image URL" name="image_url" value={editImageUrl} onChange={setEditImageUrl} autoComplete="off" />
 
                     {/* Product type + weight */}
                     <InlineGrid columns={2} gap="200">
