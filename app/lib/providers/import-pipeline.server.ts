@@ -15,6 +15,47 @@ import {
 } from "./column-mapper.server";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Decode common HTML entities in a string */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/")
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(parseInt(code, 10)))
+    .trim();
+}
+
+/**
+ * Check if a URL is a valid product image URL (not just a bare domain).
+ * Returns null for invalid/bogus URLs, the URL string for valid ones.
+ */
+function sanitizeImageUrl(url: string | undefined | null): string | null {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    // Reject URLs that are just a domain with no meaningful path
+    // e.g. "https://www.millteksport.com" or "https://www.millteksport.com/"
+    const path = parsed.pathname.replace(/\/+$/, ""); // strip trailing slashes
+    if (!path || path === "") return null;
+    // Must have a file-like path (at least one segment after domain)
+    if (!path.includes("/") && !path.includes(".")) return null;
+    return trimmed;
+  } catch {
+    return null; // Invalid URL
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -95,15 +136,12 @@ export async function runProviderImport(
     // Decode HTML entities in all text fields (e.g., &quot; → ", &amp; → &)
     for (const key of Object.keys(mapped)) {
       if (typeof mapped[key] === "string") {
-        mapped[key] = mapped[key]
-          .replace(/&quot;/g, '"')
-          .replace(/&amp;/g, "&")
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&#39;/g, "'")
-          .replace(/&apos;/g, "'")
-          .trim();
+        mapped[key] = decodeHtmlEntities(mapped[key]);
       }
+    }
+    // Sanitize image_url — reject bare domains like "https://www.millteksport.com"
+    if (mapped.image_url) {
+      mapped.image_url = sanitizeImageUrl(mapped.image_url) ?? "";
     }
     return mapped;
   });

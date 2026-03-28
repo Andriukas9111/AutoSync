@@ -66,12 +66,18 @@ export async function action({ request }: ActionFunctionArgs) {
 
         const result = await fetchFromApi({
           endpoint, authType, authValue, itemsPath: "", responseFormat: "json",
+          maxPages: 1, // Only fetch first page for test connection
         });
+
+        const countLabel = result.hasMorePages
+          ? `${result.itemCount.toLocaleString()}+ items (first page — more pages available)`
+          : `${result.itemCount.toLocaleString()} items`;
 
         return data({
           success: true,
-          message: `Connected! Found ${result.itemCount} items.`,
+          message: `Connected! Found ${countLabel}.`,
           itemCount: result.itemCount,
+          hasMorePages: result.hasMorePages,
         });
       } catch (err) {
         return data({
@@ -131,13 +137,19 @@ export async function action({ request }: ActionFunctionArgs) {
           authValue: String(config.authValue ?? ""),
           itemsPath: String(config.itemsPath ?? ""),
           responseFormat: "json",
+          maxPages: 1, // Only fetch first page for test connection
         });
+
+        const countLabel = result.hasMorePages
+          ? `${result.itemCount.toLocaleString()}+ items (first page — more pages available)`
+          : `${result.itemCount.toLocaleString()} items`;
 
         return data({
           success: true,
-          message: `Connection successful. Found ${result.itemCount} items.`,
+          message: `Connection successful. Found ${countLabel}.`,
           statusCode: result.statusCode,
           itemCount: result.itemCount,
+          hasMorePages: result.hasMorePages,
           sampleItem: result.items.length > 0 ? result.items[0] : null,
         });
       } catch (err) {
@@ -373,6 +385,21 @@ export async function action({ request }: ActionFunctionArgs) {
 // Shared: parse fetched content and return preview with smart mappings
 // ---------------------------------------------------------------------------
 
+/** Decode common HTML entities in a string */
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/")
+    .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(parseInt(code, 10)))
+    .trim();
+}
+
 async function buildPreviewResponse(
   content: string,
   displayName: string,
@@ -387,6 +414,15 @@ async function buildPreviewResponse(
 
   if (parsed.rows.length === 0) {
     return data({ error: "No rows found in the fetched data." });
+  }
+
+  // Decode HTML entities in all preview rows (e.g., &quot; → ", &amp; → &)
+  for (const row of parsed.rows) {
+    for (const key of Object.keys(row)) {
+      if (typeof row[key] === "string") {
+        row[key] = decodeHtmlEntities(row[key]);
+      }
+    }
   }
 
   // Get smart mappings

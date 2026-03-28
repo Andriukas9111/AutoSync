@@ -29,6 +29,10 @@ export interface ApiFetcherConfig {
    *  Defaults to extracting the root if it's an array, or first array property.
    */
   itemsPath?: string;
+  /** Maximum number of pages to fetch (including the first).
+   *  Defaults to 100. Set to 1 to skip pagination (e.g. for test connections).
+   */
+  maxPages?: number;
 }
 
 export interface ApiFetchResult {
@@ -36,6 +40,10 @@ export interface ApiFetchResult {
   itemCount: number;
   /** Raw response status code */
   statusCode: number;
+  /** Number of items on the first page only (before pagination) */
+  firstPageItemCount: number;
+  /** Whether there were more pages available beyond what was fetched */
+  hasMorePages: boolean;
 }
 
 /**
@@ -145,18 +153,22 @@ export async function fetchFromApi(
     }
   }
 
+  const firstPageItemCount = items.length;
+  let hasMorePages = false;
+  const maxPages = config.maxPages ?? 100;
+
   // Auto-pagination: if response has paging.next_page_href, follow it
-  if (!responseFormat || responseFormat === "json") {
+  if (maxPages > 1 && (!responseFormat || responseFormat === "json")) {
     try {
       const json = JSON.parse(rawText);
       const paging = json?.paging;
       if (paging?.next_page_href && items.length > 0) {
+        hasMorePages = true; // There is at least one more page
         const baseUrl = new URL(endpoint);
         let nextHref = paging.next_page_href;
-        const MAX_PAGES = 50; // Safety limit
         let pageCount = 1;
 
-        while (nextHref && pageCount < MAX_PAGES) {
+        while (nextHref && pageCount < maxPages) {
           pageCount++;
           // Build full URL from relative href
           const nextUrl = new URL(nextHref, baseUrl.origin);
@@ -180,16 +192,33 @@ export async function fetchFromApi(
             if (pageItems.length === 0) break;
             items.push(...pageItems);
             nextHref = pageJson?.paging?.next_page_href ?? null;
+            if (nextHref) hasMorePages = true;
           } catch { break; }
+        }
+
+        // If we hit the page limit but there's still a next page
+        if (nextHref && pageCount >= maxPages) {
+          hasMorePages = true;
         }
       }
     } catch { /* not paginated JSON, ignore */ }
+  } else if (maxPages === 1 && (!responseFormat || responseFormat === "json")) {
+    // Check if there are more pages even though we're not fetching them
+    try {
+      const json = JSON.parse(rawText);
+      const paging = json?.paging;
+      if (paging?.next_page_href) {
+        hasMorePages = true;
+      }
+    } catch { /* ignore */ }
   }
 
   return {
     items,
     itemCount: items.length,
     statusCode: response.status,
+    firstPageItemCount,
+    hasMorePages,
   };
 }
 
