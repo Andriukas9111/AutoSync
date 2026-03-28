@@ -172,18 +172,40 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Decode HTML entities in mapped values
+      // Decode HTML entities + fix mojibake (double-encoded UTF-8)
       const decodeEntities = (s: string) => s
         .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
         .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'");
+      const fixMojibake = (s: string) => {
+        try {
+          // Try to fix double-encoded UTF-8 by detecting common patterns
+          // Characters like Ã© (é), Ã¨ (è), Ã¼ (ü) are UTF-8 bytes read as Latin-1
+          if (/[\u00c0-\u00ff][\u0080-\u00bf]/.test(s)) {
+            const bytes = new Uint8Array(s.length);
+            for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+            const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+            if (decoded && !decoded.includes("\ufffd")) return decoded;
+          }
+        } catch { /* not double-encoded, return original */ }
+        // Manual common replacements as fallback
+        return s
+          .replace(/Ã©/g, "é").replace(/Ã¨/g, "è").replace(/Ã¼/g, "ü")
+          .replace(/Ã¶/g, "ö").replace(/Ã¤/g, "ä").replace(/Ã±/g, "ñ")
+          .replace(/Ã§/g, "ç").replace(/Ã¡/g, "á").replace(/Ã³/g, "ó")
+          .replace(/Ã­/g, "í").replace(/Ãº/g, "ú").replace(/Ã‰/g, "É")
+          .replace(/â€™/g, "'").replace(/â€"/g, "—").replace(/â€œ/g, '"').replace(/â€\u009d/g, '"')
+          .replace(/Â®/g, "®").replace(/Â©/g, "©").replace(/Â°/g, "°")
+          .replace(/Â /g, " "); // Non-breaking space mojibake
+      };
       const stripHtml = (s: string) => decodeEntities(s).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      const cleanText = (s: string) => fixMojibake(decodeEntities(s));
 
       const rawTitle = mapped.title || String(item.name || item.title || "Untitled");
-      const title = decodeEntities(rawTitle);
+      const title = cleanText(rawTitle);
       const sku = mapped.sku || String(item.code || item.sku || "");
       const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
       const rawDesc = mapped.description || String(item.short_desc || item.desc || "");
-      const description = rawDesc ? stripHtml(rawDesc) : null;
+      const description = rawDesc ? fixMojibake(stripHtml(rawDesc)) : null;
 
       return {
         shop_id,
