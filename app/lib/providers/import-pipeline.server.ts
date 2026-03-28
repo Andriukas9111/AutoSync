@@ -183,27 +183,53 @@ export async function runProviderImport(
         continue;
       }
       if (duplicateStrategy === "update") {
-        // Update existing product
-        await db
+        // Fetch existing product for change tracking
+        const { data: existing } = await db
           .from("products")
-          .update({
-            title: product.title,
-            price: product.price ? parseFloat(product.price) : undefined,
-            cost_price: product.cost_price ? parseFloat(product.cost_price) : undefined,
-            map_price: product.map_price ? parseFloat(product.map_price) : undefined,
-            compare_at_price: product.compare_at_price ? parseFloat(product.compare_at_price) : undefined,
-            vendor: product.vendor || undefined,
-            product_type: product.product_type || undefined,
-            description: product.description || undefined,
-            image_url: product.image_url || undefined,
-            weight: product.weight || undefined,
-            weight_unit: product.weight_unit || undefined,
-            provider_sku: product.provider_sku || undefined,
-            import_id: importId,
-            updated_at: new Date().toISOString(),
-          })
+          .select("id, title, price, cost_price, vendor, product_type, description, image_url")
           .eq("shop_id", shopId)
-          .eq("sku", product.sku);
+          .eq("sku", product.sku)
+          .maybeSingle();
+
+        const updates: Record<string, unknown> = {
+          title: product.title,
+          price: product.price ? parseFloat(product.price) : undefined,
+          cost_price: product.cost_price ? parseFloat(product.cost_price) : undefined,
+          map_price: product.map_price ? parseFloat(product.map_price) : undefined,
+          compare_at_price: product.compare_at_price ? parseFloat(product.compare_at_price) : undefined,
+          vendor: product.vendor || undefined,
+          product_type: product.product_type || undefined,
+          description: product.description || undefined,
+          image_url: product.image_url || undefined,
+          weight: product.weight || undefined,
+          weight_unit: product.weight_unit || undefined,
+          provider_sku: product.provider_sku || undefined,
+          import_id: importId,
+          updated_at: new Date().toISOString(),
+        };
+
+        await db.from("products").update(updates).eq("shop_id", shopId).eq("sku", product.sku);
+
+        // Log changes (compare old vs new for tracked fields)
+        if (existing) {
+          const trackFields = ["title", "price", "cost_price", "vendor", "description", "image_url"];
+          const changes: Array<Record<string, unknown>> = [];
+          for (const field of trackFields) {
+            const oldVal = String(existing[field as keyof typeof existing] ?? "");
+            const newVal = String(updates[field] ?? "");
+            if (oldVal !== newVal && newVal) {
+              changes.push({
+                shop_id: shopId, provider_id: providerId, import_id: importId,
+                product_id: existing.id, sku: product.sku,
+                change_type: "updated", field_name: field,
+                old_value: oldVal.slice(0, 500), new_value: newVal.slice(0, 500),
+              });
+            }
+          }
+          if (changes.length > 0) {
+            await db.from("provider_product_changes").insert(changes);
+          }
+        }
         continue;
       }
       // create_new — fall through to insert
