@@ -48,6 +48,9 @@ interface Provider {
   notes: string | null;
   import_count: number;
   duplicate_strategy: string | null;
+  fetch_schedule: string | null;
+  next_scheduled_fetch: string | null;
+  discount_percentage: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +91,11 @@ function importStatusTone(s: string): "success" | "critical" | "attention" | "in
   if (s === "running") return "attention";
   if (s === "pending") return "info";
   return undefined;
+}
+
+function parseDuration(schedule: string): number {
+  const hours = parseInt(schedule, 10);
+  return isNaN(hours) ? 24 * 60 * 60 * 1000 : hours * 60 * 60 * 1000;
 }
 
 function connectionSummary(type: ProviderType, cfg: Record<string, unknown>): string {
@@ -198,6 +206,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       config.protocol = String(formData.get("ftp_protocol") || "ftp");
     }
 
+    // Handle auto-fetch schedule
+    const fetchSchedule = String(formData.get("fetch_schedule") || "manual");
+    const scheduleIntervals: Record<string, string> = {
+      "6h": "6 hours", "12h": "12 hours", "24h": "24 hours", "168h": "7 days",
+    };
+    const nextFetch = fetchSchedule !== "manual" && scheduleIntervals[fetchSchedule]
+      ? new Date(Date.now() + parseDuration(fetchSchedule)).toISOString()
+      : null;
+
     const { error } = await db.from("providers").update({
       name, status, config,
       description: description || null,
@@ -205,6 +222,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       website_url: websiteUrl || null,
       contact_email: contactEmail || null,
       notes: notes || null,
+      fetch_schedule: fetchSchedule,
+      next_scheduled_fetch: nextFetch,
       updated_at: new Date().toISOString(),
     }).eq("id", providerId).eq("shop_id", shopId);
 
@@ -567,6 +586,29 @@ export default function ProviderDetail() {
                       <TextField label="Password" name="ftp_password" value={ftpPassword} onChange={setFtpPassword} type="password" autoComplete="off" />
                     </FormLayout.Group>
                     <TextField label="Remote Path" name="ftp_path" value={ftpPath} onChange={setFtpPath} placeholder="/data/products/" autoComplete="off" />
+                  </>
+                )}
+
+                {(type === "api" || type === "ftp") && (
+                  <>
+                    <Divider />
+                    <Select
+                      label="Auto-Fetch Schedule"
+                      name="fetch_schedule"
+                      value={provider.fetch_schedule || "manual"}
+                      onChange={() => {}}
+                      options={[
+                        { label: "Manual only", value: "manual" },
+                        { label: "Every 6 hours", value: "6h" },
+                        { label: "Every 12 hours", value: "12h" },
+                        { label: "Daily (every 24 hours)", value: "24h" },
+                        { label: "Weekly", value: "168h" },
+                      ]}
+                      helpText={provider.next_scheduled_fetch
+                        ? `Next fetch: ${new Date(provider.next_scheduled_fetch).toLocaleString()}`
+                        : "Set a schedule to automatically re-fetch products from this provider"
+                      }
+                    />
                   </>
                 )}
 
