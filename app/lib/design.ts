@@ -375,6 +375,35 @@ export function formatDate(dateStr: string | null | undefined): string {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
+// ─── Selectable Card (clickable option card with selected/disabled states) ──
+// Used in: Provider type selection, plan selection, any card-based picker
+export const selectableCardStyle = (selected: boolean, disabled = false): CSSProperties => ({
+  cursor: disabled ? "not-allowed" : "pointer",
+  borderRadius: "var(--p-border-radius-300)",
+  border: selected
+    ? "2px solid var(--p-color-border-emphasis)"
+    : "1px solid var(--p-color-border)",
+  padding: "var(--p-space-400)",
+  background: selected
+    ? "var(--p-color-bg-surface-secondary)"
+    : "var(--p-color-bg-surface)",
+  opacity: disabled ? 0.6 : 1,
+  transition: "box-shadow 120ms ease, border-color 120ms ease",
+  position: "relative" as const,
+});
+
+// ─── Format Badge (small pill for file formats) ─────────────────────────────
+export const formatBadgeStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "2px 8px",
+  borderRadius: "var(--p-border-radius-100)",
+  background: "var(--p-color-bg-surface-secondary)",
+  fontSize: "11px",
+  fontWeight: 500,
+  color: "var(--p-color-text-secondary)",
+  lineHeight: "18px",
+};
+
 export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
   starter: [
     "Up to 500 products & 2,500 fitments",

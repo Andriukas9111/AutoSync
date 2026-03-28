@@ -18,16 +18,26 @@ import {
   InlineStack,
   Text,
   Badge,
-  Tabs,
+  Box,
+  Divider,
+  Icon,
 } from "@shopify/polaris";
 import {
   ImportIcon,
   GlobeIcon,
   LockIcon,
+  CodeIcon,
+  DataTableIcon,
+  CheckSmallIcon,
 } from "@shopify/polaris-icons";
 import { HowItWorks } from "../components/HowItWorks";
+import { IconBadge } from "../components/IconBadge";
 import { PlanGate, PLAN_NAMES } from "../components/PlanGate";
-import { stepNumberStyle, infoCardStyle } from "../lib/design";
+import {
+  selectableCardStyle,
+  formatBadgeStyle,
+  equalHeightGridStyle,
+} from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError } from "../lib/billing.server";
@@ -54,7 +64,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const atLimit =
     limits.providers !== Infinity && providerCount >= limits.providers;
 
-  // Server-side enforcement: redirect if plan doesn't allow providers
   if (limits.providers === 0) {
     throw redirect("/app/providers?error=plan_limit");
   }
@@ -86,7 +95,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({ error: "Provider name is required." }, { status: 400 });
   }
 
-  // Plan gate: check provider limit
   try {
     await assertProviderLimit(shopId);
   } catch (err: unknown) {
@@ -139,7 +147,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     config.username = String(formData.get("ftp_username") || "").trim();
     // TODO: FTP passwords are stored in plaintext in the providers.config JSONB column.
     // This needs encryption at rest (e.g. AES-256 via a KMS key) before production launch.
-    // Never log the config object or password value.
     config.password = String(formData.get("ftp_password") || "").trim();
     config.remotePath = String(formData.get("ftp_path") || "").trim();
     config.protocol = String(formData.get("ftp_protocol") || "ftp");
@@ -180,7 +187,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  // Return success with redirect URL — client navigates (more reliable in Shopify iframe)
   return data({
     success: true,
     providerId: provider.id,
@@ -189,58 +195,205 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 // ---------------------------------------------------------------------------
-// Type card config
+// Source type card configuration
 // ---------------------------------------------------------------------------
-// Feature-to-plan mapping for provider types requiring higher plans
-const PROVIDER_PLAN_FEATURES: Partial<Record<ProviderType, keyof PlanLimits["features"]>> = {
-  api: "apiIntegration",
-  ftp: "ftpImport",
-};
-
-// Required plan for each gated provider type (from billing.server.ts)
-const PROVIDER_REQUIRED_PLANS: Partial<Record<ProviderType, PlanTier>> = {
-  api: "professional",
-  ftp: "business",
-};
-
-const TYPE_CARDS: Array<{
+const SOURCE_TYPES: Array<{
   value: ProviderType;
   label: string;
   description: string;
-  icon: typeof ImportIcon;
+  icon: any;
+  iconBg: string;
+  iconColor: string;
+  formats: string[];
+  features: string[];
   planFeature?: keyof PlanLimits["features"];
+  requiredPlan?: PlanTier;
 }> = [
   {
     value: "csv",
-    label: "CSV / Excel",
+    label: "CSV / Excel Upload",
     description:
-      "Upload spreadsheet files with product data. Supports CSV, TSV, and Excel formats.",
-    icon: ImportIcon,
+      "Upload spreadsheet files directly from your computer. Perfect for suppliers who send product data via email or download portals.",
+    icon: DataTableIcon,
+    iconBg: "var(--p-color-bg-fill-success-secondary)",
+    iconColor: "var(--p-color-icon-success)",
+    formats: [".csv", ".tsv", ".xlsx", ".txt"],
+    features: [
+      "Auto-detect delimiters (comma, tab, semicolon, pipe)",
+      "Smart column mapping with memory",
+      "Drag-and-drop file upload",
+    ],
   },
   {
     value: "xml",
-    label: "XML Feed",
+    label: "XML Product Feed",
     description:
-      "Import from XML product feeds. Auto-detects repeating item elements.",
-    icon: ImportIcon,
+      "Import from XML product feeds. Common for European automotive suppliers and B2B platforms like WheelTrade and TecDoc.",
+    icon: CodeIcon,
+    iconBg: "var(--p-color-bg-fill-warning-secondary)",
+    iconColor: "var(--p-color-icon-warning)",
+    formats: [".xml", ".rss", ".atom"],
+    features: [
+      "Auto-detects repeating item elements",
+      "Handles nested structures",
+      "Large file streaming support",
+    ],
   },
   {
     value: "api",
     label: "REST API",
     description:
-      "Connect to a supplier API endpoint. Supports API key, Bearer, and Basic auth.",
+      "Connect directly to a supplier's API endpoint. Ideal for real-time data from suppliers like Milltek Sport, Forge Motorsport, and others.",
     icon: GlobeIcon,
-    planFeature: "apiIntegration" as const,
+    iconBg: "var(--p-color-bg-fill-info-secondary)",
+    iconColor: "var(--p-color-icon-info)",
+    formats: ["JSON", "REST"],
+    features: [
+      "API key, Bearer token, or Basic auth",
+      "Auto-detect JSON structure",
+      "Scheduled auto-refresh (6h to weekly)",
+    ],
+    planFeature: "apiIntegration",
+    requiredPlan: "professional",
   },
   {
     value: "ftp",
-    label: "FTP / SFTP",
+    label: "FTP / SFTP Server",
     description:
-      "Connect to an FTP or SFTP server to automatically fetch product feeds.",
+      "Connect to an FTP or SFTP server to automatically download product feeds. Used by suppliers like Scorpion Exhausts and BC Racing.",
     icon: LockIcon,
-    planFeature: "ftpImport" as const,
+    iconBg: "var(--p-color-bg-fill-critical-secondary)",
+    iconColor: "var(--p-color-icon-critical)",
+    formats: ["FTP", "SFTP"],
+    features: [
+      "Secure FTP and SFTP protocols",
+      "File pattern matching (e.g. *.csv)",
+      "Automatic scheduled fetching",
+    ],
+    planFeature: "ftpImport",
+    requiredPlan: "business",
   },
 ];
+
+// ---------------------------------------------------------------------------
+// SourceTypeCard sub-component
+// ---------------------------------------------------------------------------
+function SourceTypeCard({
+  source,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  source: (typeof SOURCE_TYPES)[number];
+  selected: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      onClick={disabled ? undefined : onSelect}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      role="radio"
+      aria-checked={selected}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
+      style={selectableCardStyle(selected, disabled)}
+      onMouseEnter={(e) => {
+        if (!disabled) {
+          (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
+          if (!selected) {
+            (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)";
+          }
+        }
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        if (!selected) {
+          (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border)";
+        }
+      }}
+    >
+      <BlockStack gap="300">
+        {/* Header: Icon + Title + Badges */}
+        <InlineStack gap="300" blockAlign="center" align="space-between" wrap={false}>
+          <InlineStack gap="300" blockAlign="center" wrap={false}>
+            <IconBadge
+              icon={source.icon}
+              size={40}
+              bg={selected ? "var(--p-color-bg-fill-emphasis)" : source.iconBg}
+              color={selected ? "var(--p-color-text-inverse)" : source.iconColor}
+            />
+            <Text as="span" variant="headingSm">
+              {source.label}
+            </Text>
+          </InlineStack>
+          <InlineStack gap="200" blockAlign="center">
+            {disabled && source.requiredPlan && (
+              <Badge tone="info" size="small">
+                {`${PLAN_NAMES[source.requiredPlan]}+`}
+              </Badge>
+            )}
+            {selected && (
+              <div
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: "var(--p-color-bg-fill-emphasis)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon source={CheckSmallIcon} tone="inverse" />
+              </div>
+            )}
+          </InlineStack>
+        </InlineStack>
+
+        {/* Description */}
+        <Text as="p" variant="bodySm" tone="subdued">
+          {source.description}
+        </Text>
+
+        {/* Supported Formats */}
+        <InlineStack gap="200" blockAlign="center" wrap>
+          <Text as="span" variant="bodySm" tone="subdued">
+            Formats:
+          </Text>
+          {source.formats.map((fmt) => (
+            <span key={fmt} style={formatBadgeStyle}>
+              {fmt}
+            </span>
+          ))}
+        </InlineStack>
+
+        {/* Key Features */}
+        <BlockStack gap="100">
+          {source.features.map((feat) => (
+            <InlineStack key={feat} gap="200" blockAlign="start" wrap={false}>
+              <Box minWidth="16px">
+                <Icon
+                  source={CheckSmallIcon}
+                  tone={disabled ? "subdued" : "success"}
+                />
+              </Box>
+              <Text as="span" variant="bodySm" tone={disabled ? "subdued" : undefined}>
+                {feat}
+              </Text>
+            </InlineStack>
+          ))}
+        </BlockStack>
+      </BlockStack>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -255,9 +408,8 @@ export default function ProvidersNew() {
   const actionData = fetcher.data as { success?: boolean; redirectTo?: string; error?: string } | undefined;
   const testResult = testFetcher.data as { success?: boolean; error?: string; files?: Array<{ name: string; size: number }> } | undefined;
 
-  // Tab index maps to TYPE_CARDS order: csv=0, xml=1, api=2, ftp=3
-  const [selectedTab, setSelectedTab] = useState(0);
-  const providerType = TYPE_CARDS[selectedTab].value;
+  // Selected source type
+  const [selectedType, setSelectedType] = useState<ProviderType>("csv");
 
   // Form state
   const [name, setName] = useState("");
@@ -293,7 +445,7 @@ export default function ProvidersNew() {
   const handleTestConnection = useCallback(() => {
     const formData = new FormData();
     formData.set("_action", "test");
-    if (providerType === "ftp") {
+    if (selectedType === "ftp") {
       formData.set("type", "ftp");
       formData.set("host", ftpHost);
       formData.set("port", ftpPort);
@@ -301,14 +453,14 @@ export default function ProvidersNew() {
       formData.set("password", ftpPassword);
       formData.set("remotePath", ftpPath);
       formData.set("protocol", ftpProtocol);
-    } else if (providerType === "api") {
+    } else if (selectedType === "api") {
       formData.set("type", "api");
       formData.set("endpoint", apiEndpoint);
       formData.set("authType", apiAuthType);
       formData.set("authValue", apiAuthValue);
     }
     testFetcher.submit(formData, { method: "POST", action: "/app/api/provider-fetch" });
-  }, [providerType, ftpHost, ftpPort, ftpUsername, ftpPassword, ftpPath, ftpProtocol, apiEndpoint, apiAuthType, apiAuthValue, testFetcher]);
+  }, [selectedType, ftpHost, ftpPort, ftpUsername, ftpPassword, ftpPath, ftpProtocol, apiEndpoint, apiAuthType, apiAuthValue, testFetcher]);
 
   const limitLabel =
     providerLimit === Infinity ? "Unlimited" : String(providerLimit);
@@ -319,27 +471,10 @@ export default function ProvidersNew() {
     return false;
   };
 
-  const tabs = TYPE_CARDS.map((card) => {
-    const disabled = isTypeDisabled(card.value);
-    const requiredPlan = PROVIDER_REQUIRED_PLANS[card.value];
-    return {
-      id: card.value,
-      content: disabled ? `${card.label} (upgrade)` : card.label,
-      badge: requiredPlan && disabled ? `${PLAN_NAMES[requiredPlan]}+` : undefined,
-      disabled,
-    };
-  });
-
-  const handleTabChange = (index: number) => {
-    if (!isTypeDisabled(TYPE_CARDS[index].value)) {
-      setSelectedTab(index);
-    }
-  };
-
   return (
     <Page
-      title="Import Products"
-      subtitle="Set up a new data source to import products"
+      title="Add Import Source"
+      subtitle={`Connect a new data source to import products (${providerCount} / ${limitLabel} used)`}
       fullWidth
       backAction={{ onAction: () => navigate("/app/providers") }}
     >
@@ -351,19 +486,19 @@ export default function ProvidersNew() {
               number: 1,
               title: "Choose Source",
               description:
-                "Select your data source type — CSV, XML, REST API, or FTP. Upload files or connect to a remote server.",
+                "Select your data source type — CSV upload, XML feed, REST API, or FTP server.",
             },
             {
               number: 2,
-              title: "Configure",
+              title: "Configure Connection",
               description:
-                "Name your import source and set connection details. Our smart mapper will match columns to Shopify fields.",
+                "Name your source and enter connection details. Test the connection before saving.",
             },
             {
               number: 3,
-              title: "Import",
+              title: "Map & Import",
               description:
-                "Preview products before importing. Choose how to handle duplicates, then review and approve.",
+                "Our smart mapper matches columns to Shopify fields. Preview, adjust, then import.",
             },
           ]}
         />
@@ -404,80 +539,116 @@ export default function ProvidersNew() {
         }}>
           <BlockStack gap="500">
             {/* Hidden fields */}
-            <input type="hidden" name="type" value={providerType} />
+            <input type="hidden" name="type" value={selectedType} />
 
-            {/* ─── Source Type (Tabs) ─── */}
+            {/* ─── Source Type Selection ─── */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text variant="headingMd" as="h2">
-                    Source type
-                  </Text>
-                  <Badge tone="info">{`${providerCount} / ${limitLabel} used`}</Badge>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge
+                    icon={ImportIcon}
+                    size={32}
+                    bg="var(--p-color-bg-fill-info-secondary)"
+                    color="var(--p-color-icon-info)"
+                  />
+                  <BlockStack gap="0">
+                    <Text variant="headingMd" as="h2">
+                      Choose your data source
+                    </Text>
+                    <Text variant="bodySm" as="p" tone="subdued">
+                      Select how you receive product data from your supplier
+                    </Text>
+                  </BlockStack>
                 </InlineStack>
 
-                <Tabs
-                  tabs={tabs}
-                  selected={selectedTab}
-                  onSelect={handleTabChange}
-                  fitted
-                />
+                <div style={equalHeightGridStyle(2, "12px")}>
+                  {SOURCE_TYPES.map((source) => {
+                    const disabled = isTypeDisabled(source.value);
+                    return (
+                      <SourceTypeCard
+                        key={source.value}
+                        source={source}
+                        selected={selectedType === source.value}
+                        disabled={disabled}
+                        onSelect={() => setSelectedType(source.value)}
+                      />
+                    );
+                  })}
+                </div>
               </BlockStack>
             </Card>
 
-            {/* ─── Details + Connection ─── */}
+            {/* ─── Provider Details ─── */}
             <Card>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">
-                  Details
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge
+                    icon={SOURCE_TYPES.find((s) => s.value === selectedType)!.icon}
+                    size={32}
+                    bg={SOURCE_TYPES.find((s) => s.value === selectedType)!.iconBg}
+                    color={SOURCE_TYPES.find((s) => s.value === selectedType)!.iconColor}
+                  />
+                  <Text variant="headingMd" as="h2">
+                    {`Configure ${SOURCE_TYPES.find((s) => s.value === selectedType)!.label}`}
+                  </Text>
+                </InlineStack>
 
                 <FormLayout>
                   <TextField
-                    label="Name"
+                    label="Provider name"
                     name="name"
                     value={name}
                     onChange={setName}
                     autoComplete="off"
-                    placeholder="e.g. Parts Unlimited"
-                    helpText="A friendly name to identify this import source."
+                    placeholder="e.g. Scorpion Exhausts, Milltek Sport"
+                    helpText="A friendly name to identify this import source in your dashboard."
                     requiredIndicator
                   />
                 </FormLayout>
 
                 {/* CSV Settings */}
-                {providerType === "csv" && (
-                  <FormLayout>
-                    <Select
-                      label="Delimiter"
-                      name="csv_delimiter"
-                      value={csvDelimiter}
-                      onChange={setCsvDelimiter}
-                      options={[
-                        { label: "Comma (,)", value: "," },
-                        { label: "Tab (\\t)", value: "\t" },
-                        { label: "Semicolon (;)", value: ";" },
-                        { label: "Pipe (|)", value: "|" },
-                      ]}
-                      helpText="Column separator used in the file. Most CSV files use comma."
-                    />
-                  </FormLayout>
+                {selectedType === "csv" && (
+                  <>
+                    <Divider />
+                    <FormLayout>
+                      <Select
+                        label="Column delimiter"
+                        name="csv_delimiter"
+                        value={csvDelimiter}
+                        onChange={setCsvDelimiter}
+                        options={[
+                          { label: "Comma (,) — most common", value: "," },
+                          { label: "Tab (\\t)", value: "\t" },
+                          { label: "Semicolon (;) — European standard", value: ";" },
+                          { label: "Pipe (|)", value: "|" },
+                        ]}
+                        helpText="Auto-detected on import, but you can set a default here."
+                      />
+                    </FormLayout>
+                  </>
                 )}
 
-                {/* XML — no extra config needed */}
-                {providerType === "xml" && (
-                  <Banner tone="info">
-                    After creating, upload XML files from the detail page. The
-                    parser auto-detects the repeating item element.
-                  </Banner>
+                {/* XML info */}
+                {selectedType === "xml" && (
+                  <>
+                    <Divider />
+                    <Banner tone="info">
+                      <p>
+                        After creating this source, upload your XML file from the import page.
+                        The parser automatically detects the repeating item element and extracts product data.
+                      </p>
+                    </Banner>
+                  </>
                 )}
 
                 {/* API Settings */}
-                {providerType === "api" && (
+                {selectedType === "api" && (
                   <PlanGate feature="apiIntegration" currentPlan={plan as PlanTier} limits={limits as PlanLimits}>
+                    <Divider />
+                    <BlockStack gap="400">
                       <FormLayout>
                         <TextField
-                          label="Endpoint URL"
+                          label="API endpoint URL"
                           name="api_endpoint"
                           value={apiEndpoint}
                           onChange={setApiEndpoint}
@@ -494,7 +665,7 @@ export default function ProvidersNew() {
                             onChange={setApiAuthType}
                             options={[
                               { label: "No authentication", value: "none" },
-                              { label: "API Key (header)", value: "api_key" },
+                              { label: "API Key (query param or header)", value: "api_key" },
                               { label: "Bearer Token", value: "bearer" },
                               { label: "Basic Auth (user:pass)", value: "basic" },
                             ]}
@@ -523,10 +694,10 @@ export default function ProvidersNew() {
                             onChange={setApiItemsPath}
                             autoComplete="off"
                             placeholder="data.products"
-                            helpText="Dot path to the products array. Leave blank for auto-detect."
+                            helpText="Dot-notation path to the products array. Leave blank for auto-detect."
                           />
                           <Select
-                            label="Auto-refresh"
+                            label="Auto-refresh schedule"
                             name="api_refresh_interval"
                             value={apiRefreshInterval}
                             onChange={setApiRefreshInterval}
@@ -537,28 +708,31 @@ export default function ProvidersNew() {
                               { label: "Daily", value: "24h" },
                               { label: "Weekly", value: "168h" },
                             ]}
-                            helpText="How often to re-fetch data from the API."
+                            helpText="How often to automatically re-fetch data from this API."
                           />
                         </FormLayout.Group>
-                        <InlineStack gap="300" blockAlign="center">
-                          <Button
-                            onClick={handleTestConnection}
-                            loading={testFetcher.state !== "idle"}
-                            disabled={!apiEndpoint.trim()}
-                          >
-                            Test Connection
-                          </Button>
-                          {testResult?.success && (
-                            <Badge tone="success">Connected</Badge>
-                          )}
-                        </InlineStack>
                       </FormLayout>
+                      <InlineStack gap="300" blockAlign="center">
+                        <Button
+                          onClick={handleTestConnection}
+                          loading={testFetcher.state !== "idle"}
+                          disabled={!apiEndpoint.trim()}
+                        >
+                          Test Connection
+                        </Button>
+                        {testResult?.success && (
+                          <Badge tone="success">Connected</Badge>
+                        )}
+                      </InlineStack>
+                    </BlockStack>
                   </PlanGate>
                 )}
 
                 {/* FTP Settings */}
-                {providerType === "ftp" && (
+                {selectedType === "ftp" && (
                   <PlanGate feature="ftpImport" currentPlan={plan as PlanTier} limits={limits as PlanLimits}>
+                    <Divider />
+                    <BlockStack gap="400">
                       <FormLayout>
                         <Select
                           label="Protocol"
@@ -566,8 +740,8 @@ export default function ProvidersNew() {
                           value={ftpProtocol}
                           onChange={setFtpProtocol}
                           options={[
-                            { label: "FTP (standard)", value: "ftp" },
-                            { label: "SFTP (secure)", value: "sftp" },
+                            { label: "FTP (standard, port 21)", value: "ftp" },
+                            { label: "SFTP (encrypted, port 22)", value: "sftp" },
                           ]}
                         />
                         <FormLayout.Group>
@@ -596,6 +770,7 @@ export default function ProvidersNew() {
                             value={ftpUsername}
                             onChange={setFtpUsername}
                             autoComplete="off"
+                            placeholder="ftp-user"
                           />
                           <TextField
                             label="Password"
@@ -608,59 +783,71 @@ export default function ProvidersNew() {
                         </FormLayout.Group>
                         <FormLayout.Group>
                           <TextField
-                            label="Remote path"
+                            label="Remote directory path"
                             name="ftp_path"
                             value={ftpPath}
                             onChange={setFtpPath}
                             autoComplete="off"
-                            placeholder="/car"
+                            placeholder="/products or /car"
+                            helpText="Path on the server where product files are stored."
                           />
                           <TextField
-                            label="File pattern"
+                            label="File pattern filter"
                             name="ftp_file_pattern"
                             value={ftpFilePattern}
                             onChange={setFtpFilePattern}
                             autoComplete="off"
-                            placeholder="*.csv"
-                            helpText="Filter by name pattern. Leave blank for all files."
+                            placeholder="*.csv or products_*.xml"
+                            helpText="Only download files matching this pattern. Leave blank for all."
                           />
                         </FormLayout.Group>
-                        <InlineStack gap="300" blockAlign="center">
-                          <Button
-                            onClick={handleTestConnection}
-                            loading={testFetcher.state !== "idle"}
-                            disabled={!ftpHost.trim() || !ftpUsername.trim()}
-                          >
-                            Test Connection
-                          </Button>
-                          {testResult?.success && (
-                            <Badge tone="success">Connected</Badge>
-                          )}
-                        </InlineStack>
                       </FormLayout>
+                      <InlineStack gap="300" blockAlign="center">
+                        <Button
+                          onClick={handleTestConnection}
+                          loading={testFetcher.state !== "idle"}
+                          disabled={!ftpHost.trim() || !ftpUsername.trim()}
+                        >
+                          Test Connection
+                        </Button>
+                        {testResult?.success && (
+                          <Badge tone="success">Connected</Badge>
+                        )}
+                      </InlineStack>
+                    </BlockStack>
                   </PlanGate>
                 )}
               </BlockStack>
             </Card>
 
-            {/* ─── Duplicate Handling + Submit ─── */}
+            {/* ─── Import Settings + Submit ─── */}
             <Card>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">
-                  Duplicate handling
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge
+                    icon={CheckSmallIcon}
+                    size={32}
+                    bg="var(--p-color-bg-fill-success-secondary)"
+                    color="var(--p-color-icon-success)"
+                  />
+                  <Text variant="headingMd" as="h2">
+                    Import settings
+                  </Text>
+                </InlineStack>
 
                 <Select
-                  label="When a product with the same SKU or title already exists"
+                  label="When a product with the same SKU already exists"
                   name="duplicate_strategy"
                   value={duplicateStrategy}
                   onChange={setDuplicateStrategy}
                   options={[
                     { label: "Skip — keep existing products unchanged", value: "skip" },
-                    { label: "Update — overwrite with new data", value: "update" },
-                    { label: "Create new — always import as new products", value: "create" },
+                    { label: "Update — overwrite with new data from this source", value: "update" },
+                    { label: "Create new — always import as separate products", value: "create" },
                   ]}
                 />
+
+                <Divider />
 
                 <InlineStack align="end" gap="300">
                   <Button onClick={() => navigate("/app/providers")}>
