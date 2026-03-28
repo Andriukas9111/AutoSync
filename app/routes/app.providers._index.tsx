@@ -295,7 +295,7 @@ export default function ProvidersIndex() {
                     textAlign: "center",
                   }}>
                     <BlockStack gap="200" inlineAlign="center">
-                      <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                      <IconBadge icon={item.icon} />
                       <Text as="p" variant="headingLg" fontWeight="bold">
                         {item.count}
                       </Text>

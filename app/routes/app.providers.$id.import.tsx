@@ -7,7 +7,7 @@
  * Step 4: Import with progress
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useSearchParams, redirect } from "react-router";
 import {
@@ -47,6 +47,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import { getTargetFields } from "../lib/providers/column-mapper.server";
 import type { PlanTier } from "../lib/types";
+import { stepNumberStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -189,6 +190,9 @@ export default function ProviderImportWizard() {
 
   const providerType = provider.type as string;
   const cfg = (provider.config || {}) as Record<string, unknown>;
+
+  // Auto-fetch ref — prevents double-fetch in strict mode
+  const autoFetchedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Step 1: File Upload
@@ -366,6 +370,24 @@ export default function ProviderImportWizard() {
       setFetchingApi(false);
     }
   }, [provider.id]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-fetch on mount for API/FTP providers
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (autoFetchedRef.current) return;
+    if (step !== "upload") return;
+
+    const hasConfig =
+      (providerType === "api" && cfg.endpoint) ||
+      (providerType === "ftp" && cfg.host && cfg.remotePath);
+
+    if ((providerType === "api" || providerType === "ftp") && hasConfig) {
+      autoFetchedRef.current = true;
+      const timer = setTimeout(() => handleFetchFromApi(), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [step, providerType, cfg.endpoint, cfg.host, cfg.remotePath, handleFetchFromApi]);
 
   // ---------------------------------------------------------------------------
   // Step 2: Column Mapping
@@ -575,7 +597,7 @@ export default function ProviderImportWizard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={ConnectIcon} color="var(--p-color-icon-emphasis)" />
+                      <IconBadge icon={ConnectIcon} />
                       <Text as="h2" variant="headingMd">Fetch from API</Text>
                     </InlineStack>
                     <Badge tone="info">API</Badge>
@@ -638,7 +660,7 @@ export default function ProviderImportWizard() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={ConnectIcon} color="var(--p-color-icon-emphasis)" />
+                      <IconBadge icon={ConnectIcon} />
                       <Text as="h2" variant="headingMd">Fetch from FTP</Text>
                     </InlineStack>
                     <Badge tone="info">FTP</Badge>
@@ -711,7 +733,7 @@ export default function ProviderImportWizard() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={FileIcon} color="var(--p-color-icon-emphasis)" />
+                  <IconBadge icon={FileIcon} />
                   <Text as="h2" variant="headingMd">
                     {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
                   </Text>
@@ -824,7 +846,7 @@ export default function ProviderImportWizard() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={LinkIcon} color="var(--p-color-icon-emphasis)" />
+                    <IconBadge icon={LinkIcon} />
                     <Text as="h2" variant="headingMd">
                       Column Mapping
                     </Text>
@@ -871,7 +893,7 @@ export default function ProviderImportWizard() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={ViewIcon} color="var(--p-color-icon-emphasis)" />
+                  <IconBadge icon={ViewIcon} />
                   <Text as="h2" variant="headingMd">
                     Data Preview (First 5 Rows)
                   </Text>
@@ -921,7 +943,7 @@ export default function ProviderImportWizard() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={CheckCircleIcon} color="var(--p-color-icon-emphasis)" />
+                  <IconBadge icon={CheckCircleIcon} />
                   <Text as="h2" variant="headingMd">
                     Import Validation
                   </Text>
@@ -955,7 +977,7 @@ export default function ProviderImportWizard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={RefreshIcon} color="var(--p-color-icon-emphasis)" />
+                    <IconBadge icon={RefreshIcon} />
                     <Text as="h2" variant="headingMd">
                       Duplicate Handling
                     </Text>
@@ -1037,7 +1059,7 @@ export default function ProviderImportWizard() {
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={CheckCircleIcon} color="var(--p-color-icon-emphasis)" />
+                  <IconBadge icon={CheckCircleIcon} />
                   <Text as="h2" variant="headingMd">Import Summary</Text>
                 </InlineStack>
                 <InlineGrid columns={4} gap="400">
@@ -1121,28 +1143,21 @@ function StepBadge({
   active: boolean;
   completed: boolean;
 }) {
+  const circleStyle = {
+    ...stepNumberStyle,
+    background: completed
+      ? "var(--p-color-bg-fill-success)"
+      : active
+        ? "var(--p-color-bg-fill-emphasis)"
+        : "var(--p-color-bg-fill-secondary)",
+    color: completed || active
+      ? "var(--p-color-text-inverse)"
+      : "var(--p-color-text-secondary)",
+  };
+
   return (
     <InlineStack gap="200" blockAlign="center">
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "12px",
-          fontWeight: 600,
-          background: completed
-            ? "var(--p-color-bg-fill-success)"
-            : active
-              ? "var(--p-color-bg-fill-brand)"
-              : "var(--p-color-bg-fill-secondary)",
-          color: completed || active
-            ? "var(--p-color-text-inverse)"
-            : "var(--p-color-text-secondary)",
-        }}
-      >
+      <div style={circleStyle}>
         {completed ? "✓" : step}
       </div>
       <Text
