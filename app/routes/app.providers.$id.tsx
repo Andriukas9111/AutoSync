@@ -127,7 +127,22 @@ function parseDuration(schedule: string): number {
 }
 
 function connectionSummary(type: ProviderType, cfg: Record<string, unknown>): string {
-  if (type === "api") return String(cfg.endpoint || "No endpoint configured");
+  if (type === "api") {
+    const endpoint = String(cfg.endpoint || "No endpoint configured");
+    // Hide API keys/tokens from the display
+    try {
+      const url = new URL(endpoint);
+      // Remove sensitive query params
+      for (const key of [...url.searchParams.keys()]) {
+        if (/key|token|secret|password|auth/i.test(key)) {
+          url.searchParams.set(key, "••••••");
+        }
+      }
+      return `API — ${url.origin}${url.pathname}`;
+    } catch {
+      return endpoint.replace(/[?&](api_key|key|token|secret)=[^&]+/gi, "");
+    }
+  }
   if (type === "ftp") {
     const host = String(cfg.host || "");
     const port = String(cfg.port || "21");
@@ -464,43 +479,45 @@ export default function ProviderDetail() {
             <Divider />
 
             {/* Connection summary */}
-            <Box paddingInline="200">
-              <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+            <BlockStack gap="300">
+              <Box paddingInline="200">
                 <BlockStack gap="200">
                   <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
                   <Text as="p" variant="bodyMd" fontWeight="semibold">
                     {connectionSummary(type, cfg)}
                   </Text>
-                  {type === "api" && cfg.authType && cfg.authType !== "none" && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={LockIcon} tone="subdued" />
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Auth: {String(cfg.authType).replace("_", " ").toUpperCase()}
-                      </Text>
-                    </InlineStack>
-                  )}
                 </BlockStack>
-                <BlockStack gap="200">
-                  {provider.website_url && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={GlobeIcon} tone="subdued" />
-                      <Button variant="plain" url={provider.website_url} external>
-                        {provider.website_url.replace(/^https?:\/\//, "")}
-                      </Button>
-                    </InlineStack>
-                  )}
-                  {provider.contact_email && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={EmailIcon} tone="subdued" />
-                      <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
-                    </InlineStack>
-                  )}
-                  {provider.description && (
-                    <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>
-                  )}
-                </BlockStack>
-              </InlineGrid>
-            </Box>
+              </Box>
+
+              {(provider.website_url || provider.contact_email) && (
+                <Box paddingInline="200">
+                  <InlineStack gap="400" wrap>
+                    {provider.website_url && (
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={GlobeIcon} tone="subdued" />
+                        <Button variant="plain" url={provider.website_url} external>
+                          {provider.website_url.replace(/^https?:\/\//, "")}
+                        </Button>
+                      </InlineStack>
+                    )}
+                    {provider.contact_email && (
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={EmailIcon} tone="subdued" />
+                        <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
+                      </InlineStack>
+                    )}
+                    {type === "api" && cfg.authType && cfg.authType !== "none" && (
+                      <InlineStack gap="200" blockAlign="center">
+                        <Icon source={LockIcon} tone="subdued" />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Auth: {String(cfg.authType).replace("_", " ").toUpperCase()}
+                        </Text>
+                      </InlineStack>
+                    )}
+                  </InlineStack>
+                </Box>
+              )}
+            </BlockStack>
 
             <Divider />
 

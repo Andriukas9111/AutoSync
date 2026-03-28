@@ -228,7 +228,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
 
         const content = JSON.stringify(result.items);
-        return buildPreviewResponse(content, `${provider.name} API`, "api-response.json", providerId, shopId, provider);
+        return buildPreviewResponse(content, `${provider.name} API`, "api-response.json", providerId, shopId, provider, result.totalCount);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Fetch failed";
         return data({ error: message }, { status: 500 });
@@ -363,6 +363,7 @@ async function buildPreviewResponse(
   providerId: string,
   shopId: string,
   provider: { duplicate_strategy: string | null },
+  apiTotalCount?: number,
 ) {
   const parsed = await parseFile(content, fileName, {
     maxPreviewRows: 100,
@@ -413,7 +414,7 @@ async function buildPreviewResponse(
       fileName: displayName,
       fileSize: `${sizeKb} KB`,
       format: parsed.format,
-      totalRows: parsed.rowCount,
+      totalRows: apiTotalCount || parsed.rowCount,
       headers: parsed.headers,
       sampleRows: parsed.rows.slice(0, 10),
       warnings: [...parsed.warnings, ...warnings],

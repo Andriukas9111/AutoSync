@@ -48,6 +48,8 @@ export interface ApiFetchResult {
   firstPageItemCount: number;
   /** Whether there were more pages available beyond what was fetched */
   hasMorePages: boolean;
+  /** Total count of items across all pages (if API provides it) */
+  totalCount?: number;
 }
 
 /**
@@ -156,6 +158,7 @@ export async function fetchFromApi(
   const trimmed = rawText.trim();
 
   let items: Record<string, unknown>[];
+  let totalCount: number | undefined;
 
   if (responseFormat === "csv" || (!responseFormat && detectFormat(trimmed) === "csv")) {
     // Parse CSV/TSV/semicolon-delimited
@@ -170,6 +173,11 @@ export async function fetchFromApi(
     try {
       const json = JSON.parse(rawText);
       items = extractItems(json, itemsPath);
+      // Capture total_count if API provides it (common in paginated APIs)
+      if (json && typeof json === "object" && !Array.isArray(json)) {
+        const tc = (json as Record<string, unknown>).total_count ?? (json as Record<string, unknown>).totalCount ?? (json as Record<string, unknown>).total;
+        if (typeof tc === "number") totalCount = tc;
+      }
     } catch {
       // If JSON fails, try CSV as fallback
       items = parseCSVText(trimmed);
@@ -321,6 +329,7 @@ export async function fetchFromApi(
     statusCode: response.status,
     firstPageItemCount,
     hasMorePages,
+    totalCount,
   };
 }
 
