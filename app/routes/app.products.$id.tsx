@@ -423,6 +423,39 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, message: "Status updated" };
   }
 
+  if (intent === "update_product") {
+    const updates: Record<string, unknown> = {};
+    const title = formData.get("title") as string | null;
+    const description = formData.get("description") as string | null;
+    const price = formData.get("price") as string | null;
+    const sku = formData.get("sku") as string | null;
+    const vendor = formData.get("vendor") as string | null;
+    const imageUrl = formData.get("image_url") as string | null;
+
+    if (title !== null) updates.title = title;
+    if (description !== null) updates.description = description;
+    if (price !== null) updates.price = price ? parseFloat(price) : null;
+    if (sku !== null) updates.sku = sku || null;
+    if (vendor !== null) updates.vendor = vendor || null;
+    if (imageUrl !== null) updates.image_url = imageUrl || null;
+
+    if (Object.keys(updates).length === 0) return { error: "No fields to update" };
+
+    updates.updated_at = new Date().toISOString();
+    // Also update handle if title changed
+    if (updates.title) {
+      updates.handle = String(updates.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+
+    const { error: updateError } = await db
+      .from("products")
+      .update(updates)
+      .eq("id", productId).eq("shop_id", shopId);
+
+    if (updateError) return { error: `Failed to update: ${updateError.message}` };
+    return { success: true, message: "Product updated successfully" };
+  }
+
   if (intent === "approve_to_catalog") {
     const { error: approveError } = await db
       .from("products")
@@ -854,6 +887,45 @@ export default function ProductDetails() {
                 )}
               </BlockStack>
             </Card>
+
+            {/* ── Edit Product Fields — for staged provider products ── */}
+            {isStaged && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ProductIcon} />
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Edit Product</Text>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Review and fix product data before approving to your catalog. The extraction engine uses the title and description to auto-detect vehicle fitments.
+                  </Text>
+                  <form
+                    method="POST"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const fd = new FormData(e.currentTarget);
+                      fd.set("_action", "update_product");
+                      submit(fd, { method: "POST" });
+                    }}
+                  >
+                    <BlockStack gap="300">
+                      <TextField label="Title" name="title" defaultValue={product.title} autoComplete="off" />
+                      <TextField label="Description" name="description" defaultValue={cleanDescription || ""} multiline={4} autoComplete="off"
+                        helpText="Used by the extraction engine to detect vehicle fitments (make, model, year)" />
+                      <InlineGrid columns={3} gap="300">
+                        <TextField label="Price" name="price" defaultValue={product.price?.toString() || ""} type="number" autoComplete="off" />
+                        <TextField label="SKU" name="sku" defaultValue={product.sku || ""} autoComplete="off" />
+                        <TextField label="Vendor" name="vendor" defaultValue={product.vendor || ""} autoComplete="off" />
+                      </InlineGrid>
+                      <TextField label="Image URL" name="image_url" defaultValue={product.image_url || ""} autoComplete="off" />
+                      <InlineStack align="end">
+                        <Button variant="primary" submit>Save Changes</Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </form>
+                </BlockStack>
+              </Card>
+            )}
 
             {/* ── Smart Suggestions Card — hidden for staged provider products ── */}
             {!isStaged && <Card>
