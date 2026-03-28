@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import {
   useLoaderData,
   useNavigate,
   useFetcher,
+  redirect,
 } from "react-router";
 import { data } from "react-router";
 import {
@@ -187,11 +188,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  return data({
-    success: true,
-    providerId: provider.id,
-    redirectTo: `/app/providers/${provider.id}/import?step=upload`,
-  });
+  // Use redirect() instead of client-side navigate — fetcher follows redirects
+  // and React Router loads the target route's data before rendering (no blank page)
+  throw redirect(`/app/providers/${provider.id}/import?step=upload`);
 };
 
 // ---------------------------------------------------------------------------
@@ -397,8 +396,8 @@ export default function ProvidersNew() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const testFetcher = useFetcher();
-  const isSubmitting = fetcher.state === "submitting";
-  const actionData = fetcher.data as { success?: boolean; redirectTo?: string; error?: string } | undefined;
+  const isSubmitting = fetcher.state !== "idle";
+  const actionData = fetcher.data as { error?: string } | undefined;
   const testResult = testFetcher.data as { success?: boolean; error?: string; files?: Array<{ name: string; size: number }> } | undefined;
 
   // Selected source type
@@ -426,13 +425,6 @@ export default function ProvidersNew() {
   const [ftpPassword, setFtpPassword] = useState("");
   const [ftpPath, setFtpPath] = useState("");
   const [ftpFilePattern, setFtpFilePattern] = useState("");
-
-  // Navigate on successful creation
-  useEffect(() => {
-    if (actionData?.success && actionData.redirectTo) {
-      navigate(actionData.redirectTo);
-    }
-  }, [actionData, navigate]);
 
   // Test connection handler
   const handleTestConnection = useCallback(() => {
