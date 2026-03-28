@@ -1131,11 +1131,11 @@ export default function ProductDetails() {
           </BlockStack>
         </Layout.Section>
 
-        {/* ── Right Sidebar ── */}
+        {/* ── Right Sidebar — hidden entirely for staged provider products ── */}
+        {!isStaged && (
         <Layout.Section variant="oneThird">
           <BlockStack gap="400">
-            {/* Status Card — hidden for staged provider products */}
-            {!isStaged && <Card>
+            <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
                   <IconBadge icon={StatusIcon} color="var(--p-color-icon-emphasis)" bg="var(--p-color-bg-surface-secondary)" />
@@ -1156,10 +1156,10 @@ export default function ProductDetails() {
                   onChange={handleStatusChange}
                 />
               </BlockStack>
-            </Card>}
+            </Card>
 
-            {/* Mapping Summary — hidden for staged products */}
-            {!isStaged && <Card>
+            {/* Mapping Summary */}
+            <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
                   <IconBadge icon={TargetIcon} color="var(--p-color-icon-info)" bg="var(--p-color-bg-fill-info-secondary)" />
@@ -1193,7 +1193,7 @@ export default function ProductDetails() {
                   </InlineStack>
                 </BlockStack>
               </BlockStack>
-            </Card>}
+            </Card>
 
             {/* Product Details Card */}
             <Card>
@@ -1352,6 +1352,7 @@ export default function ProductDetails() {
             )}
           </BlockStack>
         </Layout.Section>
+        )}
       </Layout>
     </Page>
   );
