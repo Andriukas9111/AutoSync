@@ -531,7 +531,7 @@ export default function ProviderDetail() {
             {(portalUrl || portalUsername || portalPassword) && (
               <>
                 <Divider />
-                <div style={{ display: "grid", gridTemplateColumns: "70px 1fr auto", gap: "4px 12px", alignItems: "center" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 32px", gap: "6px 16px", alignItems: "center" }}>
                   {portalUrl && (<>
                     <Text as="span" variant="bodySm" tone="subdued">Portal</Text>
                     <Button variant="plain" url={portalUrl} external>{portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}</Button>

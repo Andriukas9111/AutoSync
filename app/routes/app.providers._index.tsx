@@ -148,6 +148,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const limits = getPlanLimits(plan);
   const providers = (providersResult.data ?? []) as Provider[];
 
+  // Get REAL product counts per provider (not stale provider.product_count)
+  if (providers.length > 0) {
+    const countResults = await Promise.all(
+      providers.map(p =>
+        db.from("products").select("id", { count: "exact", head: true })
+          .eq("shop_id", shopId).eq("provider_id", p.id)
+      )
+    );
+    providers.forEach((p, i) => {
+      const live = countResults[i].count ?? 0;
+      if (live > 0) p.product_count = live;
+    });
+  }
+
   return {
     providers,
     providerCount: providers.length,

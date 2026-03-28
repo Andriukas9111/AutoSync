@@ -888,42 +888,101 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>
 
-            {/* ── Edit Product Fields — for staged provider products ── */}
+            {/* ── Imported Product Data — for staged provider products ── */}
             {isStaged && (
               <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={ProductIcon} />
-                    <Text as="h2" variant="headingMd" fontWeight="semibold">Edit Product</Text>
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Review and fix product data before approving to your catalog. The extraction engine uses the title and description to auto-detect vehicle fitments.
-                  </Text>
-                  <form
-                    method="POST"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const fd = new FormData(e.currentTarget);
-                      fd.set("_action", "update_product");
-                      submit(fd, { method: "POST" });
-                    }}
-                  >
-                    <BlockStack gap="300">
-                      <TextField label="Title" name="title" defaultValue={product.title} autoComplete="off" />
-                      <TextField label="Description" name="description" defaultValue={cleanDescription || ""} multiline={4} autoComplete="off"
-                        helpText="Used by the extraction engine to detect vehicle fitments (make, model, year)" />
-                      <InlineGrid columns={3} gap="300">
-                        <TextField label="Price" name="price" defaultValue={product.price?.toString() || ""} type="number" autoComplete="off" />
-                        <TextField label="SKU" name="sku" defaultValue={product.sku || ""} autoComplete="off" />
-                        <TextField label="Vendor" name="vendor" defaultValue={product.vendor || ""} autoComplete="off" />
-                      </InlineGrid>
-                      <TextField label="Image URL" name="image_url" defaultValue={product.image_url || ""} autoComplete="off" />
-                      <InlineStack align="end">
-                        <Button variant="primary" submit>Save Changes</Button>
-                      </InlineStack>
-                    </BlockStack>
-                  </form>
-                </BlockStack>
+                <form
+                  method="POST"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const fd = new FormData(e.currentTarget);
+                    fd.set("_action", "update_product");
+                    submit(fd, { method: "POST" });
+                  }}
+                >
+                  <BlockStack gap="400">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ProductIcon} />
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Imported Product Data</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">— review and edit before approving</Text>
+                    </InlineStack>
+
+                    {/* Image preview + Title */}
+                    <InlineStack gap="400" blockAlign="start" wrap={false}>
+                      {product.image_url && (
+                        <div style={{ flexShrink: 0 }}>
+                          <Thumbnail source={product.image_url} alt={product.title} size="large" />
+                        </div>
+                      )}
+                      <BlockStack gap="200" inlineAlign="stretch">
+                        <TextField label="Title" name="title" defaultValue={product.title} autoComplete="off" />
+                        <InlineGrid columns={3} gap="200">
+                          <TextField label="SKU" name="sku" defaultValue={product.sku || ""} autoComplete="off" />
+                          <TextField label="Price" name="price" defaultValue={product.price?.toString() || ""} type="number" autoComplete="off" />
+                          <TextField label="Vendor" name="vendor" defaultValue={product.vendor || ""} autoComplete="off" />
+                        </InlineGrid>
+                      </BlockStack>
+                    </InlineStack>
+
+                    <Divider />
+
+                    {/* Full Description */}
+                    <TextField
+                      label="Description"
+                      name="description"
+                      defaultValue={cleanDescription || ""}
+                      multiline={6}
+                      autoComplete="off"
+                      helpText="The extraction engine scans this for vehicle makes, models, and years"
+                    />
+
+                    {/* Tags if present */}
+                    {product.tags && product.tags.length > 0 && (
+                      <>
+                        <Divider />
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Tags</Text>
+                          <InlineStack gap="200" wrap>
+                            {product.tags.map((t) => (
+                              <Tag key={t}>{t}</Tag>
+                            ))}
+                          </InlineStack>
+                        </BlockStack>
+                      </>
+                    )}
+
+                    {/* Image URL editable */}
+                    <TextField label="Image URL" name="image_url" defaultValue={product.image_url || ""} autoComplete="off" />
+
+                    {/* Product type + weight */}
+                    <InlineGrid columns={2} gap="200">
+                      {product.product_type && (
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Product Type</Text>
+                          <Text as="span" variant="bodyMd">{product.product_type}</Text>
+                        </BlockStack>
+                      )}
+                      {product.cost_price && (
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Cost Price</Text>
+                          <Text as="span" variant="bodyMd">${Number(product.cost_price).toFixed(2)}</Text>
+                        </BlockStack>
+                      )}
+                    </InlineGrid>
+
+                    <Divider />
+                    <InlineStack align="end" gap="200">
+                      <Button submit>Save Changes</Button>
+                      <Button
+                        variant="primary"
+                        icon={CheckCircleIcon}
+                        onClick={() => submit({ _action: "approve_to_catalog" }, { method: "POST" })}
+                      >
+                        Approve to Catalog
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                </form>
               </Card>
             )}
 
