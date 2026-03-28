@@ -69,14 +69,15 @@ export async function action({ request }: ActionFunctionArgs) {
           maxPages: 1, // Only fetch first page for test connection
         });
 
-        const countLabel = result.hasMorePages
-          ? `${result.itemCount.toLocaleString()}+ items (first page — more pages available)`
+        const total = result.totalCount || result.itemCount;
+        const countLabel = result.totalCount
+          ? `${total.toLocaleString()} items total`
           : `${result.itemCount.toLocaleString()} items`;
 
         return data({
           success: true,
           message: `Connected! Found ${countLabel}.`,
-          itemCount: result.itemCount,
+          itemCount: total,
           hasMorePages: result.hasMorePages,
         });
       } catch (err) {
@@ -140,15 +141,16 @@ export async function action({ request }: ActionFunctionArgs) {
           maxPages: 1, // Only fetch first page for test connection
         });
 
-        const countLabel = result.hasMorePages
-          ? `${result.itemCount.toLocaleString()}+ items (first page — more pages available)`
+        const total = result.totalCount || result.itemCount;
+        const countLabel = result.totalCount
+          ? `${total.toLocaleString()} items total`
           : `${result.itemCount.toLocaleString()} items`;
 
         return data({
           success: true,
           message: `Connection successful. Found ${countLabel}.`,
           statusCode: result.statusCode,
-          itemCount: result.itemCount,
+          itemCount: total,
           hasMorePages: result.hasMorePages,
           sampleItem: result.items.length > 0 ? result.items[0] : null,
         });
