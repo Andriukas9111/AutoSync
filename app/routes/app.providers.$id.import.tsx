@@ -1086,12 +1086,13 @@ export default function ProviderImportWizard() {
         {/* ============================================================ */}
         {step === "complete" && importResult && (
           <>
-            {/* Background import (via Edge Function) shows processing message */}
-            {importResult.totalRows === 0 && (importResult as Record<string, unknown>).jobId ? (
-              <Banner tone="info" title="Import processing in background">
+            {/* Background import shows processing message — products import server-side */}
+            {importResult.totalRows === 0 ? (
+              <Banner tone="success" title="Import started — processing in background">
                 <p>
-                  Your import has started and is being processed server-side. You can safely close this page — the import will continue.
-                  Check the provider detail page to monitor progress.
+                  Products are being imported from the API right now. This typically takes 15-30 seconds.
+                  You can safely close this page — the import continues server-side.
+                  Click "View Products" below to see progress.
                 </p>
               </Banner>
             ) : (
@@ -1113,20 +1114,23 @@ export default function ProviderImportWizard() {
               </Banner>
             )}
 
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={CheckCircleIcon} />
-                  <Text as="h2" variant="headingMd">Import Summary</Text>
-                </InlineStack>
-                <InlineGrid columns={4} gap="400">
-                  <StatCard label="Total Rows" value={importResult.totalRows} />
-                  <StatCard label="Imported" value={importResult.importedRows} tone="success" />
-                  <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
-                  <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
-                </InlineGrid>
-              </BlockStack>
-            </Card>
+            {/* Only show stats card if we have actual numbers (not background processing) */}
+            {importResult.totalRows > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={CheckCircleIcon} />
+                    <Text as="h2" variant="headingMd">Import Summary</Text>
+                  </InlineStack>
+                  <InlineGrid columns={4} gap="400">
+                    <StatCard label="Total Rows" value={importResult.totalRows} />
+                    <StatCard label="Imported" value={importResult.importedRows} tone="success" />
+                    <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
+                    <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
+                  </InlineGrid>
+                </BlockStack>
+              </Card>
+            )}
 
             {importResult.errors.length > 0 && (
               <Card>
