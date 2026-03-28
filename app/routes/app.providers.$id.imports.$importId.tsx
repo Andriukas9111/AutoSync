@@ -242,6 +242,7 @@ export default function ImportDetail() {
     | undefined;
 
   const isSubmitting = fetcher.state !== "idle";
+  const [showStatusBanner, setShowStatusBanner] = useState(true);
 
   const imp = importRecord as Record<string, unknown>;
 
@@ -290,14 +291,14 @@ export default function ImportDetail() {
           </Banner>
         )}
 
-        {/* Status Banner */}
-        {status === "completed" && (
-          <Banner tone="success" title="Import completed successfully">
+        {/* Status Banner — dismissible */}
+        {status === "completed" && showStatusBanner && (
+          <Banner tone="success" title="Import completed successfully" onDismiss={() => setShowStatusBanner(false)}>
             <p>{`${importedRows.toLocaleString()} of ${totalRows.toLocaleString()} rows imported.`}</p>
           </Banner>
         )}
-        {status === "failed" && (
-          <Banner tone="critical" title="Import failed">
+        {status === "failed" && showStatusBanner && (
+          <Banner tone="critical" title="Import failed" onDismiss={() => setShowStatusBanner(false)}>
             <p>{`The import encountered errors. ${errorRows.toLocaleString()} rows failed to import.`}</p>
           </Banner>
         )}
@@ -393,12 +394,13 @@ export default function ImportDetail() {
               </InlineStack>
               <Divider />
               <DataTable
-                columnContentTypes={["text", "text"]}
-                headings={["Source Column", "Target Field"]}
+                columnContentTypes={["text", "text", "text"]}
+                headings={["Source Column", "", "Mapped To"]}
                 rows={columnMapping
                   .filter((m) => m.targetField)
                   .map((m) => [
                     m.sourceColumn,
+                    "→",
                     m.targetField ?? "(skipped)",
                   ])}
               />

@@ -504,15 +504,14 @@ export default function ProviderDetail() {
             </InlineStack>
             <Divider />
 
-            {/* Connection info — 2 columns: Data Source | Quick Access */}
-            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-              <BlockStack gap="200">
-                <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
-                <Text as="p" variant="bodyMd" fontWeight="semibold">
-                  {connectionSummary(type, cfg)}
-                </Text>
+            {/* Connection info */}
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                {connectionSummary(type, cfg)}
+              </Text>
+              <InlineStack gap="400" wrap>
                 {provider.website_url && (
-                  <InlineStack gap="200" blockAlign="center">
+                  <InlineStack gap="100" blockAlign="center">
                     <Icon source={GlobeIcon} tone="subdued" />
                     <Button variant="plain" url={provider.website_url} external>
                       {provider.website_url.replace(/^https?:\/\//, "")}
@@ -520,41 +519,37 @@ export default function ProviderDetail() {
                   </InlineStack>
                 )}
                 {provider.contact_email && (
-                  <InlineStack gap="200" blockAlign="center">
+                  <InlineStack gap="100" blockAlign="center">
                     <Icon source={EmailIcon} tone="subdued" />
-                    <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
+                    <Text as="span" variant="bodyMd">{provider.contact_email}</Text>
                   </InlineStack>
                 )}
-              </BlockStack>
+              </InlineStack>
+            </BlockStack>
 
-              {(portalUrl || portalUsername || portalPassword) && (
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">Portal Quick Access</Text>
-                  {portalUrl && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={LinkIcon} tone="subdued" />
-                      <Button variant="plain" url={portalUrl} external>
-                        {portalUrl.replace(/^https?:\/\//, "").slice(0, 40)}
-                      </Button>
-                    </InlineStack>
-                  )}
-                  {portalUsername && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={PersonIcon} tone="subdued" />
-                      <Text as="p" variant="bodyMd">{portalUsername}</Text>
-                      <CopyButton value={portalUsername} />
-                    </InlineStack>
-                  )}
-                  {portalPassword && (
-                    <InlineStack gap="200" blockAlign="center">
-                      <Icon source={LockIcon} tone="subdued" />
-                      <Text as="p" variant="bodyMd">••••••••</Text>
-                      <CopyButton value={portalPassword} />
-                    </InlineStack>
-                  )}
-                </BlockStack>
-              )}
-            </InlineGrid>
+            {/* Portal credentials — compact table */}
+            {(portalUrl || portalUsername || portalPassword) && (
+              <>
+                <Divider />
+                <div style={{ display: "grid", gridTemplateColumns: "70px 1fr auto", gap: "4px 12px", alignItems: "center" }}>
+                  {portalUrl && (<>
+                    <Text as="span" variant="bodySm" tone="subdued">Portal</Text>
+                    <Button variant="plain" url={portalUrl} external>{portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}</Button>
+                    <span />
+                  </>)}
+                  {portalUsername && (<>
+                    <Text as="span" variant="bodySm" tone="subdued">Username</Text>
+                    <Text as="span" variant="bodyMd">{portalUsername}</Text>
+                    <CopyButton value={portalUsername} />
+                  </>)}
+                  {portalPassword && (<>
+                    <Text as="span" variant="bodySm" tone="subdued">Password</Text>
+                    <Text as="span" variant="bodyMd">••••••••</Text>
+                    <CopyButton value={portalPassword} />
+                  </>)}
+                </div>
+              </>
+            )}
 
             <Divider />
 
