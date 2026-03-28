@@ -505,61 +505,56 @@ export default function ProviderDetail() {
             <Divider />
 
             {/* Connection info — 2 columns: Data Source | Quick Access */}
-            <BlockStack gap="300">
-              {/* Data Source */}
-              <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
-                  <Text as="p" variant="bodyMd" fontWeight="semibold">
-                    {connectionSummary(type, cfg)}
-                  </Text>
-                  <InlineStack gap="400" wrap>
-                    {provider.website_url && (
-                      <InlineStack gap="100" blockAlign="center">
-                        <Icon source={GlobeIcon} tone="subdued" />
-                        <Button variant="plain" url={provider.website_url} external>
-                          {provider.website_url.replace(/^https?:\/\//, "")}
-                        </Button>
-                      </InlineStack>
-                    )}
-                    {provider.contact_email && (
-                      <InlineStack gap="100" blockAlign="center">
-                        <Icon source={EmailIcon} tone="subdued" />
-                        <Text as="span" variant="bodyMd">{provider.contact_email}</Text>
-                      </InlineStack>
-                    )}
+            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm" tone="subdued">Data Source</Text>
+                <Text as="p" variant="bodyMd" fontWeight="semibold">
+                  {connectionSummary(type, cfg)}
+                </Text>
+                {provider.website_url && (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={GlobeIcon} tone="subdued" />
+                    <Button variant="plain" url={provider.website_url} external>
+                      {provider.website_url.replace(/^https?:\/\//, "")}
+                    </Button>
                   </InlineStack>
-                </BlockStack>
-              </Box>
+                )}
+                {provider.contact_email && (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={EmailIcon} tone="subdued" />
+                    <Text as="p" variant="bodyMd">{provider.contact_email}</Text>
+                  </InlineStack>
+                )}
+              </BlockStack>
 
-              {/* Portal Quick Access */}
               {(portalUrl || portalUsername || portalPassword) && (
-                <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                  <BlockStack gap="200">
-                    <Text as="p" variant="bodySm" tone="subdued">Portal Login</Text>
-                    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: "8px", alignItems: "center" }}>
-                      {portalUrl && (<>
-                        <Text as="span" variant="bodySm" tone="subdued">URL</Text>
-                        <Button variant="plain" url={portalUrl} external>
-                          {portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}
-                        </Button>
-                        <span />
-                      </>)}
-                      {portalUsername && (<>
-                        <Text as="span" variant="bodySm" tone="subdued">User</Text>
-                        <Text as="span" variant="bodyMd" fontWeight="semibold">{portalUsername}</Text>
-                        <CopyButton value={portalUsername} />
-                      </>)}
-                      {portalPassword && (<>
-                        <Text as="span" variant="bodySm" tone="subdued">Pass</Text>
-                        <Text as="span" variant="bodyMd">••••••••</Text>
-                        <CopyButton value={portalPassword} />
-                      </>)}
-                    </div>
-                  </BlockStack>
-                </Box>
+                <BlockStack gap="200">
+                  <Text as="p" variant="bodySm" tone="subdued">Portal Quick Access</Text>
+                  {portalUrl && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={LinkIcon} tone="subdued" />
+                      <Button variant="plain" url={portalUrl} external>
+                        {portalUrl.replace(/^https?:\/\//, "").slice(0, 40)}
+                      </Button>
+                    </InlineStack>
+                  )}
+                  {portalUsername && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={PersonIcon} tone="subdued" />
+                      <Text as="p" variant="bodyMd">{portalUsername}</Text>
+                      <CopyButton value={portalUsername} />
+                    </InlineStack>
+                  )}
+                  {portalPassword && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <Icon source={LockIcon} tone="subdued" />
+                      <Text as="p" variant="bodyMd">••••••••</Text>
+                      <CopyButton value={portalPassword} />
+                    </InlineStack>
+                  )}
+                </BlockStack>
               )}
-            </BlockStack>
+            </InlineGrid>
 
             <Divider />
 
