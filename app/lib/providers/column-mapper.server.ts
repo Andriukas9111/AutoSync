@@ -50,8 +50,9 @@ const FIELD_PATTERNS: Record<string, string[]> = {
     "part_code", "stock_code", "model_code",
   ],
   price: [
-    "price", "variant_price", "retail_price", "sale_price", "selling_price",
+    "price", "variant_price", "retail_price", "selling_price",
     "rrp", "msrp", "retail", "unit_price", "list_price",
+    "rrp_inc_vat", "rrp_exc_vat", "price_normal", "price.normal",
   ],
   cost_price: [
     "cost", "cost_price", "wholesale_price", "trade_price", "buy_price",
@@ -80,6 +81,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   description: [
     "description", "body_html", "body", "long_description", "full_description",
     "product_description", "details", "content", "text",
+    "short_desc", "desc", "body_(html)",
   ],
   image_url: [
     "image_url", "image", "image_src", "photo_url", "picture_url",
@@ -88,7 +90,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   ],
   barcode: [
     "barcode", "upc", "ean", "gtin", "isbn", "asin",
-    "upc_code", "ean_code", "gtin13", "gtin14",
+    "upc_code", "ean_code", "gtin13", "gtin14", "variant_barcode",
   ],
   weight: [
     "weight", "weight_value", "shipping_weight", "item_weight", "net_weight",
@@ -118,6 +120,9 @@ const FIELD_PATTERNS: Record<string, string[]> = {
 const SKIP_HEADERS = new Set([
   "href", "id", "parent_id", "sort_order", "custom_sort_order",
   "date_added", "date_modified", "date_modified_admin", "date_modified_api",
+  "link", "status", "published", "published_at", "updated_at", "created_at",
+  "exclude_from_google_base", "exclude_from_api_webhook", "is_digital",
+  "is_addon_product", "is_discontinued", "triggers_event_system",
 ]);
 
 export function autoMapColumns(headers: string[]): ColumnMapping[] {
