@@ -513,7 +513,7 @@ export default function ProviderImportWizard() {
       }
 
       // File-based import (CSV, XML, JSON upload)
-      if (!file) {
+      if (!file && !storagePath) {
         setError("No file selected. Please upload a file first.");
         setStep("validate");
         return;
@@ -521,7 +521,6 @@ export default function ProviderImportWizard() {
 
       setImportProgress(20);
 
-      // For large files, upload to Supabase Storage first
       const formData = new FormData();
       formData.set("provider_id", provider.id);
       formData.set("mappings", JSON.stringify(mappings));
@@ -530,9 +529,9 @@ export default function ProviderImportWizard() {
       if (storagePath) {
         // File already in Supabase Storage from the preview step — reuse it
         formData.set("storage_path", storagePath);
-        formData.set("file_name", file.name);
-      } else {
-        // Small file or no storage path — send directly
+        formData.set("file_name", file?.name || preview?.fileName || "import");
+      } else if (file) {
+        // Small file — send directly
         formData.set("file", file);
       }
 
