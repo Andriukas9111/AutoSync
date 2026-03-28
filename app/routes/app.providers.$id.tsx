@@ -19,7 +19,7 @@ import {
   ConnectIcon, AlertDiamondIcon, DataTableIcon,
   LinkIcon, EmailIcon, NoteIcon, CalendarIcon,
   SettingsIcon, DatabaseIcon, LockIcon, ImageIcon,
-  PersonIcon,
+  PersonIcon, ClipboardIcon, CheckIcon,
 } from "@shopify/polaris-icons";
 
 import { IconBadge } from "../components/IconBadge";
@@ -544,26 +544,14 @@ export default function ProviderDetail() {
                     <InlineStack gap="200" blockAlign="center">
                       <Icon source={PersonIcon} tone="subdued" />
                       <Text as="p" variant="bodyMd">{portalUsername}</Text>
-                      <Button
-                        variant="plain"
-                        size="slim"
-                        onClick={() => navigator.clipboard.writeText(portalUsername)}
-                      >
-                        Copy
-                      </Button>
+                      <CopyButton value={portalUsername} />
                     </InlineStack>
                   )}
                   {portalPassword && (
                     <InlineStack gap="200" blockAlign="center">
                       <Icon source={LockIcon} tone="subdued" />
                       <Text as="p" variant="bodyMd">••••••••</Text>
-                      <Button
-                        variant="plain"
-                        size="slim"
-                        onClick={() => navigator.clipboard.writeText(portalPassword)}
-                      >
-                        Copy password
-                      </Button>
+                      <CopyButton value={portalPassword} />
                     </InlineStack>
                   )}
                 </BlockStack>
@@ -903,5 +891,57 @@ export default function ProviderDetail() {
         </Modal.Section>
       </Modal>
     </Page>
+  );
+}
+
+/** Clipboard copy button — shows checkmark for 2s after copy */
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [value]);
+
+  return (
+    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+      {copied && (
+        <div style={{
+          position: "absolute",
+          bottom: "100%",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "var(--p-color-bg-fill-success)",
+          color: "var(--p-color-text-inverse)",
+          padding: "2px 8px",
+          borderRadius: "var(--p-border-radius-100)",
+          fontSize: "11px",
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          marginBottom: "4px",
+        }}>
+          Copied!
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={handleCopy}
+        style={{
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "4px",
+          borderRadius: "var(--p-border-radius-100)",
+          display: "flex",
+          alignItems: "center",
+          color: copied ? "var(--p-color-icon-success)" : "var(--p-color-icon-secondary)",
+        }}
+        title="Copy to clipboard"
+      >
+        <Icon source={copied ? CheckIcon : ClipboardIcon} />
+      </button>
+    </div>
   );
 }
