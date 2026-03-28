@@ -36,65 +36,166 @@ export interface DuplicateCheckResult {
 // Known field patterns — 50+ common column name variations
 // ---------------------------------------------------------------------------
 
+// Comprehensive field patterns — supports Shopify, WooCommerce, PrestaShop,
+// Magento, OpenCart, BigCommerce, VirtueMart/Joomla, custom supplier feeds
 const FIELD_PATTERNS: Record<string, string[]> = {
   title: [
-    "title", "name", "product_name", "product_title", "item_name", "item_title",
-    "product name", "product title", "item name", "description_short", "short_name",
-    "part_description", "part_name", "part description",
+    // Shopify
+    "title", "product_title",
+    // WooCommerce / WordPress
+    "name", "product_name", "post_title",
+    // PrestaShop
+    "nom", "designation",
+    // Magento
+    "item_name", "item_title",
+    // Generic
+    "product name", "product title", "item name", "short_name",
+    "part_description", "part_name", "part description", "product",
+    "listing_title", "article_name",
   ],
   sku: [
-    "sku", "variant_sku", "item_sku", "product_sku", "part_number", "part_no",
-    "partnumber", "part_num", "item_number", "item_no",
-    "article_number", "article_no", "catalog_number", "oem_number", "oem",
-    "manufacturer_part_number", "mpn", "code", "product_code", "item_code",
-    "part_code", "stock_code", "model_code",
+    // Shopify
+    "sku", "variant_sku",
+    // WooCommerce
+    "item_sku", "product_sku", "_sku",
+    // PrestaShop / Magento
+    "reference", "product_reference",
+    // Generic supplier
+    "part_number", "part_no", "partnumber", "part_num",
+    "item_number", "item_no", "article_number", "article_no",
+    "catalog_number", "oem_number", "oem",
+    "manufacturer_part_number", "mpn",
+    "code", "product_code", "item_code", "part_code", "stock_code",
+    "model_code", "model", "ref",
   ],
   price: [
-    "price", "variant_price", "retail_price", "selling_price",
-    "rrp", "msrp", "retail", "unit_price", "list_price",
-    "rrp_inc_vat", "rrp_exc_vat", "price_normal", "price.normal",
+    // Shopify
+    "price", "variant_price",
+    // WooCommerce
+    "regular_price", "_regular_price", "sale_price_dates_from",
+    // PrestaShop
+    "prix", "prix_ttc", "price_tax_incl", "price_tex",
+    // Magento
+    "base_price",
+    // Generic
+    "retail_price", "selling_price", "rrp", "msrp", "retail",
+    "unit_price", "list_price", "rrp_inc_vat", "rrp_exc_vat",
+    "price_normal", "price.normal", "normal_price",
   ],
   cost_price: [
     "cost", "cost_price", "wholesale_price", "trade_price", "buy_price",
     "purchase_price", "supplier_price", "net_price", "dealer_price",
     "your_price", "your_price_exc_vat", "your_price_ex_vat", "trade",
+    "your_price_inc_vat", "nett", "nett_price", "cost_per_item",
+    // PrestaShop
+    "wholesale_price", "prix_achat",
+    // Magento
+    "base_cost",
   ],
   map_price: [
     "map", "map_price", "minimum_advertised_price", "min_price",
   ],
   compare_at_price: [
-    "compare_at_price", "compare_price", "was_price", "original_price",
-    "before_price", "old_price", "regular_price", "special_offer",
-    "offer_price", "sale_price", "discount_price",
+    // Shopify
+    "compare_at_price", "variant_compare_at_price",
+    // WooCommerce
+    "_sale_price", "sale_price",
+    // Generic
+    "compare_price", "was_price", "original_price",
+    "before_price", "old_price", "special_offer",
+    "offer_price", "discount_price", "special_price",
+    "price.special_offer", "price_special_offer",
+    // PrestaShop
+    "prix_promo", "reduction_price",
   ],
   vendor: [
-    "vendor", "brand", "manufacturer", "maker", "supplier", "brand_name",
+    // Shopify
+    "vendor",
+    // Generic
+    "brand", "manufacturer", "maker", "supplier", "brand_name",
     "manufacturer_name", "mfg", "make",
+    // PrestaShop
+    "marque", "fabricant",
+    // Magento
+    "manufacturer",
+    // WooCommerce
+    "pa_brand",
   ],
   product_type: [
-    "product_type", "type", "category", "product_category", "item_type",
+    // Shopify
+    "product_type", "type",
+    // Generic
+    "category", "product_category", "item_type",
     "classification", "group", "department", "class",
+    // WooCommerce
+    "tax:product_type", "tax:product_cat",
+    // PrestaShop
+    "categorie", "categorie_principale",
+    // OpenCart
+    "categories",
   ],
   handle: [
-    "handle", "slug", "url_key", "seo_url", "permalink",
+    // Shopify
+    "handle",
+    // WooCommerce / WordPress
+    "slug", "post_name",
+    // Magento
+    "url_key",
+    // Generic
+    "seo_url", "permalink", "url_rewrite", "friendly_url",
+    // PrestaShop
+    "link_rewrite",
   ],
   description: [
-    "description", "body_html", "body", "long_description", "full_description",
+    // Shopify
+    "body_html", "body_(html)",
+    // WooCommerce
+    "post_content", "post_excerpt",
+    // PrestaShop
+    "description_long", "description_courte",
+    // Magento
+    "short_description",
+    // Generic
+    "description", "body", "long_description", "full_description",
     "product_description", "details", "content", "text",
-    "short_desc", "desc", "body_(html)",
+    "short_desc", "desc", "summary",
   ],
   image_url: [
-    "image_url", "image", "image_src", "photo_url", "picture_url",
-    "thumbnail", "main_image", "primary_image", "img_url", "photo",
-    "image_link", "picture",
+    // Shopify
+    "image_src", "image_url",
+    // WooCommerce
+    "images", "featured_image",
+    // PrestaShop
+    "image_url", "url_image",
+    // Magento
+    "base_image", "small_image", "thumbnail_image",
+    // Generic
+    "image", "photo_url", "picture_url", "thumbnail",
+    "main_image", "primary_image", "img_url", "photo",
+    "image_link", "picture", "img", "image_1",
+    // OpenCart
+    "main_image",
   ],
   barcode: [
+    // Shopify
+    "variant_barcode",
+    // Generic
     "barcode", "upc", "ean", "gtin", "isbn", "asin",
-    "upc_code", "ean_code", "gtin13", "gtin14", "variant_barcode",
+    "upc_code", "ean_code", "gtin13", "gtin14",
+    // PrestaShop
+    "ean13",
+    // WooCommerce
+    "_global_unique_id",
   ],
   weight: [
     "weight", "weight_value", "shipping_weight", "item_weight", "net_weight",
     "gross_weight", "product_weight",
+    // Shopify
+    "variant_grams",
+    // WooCommerce
+    "_weight",
+    // PrestaShop
+    "poids",
   ],
   weight_unit: [
     "weight_unit", "weight_uom", "unit_of_measure",
