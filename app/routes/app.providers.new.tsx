@@ -202,8 +202,6 @@ const SOURCE_TYPES: Array<{
   label: string;
   description: string;
   icon: any;
-  iconBg: string;
-  iconColor: string;
   formats: string[];
   features: string[];
   planFeature?: keyof PlanLimits["features"];
@@ -215,8 +213,6 @@ const SOURCE_TYPES: Array<{
     description:
       "Upload spreadsheet files directly from your computer. Perfect for suppliers who send product data via email or download portals.",
     icon: DataTableIcon,
-    iconBg: "var(--p-color-bg-fill-success-secondary)",
-    iconColor: "var(--p-color-icon-success)",
     formats: [".csv", ".tsv", ".xlsx", ".txt"],
     features: [
       "Auto-detect delimiters (comma, tab, semicolon, pipe)",
@@ -230,8 +226,6 @@ const SOURCE_TYPES: Array<{
     description:
       "Import from XML product feeds. Common for European automotive suppliers and B2B platforms like WheelTrade and TecDoc.",
     icon: CodeIcon,
-    iconBg: "var(--p-color-bg-fill-warning-secondary)",
-    iconColor: "var(--p-color-icon-warning)",
     formats: [".xml", ".rss", ".atom"],
     features: [
       "Auto-detects repeating item elements",
@@ -245,8 +239,6 @@ const SOURCE_TYPES: Array<{
     description:
       "Connect directly to a supplier's API endpoint. Ideal for real-time data from suppliers like Milltek Sport, Forge Motorsport, and others.",
     icon: GlobeIcon,
-    iconBg: "var(--p-color-bg-fill-info-secondary)",
-    iconColor: "var(--p-color-icon-info)",
     formats: ["JSON", "REST"],
     features: [
       "API key, Bearer token, or Basic auth",
@@ -262,8 +254,6 @@ const SOURCE_TYPES: Array<{
     description:
       "Connect to an FTP or SFTP server to automatically download product feeds. Used by suppliers like Scorpion Exhausts and BC Racing.",
     icon: LockIcon,
-    iconBg: "var(--p-color-bg-fill-critical-secondary)",
-    iconColor: "var(--p-color-icon-critical)",
     formats: ["FTP", "SFTP"],
     features: [
       "Secure FTP and SFTP protocols",
@@ -325,8 +315,8 @@ function SourceTypeCard({
             <IconBadge
               icon={source.icon}
               size={40}
-              bg={selected ? "var(--p-color-bg-fill-emphasis)" : source.iconBg}
-              color={selected ? "var(--p-color-text-inverse)" : source.iconColor}
+              bg={selected ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-fill-info-secondary)"}
+              color={selected ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
             />
             <Text as="span" variant="headingSm">
               {source.label}
@@ -585,8 +575,8 @@ export default function ProvidersNew() {
                   <IconBadge
                     icon={SOURCE_TYPES.find((s) => s.value === selectedType)!.icon}
                     size={32}
-                    bg={SOURCE_TYPES.find((s) => s.value === selectedType)!.iconBg}
-                    color={SOURCE_TYPES.find((s) => s.value === selectedType)!.iconColor}
+                    bg="var(--p-color-bg-fill-info-secondary)"
+                    color="var(--p-color-icon-emphasis)"
                   />
                   <Text variant="headingMd" as="h2">
                     {`Configure ${SOURCE_TYPES.find((s) => s.value === selectedType)!.label}`}
