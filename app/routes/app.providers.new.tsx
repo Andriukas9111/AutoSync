@@ -339,9 +339,10 @@ function SourceTypeCard({
                   alignItems: "center",
                   justifyContent: "center",
                   flexShrink: 0,
+                  color: "var(--p-color-text-inverse)",
                 }}
               >
-                <Icon source={CheckSmallIcon} tone="inverse" />
+                <Icon source={CheckSmallIcon} />
               </div>
             )}
           </InlineStack>
@@ -369,10 +370,12 @@ function SourceTypeCard({
           {source.features.map((feat) => (
             <InlineStack key={feat} gap="200" blockAlign="start" wrap={false}>
               <Box minWidth="16px">
-                <Icon
-                  source={CheckSmallIcon}
-                  tone={disabled ? "subdued" : "success"}
-                />
+                <div style={{ color: disabled ? undefined : "var(--p-color-icon-emphasis)" }}>
+                  <Icon
+                    source={CheckSmallIcon}
+                    tone={disabled ? "subdued" : undefined}
+                  />
+                </div>
               </Box>
               <Text as="span" variant="bodySm" tone={disabled ? "subdued" : undefined}>
                 {feat}
