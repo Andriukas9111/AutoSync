@@ -94,7 +94,7 @@ export async function runProviderImport(
 
   // 3. Validate and prepare products
   const errors: ImportError[] = [];
-  const validProducts: Record<string, string>[] = [];
+  let validProducts: Record<string, string>[] = [];
 
   for (let i = 0; i < mappedRows.length; i++) {
     const row = mappedRows[i];
@@ -115,6 +115,37 @@ export async function runProviderImport(
     }
 
     validProducts.push(row);
+  }
+
+  // 3b. Filter out archived products (user previously excluded these)
+  let archivedCount = 0;
+  const archivedSkus = new Set<string>();
+  const allProductSkus = validProducts
+    .map((p) => p.sku)
+    .filter((s): s is string => !!s && s.trim() !== "");
+
+  if (allProductSkus.length > 0) {
+    const uniqueProductSkus = [...new Set(allProductSkus)];
+    const ARCHIVE_BATCH = 500;
+    for (let i = 0; i < uniqueProductSkus.length; i += ARCHIVE_BATCH) {
+      const batch = uniqueProductSkus.slice(i, i + ARCHIVE_BATCH);
+      const { data: archived } = await db
+        .from("provider_archived_products")
+        .select("provider_sku")
+        .eq("provider_id", providerId)
+        .in("provider_sku", batch);
+      if (archived) archived.forEach((a) => archivedSkus.add(a.provider_sku));
+    }
+  }
+
+  if (archivedSkus.size > 0) {
+    validProducts = validProducts.filter((p) => {
+      if (p.sku && archivedSkus.has(p.sku)) {
+        archivedCount++;
+        return false;
+      }
+      return true;
+    });
   }
 
   // 4. Duplicate detection
@@ -234,7 +265,7 @@ export async function runProviderImport(
     .from("provider_imports")
     .update({
       imported_rows: insertedCount,
-      skipped_rows: skippedCount,
+      skipped_rows: skippedCount + archivedCount,
       duplicate_rows: duplicateCount,
       error_rows: errors.length,
       errors: errors.length > 0 ? errors.slice(0, 100) : [], // Cap at 100 errors

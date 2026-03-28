@@ -714,7 +714,8 @@ export default function ProviderImportWizard() {
                   <IconBadge icon={FileIcon} color="var(--p-color-icon-emphasis)" />
                   <Text as="h2" variant="headingMd">
                     {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
-                </Text>
+                  </Text>
+                </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
                 </Text>
@@ -821,10 +822,13 @@ export default function ProviderImportWizard() {
             {/* Column Mapping Table */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between">
-                  <Text as="h2" variant="headingMd">
-                    Column Mapping
-                  </Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={LinkIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">
+                      Column Mapping
+                    </Text>
+                  </InlineStack>
                   <Badge tone={mappedCount === totalColumns ? "success" : undefined}>
                     {`${mappedCount} / ${totalColumns} mapped`}
                   </Badge>
@@ -866,9 +870,12 @@ export default function ProviderImportWizard() {
             {/* Sample Data Preview */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Data Preview (First 5 Rows)
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ViewIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">
+                    Data Preview (First 5 Rows)
+                  </Text>
+                </InlineStack>
 
                 <div style={{ overflowX: "auto" }}>
                   <DataTable
@@ -913,9 +920,12 @@ export default function ProviderImportWizard() {
           <>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Import Validation
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={CheckCircleIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">
+                    Import Validation
+                  </Text>
+                </InlineStack>
 
                 <InlineGrid columns={3} gap="400">
                   <BlockStack gap="100">
@@ -944,9 +954,12 @@ export default function ProviderImportWizard() {
             {duplicatePreview.duplicateCount > 0 && (
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Duplicate Handling
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={RefreshIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">
+                      Duplicate Handling
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     {`Found ${duplicatePreview.duplicateCount} products with matching SKUs already in your database.`}
                   </Text>
@@ -1023,7 +1036,10 @@ export default function ProviderImportWizard() {
 
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Import Summary</Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={CheckCircleIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">Import Summary</Text>
+                </InlineStack>
                 <InlineGrid columns={4} gap="400">
                   <StatCard label="Total Rows" value={importResult.totalRows} />
                   <StatCard label="Imported" value={importResult.importedRows} tone="success" />
@@ -1036,7 +1052,10 @@ export default function ProviderImportWizard() {
             {importResult.errors.length > 0 && (
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Errors</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={AlertCircleIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
+                    <Text as="h2" variant="headingMd">Errors</Text>
+                  </InlineStack>
                   <DataTable
                     columnContentTypes={["numeric", "text", "text"]}
                     headings={["Row", "Field", "Error"]}
