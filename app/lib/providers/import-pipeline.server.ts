@@ -10,7 +10,7 @@ import {
   loadSavedMappings,
   saveMappings,
   mergeAutoAndSavedMappings,
-  autoMapColumns,
+  autoMapColumns, smartAutoMapColumns,
   type ColumnMapping,
 } from "./column-mapper.server";
 
@@ -89,8 +89,24 @@ export async function runProviderImport(
 
   const importId = importRecord.id;
 
-  // 2. Apply mappings to all rows
-  const mappedRows = rows.map((row) => applyColumnMapping(row, mappings));
+  // 2. Apply mappings to all rows + clean data
+  const mappedRows = rows.map((row) => {
+    const mapped = applyColumnMapping(row, mappings);
+    // Decode HTML entities in all text fields (e.g., &quot; → ", &amp; → &)
+    for (const key of Object.keys(mapped)) {
+      if (typeof mapped[key] === "string") {
+        mapped[key] = mapped[key]
+          .replace(/&quot;/g, '"')
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&#39;/g, "'")
+          .replace(/&apos;/g, "'")
+          .trim();
+      }
+    }
+    return mapped;
+  });
 
   // 3. Validate and prepare products
   const errors: ImportError[] = [];
@@ -346,9 +362,13 @@ export async function getSmartMappings(
   providerId: string,
   headers: string[],
   shopId: string,
+  sampleRows?: Record<string, string>[],
 ): Promise<{ mappings: ColumnMapping[]; warnings: string[]; hasSavedMappings: boolean }> {
   const savedMappings = await loadSavedMappings(providerId, shopId);
-  const autoMappings = autoMapColumns(headers);
+  // Use data-aware smart mapping if sample rows available
+  const autoMappings = sampleRows && sampleRows.length > 0
+    ? smartAutoMapColumns(headers, sampleRows)
+    : autoMapColumns(headers);
 
   if (savedMappings.length === 0) {
     // No saved mappings — return auto-detected

@@ -44,7 +44,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   ],
   sku: [
     "sku", "variant_sku", "item_sku", "product_sku", "part_number", "part_no",
-    "partnumber", "part_num", "item_number", "item_no", "reference", "ref",
+    "partnumber", "part_num", "item_number", "item_no",
     "article_number", "article_no", "catalog_number", "oem_number", "oem",
     "manufacturer_part_number", "mpn", "code", "product_code", "item_code",
     "part_code", "stock_code", "model_code",
@@ -63,7 +63,8 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   ],
   compare_at_price: [
     "compare_at_price", "compare_price", "was_price", "original_price",
-    "before_price", "old_price", "regular_price",
+    "before_price", "old_price", "regular_price", "special_offer",
+    "offer_price", "sale_price", "discount_price",
   ],
   vendor: [
     "vendor", "brand", "manufacturer", "maker", "supplier", "brand_name",
@@ -113,12 +114,25 @@ const FIELD_PATTERNS: Record<string, string[]> = {
  * Auto-detect column mappings from header names.
  * Returns a mapping for every header — unmapped headers get targetField: null.
  */
+// Headers that should NEVER be auto-mapped (always Skip)
+const SKIP_HEADERS = new Set([
+  "href", "id", "parent_id", "sort_order", "custom_sort_order",
+  "date_added", "date_modified", "date_modified_admin", "date_modified_api",
+]);
+
 export function autoMapColumns(headers: string[]): ColumnMapping[] {
   const mappings: ColumnMapping[] = [];
   const usedTargets = new Set<string>();
 
   for (const header of headers) {
     const normalizedHeader = header.toLowerCase().trim().replace(/[\s_-]+/g, "_");
+
+    // Skip blocklisted headers
+    if (SKIP_HEADERS.has(normalizedHeader)) {
+      mappings.push({ sourceColumn: header, targetField: null, isUserEdited: false });
+      continue;
+    }
+
     let matched = false;
 
     for (const [targetField, patterns] of Object.entries(FIELD_PATTERNS)) {
@@ -142,6 +156,71 @@ export function autoMapColumns(headers: string[]): ColumnMapping[] {
 
     if (!matched) {
       mappings.push({ sourceColumn: header, targetField: null, isUserEdited: false });
+    }
+  }
+
+  return mappings;
+}
+
+/**
+ * Enhanced auto-mapping that also analyzes sample data to make smarter decisions.
+ * - Detects URL columns and avoids mapping them as SKU
+ * - Detects price-like values and maps them correctly
+ * - Detects image URLs by checking for common image extensions or domains
+ */
+export function smartAutoMapColumns(
+  headers: string[],
+  sampleRows: Record<string, string>[],
+): ColumnMapping[] {
+  // Start with pattern-based mapping
+  const mappings = autoMapColumns(headers);
+
+  if (sampleRows.length === 0) return mappings;
+
+  const sample = sampleRows[0];
+  const usedTargets = new Set(mappings.filter(m => m.targetField).map(m => m.targetField!));
+
+  for (const mapping of mappings) {
+    const val = String(sample[mapping.sourceColumn] || "").trim();
+    if (!val) continue;
+
+    // Fix: if mapped as SKU but value looks like a URL path, unmatch it
+    if (mapping.targetField === "sku" && (val.startsWith("/") || val.startsWith("http"))) {
+      mapping.targetField = null;
+      mapping.isUserEdited = false;
+      usedTargets.delete("sku");
+    }
+
+    // Fix: if mapped as barcode but value looks like a short product code (not numeric), remap to SKU
+    if (mapping.targetField === "barcode" && !usedTargets.has("sku")) {
+      const isNumericBarcode = /^\d{8,14}$/.test(val); // UPC/EAN are 8-14 digits
+      if (!isNumericBarcode) {
+        mapping.targetField = "sku";
+        usedTargets.delete("barcode");
+        usedTargets.add("sku");
+      }
+    }
+
+    // Auto-detect image URLs for unmapped columns
+    if (!mapping.targetField && !usedTargets.has("image_url")) {
+      if (/\.(jpg|jpeg|png|gif|webp|svg)/i.test(val) || /\/images\//i.test(val) || /\/userfiles\//i.test(val)) {
+        mapping.targetField = "image_url";
+        usedTargets.add("image_url");
+      }
+    }
+
+    // Auto-detect URL columns as description source (product page links)
+    if (!mapping.targetField && mapping.sourceColumn.toLowerCase() === "link" && val.startsWith("http")) {
+      // Keep as unmapped — stored in raw_data for reference
+    }
+
+    // Auto-detect cost price fields
+    if (!mapping.targetField && !usedTargets.has("cost_price")) {
+      const header = mapping.sourceColumn.toLowerCase();
+      if (/your.price|trade.price|wholesale|cost/i.test(header) && /^\d/.test(val)) {
+        mapping.targetField = "cost_price";
+        usedTargets.add("cost_price");
+      }
     }
   }
 
