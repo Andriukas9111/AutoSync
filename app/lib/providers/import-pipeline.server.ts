@@ -146,12 +146,30 @@ export async function runProviderImport(
     return mapped;
   });
 
+  // 2b. Handle Shopify CSV format — variant rows have empty title.
+  // When a row has no title but previous row does, it's a variant — skip it (not a separate product).
+  // This prevents thousands of "Missing product title" errors on Shopify CSV exports.
+  let lastTitle = "";
+  const deduplicatedRows: Record<string, string>[] = [];
+  for (const row of mappedRows) {
+    if (row.title && row.title.trim()) {
+      lastTitle = row.title.trim();
+      deduplicatedRows.push(row);
+    } else if (lastTitle) {
+      // Variant row — skip (it belongs to the product above)
+      // Could optionally merge variant data in the future
+    } else {
+      // No title and no previous title — genuinely bad row
+      deduplicatedRows.push(row);
+    }
+  }
+
   // 3. Validate and prepare products
   const errors: ImportError[] = [];
   let validProducts: Record<string, string>[] = [];
 
-  for (let i = 0; i < mappedRows.length; i++) {
-    const row = mappedRows[i];
+  for (let i = 0; i < deduplicatedRows.length; i++) {
+    const row = deduplicatedRows[i];
     const rowNum = i + 2; // 1-indexed + header row
 
     // Validate required fields
