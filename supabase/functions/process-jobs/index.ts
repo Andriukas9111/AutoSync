@@ -172,6 +172,264 @@ async function processProviderAutoFetch(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Provider Import — fetch from API/FTP, parse, and import products directly
+// ---------------------------------------------------------------------------
+
+async function processProviderImport(
+  db: any,
+  job: any,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
+  const providerId = meta.provider_id;
+  const mappings = meta.mappings || [];
+  const duplicateStrategy = meta.duplicate_strategy || "skip";
+
+  if (!providerId) return { processed: 0, hasMore: false, error: "Missing provider_id" };
+
+  // Get provider config
+  const { data: provider } = await db
+    .from("providers")
+    .select("*")
+    .eq("id", providerId)
+    .eq("shop_id", job.shop_id)
+    .maybeSingle();
+
+  if (!provider) return { processed: 0, hasMore: false, error: "Provider not found" };
+
+  const config = provider.config || {};
+
+  // Only handle API providers for now (FTP/CSV need different approach)
+  if (provider.type !== "api") {
+    return { processed: 0, hasMore: false, error: `Edge Function import not yet supported for ${provider.type} providers` };
+  }
+
+  const endpoint = String(config.endpoint || "");
+  if (!endpoint) return { processed: 0, hasMore: false, error: "No API endpoint configured" };
+
+  try {
+    // Smart URL enrichment: add fields=* and limit=250
+    const urlObj = new URL(endpoint);
+    if (!urlObj.searchParams.has("fields")) urlObj.searchParams.set("fields", "*");
+    if (!urlObj.searchParams.has("limit")) urlObj.searchParams.set("limit", "250");
+    let fetchUrl = urlObj.toString();
+
+    const headers: Record<string, string> = {
+      "Accept": "application/json",
+      "User-Agent": "AutoSync/3.0 (Shopify App)",
+    };
+
+    // Auth
+    const authType = String(config.authType || "none");
+    const authValue = String(config.authValue || "");
+    if (authType === "api_key" && authValue) headers["X-API-Key"] = authValue;
+    else if (authType === "bearer" && authValue) headers["Authorization"] = `Bearer ${authValue}`;
+    else if (authType === "basic" && authValue) {
+      headers["Authorization"] = `Basic ${btoa(authValue)}`;
+    }
+
+    // Fetch all pages
+    const allItems: Record<string, unknown>[] = [];
+    let pageCount = 0;
+    let nextHref: string | null = fetchUrl;
+
+    while (nextHref && pageCount < 500) {
+      pageCount++;
+      const res = await fetch(nextHref, { headers });
+      if (!res.ok) break;
+
+      const json = await res.json();
+      const items = extractItemsFromJson(json, String(config.itemsPath || ""));
+      if (items.length === 0) break;
+
+      // Flatten nested objects
+      const flatItems = items.map((item: Record<string, unknown>) => flattenObject(item));
+      allItems.push(...flatItems);
+
+      // Check for next page
+      const paging = json?.paging;
+      if (paging?.next_page_href) {
+        const nextUrl = new URL(paging.next_page_href, urlObj.origin);
+        // Preserve auth params
+        urlObj.searchParams.forEach((v: string, k: string) => {
+          if (!nextUrl.searchParams.has(k)) nextUrl.searchParams.set(k, v);
+        });
+        nextHref = nextUrl.toString();
+      } else {
+        nextHref = null;
+      }
+
+      // Update progress
+      await db.from("sync_jobs").update({
+        processed_items: allItems.length,
+        metadata: { ...meta, pages_fetched: pageCount, items_fetched: allItems.length },
+      }).eq("id", job.id);
+    }
+
+    if (allItems.length === 0) {
+      return { processed: 0, hasMore: false, error: "API returned no items" };
+    }
+
+    // Create import record
+    const { data: importRecord } = await db
+      .from("provider_imports")
+      .insert({
+        shop_id: job.shop_id,
+        provider_id: providerId,
+        file_name: `${provider.name}-api-import.json`,
+        file_size_bytes: 0,
+        file_type: "json",
+        total_rows: allItems.length,
+        column_mapping: mappings,
+        status: "processing",
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .maybeSingle();
+
+    const importId = importRecord?.id || "unknown";
+
+    // Apply column mappings and insert products in batches
+    let insertedCount = 0;
+    const BATCH = 500;
+
+    for (let i = 0; i < allItems.length; i += BATCH) {
+      const batch = allItems.slice(i, i + BATCH);
+      const products = batch.map((item) => {
+        const mapped: Record<string, string> = {};
+        for (const m of mappings) {
+          if (m.targetField && item[m.sourceColumn] !== undefined && item[m.sourceColumn] !== null) {
+            mapped[m.targetField] = String(item[m.sourceColumn]);
+          }
+        }
+
+        const title = mapped.title || mapped.name || String(item.name || item.title || "Untitled");
+        const sku = mapped.sku || String(item.code || item.sku || "");
+        const handle = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+        return {
+          shop_id: job.shop_id,
+          provider_id: providerId,
+          import_id: importId,
+          title,
+          handle,
+          sku: sku || null,
+          provider_sku: sku || null,
+          price: mapped.price ? parseFloat(mapped.price) : (item.price_normal ? parseFloat(String(item.price_normal)) : null),
+          cost_price: mapped.cost_price ? parseFloat(mapped.cost_price) : null,
+          compare_at_price: mapped.compare_at_price ? parseFloat(mapped.compare_at_price) : null,
+          vendor: mapped.vendor || String(item.manufacturer_name || "") || null,
+          product_type: mapped.product_type || null,
+          description: mapped.description || String(item.short_desc || item.desc || "") || null,
+          image_url: mapped.image_url || String(item.image || "") || null,
+          weight: mapped.weight || (item.weight ? String(item.weight) : null),
+          tags: mapped.tags || null,
+          source: "api",
+          fitment_status: "unmapped",
+          status: "staged",
+          raw_data: item,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+      });
+
+      // Skip duplicates if strategy is "skip"
+      if (duplicateStrategy === "skip" && products.length > 0) {
+        const skus = products.map(p => p.sku).filter(Boolean);
+        if (skus.length > 0) {
+          const { data: existing } = await db
+            .from("products")
+            .select("sku")
+            .eq("shop_id", job.shop_id)
+            .in("sku", skus);
+          const existingSkus = new Set((existing || []).map((e: any) => e.sku));
+          const filtered = products.filter(p => !p.sku || !existingSkus.has(p.sku));
+          if (filtered.length > 0) {
+            await db.from("products").insert(filtered);
+            insertedCount += filtered.length;
+          }
+        } else {
+          await db.from("products").insert(products);
+          insertedCount += products.length;
+        }
+      } else {
+        await db.from("products").insert(products);
+        insertedCount += products.length;
+      }
+
+      // Update progress
+      await db.from("sync_jobs").update({
+        processed_items: insertedCount,
+      }).eq("id", job.id);
+    }
+
+    // Update import record
+    await db.from("provider_imports").update({
+      imported_rows: insertedCount,
+      skipped_rows: allItems.length - insertedCount,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+    }).eq("id", importId);
+
+    // Update provider counts
+    const { count: productCount } = await db
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", providerId)
+      .eq("shop_id", job.shop_id);
+
+    await db.from("providers").update({
+      product_count: productCount ?? 0,
+      import_count: (provider.import_count ?? 0) + 1,
+      last_fetch_at: new Date().toISOString(),
+      status: "active",
+    }).eq("id", providerId);
+
+    return { processed: insertedCount, hasMore: false };
+  } catch (err) {
+    return { processed: 0, hasMore: false, error: `Import error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/** Extract items array from JSON response */
+function extractItemsFromJson(json: unknown, itemsPath: string): Record<string, unknown>[] {
+  if (itemsPath) {
+    let current: unknown = json;
+    for (const part of itemsPath.split(".")) {
+      if (current && typeof current === "object" && !Array.isArray(current)) {
+        current = (current as Record<string, unknown>)[part];
+      } else return [];
+    }
+    return Array.isArray(current) ? current : [];
+  }
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === "object") {
+    for (const value of Object.values(json as Record<string, unknown>)) {
+      if (Array.isArray(value) && value.length > 0) return value;
+    }
+  }
+  return [];
+}
+
+/** Flatten nested objects: { price: { normal: "100" } } → { price_normal: "100" } */
+function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const fullKey = prefix ? `${prefix}_${key}` : key;
+    if (value === null || value === undefined) {
+      result[fullKey] = value;
+    } else if (Array.isArray(value)) {
+      result[fullKey] = value;
+    } else if (typeof value === "object") {
+      Object.assign(result, flattenObject(value as Record<string, unknown>, fullKey));
+      result[fullKey] = value;
+    } else {
+      result[fullKey] = value;
+    }
+  }
+  return result;
+}
+
 Deno.serve(async (req) => {
   let currentJobId: string | null = null;
   try {
@@ -320,6 +578,9 @@ Deno.serve(async (req) => {
         break;
       case "provider_auto_fetch":
         result = await processProviderAutoFetch(db, job);
+        break;
+      case "provider_import":
+        result = await processProviderImport(db, job);
         break;
       default:
         result = { processed: 0, hasMore: false, error: `Unknown job type: ${job.type}` };
