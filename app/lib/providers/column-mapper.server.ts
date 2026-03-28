@@ -138,7 +138,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   ],
   handle: [
     // Shopify
-    "handle",
+    "handle", "op",
     // WooCommerce / WordPress
     "slug", "post_name",
     // Magento
