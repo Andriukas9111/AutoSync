@@ -296,49 +296,35 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: `Invalid mappings: ${message}` }, { status: 400 });
     }
 
-    // Create sync_job — Edge Function processes it page-by-page in the background
-    const { data: job, error: jobError } = await db
-      .from("sync_jobs")
-      .insert({
-        shop_id: shopId,
-        type: "provider_import",
-        status: "pending",
-        total_items: 0,
-        processed_items: 0,
-        metadata: {
-          provider_id: providerId,
-          provider_name: provider.name,
-          provider_type: provider.type,
-          mappings,
-          duplicate_strategy: duplicateStrategy,
-          current_offset: 0,
-        },
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (jobError || !job) {
-      return data({ error: `Failed to create import job: ${jobError?.message ?? "unknown"}` }, { status: 500 });
-    }
-
-    // Invoke Edge Function DIRECTLY for instant start (don't wait for pg_cron 30s)
+    // Invoke dedicated provider-import Edge Function directly
+    // No sync_job queue, no pg_cron — instant processing with self-chaining
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-        },
-      }).catch(() => {}); // Fire-and-forget — don't block the response
+
+    if (!supabaseUrl || !supabaseKey) {
+      return data({ error: "Server configuration error" }, { status: 500 });
     }
+
+    // Fire-and-forget: the Edge Function self-chains for all pages automatically
+    fetch(`${supabaseUrl}/functions/v1/provider-import`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        shop_id: shopId,
+        provider_id: providerId,
+        mappings,
+        duplicate_strategy: duplicateStrategy,
+        current_offset: 0,
+      }),
+    }).catch(() => {});
 
     return data({
       success: true,
-      jobId: job.id,
-      message: `Import started in background. Processing ${provider.name} products...`,
-      importId: job.id,
+      message: `Import started. Processing ${provider.name} products in background...`,
+      importId: "background",
       totalRows: 0,
       importedRows: 0,
       skippedRows: 0,
