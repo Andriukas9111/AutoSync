@@ -527,27 +527,40 @@ export default function ProviderDetail() {
               </InlineStack>
             </BlockStack>
 
-            {/* Portal credentials — compact table */}
+            {/* Portal credentials */}
             {(portalUrl || portalUsername || portalPassword) && (
               <>
                 <Divider />
-                <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 32px", gap: "6px 16px", alignItems: "center" }}>
-                  {portalUrl && (<>
-                    <Text as="span" variant="bodySm" tone="subdued">Portal</Text>
-                    <Button variant="plain" url={portalUrl} external>{portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}</Button>
-                    <span />
-                  </>)}
-                  {portalUsername && (<>
-                    <Text as="span" variant="bodySm" tone="subdued">Username</Text>
-                    <Text as="span" variant="bodyMd">{portalUsername}</Text>
-                    <CopyButton value={portalUsername} />
-                  </>)}
-                  {portalPassword && (<>
-                    <Text as="span" variant="bodySm" tone="subdued">Password</Text>
-                    <Text as="span" variant="bodyMd">••••••••</Text>
-                    <CopyButton value={portalPassword} />
-                  </>)}
-                </div>
+                <BlockStack gap="200">
+                  {portalUrl && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{ width: 80, flexShrink: 0 }}>
+                        <Text as="span" variant="bodySm" tone="subdued">Portal</Text>
+                      </div>
+                      <Button variant="plain" url={portalUrl} external>
+                        {portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}
+                      </Button>
+                    </InlineStack>
+                  )}
+                  {portalUsername && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{ width: 80, flexShrink: 0 }}>
+                        <Text as="span" variant="bodySm" tone="subdued">Username</Text>
+                      </div>
+                      <Text as="span" variant="bodyMd">{portalUsername}</Text>
+                      <CopyButton value={portalUsername} />
+                    </InlineStack>
+                  )}
+                  {portalPassword && (
+                    <InlineStack gap="200" blockAlign="center">
+                      <div style={{ width: 80, flexShrink: 0 }}>
+                        <Text as="span" variant="bodySm" tone="subdued">Password</Text>
+                      </div>
+                      <Text as="span" variant="bodyMd">••••••••</Text>
+                      <CopyButton value={portalPassword} />
+                    </InlineStack>
+                  )}
+                </BlockStack>
               </>
             )}
 
