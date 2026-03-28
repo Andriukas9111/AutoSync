@@ -106,11 +106,17 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .from("provider-uploads")
     .createSignedUploadUrl(uploadToken);
 
+  // Build full URL from relative signed URL
+  const supabaseUrl = process.env.SUPABASE_URL || "";
+  const fullUploadUrl = signedUrl?.signedUrl
+    ? `${supabaseUrl}/storage/v1${signedUrl.signedUrl}`
+    : null;
+
   return {
     provider,
     plan,
     targetFields,
-    uploadUrl: signedUrl?.signedUrl || null,
+    uploadUrl: fullUploadUrl,
     uploadToken: signedUrl ? uploadToken : null,
   };
 };
@@ -516,13 +522,33 @@ export default function ProviderImportWizard() {
         return;
       }
 
+      setImportProgress(20);
+
+      // For large files, upload to Supabase Storage first
       const formData = new FormData();
-      formData.set("file", file);
       formData.set("provider_id", provider.id);
       formData.set("mappings", JSON.stringify(mappings));
       formData.set("duplicate_strategy", duplicateStrategy);
 
-      setImportProgress(30);
+      if (file.size > 4 * 1024 * 1024 && uploadUrl && uploadToken) {
+        // Upload to Supabase Storage via signed URL
+        const upResp = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+        if (!upResp.ok) {
+          setError(`File upload failed (${upResp.status}). File may be too large.`);
+          setStep("validate");
+          return;
+        }
+        formData.set("storage_path", uploadToken);
+        formData.set("file_name", file.name);
+      } else {
+        formData.set("file", file);
+      }
+
+      setImportProgress(40);
 
       const response = await fetch("/app/api/provider-import", {
         method: "POST",
