@@ -11,7 +11,7 @@ import { data, redirect } from "react-router";
 import {
   Page, Card, InlineStack, InlineGrid, BlockStack, Text,
   TextField, Select, Button, Badge, Banner, Divider, Modal,
-  FormLayout, Box, Icon,
+  FormLayout, Box, Icon, Thumbnail,
 } from "@shopify/polaris";
 import {
   ProductIcon, ImportIcon, ClockIcon,
@@ -448,9 +448,18 @@ export default function ProviderDetail() {
         {/* Connection & Quick Actions */}
         <Card>
           <BlockStack gap="400">
-            <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={ConnectIcon} />
-              <Text as="h2" variant="headingMd">Connection</Text>
+            <InlineStack gap="300" blockAlign="center">
+              {provider.logo_url ? (
+                <Thumbnail source={provider.logo_url} alt={provider.name} size="small" />
+              ) : (
+                <IconBadge icon={ConnectIcon} />
+              )}
+              <BlockStack gap="0">
+                <Text as="h2" variant="headingMd">Connection</Text>
+                {provider.description && (
+                  <Text as="p" variant="bodySm" tone="subdued">{provider.description}</Text>
+                )}
+              </BlockStack>
             </InlineStack>
             <Divider />
 
