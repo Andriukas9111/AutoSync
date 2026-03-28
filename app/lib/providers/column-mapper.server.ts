@@ -46,7 +46,8 @@ const FIELD_PATTERNS: Record<string, string[]> = {
     "sku", "variant_sku", "item_sku", "product_sku", "part_number", "part_no",
     "partnumber", "part_num", "item_number", "item_no", "reference", "ref",
     "article_number", "article_no", "catalog_number", "oem_number", "oem",
-    "manufacturer_part_number", "mpn",
+    "manufacturer_part_number", "mpn", "code", "product_code", "item_code",
+    "part_code", "stock_code", "model_code",
   ],
   price: [
     "price", "variant_price", "retail_price", "sale_price", "selling_price",
@@ -55,6 +56,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   cost_price: [
     "cost", "cost_price", "wholesale_price", "trade_price", "buy_price",
     "purchase_price", "supplier_price", "net_price", "dealer_price",
+    "your_price", "your_price_exc_vat", "your_price_ex_vat", "trade",
   ],
   map_price: [
     "map", "map_price", "minimum_advertised_price", "min_price",
@@ -124,9 +126,10 @@ export function autoMapColumns(headers: string[]): ColumnMapping[] {
 
       const isMatch = patterns.some((p) => {
         const normalizedPattern = p.replace(/[\s_-]+/g, "_");
+        // Exact match OR header contains the full pattern (e.g., "product_title" contains "title")
+        // Do NOT match pattern-contains-header (e.g., "barcode" should not match "code")
         return normalizedHeader === normalizedPattern ||
-          normalizedHeader.includes(normalizedPattern) ||
-          normalizedPattern.includes(normalizedHeader);
+          normalizedHeader.includes(normalizedPattern);
       });
 
       if (isMatch) {
