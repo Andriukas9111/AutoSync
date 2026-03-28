@@ -103,7 +103,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   // Build query
   let query = db
     .from("products")
-    .select("id, title, sku, provider_sku, price, cost_price, vendor, product_type, image_url, fitment_status, import_id, created_at", { count: "exact" })
+    .select("id, title, sku, provider_sku, price, cost_price, vendor, product_type, image_url, fitment_status, status, import_id, created_at", { count: "exact" })
     .eq("shop_id", shopId)
     .eq("provider_id", providerId);
 
@@ -112,6 +112,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     if (sanitized) {
       query = query.or(`title.ilike.%${sanitized}%,sku.ilike.%${sanitized}%,provider_sku.ilike.%${sanitized}%`);
     }
+  }
+
+  // Filter by catalog status (staged = new, active = in catalog)
+  const catalogFilter = url.searchParams.get("catalog") ?? "";
+  if (catalogFilter === "staged") {
+    query = query.eq("status", "staged");
+  } else if (catalogFilter === "active") {
+    query = query.eq("status", "active");
   }
 
   if (statusFilter) {
@@ -148,6 +156,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     if (c > 0) statusBreakdown[s] = c;
   });
 
+  // Catalog status counts (staged vs in-catalog)
+  const [stagedResult, activeResult] = await Promise.all([
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("provider_id", providerId).eq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("provider_id", providerId).eq("status", "active"),
+  ]);
+
   return {
     provider,
     products: products ?? [],
@@ -156,9 +172,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     currentPage: page,
     search,
     statusFilter,
+    catalogFilter,
     sortField,
     sortDir,
     statusBreakdown,
+    stagedCount: stagedResult.count ?? 0,
+    activeCount: activeResult.count ?? 0,
   };
 };
 
@@ -334,13 +353,17 @@ export default function ProviderProducts() {
     currentPage,
     search: initialSearch,
     statusFilter: initialStatus,
+    catalogFilter: initialCatalog,
     statusBreakdown,
+    stagedCount,
+    activeCount,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
   const [searchValue, setSearchValue] = useState(initialSearch);
+  const [catalogValue, setCatalogValue] = useState(initialCatalog || "");
   const [statusValue, setStatusValue] = useState(initialStatus);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -363,12 +386,14 @@ export default function ProviderProducts() {
       const params = new URLSearchParams();
       const s = overrides.search ?? searchValue;
       const st = overrides.status ?? statusValue;
+      const cat = overrides.catalog ?? catalogValue;
       if (s) params.set("search", s);
       if (st) params.set("status", st);
+      if (cat) params.set("catalog", cat);
       params.set("page", overrides.page ?? "1");
       navigate(`/app/providers/${provider.id}/products?${params.toString()}`);
     },
-    [searchValue, statusValue, provider.id, navigate],
+    [searchValue, statusValue, catalogValue, provider.id, navigate],
   );
 
   const handleSearch = useCallback(() => applyFilters(), [applyFilters]);
@@ -480,13 +505,50 @@ export default function ProviderProducts() {
           </Banner>
         )}
 
-        {/* Status Breakdown */}
-        {totalProducts > 0 && (
+        {/* Catalog Status Filter */}
+        {totalProducts > 0 && (stagedCount > 0 || activeCount > 0) && (
+          <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={CheckCircleIcon} />
+                <Text as="h2" variant="headingMd">Catalog Status</Text>
+              </InlineStack>
+              <InlineStack gap="300" wrap>
+                <Button
+                  size="slim"
+                  variant={catalogValue === "" ? "primary" : "tertiary"}
+                  onClick={() => { setCatalogValue(""); applyFilters({ catalog: "" }); }}
+                >
+                  {`All (${stagedCount + activeCount})`}
+                </Button>
+                <Button
+                  size="slim"
+                  variant={catalogValue === "staged" ? "primary" : "tertiary"}
+                  onClick={() => { setCatalogValue("staged"); applyFilters({ catalog: "staged" }); }}
+                >
+                  {`Staged — Not in Catalog (${stagedCount})`}
+                </Button>
+                {activeCount > 0 && (
+                  <Button
+                    size="slim"
+                    variant={catalogValue === "active" ? "primary" : "tertiary"}
+                    onClick={() => { setCatalogValue("active"); applyFilters({ catalog: "active" }); }}
+                  >
+                    {`In Catalog (${activeCount})`}
+                  </Button>
+                )}
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* Fitment Status Breakdown */}
+        {totalProducts > 0 && Object.keys(statusBreakdown).length > 0 && (
           <Card>
             <BlockStack gap="300">
             <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={FilterIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">Filter by Status</Text>
+              <IconBadge icon={FilterIcon} />
+              <Text as="h2" variant="headingMd">Filter by Fitment Status</Text>
             </InlineStack>
             <InlineStack gap="400" wrap>
               {Object.entries(statusBreakdown).map(([status, count]) => {
@@ -646,7 +708,13 @@ export default function ProviderProducts() {
                       </Text>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <InlineStack gap="100">
+                        {(product as Record<string, unknown>).status === "staged" ? (
+                          <Badge tone="attention">Staged</Badge>
+                        ) : (
+                          <Badge tone="success">In Catalog</Badge>
+                        )}
+                      </InlineStack>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                       <Text as="span" variant="bodySm" tone="subdued">

@@ -537,7 +537,7 @@ export default function ProviderDetail() {
                       <div style={{ width: 80, flexShrink: 0 }}>
                         <Text as="span" variant="bodySm" tone="subdued">Portal</Text>
                       </div>
-                      <Button variant="plain" url={portalUrl} external>
+                      <Button variant="plain" url={portalUrl.startsWith("http") ? portalUrl : `https://${portalUrl}`} external>
                         {portalUrl.replace(/^https?:\/\//, "").slice(0, 50)}
                       </Button>
                     </InlineStack>
