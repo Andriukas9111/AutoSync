@@ -108,6 +108,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const config = (provider.config as Record<string, unknown>) ?? {};
 
+  // ── Quick count query for live polling (no plan gate needed) ──
+  if (actionType === "count") {
+    const { count } = await db
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", providerId)
+      .eq("shop_id", shopId);
+    return data({ productCount: count ?? 0 });
+  }
+
   // Plan gate: check provider type feature
   try {
     if (provider.type === "api") {

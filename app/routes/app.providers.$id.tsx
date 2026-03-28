@@ -4,7 +4,7 @@
  * Sections: header stats, connection info, recent imports, settings (split by category), danger zone.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher, Outlet, useLocation } from "react-router";
 import { data, redirect } from "react-router";
@@ -297,6 +297,32 @@ export default function ProviderDetail() {
     message: string;
   } | null>(null);
 
+  // Real-time product count — polls every 3s to show import progress
+  const [liveProductCount, setLiveProductCount] = useState(provider.product_count ?? 0);
+  const prevCountRef = useRef(provider.product_count ?? 0);
+
+  useEffect(() => {
+    // Reset when provider changes
+    setLiveProductCount(provider.product_count ?? 0);
+    prevCountRef.current = provider.product_count ?? 0;
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await fetch(`/app/api/provider-fetch`, {
+          method: "POST",
+          body: new URLSearchParams({ _action: "count", provider_id: provider.id }),
+        });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (typeof result.productCount === "number") {
+          setLiveProductCount(result.productCount);
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+
+    return () => clearInterval(poll);
+  }, [provider.id, provider.product_count]);
+
   // Settings form state
   const [name, setName] = useState(provider.name);
   const [status, setStatus] = useState(provider.status);
@@ -333,7 +359,7 @@ export default function ProviderDetail() {
   const isSubmitting = fetcher.state !== "idle";
   const fetcherData = fetcher.data as { success: true; message: string } | { error: string } | undefined;
   const type = provider.type;
-  const totalProducts = provider.product_count ?? 0;
+  const totalProducts = liveProductCount;
 
   const handleTestConnection = useCallback(async () => {
     setTestingConnection(true);
