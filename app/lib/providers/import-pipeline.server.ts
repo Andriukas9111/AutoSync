@@ -146,30 +146,70 @@ export async function runProviderImport(
     return mapped;
   });
 
-  // 2b. Handle Shopify CSV format — variant rows have empty title.
-  // When a row has no title but previous row does, it's a variant — skip it (not a separate product).
-  // This prevents thousands of "Missing product title" errors on Shopify CSV exports.
-  let lastTitle = "";
-  const deduplicatedRows: Record<string, string>[] = [];
+  // 2b. Handle Shopify CSV format — group variant rows into parent products.
+  // Shopify CSVs have one row per variant. The first row of each product has the title,
+  // description, vendor, tags, etc. Subsequent rows (same handle, empty title) are variants
+  // with different SKUs, prices, images, and options.
+  // We merge variants into the parent: first variant's SKU/price becomes the main product,
+  // all variant SKUs stored in the variants JSON field.
+  const groupedProducts: Record<string, string>[] = [];
+  let currentProduct: Record<string, string> | null = null;
+  let currentVariants: Array<Record<string, string>> = [];
+
   for (const row of mappedRows) {
     if (row.title && row.title.trim()) {
-      lastTitle = row.title.trim();
-      deduplicatedRows.push(row);
-    } else if (lastTitle) {
-      // Variant row — skip (it belongs to the product above)
-      // Could optionally merge variant data in the future
+      // New product — save previous if exists
+      if (currentProduct) {
+        // Store variants as JSON string
+        if (currentVariants.length > 0) {
+          currentProduct._variants = JSON.stringify(currentVariants);
+        }
+        groupedProducts.push(currentProduct);
+      }
+      currentProduct = { ...row };
+      currentVariants = [];
+      // First variant data is already in the product row
+      if (row.sku) {
+        currentVariants.push({
+          sku: row.sku,
+          price: row.price || "",
+          compare_at_price: row.compare_at_price || "",
+          barcode: row.barcode || "",
+        });
+      }
+    } else if (currentProduct) {
+      // Variant row — collect variant data and merge useful fields
+      if (row.sku) {
+        currentVariants.push({
+          sku: row.sku,
+          price: row.price || "",
+          compare_at_price: row.compare_at_price || "",
+          barcode: row.barcode || "",
+        });
+      }
+      // Use the first available image if parent has none
+      if (!currentProduct.image_url && row.image_url) {
+        currentProduct.image_url = row.image_url;
+      }
     } else {
-      // No title and no previous title — genuinely bad row
-      deduplicatedRows.push(row);
+      // No title and no current product — standalone row
+      groupedProducts.push(row);
     }
+  }
+  // Don't forget the last product
+  if (currentProduct) {
+    if (currentVariants.length > 0) {
+      currentProduct._variants = JSON.stringify(currentVariants);
+    }
+    groupedProducts.push(currentProduct);
   }
 
   // 3. Validate and prepare products
   const errors: ImportError[] = [];
   let validProducts: Record<string, string>[] = [];
 
-  for (let i = 0; i < deduplicatedRows.length; i++) {
-    const row = deduplicatedRows[i];
+  for (let i = 0; i < groupedProducts.length; i++) {
+    const row = groupedProducts[i];
     const rowNum = i + 2; // 1-indexed + header row
 
     // Validate required fields
@@ -225,8 +265,30 @@ export async function runProviderImport(
   let skippedCount = 0;
   const productsToInsert: Record<string, unknown>[] = [];
 
-  // Build lookup of existing SKUs
+  // Build lookup of existing products — by handle (preferred) or SKU
+  const existingHandles = new Set<string>();
   const existingSkus = new Set<string>();
+
+  // Check handles first (more reliable for Shopify products with variants)
+  const allHandles = validProducts
+    .map((p) => p.handle)
+    .filter((h): h is string => !!h && h.trim() !== "");
+
+  if (allHandles.length > 0) {
+    const uniqueHandles = [...new Set(allHandles)];
+    const BATCH = 500;
+    for (let i = 0; i < uniqueHandles.length; i += BATCH) {
+      const batch = uniqueHandles.slice(i, i + BATCH);
+      const { data } = await db
+        .from("products")
+        .select("handle")
+        .eq("shop_id", shopId)
+        .in("handle", batch);
+      if (data) data.forEach((d) => existingHandles.add(d.handle));
+    }
+  }
+
+  // Also check SKUs as fallback
   const allSkus = validProducts
     .map((p) => p.sku)
     .filter((s): s is string => !!s && s.trim() !== "");
@@ -246,7 +308,8 @@ export async function runProviderImport(
   }
 
   for (const product of validProducts) {
-    const isDuplicate = product.sku && existingSkus.has(product.sku);
+    const isDuplicate = (product.handle && existingHandles.has(product.handle))
+      || (product.sku && existingSkus.has(product.sku));
 
     if (isDuplicate) {
       duplicateCount++;
@@ -327,6 +390,7 @@ export async function runProviderImport(
       weight: product.weight || null,
       weight_unit: product.weight_unit || null,
       tags: product.tags || null,
+      variants: product._variants ? JSON.parse(product._variants) : null,
       source: fileType,
       fitment_status: "unmapped",
       status: "staged", // Provider imports are staged — NOT in main catalog until approved
