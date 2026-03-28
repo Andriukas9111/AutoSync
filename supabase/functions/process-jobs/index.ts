@@ -116,6 +116,62 @@ async function getPublicationIds(
   }
 }
 
+// ── Provider Auto-Fetch Handler ─────────────────────────────────────────
+// Calls the Vercel API route to fetch + import from a provider.
+// The Vercel route has the Node.js FTP/API fetcher + parser + import pipeline.
+async function processProviderAutoFetch(
+  db: any,
+  job: any,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
+  const providerId = meta.provider_id;
+  if (!providerId) return { processed: 0, hasMore: false, error: "Missing provider_id in metadata" };
+
+  // Get tenant info
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("shop_id, shopify_access_token")
+    .eq("shop_id", job.shop_id)
+    .maybeSingle();
+
+  if (!tenant?.shopify_access_token) {
+    return { processed: 0, hasMore: false, error: "Tenant not found or missing access token" };
+  }
+
+  // Call the Vercel API route to trigger the import
+  const appUrl = Deno.env.get("APP_URL") || "https://autosync-v3.vercel.app";
+  try {
+    const formData = new FormData();
+    formData.set("_action", "import");
+    formData.set("provider_id", providerId);
+
+    const response = await fetch(`${appUrl}/app/api/provider-fetch`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "Cookie": `shopify_app_session=${tenant.shopify_access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return { processed: 1, hasMore: false, error: `Auto-fetch failed (${response.status}): ${text.slice(0, 200)}` };
+    }
+
+    const result = await response.json();
+    if (result.error) {
+      return { processed: 1, hasMore: false, error: result.error };
+    }
+
+    return {
+      processed: result.importedRows ?? result.totalRows ?? 1,
+      hasMore: false,
+    };
+  } catch (err) {
+    return { processed: 0, hasMore: false, error: `Auto-fetch error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 Deno.serve(async (req) => {
   let currentJobId: string | null = null;
   try {
@@ -261,6 +317,9 @@ Deno.serve(async (req) => {
         break;
       case "cleanup":
         result = await processCleanupChunk(db, job);
+        break;
+      case "provider_auto_fetch":
+        result = await processProviderAutoFetch(db, job);
         break;
       default:
         result = { processed: 0, hasMore: false, error: `Unknown job type: ${job.type}` };
