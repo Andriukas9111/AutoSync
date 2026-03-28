@@ -120,6 +120,8 @@ const FIELD_PATTERNS: Record<string, string[]> = {
     "manufacturer",
     // WooCommerce
     "pa_brand",
+    // Flattened nested (from API enrichment)
+    "manufacturer_name", "manufacturer_id",
   ],
   product_type: [
     // Shopify
@@ -202,6 +204,7 @@ const FIELD_PATTERNS: Record<string, string[]> = {
   ],
   tags: [
     "tags", "keywords", "labels", "tag_list",
+    "product_tags", "tag",
   ],
   provider_sku: [
     "supplier_sku", "supplier_code", "supplier_ref", "external_sku",

@@ -122,7 +122,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let query = db
     .from("products")
     .select("*", { count: "exact" })
-    .eq("shop_id", shopId);
+    .eq("shop_id", shopId)
+    .neq("status", "staged"); // Exclude staged provider imports — they live in provider products view
 
   if (search) {
     const sanitized = search.replace(/[%_,.*()\\]/g, '');
@@ -155,7 +156,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const statusResults = await Promise.all(
     statuses.map((s) =>
       db.from("products").select("id", { count: "exact", head: true })
-        .eq("shop_id", shopId).eq("fitment_status", s),
+        .eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", s),
     ),
   );
   const breakdown: Record<string, number> = {};

@@ -68,14 +68,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // ── Product counts by fitment_status (7 parallel head-only count queries) ──
   // Each query returns just a count, not rows — efficient at scale (100K+ products).
+  // Exclude staged provider imports from main product counts — they're in the provider products view
   const productCountQueries = {
-    total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    autoMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    smartMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    manualMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
-    flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
-    pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).not("synced_at", "is", null),
+    total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
+    autoMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    smartMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
+    manualMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "manual_mapped"),
+    flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
+    pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
   };
 
   // ── Query 3: Vehicle page sync_status counts (head-only) ──

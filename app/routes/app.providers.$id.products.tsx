@@ -33,6 +33,7 @@ import {
   ImportIcon,
   ProductIcon,
   FilterIcon,
+  CheckCircleIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
 
@@ -284,6 +285,39 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return data({ success: true, archived: ids.length });
   }
 
+  if (actionType === "bulk_approve") {
+    const ids: string[] = JSON.parse(String(formData.get("ids") || "[]"));
+    if (ids.length === 0) return data({ error: "No products selected" }, { status: 400 });
+
+    const { error: approveError } = await db
+      .from("products")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    if (approveError) {
+      return data({ error: `Failed to approve: ${approveError.message}` }, { status: 500 });
+    }
+
+    return data({ success: true, approved: ids.length });
+  }
+
+  if (actionType === "approve_all") {
+    const { error: approveError } = await db
+      .from("products")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .eq("status", "staged");
+
+    if (approveError) {
+      return data({ error: `Failed to approve: ${approveError.message}` }, { status: 500 });
+    }
+
+    return data({ success: true, approvedAll: true });
+  }
+
   return data({ error: "Unknown action" }, { status: 400 });
 };
 
@@ -313,7 +347,7 @@ export default function ProviderProducts() {
   // Keep unified polling hook active for real-time updates
   useAppData();
 
-  const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
+  const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean; approved?: number; approvedAll?: boolean } | undefined;
 
   const resourceName = { singular: "product", plural: "products" };
   const {
@@ -362,7 +396,24 @@ export default function ProviderProducts() {
     clearSelection();
   }, [selectedResources, fetcher, clearSelection]);
 
+  const handleBulkApprove = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    fetcher.submit(
+      { _action: "bulk_approve", ids: JSON.stringify(selectedResources) },
+      { method: "POST" },
+    );
+    clearSelection();
+  }, [selectedResources, fetcher, clearSelection]);
+
+  const handleApproveAll = useCallback(() => {
+    fetcher.submit({ _action: "approve_all" }, { method: "POST" });
+  }, [fetcher]);
+
   const promotedBulkActions = [
+    {
+      content: `Approve ${selectedResources.length} to Catalog`,
+      onAction: handleBulkApprove,
+    },
     {
       content: `Archive ${selectedResources.length} selected`,
       onAction: handleBulkArchive,
@@ -389,6 +440,11 @@ export default function ProviderProducts() {
       }}
       secondaryActions={[
         {
+          content: "Approve All to Catalog",
+          onAction: handleApproveAll,
+          icon: CheckCircleIcon,
+        },
+        {
           content: "Delete All Products",
           onAction: () => setDeleteModalOpen(true),
           icon: DeleteIcon,
@@ -406,6 +462,16 @@ export default function ProviderProducts() {
         {fetcherData?.success && fetcherData.deletedAll && (
           <Banner tone="success" onDismiss={() => {}}>
             <p>All products from this provider have been deleted.</p>
+          </Banner>
+        )}
+        {fetcherData?.success && fetcherData.approved && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>{`${fetcherData.approved} product${fetcherData.approved !== 1 ? "s" : ""} approved and added to your catalog.`}</p>
+          </Banner>
+        )}
+        {fetcherData?.success && fetcherData.approvedAll && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>All staged products have been approved and added to your catalog.</p>
           </Banner>
         )}
         {fetcherData?.error && (

@@ -311,6 +311,7 @@ export async function runProviderImport(
       tags: product.tags || null,
       source: fileType,
       fitment_status: "unmapped",
+      status: "staged", // Provider imports are staged — NOT in main catalog until approved
       raw_data: product, // Store all mapped data for reference
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

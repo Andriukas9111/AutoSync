@@ -33,6 +33,10 @@ export interface ApiFetcherConfig {
    *  Defaults to 100. Set to 1 to skip pagination (e.g. for test connections).
    */
   maxPages?: number;
+  /** Whether to request full product details (fields=*) and fetch detail endpoints.
+   *  Defaults to true. Set to false for minimal/fast fetches.
+   */
+  fetchFullDetails?: boolean;
 }
 
 export interface ApiFetchResult {
@@ -77,6 +81,21 @@ export async function fetchFromApi(
     throw new Error(`Invalid API endpoint URL: ${endpoint}`);
   }
 
+  const fetchFullDetails = config.fetchFullDetails !== false; // default true
+
+  // Smart URL enrichment: add fields=* if not present (common e-commerce API pattern)
+  // This tells APIs like Forge, EKM, Shopify to return full product details
+  let enrichedEndpoint = endpoint;
+  if (fetchFullDetails) {
+    try {
+      const urlObj = new URL(endpoint);
+      if (!urlObj.searchParams.has("fields")) {
+        urlObj.searchParams.set("fields", "*");
+        enrichedEndpoint = urlObj.toString();
+      }
+    } catch { /* keep original endpoint */ }
+  }
+
   // Build headers — include User-Agent to avoid 403 blocks from APIs that reject default Node UA
   const headers: Record<string, string> = {
     Accept: "application/json, text/csv, text/xml, */*",
@@ -111,7 +130,7 @@ export async function fetchFromApi(
   const timeoutId = setTimeout(() => controller.abort(), 30_000);
   fetchOptions.signal = controller.signal;
 
-  const response = await fetch(endpoint, fetchOptions);
+  const response = await fetch(enrichedEndpoint, fetchOptions);
   clearTimeout(timeoutId);
 
   if (!response.ok) {
@@ -213,6 +232,85 @@ export async function fetchFromApi(
     } catch { /* ignore */ }
   }
 
+  // ── Smart enrichment: flatten nested objects and fetch detail endpoints ──
+
+  // 1. Flatten nested objects in items (e.g., price.normal → price_normal)
+  items = items.map(item => flattenItem(item));
+
+  // 2. If items are missing key fields (image, description) and have href/id,
+  //    try fetching individual detail endpoints for richer data
+  if (fetchFullDetails && maxPages > 1 && items.length > 0 && items.length <= 10_000) {
+    const needsEnrichment = items.some(item =>
+      !item.image && !item.image_url && !item.desc && !item.description && !item.short_desc
+    );
+    const hasDetailEndpoint = items.some(item => item.href && typeof item.href === "string");
+
+    if (needsEnrichment && hasDetailEndpoint) {
+      const baseUrl = new URL(enrichedEndpoint);
+      const apiBase = `${baseUrl.origin}${baseUrl.pathname.replace(/\/[^/]+$/, "")}`;
+
+      // Batch-fetch detail endpoints (5 concurrent, rate-limited)
+      const BATCH_SIZE = 5;
+      const DELAY_MS = 100;
+      let enrichedCount = 0;
+
+      for (let i = 0; i < items.length && enrichedCount < 500; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE);
+        const promises = batch.map(async (item) => {
+          const href = String(item.href || "");
+          if (!href) return item;
+
+          try {
+            const detailUrl = new URL(href, baseUrl.origin);
+            // Preserve API key from original URL
+            baseUrl.searchParams.forEach((v, k) => {
+              if (!detailUrl.searchParams.has(k)) detailUrl.searchParams.set(k, v);
+            });
+            if (!detailUrl.searchParams.has("fields")) {
+              detailUrl.searchParams.set("fields", "*");
+            }
+
+            const detailController = new AbortController();
+            const detailTimeout = setTimeout(() => detailController.abort(), 15_000);
+            const detailResponse = await fetch(detailUrl.toString(), {
+              method: "GET",
+              headers,
+              signal: detailController.signal,
+            });
+            clearTimeout(detailTimeout);
+
+            if (!detailResponse.ok) return item;
+            const detailJson = await detailResponse.json();
+
+            // Merge detail data into item (detail takes precedence for new fields)
+            const detailFlat = flattenItem(
+              typeof detailJson === "object" && !Array.isArray(detailJson)
+                ? detailJson as Record<string, unknown>
+                : item,
+            );
+            enrichedCount++;
+            // Keep existing fields, add new ones from detail
+            return { ...detailFlat, ...item, ...Object.fromEntries(
+              Object.entries(detailFlat).filter(([k]) => !item[k] || item[k] === "")
+            )};
+          } catch {
+            return item; // Skip failed detail fetches
+          }
+        });
+
+        const results = await Promise.all(promises);
+        for (let j = 0; j < results.length; j++) {
+          items[i + j] = results[j];
+        }
+
+        // Rate limit between batches
+        if (i + BATCH_SIZE < items.length) {
+          await new Promise(r => setTimeout(r, DELAY_MS));
+        }
+      }
+    }
+  }
+
   return {
     items,
     itemCount: items.length,
@@ -220,6 +318,36 @@ export async function fetchFromApi(
     firstPageItemCount,
     hasMorePages,
   };
+}
+
+/**
+ * Flatten nested objects in an item into dot-separated keys.
+ * e.g., { price: { normal: "100" } } → { price_normal: "100" }
+ * Also handles common patterns: price.normal → price, stock.qty → stock_qty
+ */
+function flattenItem(item: Record<string, unknown>, prefix = ""): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(item)) {
+    const fullKey = prefix ? `${prefix}_${key}` : key;
+
+    if (value === null || value === undefined) {
+      result[fullKey] = value;
+    } else if (Array.isArray(value)) {
+      // Keep arrays as-is (e.g., additional_images, tags)
+      result[fullKey] = value;
+    } else if (typeof value === "object") {
+      // Flatten nested objects
+      const nested = flattenItem(value as Record<string, unknown>, fullKey);
+      Object.assign(result, nested);
+      // Also keep the original nested object for raw_data
+      result[fullKey] = value;
+    } else {
+      result[fullKey] = value;
+    }
+  }
+
+  return result;
 }
 
 /**
