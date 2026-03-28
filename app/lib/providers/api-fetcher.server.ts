@@ -83,16 +83,20 @@ export async function fetchFromApi(
 
   const fetchFullDetails = config.fetchFullDetails !== false; // default true
 
-  // Smart URL enrichment: add fields=* if not present (common e-commerce API pattern)
-  // This tells APIs like Forge, EKM, Shopify to return full product details
+  // Smart URL enrichment: add fields=* and increase page size if not present
+  // fields=* tells APIs like Forge, EKM, Shopify to return full product details
+  // limit=250 reduces pagination requests (most APIs default to 25)
   let enrichedEndpoint = endpoint;
   if (fetchFullDetails) {
     try {
       const urlObj = new URL(endpoint);
       if (!urlObj.searchParams.has("fields")) {
         urlObj.searchParams.set("fields", "*");
-        enrichedEndpoint = urlObj.toString();
       }
+      if (!urlObj.searchParams.has("limit")) {
+        urlObj.searchParams.set("limit", "250");
+      }
+      enrichedEndpoint = urlObj.toString();
     } catch { /* keep original endpoint */ }
   }
 
@@ -174,7 +178,7 @@ export async function fetchFromApi(
 
   const firstPageItemCount = items.length;
   let hasMorePages = false;
-  const maxPages = config.maxPages ?? 100;
+  const maxPages = config.maxPages ?? 500; // Support large catalogs (500 pages × 250/page = 125K products)
 
   // Auto-pagination: if response has paging.next_page_href, follow it
   if (maxPages > 1 && (!responseFormat || responseFormat === "json")) {
