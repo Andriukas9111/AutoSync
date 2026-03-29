@@ -1015,6 +1015,12 @@ export default function ProviderImportWizard() {
                     <Text as="p" variant="headingLg">
                       {preview.totalRows.toLocaleString()}
                     </Text>
+                    {/* Show grouped product count if file has variant rows (Shopify CSV) */}
+                    {mappings.some(m => m.sourceColumn.toLowerCase().includes("variant")) && preview.totalRows > mappings.filter(m => m.targetField === "title").length && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Products will be grouped by handle (variant rows merged)
+                      </Text>
+                    )}
                   </BlockStack>
                   <BlockStack gap="100">
                     <Text as="p" variant="bodySm" tone="subdued">Mapped Columns</Text>
@@ -1068,7 +1074,7 @@ export default function ProviderImportWizard() {
                 onClick={handleStartImport}
                 icon={ImportIcon}
               >
-                {`Import ${preview.totalRows.toLocaleString()} Products`}
+                Import Products
               </Button>
             </InlineStack>
           </>
