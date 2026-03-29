@@ -300,7 +300,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // 2. Create Shopify cleanup job for Edge Function
     // Edge Function fetches access_token from tenants table at execution time (no secrets in metadata)
-    await db.from("sync_jobs").insert({
+    const { data: cleanupJob } = await db.from("sync_jobs").insert({
       shop_id: shopId,
       type: "cleanup",
       status: "pending",
@@ -309,7 +309,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         phases: ["tags", "metafields", "collections", "vehicle_pages"],
         current_phase: "tags",
       },
-    });
+    }).select("id").maybeSingle();
+
+    // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey && cleanupJob) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ job_id: cleanupJob.id, shop_id: shopId }),
+      }).catch((err) => console.error("[cleanup] Edge Function invocation failed:", err));
+    }
 
     return data({
       success: true,

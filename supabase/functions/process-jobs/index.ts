@@ -443,25 +443,40 @@ Deno.serve(async (req) => {
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Find the next pending/running job and atomically claim it.
-    // Uses a conditional update: only succeeds if the row still matches the filter,
-    // preventing two pg_cron ticks from processing the same job simultaneously.
+    // Support direct invocation with a specific job_id (from Vercel API routes)
+    // or poll for the next pending job (from pg_cron / self-chain)
+    let targetJobId: string | null = null;
+    try {
+      const body = await req.json();
+      targetJobId = body?.job_id ?? null;
+    } catch {
+      // No body or invalid JSON — fall through to queue-based claim
+    }
+
     const staleLockCutoff = new Date(Date.now() - 5 * 60000).toISOString();
     const lockTime = new Date().toISOString();
 
-    // Step 1: Find a candidate job
-    const { data: candidate, error: candidateError } = await db
-      .from("sync_jobs")
-      .select("id")
-      .in("status", ["running", "pending"])
-      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    let candidate: { id: string } | null = null;
 
-    if (candidateError) {
-      console.error("[process-jobs] Job query error:", candidateError.message);
-      return new Response(JSON.stringify({ error: candidateError.message }), { status: 500 });
+    if (targetJobId) {
+      // Direct invocation — use the specified job
+      candidate = { id: targetJobId };
+    } else {
+      // Queue-based: find the next pending/running job
+      const { data: found, error: candidateError } = await db
+        .from("sync_jobs")
+        .select("id")
+        .in("status", ["running", "pending"])
+        .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (candidateError) {
+        console.error("[process-jobs] Job query error:", candidateError.message);
+        return new Response(JSON.stringify({ error: candidateError.message }), { status: 500 });
+      }
+      candidate = found;
     }
 
     if (!candidate) {
@@ -626,12 +641,22 @@ Deno.serve(async (req) => {
         }).eq("shop_id", shopId);
       } catch (_e) { /* non-critical */ }
     } else {
-      // Release the lock between chunks so the next pg_cron tick can pick it up.
-      // Without this, the 5-minute stale lock timeout would block multi-batch jobs.
+      // More work to do — release lock and self-invoke for the next chunk.
+      // This eliminates the 30s pg_cron delay between chunks.
       await db.from("sync_jobs").update({
         processed_items: newProcessed,
         locked_at: null,
       }).eq("id", job.id);
+
+      // Self-chain: immediately invoke for the next chunk (fire-and-forget)
+      fetch(`${SUPABASE_URL}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ job_id: job.id, shop_id: job.shop_id }),
+      }).catch((e) => console.error("[process-jobs] Self-chain failed:", e));
     }
 
     return new Response(JSON.stringify({
