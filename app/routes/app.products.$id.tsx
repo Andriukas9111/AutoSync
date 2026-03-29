@@ -946,13 +946,18 @@ export default function ProductDetails() {
                     />
 
                     {/* Tags if present */}
-                    {product.tags && product.tags.length > 0 && (
+                    {product.tags && (typeof product.tags === "string" ? product.tags.trim() : (product.tags as string[]).length > 0) && (
                       <>
                         <Divider />
                         <BlockStack gap="100">
                           <Text as="span" variant="bodySm" tone="subdued">Tags</Text>
                           <InlineStack gap="200" wrap>
-                            {product.tags.map((t) => (
+                            {(Array.isArray(product.tags)
+                              ? product.tags
+                              : typeof product.tags === "string"
+                                ? product.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+                                : []
+                            ).map((t: string) => (
                               <Tag key={t}>{t}</Tag>
                             ))}
                           </InlineStack>
