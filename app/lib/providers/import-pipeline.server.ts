@@ -465,6 +465,8 @@ export async function runProviderImport(
     .eq("id", providerId)
     .eq("shop_id", shopId);
 
+  const variantRowsGrouped = rows.length - groupedProducts.length;
+
   return {
     importId,
     totalRows: rows.length,
@@ -473,6 +475,9 @@ export async function runProviderImport(
     duplicateRows: duplicateCount,
     errorRows: errors.length,
     errors,
+    // Extra context for Shopify CSV imports with variants
+    uniqueProducts: groupedProducts.length,
+    variantRowsGrouped,
   };
 }
 

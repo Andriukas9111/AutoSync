@@ -1117,13 +1117,18 @@ export default function ProviderImportWizard() {
                     : "Import completed successfully"
                 }
               >
-                <p>
-                  {`Imported ${importResult.importedRows.toLocaleString()} of ${importResult.totalRows.toLocaleString()} products.`}
-                  {importResult.skippedRows > 0 &&
-                    ` Skipped ${importResult.skippedRows} duplicates.`}
-                  {importResult.errorRows > 0 &&
-                    ` ${importResult.errorRows} rows had errors.`}
-                </p>
+                <BlockStack gap="200">
+                  <p>
+                    {(importResult as Record<string, unknown>).variantRowsGrouped
+                      ? `${importResult.totalRows.toLocaleString()} rows grouped into ${((importResult as Record<string, unknown>).uniqueProducts as number || importResult.importedRows).toLocaleString()} products (variant rows merged). `
+                      : ""}
+                    {`Imported ${importResult.importedRows.toLocaleString()} products.`}
+                    {importResult.skippedRows > 0 &&
+                      ` Skipped ${importResult.skippedRows.toLocaleString()} duplicates.`}
+                    {importResult.errorRows > 0 &&
+                      ` ${importResult.errorRows} rows had errors.`}
+                  </p>
+                </BlockStack>
               </Banner>
             )}
 
@@ -1135,8 +1140,11 @@ export default function ProviderImportWizard() {
                     <IconBadge icon={CheckCircleIcon} />
                     <Text as="h2" variant="headingMd">Import Summary</Text>
                   </InlineStack>
-                  <InlineGrid columns={4} gap="400">
+                  <InlineGrid columns={(importResult as Record<string, unknown>).variantRowsGrouped ? 5 : 4} gap="400">
                     <StatCard label="Total Rows" value={importResult.totalRows} />
+                    {(importResult as Record<string, unknown>).uniqueProducts && (
+                      <StatCard label="Unique Products" value={(importResult as Record<string, unknown>).uniqueProducts as number} />
+                    )}
                     <StatCard label="Imported" value={importResult.importedRows} tone="success" />
                     <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
                     <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
