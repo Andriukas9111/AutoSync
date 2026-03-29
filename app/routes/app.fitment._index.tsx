@@ -33,13 +33,14 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits, getMinimumPlanForFeature, PLAN_LIMITS } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getMinimumPlanForFeature, getSerializedPlanLimits } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
 import { equalHeightGridStyle, listRowStyle } from "../lib/design";
 import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -204,7 +205,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakes,
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     autoExtractionAllowed: !!limits.features.autoExtraction,
     requiredPlanForAutoExtract: getMinimumPlanForFeature("autoExtraction"),
   };
@@ -614,4 +615,9 @@ export default function Fitment() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Fitment" />;
 }

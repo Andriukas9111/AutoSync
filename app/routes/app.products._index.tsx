@@ -45,6 +45,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import db from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 import { useAppData } from "../lib/use-app-data";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -740,4 +741,9 @@ export default function Products() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Products" />;
 }

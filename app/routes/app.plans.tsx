@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -16,6 +16,7 @@ import {
   Modal,
   Collapsible,
   Icon,
+  RangeSlider,
 } from "@shopify/polaris";
 import {
   StarFilledIcon,
@@ -29,6 +30,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { cardRowStyle, isBannerDismissed, dismissBanner } from "../lib/design";
 import { authenticate } from "../shopify.server";
+import db from "../lib/db.server";
 import { isAdminShop } from "../lib/admin.server";
 import {
   getTenant,
@@ -36,7 +38,14 @@ import {
   confirmBillingSubscription,
   getPlanConfigs,
 } from "../lib/billing.server";
+import {
+  CUSTOM_PLAN_TIERS,
+  CUSTOM_PLAN_BASE_PRICE,
+  calculateCustomPrice,
+} from "../lib/custom-plan";
+import type { CustomPlanConfig } from "../lib/custom-plan";
 import { PLAN_ORDER } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 import type { PlanTier, PlanLimits, PlanConfig } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -90,9 +99,9 @@ function getHighlights(config: PlanConfig): string[] {
   if (f.vinDecode) items.push("VIN Decode");
 
   // Customisation & Analytics
-  if (f.widgetCustomisation === "full_css") items.push("Full CSS widget customisation (Coming Soon)");
-  else if (f.widgetCustomisation === "full") items.push("Full widget customisation (Coming Soon)");
-  else if (f.widgetCustomisation === "basic") items.push("Basic widget styling (Coming Soon)");
+  if (f.widgetCustomisation === "full_css") items.push("Full CSS widget customisation");
+  else if (f.widgetCustomisation === "full") items.push("Full widget customisation");
+  else if (f.widgetCustomisation === "basic") items.push("Basic widget styling");
 
   if (f.dashboardAnalytics === "full_export") items.push("Analytics with export");
   else if (f.dashboardAnalytics === "full") items.push("Full analytics dashboard");
@@ -217,7 +226,11 @@ const PLAN_SUBTITLES: Record<PlanTier, string> = {
   professional: "Integrate with APIs & data feeds",
   business: "Convert with advanced features",
   enterprise: "Complete automotive platform",
+  custom: "Tailored to your needs",
 };
+
+/** Standard plan tiers shown in the card grid (excludes custom) */
+const DISPLAY_PLAN_ORDER: PlanTier[] = PLAN_ORDER.filter((t) => t !== "custom");
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -296,6 +309,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
+    // For custom plans, save the configuration and set the custom price
+    if (newPlan === "custom") {
+      const customConfigRaw = String(formData.get("custom_config") || "").trim();
+      if (!customConfigRaw) {
+        return data({ error: "Custom plan configuration is required." }, { status: 400 });
+      }
+      const customConfig = JSON.parse(customConfigRaw) as { products: number; providers: number; fitments: number; scheduledFetches: number };
+      // Calculate price from values by finding matching tier
+      const findAddon = (tiers: { value: number; addon: number }[], val: number) => tiers.find(t => t.value === val)?.addon ?? 0;
+      const customPrice = CUSTOM_PLAN_BASE_PRICE
+        + findAddon(CUSTOM_PLAN_TIERS.products, customConfig.products)
+        + findAddon(CUSTOM_PLAN_TIERS.providers, customConfig.providers)
+        + findAddon(CUSTOM_PLAN_TIERS.fitments, customConfig.fitments)
+        + findAddon(CUSTOM_PLAN_TIERS.scheduledFetches, customConfig.scheduledFetches);
+      await db.from("tenants").update({
+        custom_plan_config: customConfig,
+        custom_price: customPrice,
+        pending_plan: "custom",
+        updated_at: new Date().toISOString(),
+      }).eq("shop_id", shopId);
+    }
+
     const appUrl = process.env.SHOPIFY_APP_URL || `https://${request.headers.get("host")}`;
     const returnUrl = `${appUrl}/app/plans?billing_confirmed=true`;
 
@@ -360,9 +395,16 @@ export default function Plans() {
 
   useEffect(() => {
     if (fetcherData && "redirectUrl" in fetcherData) {
-      window.top
-        ? (window.top.location.href = fetcherData.redirectUrl)
-        : (window.location.href = fetcherData.redirectUrl);
+      // Use Shopify's redirect method for embedded apps — opens billing approval in top frame
+      const url = fetcherData.redirectUrl;
+      if (window.shopify?.idToken) {
+        // App Bridge v4 — use top-level navigation
+        open(url, "_top");
+      } else if (window.top) {
+        window.top.location.href = url;
+      } else {
+        window.location.href = url;
+      }
     }
   }, [fetcherData]);
 
@@ -452,7 +494,7 @@ export default function Plans() {
             @media(max-width:900px) { .as-plan-grid { grid-template-columns: repeat(2, 1fr) !important; } }
             @media(max-width:580px) { .as-plan-grid { grid-template-columns: 1fr !important; } }
           `}</style>
-          {PLAN_ORDER.map((tier) => {
+          {DISPLAY_PLAN_ORDER.map((tier) => {
             const config = configs[tier];
             const isCurrent = tier === activePlan;
             const tierIndex = PLAN_ORDER.indexOf(tier);
@@ -576,6 +618,18 @@ export default function Plans() {
           })}
         </div>
 
+        {/* ─── Build Your Plan — Enterprise extension with sliders ─── */}
+        <BuildYourPlan
+          currentPlan={activePlan}
+          onSubscribe={(config) => {
+            const fd = new FormData();
+            fd.set("plan", "custom");
+            fd.set("custom_config", JSON.stringify(config));
+            fetcher.submit(fd, { method: "POST" });
+          }}
+          loading={fetcher.state !== "idle"}
+        />
+
         {/* ─── Feature comparison table ─── */}
         <Card>
           <BlockStack gap="400">
@@ -601,7 +655,7 @@ export default function Plans() {
                     }}>
                       <Text as="span" variant="bodySm" fontWeight="semibold">Feature</Text>
                     </th>
-                    {PLAN_ORDER.map((tier) => {
+                    {DISPLAY_PLAN_ORDER.map((tier) => {
                       const c = configs[tier];
                       return (
                         <th key={tier} style={{
@@ -647,13 +701,8 @@ export default function Plans() {
                             zIndex: 1,
                           }}>
                             <Text as="span" variant="bodySm" fontWeight="medium">{row.label}</Text>
-                            {row.comingSoon && (
-                              <span style={{ marginLeft: "6px" }}>
-                                <Text as="span" variant="bodySm" tone="info">Coming Soon</Text>
-                              </span>
-                            )}
                           </td>
-                          {PLAN_ORDER.map((tier) => {
+                          {DISPLAY_PLAN_ORDER.map((tier) => {
                             const value = row.getValue(configs[tier].limits);
                             return (
                               <td key={tier} style={{
@@ -680,20 +729,28 @@ export default function Plans() {
           </BlockStack>
         </Card>
 
-        {/* ─── FAQ ─── */}
+        {/* ─── Competitor Comparison ─── */}
         <Card>
           <BlockStack gap="300">
             <InlineStack gap="200" blockAlign="center">
               <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">Why AutoSync?</Text>
+              <Text as="h2" variant="headingMd">How We Compare</Text>
             </InlineStack>
             <Divider />
             <Box overflowX="scroll">
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", fontSize: "12px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px", fontSize: "13px" }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid var(--p-color-border)" }}>
                     {["Feature", "AutoSync", "Convermax", "EasySearch", "C: YMM", "PCFitment", "VFitz", "AutoFit AI", "PartFinder", "SearchAuto"].map((h, i) => (
-                      <th key={i} style={{ textAlign: i === 0 ? "left" : "center", padding: "8px 6px", fontWeight: i === 1 ? 700 : 500, fontSize: i === 1 ? "13px" : "11px", background: i === 1 ? "var(--p-color-bg-fill-emphasis)" : undefined, color: i === 1 ? "var(--p-color-text-inverse)" : i > 1 ? "var(--p-color-text-subdued)" : undefined, borderRadius: i === 1 ? "6px 6px 0 0" : undefined, whiteSpace: "nowrap" }}>
+                      <th key={i} style={{
+                        textAlign: i === 0 ? "left" : "center",
+                        padding: "10px 8px",
+                        fontWeight: 600,
+                        fontSize: "13px",
+                        background: i === 1 ? "var(--p-color-bg-surface-selected)" : undefined,
+                        color: i > 1 ? "var(--p-color-text-secondary)" : undefined,
+                        whiteSpace: "nowrap",
+                      }}>
                         {h}
                       </th>
                     ))}
@@ -702,7 +759,6 @@ export default function Plans() {
                 <tbody>
                   {([
                     ["Price", "Free–$299", "$250–$850", "$19–$75", "$10–$75", "$15–$150", "$1–$58", "$50–$250", "$49", "$89–$500"],
-                    ["Rating", "—", "5.0 (12)", "4.8 (133)", "4.8 (92)", "1.0 (1)", "4.9 (27)", "4.1 (4)", "4.9 (15)", "5.0 (5)"],
                     ["YMME Database", "yes", "yes", "yes", "yes", "yes", "yes", "yes", "no", "yes"],
                     ["Auto Extraction", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
                     ["Smart Collections", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
@@ -710,35 +766,33 @@ export default function Plans() {
                     ["VIN Decode", "yes", "yes", "no", "no", "yes", "no", "no", "no", "yes"],
                     ["Wheel Finder", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
                     ["Fitment Badge", "yes", "yes", "no", "no", "no", "no", "yes", "yes", "yes"],
-                    ["Compatibility Table", "yes", "yes", "$75/mo", "$50/mo", "no", "no", "$80/mo", "no", "no"],
-                    ["My Garage", "yes", "yes", "$75/mo", "$50/mo", "no", "no", "yes", "yes", "yes"],
+                    ["Compatibility Table", "yes", "yes", "extra", "extra", "no", "no", "extra", "no", "no"],
+                    ["My Garage", "yes", "yes", "extra", "extra", "no", "no", "yes", "yes", "yes"],
                     ["Vehicle Spec Pages", "yes", "yes", "no", "no", "no", "no", "no", "no", "no"],
                     ["API/FTP Import", "yes", "yes", "no", "no", "yes", "no", "no", "no", "no"],
                     ["Pricing Engine", "yes", "no", "no", "no", "no", "no", "no", "no", "no"],
                     ["Analytics", "yes", "yes", "no", "no", "no", "no", "yes", "yes", "yes"],
                     ["Widgets", "7", "7+", "2", "2", "1", "1", "2", "2", "1"],
-                  ] as string[][]).map(([label, ...vals], i) => (
-                    <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                      <td style={{ padding: "7px 6px", fontWeight: 500, whiteSpace: "nowrap" }}>{label}</td>
+                  ] as string[][]).map(([label, ...vals], ri) => (
+                    <tr key={ri} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                      <td style={{ padding: "8px", fontWeight: 500 }}>{label}</td>
                       {vals.map((v, j) => {
                         const isAutoSync = j === 0;
                         const isYes = v === "yes";
                         const isNo = v === "no";
-                        const isPaidOnly = v.includes("$");
                         return (
                           <td key={j} style={{
-                            textAlign: "center", padding: "7px 6px",
-                            fontWeight: isAutoSync ? 600 : 400,
-                            background: isAutoSync ? "var(--p-color-bg-surface-secondary)" : undefined,
+                            textAlign: "center", padding: "8px",
+                            background: isAutoSync ? "var(--p-color-bg-surface-selected)" : undefined,
                           }}>
                             {isYes ? (
-                              <span style={{ color: "var(--p-color-text-success)", fontWeight: 600 }}>&#10003;</span>
+                              <Icon source={CheckSmallIcon} tone="success" />
                             ) : isNo ? (
-                              <span style={{ color: "var(--p-color-text-critical)", fontWeight: 600 }}>&#10007;</span>
-                            ) : isPaidOnly ? (
-                              <span style={{ color: "var(--p-color-text-warning)", fontSize: "11px" }}>{v}</span>
+                              <Text as="span" variant="bodySm" tone="subdued">—</Text>
+                            ) : v === "extra" ? (
+                              <Text as="span" variant="bodySm" tone="subdued">paid extra</Text>
                             ) : (
-                              <span>{v}</span>
+                              <Text as="span" variant="bodySm" fontWeight={isAutoSync ? "semibold" : "regular"}>{v}</Text>
                             )}
                           </td>
                         );
@@ -748,11 +802,11 @@ export default function Plans() {
                 </tbody>
               </table>
             </Box>
-            <Banner tone="success">
-              <Text as="p" variant="bodySm">
-                <strong>AutoSync matches Convermax&apos;s $250/mo features — starting free.</strong> We&apos;re the only affordable app with smart auto-extraction, 7 storefront widgets, UK plate lookup, vehicle spec pages, and a built-in pricing engine. Convermax is the only competitor with comparable features, but at 3-10x the price.
+            <Box padding="300" background="bg-surface-secondary" borderRadius="200">
+              <Text as="p" variant="bodySm" tone="subdued">
+                AutoSync offers the most complete feature set in the market at a fraction of the cost. Only Convermax offers comparable features — at 3-10x the price.
               </Text>
-            </Banner>
+            </Box>
           </BlockStack>
         </Card>
 
@@ -851,4 +905,111 @@ export default function Plans() {
       </Modal>
     </Page>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Build Your Plan — Enterprise extension with configurable resource scaling
+// ---------------------------------------------------------------------------
+
+function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
+  currentPlan: PlanTier;
+  onSubscribe: (selection: { products: number; providers: number; fitments: number; scheduledFetches: number }) => void;
+  loading: boolean;
+}) {
+  const [products, setProducts] = useState(0);
+  const [providers, setProviders] = useState(0);
+  const [fitments, setFitments] = useState(0);
+  const [fetches, setFetches] = useState(0);
+
+  const totalPrice = useMemo(() => calculateCustomPrice({
+    productsIndex: products, providersIndex: providers,
+    fitmentsIndex: fitments, scheduledFetchesIndex: fetches,
+  }), [products, providers, fitments, fetches]);
+
+  const addons = CUSTOM_PLAN_TIERS.products[products].addon
+    + CUSTOM_PLAN_TIERS.providers[providers].addon
+    + CUSTOM_PLAN_TIERS.fitments[fitments].addon
+    + CUSTOM_PLAN_TIERS.scheduledFetches[fetches].addon;
+  const isActive = currentPlan === "custom";
+
+  const sliders: { label: string; desc: string; tiers: { label: string; addon: number }[]; value: number; set: (v: number) => void }[] = [
+    { label: "Products", desc: "Enterprise includes 500K", tiers: CUSTOM_PLAN_TIERS.products, value: products, set: setProducts },
+    { label: "Providers", desc: "Enterprise includes 5", tiers: CUSTOM_PLAN_TIERS.providers, value: providers, set: setProviders },
+    { label: "Fitments", desc: "Enterprise includes 2M", tiers: CUSTOM_PLAN_TIERS.fitments, value: fitments, set: setFitments },
+    { label: "Scheduled Fetches", desc: "Enterprise includes 12/day", tiers: CUSTOM_PLAN_TIERS.scheduledFetches, value: fetches, set: setFetches },
+  ];
+
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="200" blockAlign="center">
+            <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
+            <BlockStack gap="050">
+              <Text as="h2" variant="headingMd" fontWeight="semibold">Build Your Plan</Text>
+              <Text as="span" variant="bodySm" tone="subdued">Enterprise + extra resources</Text>
+            </BlockStack>
+          </InlineStack>
+          <BlockStack gap="050" inlineAlign="end">
+            <Text as="p" variant="headingXl" fontWeight="bold">${String(totalPrice)}</Text>
+            <Text as="span" variant="bodySm" tone="subdued">/month</Text>
+          </BlockStack>
+        </InlineStack>
+
+        <Divider />
+
+        {/* Sliders */}
+        <BlockStack gap="400">
+          {sliders.map((s) => {
+            const tier = s.tiers[s.value];
+            return (
+              <BlockStack key={s.label} gap="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="050">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">{s.label}</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">{s.desc}</Text>
+                  </BlockStack>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge>{tier.label}</Badge>
+                    {tier.addon > 0 && (
+                      <Text as="span" variant="bodySm" tone="subdued">+${String(tier.addon)}/mo</Text>
+                    )}
+                  </InlineStack>
+                </InlineStack>
+                <RangeSlider
+                  label=""
+                  labelHidden
+                  min={0}
+                  max={s.tiers.length - 1}
+                  value={s.value}
+                  onChange={(v: number) => s.set(v)}
+                />
+              </BlockStack>
+            );
+          })}
+        </BlockStack>
+
+        <Divider />
+
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="span" variant="bodySm" tone="subdued">
+            {addons > 0 ? `$299 base + $${String(addons)} add-ons` : "Same as Enterprise — adjust sliders to add resources"}
+          </Text>
+          <Button variant="primary" loading={loading} disabled={isActive} onClick={() => onSubscribe({
+            products: CUSTOM_PLAN_TIERS.products[products].value,
+            providers: CUSTOM_PLAN_TIERS.providers[providers].value,
+            fitments: CUSTOM_PLAN_TIERS.fitments[fitments].value,
+            scheduledFetches: CUSTOM_PLAN_TIERS.scheduledFetches[fetches].value,
+          })}>
+            {isActive ? "Current Plan" : `Subscribe — $${String(totalPrice)}/mo`}
+          </Button>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Plans" />;
 }

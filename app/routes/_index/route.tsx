@@ -8,15 +8,17 @@ import "./landing.css";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   if (url.searchParams.get("shop")) throw redirect(`/app?${url.searchParams.toString()}`);
-  const [makesRes, modelsRes, enginesRes, productsRes] = await Promise.all([
+  // Only expose YMME database stats (global, non-merchant data)
+  // Never expose aggregate merchant data (product counts) on the public landing page
+  const [makesRes, modelsRes, enginesRes, specsRes] = await Promise.all([
     db.from("ymme_makes").select("id", { count: "exact", head: true }),
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
-    db.from("products").select("id", { count: "exact", head: true }),
+    db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
   ]);
   return {
     showForm: Boolean(login),
-    stats: { makes: makesRes.count ?? 0, models: modelsRes.count ?? 0, engines: enginesRes.count ?? 0, products: productsRes.count ?? 0 },
+    stats: { makes: makesRes.count ?? 0, models: modelsRes.count ?? 0, engines: enginesRes.count ?? 0, specs: specsRes.count ?? 0 },
   };
 };
 
@@ -750,7 +752,7 @@ export default function LandingPage() {
             <Stat value={stats.makes} label="Makes" />
             <Stat value={stats.models} label="Models" />
             <Stat value={stats.engines} label="Engines" />
-            <Stat value={stats.products} label="Products" />
+            <Stat value={stats.specs} label="Vehicle Specs" />
           </div>
         </div>
       </section>

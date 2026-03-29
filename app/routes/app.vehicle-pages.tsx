@@ -48,7 +48,7 @@ import {
   getTenant,
   assertFeature,
   BillingGateError,
-  PLAN_LIMITS,
+  getSerializedPlanLimits,
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -56,6 +56,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -146,7 +147,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           gated: true as const,
           plan,
           limits,
-          allLimits: PLAN_LIMITS,
+          allLimits: getSerializedPlanLimits(),
           syncStats: { synced: 0, pending: 0, failed: 0 },
           availableVehicles: 0,
           vehicles: [] as VehicleRow[],
@@ -347,7 +348,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     gated: false as const,
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     syncStats,
     availableVehicles: uniqueVehicleKeys.size,
     vehicles,
@@ -1024,4 +1025,9 @@ export default function VehiclePages() {
       </Modal>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Vehicle Pages" />;
 }

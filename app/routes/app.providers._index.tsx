@@ -34,6 +34,7 @@ import { getTenant, getPlanLimits } from "../lib/billing.server";
 import type { PlanTier, PlanLimits, ProviderType } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
 import { PlanGate } from "../components/PlanGate";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -504,4 +505,9 @@ function ProviderCard({
       </BlockStack>
     </div>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Providers" />;
 }

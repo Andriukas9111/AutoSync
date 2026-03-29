@@ -31,7 +31,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getTenant, PLAN_LIMITS, assertFeature, BillingGateError } from "../lib/billing.server";
+import { getPlanLimits, getTenant, getSerializedPlanLimits, assertFeature, BillingGateError } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -39,6 +39,7 @@ import { useAppData } from "../lib/use-app-data";
 import { OperationProgress } from "../components/OperationProgress";
 import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -98,7 +99,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     collections: collectionsResult.data ?? [],
     appSettings: appSettingsResult.data,
     uniqueMakes,
@@ -572,4 +573,9 @@ export default function Collections() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Collections" />;
 }

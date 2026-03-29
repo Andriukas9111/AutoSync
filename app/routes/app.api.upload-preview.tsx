@@ -28,6 +28,11 @@ export async function action({ request }: ActionFunctionArgs) {
   const file = formData.get("file") as File | null;
   const fileNameOverride = String(formData.get("file_name") || "").trim();
 
+  // Path traversal protection: reject storage paths with directory escape sequences
+  if (storagePath && (storagePath.includes("..") || storagePath.startsWith("/"))) {
+    return data({ error: "Invalid storage path." }, { status: 400 });
+  }
+
   if (!storagePath && (!file || file.size === 0)) {
     return data({ error: "No file uploaded." }, { status: 400 });
   }

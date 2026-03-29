@@ -1,4 +1,4 @@
-export type PlanTier = "free" | "starter" | "growth" | "professional" | "business" | "enterprise";
+export type PlanTier = "free" | "starter" | "growth" | "professional" | "business" | "enterprise" | "custom";
 
 export const PLAN_ORDER: PlanTier[] = [
   "free",
@@ -7,6 +7,7 @@ export const PLAN_ORDER: PlanTier[] = [
   "professional",
   "business",
   "enterprise",
+  "custom",
 ];
 
 export interface PlanConfig {

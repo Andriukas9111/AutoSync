@@ -45,6 +45,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { assertFitmentLimit, BillingGateError } from "../lib/billing.server";
 import type { FitmentStatus } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 import { formatPrice } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
@@ -1488,7 +1489,7 @@ export default function ProductDetails() {
                   </InlineStack>
                   <Button
                     fullWidth
-                    onClick={() => window.open(`https://${shopDomain}/admin/products/${product.shopify_product_id}`, "_blank")}
+                    url={`shopify://admin/products/${product.shopify_product_id}`}
                   >
                     View on Shopify
                   </Button>
@@ -1501,4 +1502,9 @@ export default function ProductDetails() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Product Details" />;
 }

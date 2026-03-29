@@ -33,7 +33,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getTenant, assertFeature, PLAN_LIMITS } from "../lib/billing.server";
+import { getPlanLimits, getTenant, assertFeature, getSerializedPlanLimits } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
@@ -42,6 +42,7 @@ import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismis
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -105,7 +106,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     productsWithFitments: fitmentCountResult.count ?? 0,
     pushedCount: pushedCountResult.count ?? 0,
     collectionCount: collectionCountResult.count ?? 0,
@@ -644,4 +645,9 @@ export default function Push() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Push to Shopify" />;
 }

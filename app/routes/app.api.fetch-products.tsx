@@ -5,9 +5,7 @@ import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
 import { assertProductLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 
-// TODO: Move to Edge Function for true background processing.
-// Currently runs synchronously with a timeout guard.
-// The Edge Function (process-jobs) should handle this in the future.
+// Runs with a timeout guard within Vercel's serverless limit.
 const FETCH_TIMEOUT_MS = 55_000; // 55s guard — Vercel serverless has 60s limit
 
 export async function action({ request }: ActionFunctionArgs) {

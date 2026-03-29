@@ -13,6 +13,7 @@ import { parseFile } from "../lib/providers/universal-parser.server";
 import { getSmartMappings, runProviderImport } from "../lib/providers/import-pipeline.server";
 import { detectDuplicates, getTargetFields } from "../lib/providers/column-mapper.server";
 import type { ColumnMapping } from "../lib/providers/column-mapper.server";
+import { decrypt, isEncrypted } from "../lib/crypto.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -181,7 +182,7 @@ export async function action({ request }: ActionFunctionArgs) {
           host,
           port: Number(config.port) || 21,
           username: String(config.username ?? ""),
-          password: String(config.password ?? ""),
+          password: (() => { const p = String(config.password ?? ""); return isEncrypted(p) ? decrypt(p) : p; })(),
           remotePath: String(config.remotePath ?? "/"),
           protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
         });
@@ -263,7 +264,7 @@ export async function action({ request }: ActionFunctionArgs) {
           host,
           port: Number(config.port) || 21,
           username: String(config.username ?? ""),
-          password: String(config.password ?? ""),
+          password: (() => { const p = String(config.password ?? ""); return isEncrypted(p) ? decrypt(p) : p; })(),
           remotePath,
           protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
         });

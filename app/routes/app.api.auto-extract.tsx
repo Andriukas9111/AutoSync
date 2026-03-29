@@ -123,14 +123,17 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: "Failed to create job" }, { status: 500 });
     }
 
-    // Post-insert duplicate guard: if another job was created concurrently, cancel ours
-    const { count: activeCount } = await db
+    // Post-insert duplicate guard: if another job was created concurrently,
+    // keep the OLDEST (lowest id) and cancel ours if we lost the race
+    const { data: activeJobs } = await db
       .from("sync_jobs")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .eq("shop_id", shopId)
       .eq("type", "extract")
-      .in("status", ["pending", "running"]);
-    if (activeCount && activeCount > 1) {
+      .in("status", ["pending", "running"])
+      .order("id", { ascending: true })
+      .limit(2);
+    if (activeJobs && activeJobs.length > 1 && activeJobs[0].id !== job.id) {
       await db.from("sync_jobs").delete().eq("id", job.id);
       return data({ error: "An extraction job is already running" }, { status: 409 });
     }

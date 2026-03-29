@@ -30,6 +30,7 @@ import { getTenant, getPlanLimits } from "../lib/billing.server";
 import type { ProviderType, PlanTier } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
 import { listRowStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -950,4 +951,9 @@ function CopyButton({ value }: { value: string }) {
       </button>
     </div>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Provider Details" />;
 }

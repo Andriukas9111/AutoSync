@@ -18,10 +18,22 @@ const RATE_LIMITS: Record<string, number> = {
   "default": 100,        // fallback
 };
 
+let lastCleanup = Date.now();
+
 function checkRateLimit(shop: string, endpoint: string): boolean {
   const key = `${shop}:${endpoint}`;
   const limit = RATE_LIMITS[endpoint] ?? RATE_LIMITS.default;
   const now = Date.now();
+
+  // Lazy cleanup: purge stale entries every 5 minutes instead of setInterval
+  // (setInterval keeps the process alive on serverless runtimes)
+  if (now - lastCleanup > 5 * 60_000) {
+    lastCleanup = now;
+    for (const [k, val] of rateLimitMap) {
+      if (now > val.resetAt) rateLimitMap.delete(k);
+    }
+  }
+
   const entry = rateLimitMap.get(key);
 
   if (!entry || now > entry.resetAt) {
@@ -33,14 +45,6 @@ function checkRateLimit(shop: string, endpoint: string): boolean {
   entry.count++;
   return true;
 }
-
-// Clean stale entries every 5 minutes to prevent memory leak
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of rateLimitMap) {
-    if (now > val.resetAt) rateLimitMap.delete(key);
-  }
-}, 5 * 60_000);
 
 // ---------- CORS helpers ----------
 // Dynamic CORS: allow the requesting Shopify store domain, not wildcard

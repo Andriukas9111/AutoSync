@@ -364,6 +364,7 @@ export const PLAN_PRICING: Record<string, string> = {
   professional: "$99/mo",
   business: "$179/mo",
   enterprise: "$299/mo",
+  custom: "From $299/mo",
 };
 
 /** Key highlights for each plan tier (used in PlanGate upgrade prompt) */
@@ -403,6 +404,52 @@ export const formatBadgeStyle: CSSProperties = {
   color: "var(--p-color-text-secondary)",
   lineHeight: "18px",
 };
+
+// ─── Auto-fit Grid (responsive grid that wraps naturally) ──────────────────
+export const autoFitGridStyle = (minWidth = "250px", gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}, 1fr))`,
+  gap,
+});
+
+// ─── FTP File Card ─────────────────────────────────────────────────────────
+export const ftpFileCardStyle = (selected: boolean): CSSProperties => ({
+  padding: "10px 14px",
+  borderRadius: "var(--p-border-radius-200)",
+  border: selected
+    ? "2px solid var(--p-color-border-emphasis)"
+    : "1px solid var(--p-color-border)",
+  background: selected
+    ? "var(--p-color-bg-surface-secondary)"
+    : "var(--p-color-bg-surface)",
+  cursor: "pointer",
+  transition: "border-color 120ms ease, background 120ms ease",
+});
+
+// ─── Variant Table (product detail page) ───────────────────────────────────
+export const variantTableStyle: CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: "13px",
+};
+
+export const variantTableHeaderStyle: CSSProperties = {
+  textAlign: "left" as const,
+  padding: "8px 10px",
+  borderBottom: "2px solid var(--p-color-border)",
+  fontWeight: 600,
+  fontSize: "12px",
+  color: "var(--p-color-text-secondary)",
+};
+
+export const variantTableCellStyle: CSSProperties = {
+  padding: "8px 10px",
+  borderBottom: "1px solid var(--p-color-border-secondary)",
+};
+
+export const variantTableRowStyle = (isLast: boolean): CSSProperties => ({
+  borderBottom: isLast ? "none" : undefined,
+});
 
 export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
   starter: [

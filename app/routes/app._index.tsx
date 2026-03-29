@@ -45,6 +45,7 @@ import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle, formatJobType, formatDate } from "../lib/design";
 
 // ---------------------------------------------------------------------------
@@ -1062,4 +1063,9 @@ export default function Dashboard() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Dashboard" />;
 }

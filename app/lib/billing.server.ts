@@ -98,7 +98,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   growth: {
     products: 5_000,
     fitments: 25_000,
-    providers: 3,
+    providers: 2,
     scheduledFetchesPerDay: 1,
     activeMakes: 30,
     features: {
@@ -128,7 +128,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   professional: {
     products: 25_000,
     fitments: 100_000,
-    providers: 5,
+    providers: 3,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
     features: {
@@ -158,8 +158,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   business: {
     products: 100_000,
     fitments: 500_000,
-    providers: 15,
-    scheduledFetchesPerDay: 6,
+    providers: 4,
+    scheduledFetchesPerDay: 4,
     activeMakes: 999_999,
     features: {
       pushTags: true,
@@ -186,10 +186,40 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   enterprise: {
-    products: Infinity,
-    fitments: Infinity,
-    providers: Infinity,
-    scheduledFetchesPerDay: Infinity,
+    products: 500_000,
+    fitments: 2_000_000,
+    providers: 5,
+    scheduledFetchesPerDay: 12,
+    activeMakes: 999_999,
+    features: {
+      pushTags: true,
+      pushMetafields: true,
+      autoExtraction: true,
+      bulkOperations: true,
+      smartCollections: "full",
+      collectionSeoImages: true,
+      apiIntegration: true,
+      ftpImport: true,
+      ymmeWidget: true,
+      fitmentBadge: true,
+      compatibilityTable: true,
+      floatingBar: true,
+      myGarage: true,
+      wheelFinder: true,
+      plateLookup: true,
+      vinDecode: true,
+      pricingEngine: true,
+      vehiclePages: true,
+      widgetCustomisation: "full_css",
+      dashboardAnalytics: "full_export",
+    },
+  },
+
+  custom: {
+    products: 25_000,
+    fitments: 100_000,
+    providers: 5,
+    scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
     features: {
       pushTags: true,
@@ -226,6 +256,7 @@ const DEFAULT_PLAN_CONFIGS: Record<PlanTier, Omit<PlanConfig, "limits">> = {
   professional: { tier: "professional", name: "Professional", priceMonthly: 99, badge: null, description: "Integrate with external data providers and APIs", isActive: true },
   business: { tier: "business", name: "Business", priceMonthly: 179, badge: "BEST VALUE", description: "Convert visitors with advanced features and analytics", isActive: true },
   enterprise: { tier: "enterprise", name: "Enterprise", priceMonthly: 299, badge: null, description: "The complete automotive platform with every feature", isActive: true },
+  custom: { tier: "custom", name: "Custom", priceMonthly: 299, badge: "FLEXIBLE", description: "Tailored plan with custom limits", isActive: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -419,6 +450,27 @@ export class BillingGateError extends Error {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Convert Infinity values to a large integer safe for JSON serialization. */
+export function serializeLimits(limits: PlanLimits): PlanLimits & Record<string, unknown> {
+  return {
+    ...limits,
+    products: limits.products === Infinity ? 999_999_999 : limits.products,
+    fitments: limits.fitments === Infinity ? 999_999_999 : limits.fitments,
+    providers: limits.providers === Infinity ? 999_999_999 : limits.providers,
+    scheduledFetchesPerDay: limits.scheduledFetchesPerDay === Infinity ? 999_999_999 : limits.scheduledFetchesPerDay,
+    activeMakes: limits.activeMakes === Infinity ? 999_999_999 : limits.activeMakes,
+  };
+}
+
+/** Return all plan limits serialized (Infinity → 999_999_999) for use in loaders. */
+export function getSerializedPlanLimits(): Record<PlanTier, PlanLimits> {
+  const result = {} as Record<PlanTier, PlanLimits>;
+  for (const tier of PLAN_ORDER) {
+    result[tier] = serializeLimits(getPlanLimits(tier));
+  }
+  return result;
+}
+
 /** Return the full limits object for a given plan tier (cache-aware). */
 export function getPlanLimits(plan: PlanTier): PlanLimits {
   if (_planConfigCache?.limits[plan]) {
@@ -536,6 +588,14 @@ function getPlanPrice(tier: PlanTier): number {
     return _planConfigCache.configs[tier].priceMonthly;
   }
   return DEFAULT_PLAN_CONFIGS[tier].priceMonthly;
+}
+
+/** Get a human-readable price label for a tier (e.g., "$49/mo", "From $299/mo") */
+export function getPlanPriceLabel(tier: PlanTier): string {
+  const price = getPlanPrice(tier);
+  if (price === 0) return "Free";
+  if (tier === "custom") return `From $${price}/mo`;
+  return `$${price}/mo`;
 }
 
 /** Get the display name for a tier (cache-aware) */
@@ -725,8 +785,8 @@ export async function confirmBillingSubscription(
       }
     } catch (err) {
       if (err instanceof Error && err.message.includes("not active")) throw err;
-      // If we can't verify (e.g., network error), log but allow — Shopify redirected here
-      console.error("[billing] Could not verify charge with Shopify:", err);
+      // Security: if we can't verify the charge, reject it — don't activate unverified plans
+      throw new Error(`Failed to verify billing subscription: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -792,3 +852,13 @@ export async function incrementFitmentCount(
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Re-export custom plan helpers (client-safe types + pricing calculator)
+// ---------------------------------------------------------------------------
+export {
+  CUSTOM_PLAN_TIERS,
+  CUSTOM_PLAN_BASE_PRICE,
+  calculateCustomPrice,
+} from "./custom-plan";
+export type { CustomPlanTier, CustomPlanConfig } from "./custom-plan";
