@@ -306,9 +306,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .update({ fitment_count: fitmentCount ?? 0, updated_at: new Date().toISOString() })
       .eq("shop_id", shopId);
 
-    // Find next unmapped product AFTER the current one
+    // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterAdd } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
@@ -367,9 +368,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    // Find next unmapped product AFTER the current one
+    // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterSuggest } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
@@ -405,7 +407,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .eq("id", productId).eq("shop_id", shopId);
 
     const { data: nextProduct } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
@@ -456,9 +459,33 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "approve_to_catalog") {
+    // Clean up data before adding to catalog
+    const updates: Record<string, unknown> = {
+      status: "active",
+      updated_at: new Date().toISOString(),
+    };
+    // Fix vendor if it's a raw API path (e.g. /manufacturers/1.json)
+    const { data: currentProduct } = await db.from("products")
+      .select("vendor, product_type, description")
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
+    if (currentProduct?.vendor?.includes("/manufacturers/") || currentProduct?.vendor?.includes(".json")) {
+      updates.vendor = null;
+    }
+    // Fix product_type if it's a numeric ID
+    if (currentProduct?.product_type && /^\d+$/.test(currentProduct.product_type)) {
+      updates.product_type = null;
+    }
+    // Decode HTML entities in description
+    if (currentProduct?.description && /&[a-z]+;|&nbsp;/i.test(currentProduct.description)) {
+      updates.description = currentProduct.description
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+        .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    }
+
     const { error: approveError } = await db
       .from("products")
-      .update({ status: "active", updated_at: new Date().toISOString() })
+      .update(updates)
       .eq("id", productId).eq("shop_id", shopId);
 
     if (approveError) return { error: "Failed to approve" };
@@ -822,7 +849,7 @@ export default function ProductDetails() {
                       <Text as="span" variant="bodySm" tone="subdued">Price</Text>
                       <InlineStack gap="100" blockAlign="center">
                         <Text as="span" variant="bodyMd" fontWeight="semibold">{fmtPrice(product.price)}</Text>
-                        {product.compare_at_price && (
+                        {product.compare_at_price != null && product.compare_at_price > 0 && (
                           <Text as="span" variant="bodySm" tone="subdued" textDecorationLine="line-through">
                             {formatPrice(product.compare_at_price)}
                           </Text>
@@ -1397,100 +1424,7 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>
 
-            {/* Provider Raw Data Card — shows ALL data fetched from the API */}
-            {product.raw_data && typeof product.raw_data === "object" && Object.keys(product.raw_data).length > 0 && (
-              <Card>
-                <BlockStack gap="300">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={ConnectIcon} />
-                    <Text as="h2" variant="headingSm" fontWeight="semibold">
-                      {`Provider Data (${Object.keys(product.raw_data).length} fields)`}
-                    </Text>
-                  </InlineStack>
-
-                  {/* Missing fields indicator */}
-                  {(!product.image_url || !product.description) && (
-                    <Banner tone="warning">
-                      <p>
-                        {[
-                          !product.image_url && "No image",
-                          !product.description && "No description",
-                          !product.vendor && "No vendor",
-                        ].filter(Boolean).join(" · ")}
-                        {" — check raw data below for available fields"}
-                      </p>
-                    </Banner>
-                  )}
-
-                  {/* Staged product approval */}
-                  {product.status === "staged" && (
-                    <Banner tone="info">
-                      <p>This product is <strong>staged</strong> — it's not visible in the main catalog yet. Approve it to add to your catalog.</p>
-                    </Banner>
-                  )}
-
-                  {(() => {
-                    const allFields = Object.entries(product.raw_data as Record<string, unknown>)
-                      .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                      .filter(([, v]) => typeof v !== "object")
-                      .sort(([a], [b]) => {
-                        const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "cost_price", "status", "availability", "weight", "barcode"];
-                        const ai = priority.indexOf(a);
-                        const bi = priority.indexOf(b);
-                        if (ai !== -1 && bi !== -1) return ai - bi;
-                        if (ai !== -1) return -1;
-                        if (bi !== -1) return 1;
-                        return a.localeCompare(b);
-                      });
-                    const shown = showProviderExpanded ? allFields : allFields.slice(0, 12);
-                    return (
-                      <>
-                  <div style={{ borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
-                    <BlockStack gap="0">
-                      {shown
-                        .map(([key, value], i) => {
-                          // Decode HTML entities for display
-                          let display = String(value)
-                            .replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-                            .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
-                            .replace(/&#39;/g, "'").replace(/&apos;/g, "'")
-                            .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-                          if (display.length > 200) display = display.slice(0, 200) + "…";
-
-                          return (
-                            <div key={key} style={{
-                              display: "grid",
-                              gridTemplateColumns: "180px 1fr",
-                              gap: "8px",
-                              padding: "8px 12px",
-                              borderBottom: "1px solid var(--p-color-border-secondary)",
-                              background: i % 2 === 0 ? "var(--p-color-bg-surface)" : "var(--p-color-bg-surface-secondary)",
-                            }}>
-                              <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">
-                                {key}
-                              </Text>
-                              <Text as="span" variant="bodySm" breakWord>
-                                {display}
-                              </Text>
-                            </div>
-                          );
-                        })}
-                    </BlockStack>
-                  </div>
-                  {allFields.length > 12 && (
-                    <Button
-                      variant="plain"
-                      onClick={() => setShowProviderExpanded(!showProviderExpanded)}
-                    >
-                      {showProviderExpanded ? `Show less` : `Show all ${allFields.length} fields`}
-                    </Button>
-                  )}
-                      </>
-                    );
-                  })()}
-                </BlockStack>
-              </Card>
-            )}
+            {/* Provider Data moved to main column (full-width, bottom of page) */}
 
             {/* Shopify Link Card */}
             {product.shopify_product_id && (
@@ -1513,6 +1447,63 @@ export default function ProductDetails() {
         </Layout.Section>
         )}
       </Layout>
+
+      {/* Provider Data — full-width at bottom for reference */}
+      {product.raw_data && typeof product.raw_data === "object" && Object.keys(product.raw_data as Record<string, unknown>).length > 0 && (
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ConnectIcon} />
+                <Text as="h2" variant="headingSm" fontWeight="semibold">
+                  {`Provider Data (${Object.keys(product.raw_data as Record<string, unknown>).length} fields)`}
+                </Text>
+              </InlineStack>
+              <Button variant="plain" onClick={() => setShowProviderExpanded(!showProviderExpanded)}>
+                {showProviderExpanded ? "Hide" : "Show"}
+              </Button>
+            </InlineStack>
+            {showProviderExpanded && (
+              <div style={{ borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)", maxHeight: "500px", overflowY: "auto" }}>
+                <BlockStack gap="0">
+                  {Object.entries(product.raw_data as Record<string, unknown>)
+                    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                    .filter(([, v]) => typeof v !== "object")
+                    .sort(([a], [b]) => {
+                      const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "cost_price", "status", "weight"];
+                      const ai = priority.indexOf(a);
+                      const bi = priority.indexOf(b);
+                      if (ai !== -1 && bi !== -1) return ai - bi;
+                      if (ai !== -1) return -1;
+                      if (bi !== -1) return 1;
+                      return a.localeCompare(b);
+                    })
+                    .map(([key, value], i) => {
+                      let display = String(value)
+                        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                        .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+                        .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                      if (display.length > 300) display = display.slice(0, 300) + "…";
+                      return (
+                        <div key={key} style={{
+                          display: "grid",
+                          gridTemplateColumns: "180px 1fr",
+                          gap: "8px",
+                          padding: "6px 12px",
+                          borderBottom: "1px solid var(--p-color-border-secondary)",
+                          background: i % 2 === 0 ? undefined : "var(--p-color-bg-surface-secondary)",
+                        }}>
+                          <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">{key}</Text>
+                          <Text as="span" variant="bodySm" breakWord>{display}</Text>
+                        </div>
+                      );
+                    })}
+                </BlockStack>
+              </div>
+            )}
+          </BlockStack>
+        </Card>
+      )}
     </Page>
   );
 }

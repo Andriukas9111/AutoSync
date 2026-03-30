@@ -296,8 +296,10 @@ export default function Fitment() {
     | undefined;
 
   const handleRunExtract = useCallback(() => {
+    const fd = new FormData();
+    fd.set("_action", "start");
     extractFetcher.submit(
-      {},
+      fd,
       { method: "POST", action: "/app/api/auto-extract" },
     );
     setExtractDismissed(false);
