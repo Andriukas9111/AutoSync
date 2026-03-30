@@ -54,7 +54,7 @@ import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import type { PlanTier } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 
@@ -737,8 +737,7 @@ export default function VehiclePages() {
         {/* ── Section 2: Stats Dashboard ── */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[

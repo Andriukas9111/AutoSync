@@ -38,7 +38,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
-import { equalHeightGridStyle, listRowStyle } from "../lib/design";
+import { equalHeightGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
 import { useAppData } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
 
@@ -342,8 +342,7 @@ export default function Fitment() {
         {/* Stats Overview — single card, consistent grid */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([

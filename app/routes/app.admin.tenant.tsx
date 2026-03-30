@@ -40,7 +40,7 @@ import type { PlanTier, FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
 import { getPlanLimits } from "../lib/billing.server";
-import { statMiniStyle, statGridStyle, listRowStyle } from "../lib/design";
+import { statMiniStyle, statGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -396,8 +396,7 @@ export default function TenantDetail() {
         {/* ── KPI Cards ── */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[

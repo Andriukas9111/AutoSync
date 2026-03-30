@@ -29,7 +29,7 @@ import db from "../lib/db.server";
 import { getTenant, getPlanLimits } from "../lib/billing.server";
 import type { ProviderType, PlanTier } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
-import { listRowStyle } from "../lib/design";
+import { listRowStyle, autoFitGridStyle } from "../lib/design";
 import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
@@ -467,8 +467,7 @@ export default function ProviderDetail() {
         {/* Stats Row — bordered grid matching providers list */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            ...autoFitGridStyle("140px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[

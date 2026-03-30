@@ -47,6 +47,7 @@ import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 import { useAppData } from "../lib/use-app-data";
+import { autoFitGridStyle } from "../lib/design";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -569,8 +570,7 @@ export default function Products() {
         {/* ── Status Overview ── */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([

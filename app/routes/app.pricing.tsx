@@ -58,6 +58,7 @@ import {
 } from "../lib/pipeline/pricing.server";
 import type { PlanTier } from "../lib/types";
 import { formatPrice } from "../lib/types";
+import { autoFitGridStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -291,8 +292,7 @@ export default function PricingPage() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              ...autoFitGridStyle("120px", "8px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[

@@ -50,6 +50,7 @@ import {
 } from "../lib/billing.server";
 import { PLAN_ORDER } from "../lib/types";
 import type { PlanTier, PlanLimits, PlanConfig } from "../lib/types";
+import { autoFitGridStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Feature definitions grouped by category
@@ -647,7 +648,7 @@ export default function AdminPlans() {
                         <Divider />
 
                         {/* Boolean toggles */}
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "4px" }}>
+                        <div style={autoFitGridStyle("220px", "4px")}>
                           {group.booleans.map((feature) => (
                             <FeatureToggleRow
                               key={feature.key}

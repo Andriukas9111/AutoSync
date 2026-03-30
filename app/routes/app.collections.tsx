@@ -37,7 +37,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { OperationProgress } from "../components/OperationProgress";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 
@@ -414,8 +414,7 @@ export default function Collections() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              ...autoFitGridStyle("120px", "8px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[
