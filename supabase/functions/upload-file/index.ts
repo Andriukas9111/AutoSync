@@ -4,8 +4,7 @@
  * Receives a file upload (multipart/form-data), stores it in Supabase Storage,
  * and returns the storage path. This bypasses Vercel's 4.5MB body size limit.
  *
- * No auth required — the file is stored with a random UUID path.
- * The Vercel API validates auth when it reads the file for parsing.
+ * Requires Authorization header with the Supabase service role key.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -17,13 +16,22 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 Deno.serve(async (req) => {
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://autosync-v3.vercel.app",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Verify authorization — only accept requests with service role key
+  const authHeader = req.headers.get("authorization") ?? "";
+  const token = authHeader.replace("Bearer ", "");
+  if (token !== SUPABASE_SERVICE_ROLE_KEY) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   if (req.method !== "POST") {

@@ -28,7 +28,7 @@ interface ImportRequest {
 
 Deno.serve(async (req) => {
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://autosync-v3.vercel.app",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   };
 

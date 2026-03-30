@@ -80,7 +80,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeSpecsResult,
     syncedProductsResult,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
+    db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at, updated_at").eq("shop_id", shopId).maybeSingle(),
     // Product counts — exclude staged products (same filter as job-status API to prevent flash-to-zero)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
@@ -90,8 +90,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Top makes
-    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null),
+    // Top makes (capped at 2000 to prevent memory issues on large shops)
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(2000),
     // Providers
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
     // Recent jobs
