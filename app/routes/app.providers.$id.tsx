@@ -255,7 +255,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       config.protocol = String(formData.get("ftp_protocol") || "ftp");
     }
 
-    const fetchSchedule = String(formData.get("fetch_schedule") || "manual");
+    let fetchSchedule = String(formData.get("fetch_schedule") || "manual");
+    // Plan gate: check if the tenant's plan allows scheduled fetches
+    if (fetchSchedule !== "manual") {
+      const tenantRecord = await getTenant(shopId);
+      const limits = getPlanLimits(tenantRecord?.plan ?? "free");
+      if (limits.scheduledFetchesPerDay === 0) {
+        fetchSchedule = "manual";
+      }
+    }
     const nextFetch = fetchSchedule !== "manual"
       ? new Date(Date.now() + parseDuration(fetchSchedule)).toISOString()
       : null;

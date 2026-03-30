@@ -125,48 +125,65 @@ async function processProviderAutoFetch(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
   const providerId = meta.provider_id;
+  const schedule = meta.schedule;
   if (!providerId) return { processed: 0, hasMore: false, error: "Missing provider_id in metadata" };
 
-  // Get tenant info
-  const { data: tenant } = await db
-    .from("tenants")
-    .select("shop_id, shopify_access_token")
-    .eq("shop_id", job.shop_id)
+  // Get provider info
+  const { data: provider } = await db
+    .from("providers")
+    .select("id, name, type, config, fetch_schedule")
+    .eq("id", providerId)
     .maybeSingle();
 
-  if (!tenant?.shopify_access_token) {
-    return { processed: 0, hasMore: false, error: "Tenant not found or missing access token" };
+  if (!provider) return { processed: 0, hasMore: false, error: "Provider not found" };
+  if (provider.type !== "api" && provider.type !== "ftp") {
+    return { processed: 0, hasMore: false, error: `Auto-fetch not supported for ${provider.type} providers` };
   }
 
-  // Call the Vercel API route to trigger the import
-  const appUrl = Deno.env.get("APP_URL") || "https://autosync-v3.vercel.app";
-  try {
-    const formData = new FormData();
-    formData.set("_action", "import");
-    formData.set("provider_id", providerId);
+  // Get saved column mappings for this provider
+  const { data: savedMappings } = await db
+    .from("provider_column_mappings")
+    .select("mappings")
+    .eq("provider_id", providerId)
+    .maybeSingle();
 
-    const response = await fetch(`${appUrl}/app/api/provider-fetch`, {
+  if (!savedMappings?.mappings) {
+    return { processed: 0, hasMore: false, error: "No saved column mappings — import at least once manually first" };
+  }
+
+  try {
+    // Invoke the provider-import Edge Function directly (same self-chaining pattern)
+    const importResponse = await fetch(`${SUPABASE_URL}/functions/v1/provider-import`, {
       method: "POST",
-      body: formData,
       headers: {
-        "Cookie": `shopify_app_session=${tenant.shopify_access_token}`,
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        shop_id: job.shop_id,
+        provider_id: providerId,
+        mappings: savedMappings.mappings,
+        duplicate_strategy: "skip",
+        current_offset: 0,
+      }),
     });
 
-    if (!response.ok) {
-      const text = await response.text();
-      return { processed: 1, hasMore: false, error: `Auto-fetch failed (${response.status}): ${text.slice(0, 200)}` };
+    if (!importResponse.ok) {
+      const text = await importResponse.text().catch(() => "");
+      return { processed: 0, hasMore: false, error: `Import Edge Function failed (${importResponse.status}): ${text.slice(0, 200)}` };
     }
 
-    const result = await response.json();
-    if (result.error) {
-      return { processed: 1, hasMore: false, error: result.error };
-    }
+    // Update next_scheduled_fetch for this provider
+    const fetchSchedule = provider.fetch_schedule || schedule || "24h";
+    const hours = parseInt(fetchSchedule) || 24;
+    const nextFetch = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    await db.from("providers").update({
+      next_scheduled_fetch: nextFetch,
+      last_fetched_at: new Date().toISOString(),
+    }).eq("id", providerId);
 
-    return {
-      processed: result.importedRows ?? result.totalRows ?? 1,
-      hasMore: false,
-    };
+    console.log(`[auto-fetch] Triggered import for provider ${provider.name}, next fetch: ${nextFetch}`);
+    return { processed: 1, hasMore: false };
   } catch (err) {
     return { processed: 0, hasMore: false, error: `Auto-fetch error: ${err instanceof Error ? err.message : String(err)}` };
   }
