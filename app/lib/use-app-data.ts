@@ -102,7 +102,9 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
   }, []);
 
   useEffect(() => {
-    poll(); // Initial poll
+    // Defer initial poll to avoid React hydration mismatch (#418)
+    // The first render uses loaderStats from the server; polling starts after hydration
+    const initialTimer = setTimeout(poll, 100);
 
     // Use slower polling interval — Realtime handles instant updates
     // Polling is just a safety net in case WebSocket disconnects
@@ -110,6 +112,7 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
     intervalRef.current = setInterval(poll, safeInterval);
 
     return () => {
+      clearTimeout(initialTimer);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [poll, pollInterval, activeJobs.length]);
