@@ -101,12 +101,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakesResult,
     ...statusCountResults
   ] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Get recently mapped products (last 20 products that have fitments)
     db.from("products")
       .select("id, title, fitment_status, updated_at")
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .not("fitment_status", "eq", "unmapped")
       .order("updated_at", { ascending: false })
       .limit(20),
@@ -120,6 +121,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.from("products")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
+        .neq("status", "staged")
         .eq("fitment_status", s)
     ),
   ]);

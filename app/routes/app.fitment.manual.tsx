@@ -31,11 +31,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Find the next product needing review (unmapped OR flagged) + stats
+  // IMPORTANT: exclude staged products — they live in the provider products view, not here
   const [totalResult, needsReviewResult, nextUnmappedResult, nextFlaggedResult] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]),
-    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
-    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged"]),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
   // Prioritize unmapped, then flagged

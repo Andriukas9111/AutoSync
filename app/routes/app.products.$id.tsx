@@ -161,17 +161,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .order("model", { ascending: true })
     .order("year_from", { ascending: true });
 
-  // Queue mode: also fetch progress stats and next product
+  // Queue mode: also fetch progress stats and next product (exclude staged)
   const totalQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId)
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged")
     : null;
   const unmappedQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged"])
     : null;
-  // Get next product needing review AFTER the current one (by ID sort order)
-  // Includes both unmapped and flagged products
   const nextQuery = isQueueMode
-    ? db.from("products").select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
     : null;
 
   const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
@@ -509,9 +507,9 @@ export default function ProductDetails() {
   const [showDescription, setShowDescription] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
 
-  // Auto-fetch suggestions when product changes
+  // Auto-fetch suggestions when product changes (only for non-staged products)
   useEffect(() => {
-    if (product.title) {
+    if (product.title && !isStaged) {
       suggestionFetcher.submit(
         JSON.stringify({
           title: product.title,
@@ -526,7 +524,7 @@ export default function ProductDetails() {
       setSuggestionsLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }, [product.id, isStaged]);
 
   const suggestions = suggestionFetcher.data?.suggestions ?? [];
   const hints = suggestionFetcher.data?.hints ?? [];

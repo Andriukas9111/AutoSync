@@ -44,13 +44,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .limit(1)
     .maybeSingle();
 
-  // Get live counts
+  // Get live counts — exclude staged products (they're in provider view, not extraction queue)
   const [totalRes, unmappedRes, autoRes, smartRes, flaggedRes] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
   ]);
 
   return data({
@@ -104,6 +104,7 @@ export async function action({ request }: ActionFunctionArgs) {
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
 
     const { data: job, error: jobError } = await db
@@ -176,6 +177,7 @@ export async function action({ request }: ActionFunctionArgs) {
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
+        .neq("status", "staged")
         .eq("fitment_status", "unmapped");
 
       // Get processed count directly from the job record
@@ -207,11 +209,12 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ done: true, reason: job?.status || "not_found" });
     }
 
-    // Get next chunk of unmapped products
+    // Get next chunk of unmapped products (exclude staged — they're in provider view)
     const { data: products } = await db
       .from("products")
       .select("id, title, description, handle, tags, product_type, vendor, sku")
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped")
       .order("id")
       .limit(CHUNK_SIZE);
@@ -526,11 +529,12 @@ export async function action({ request }: ActionFunctionArgs) {
       await db.from("tenants").update({ fitment_count: (tenant?.fitment_count ?? 0) + chunkFitments }).eq("shop_id", shopId);
     }
 
-    // Check if more products remain
+    // Check if more products remain (exclude staged)
     const { count: remaining } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
 
     return data({

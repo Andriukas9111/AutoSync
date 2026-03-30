@@ -715,11 +715,12 @@ async function processExtractChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const shopId = job.shop_id as string;
 
-  // Get unmapped products
+  // Get unmapped products — exclude staged (they're in provider view, not extraction queue)
   const { data: products, error: fetchErr } = await db
     .from("products")
     .select("id, title, description, tags, product_type, vendor, sku")
     .eq("shop_id", shopId)
+    .neq("status", "staged")
     .eq("fitment_status", "unmapped")
     .order("id")
     .limit(BATCH_SIZE);
@@ -775,11 +776,12 @@ async function processExtractChunk(
     }
   }
 
-  // Check if more remain
+  // Check if more remain (exclude staged)
   const { count } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
+    .neq("status", "staged")
     .eq("fitment_status", "unmapped");
 
   console.log(`[extract] Processed ${products.length}: ${autoMapped} auto, ${flagged} flagged, ${(count ?? 0)} remaining`);
