@@ -440,7 +440,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   if (!isAdminShop(session.shop)) {
     throw new Response("Forbidden", { status: 403 });
   }
@@ -742,10 +742,8 @@ function TenantPurgeActions({ shopId, shopName }: { shopId: string; shopName: st
           </Modal.Section>
         </Modal>
       )}
-      {fetcher.data?.message && (
-        <div style={{ position: "fixed", bottom: "16px", right: "16px", zIndex: 999 }}>
-          <Banner title={fetcher.data.message} tone={fetcher.data.ok ? "success" : "critical"} onDismiss={() => {}} />
-        </div>
+      {fetcher.data?.message && !confirmAction && (
+        <Banner title={fetcher.data.message} tone={fetcher.data.ok ? "success" : "critical"} />
       )}
     </>
   );
