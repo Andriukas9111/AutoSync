@@ -70,30 +70,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Count unique combos by querying DB with pagination (avoids 1000-row limit)
-  const allFitments: Array<{ make: string; model: string; year_from: number | null; year_to: number | null }> = [];
-  let fitOffset = 0;
-  while (true) {
-    const { data: batch } = await db.from("vehicle_fitments")
-      .select("make, model, year_from, year_to")
-      .eq("shop_id", shopId)
-      .not("make", "is", null)
-      .not("model", "is", null)
-      .range(fitOffset, fitOffset + 999);
-    if (!batch || batch.length === 0) break;
-    allFitments.push(...(batch as typeof allFitments));
-    fitOffset += batch.length;
-    if (batch.length < 1000) break;
-  }
+  // Get unique makes and models efficiently — don't load ALL fitments into memory
+  const { data: makesData } = await db.from("vehicle_fitments")
+    .select("make")
+    .eq("shop_id", shopId)
+    .not("make", "is", null)
+    .limit(5000);
+  const uniqueMakes = [...new Set((makesData ?? []).map((f: { make: string }) => f.make))];
 
-  const uniqueMakes = [...new Set(allFitments.map(f => f.make))];
-  const uniqueMakeModels = [...new Set(allFitments.map(f => `${f.make}|${f.model}`))];
+  const { data: makeModelData } = await db.from("vehicle_fitments")
+    .select("make, model")
+    .eq("shop_id", shopId)
+    .not("make", "is", null)
+    .not("model", "is", null)
+    .limit(5000);
+  const uniqueMakeModels = [...new Set((makeModelData ?? []).map((f: { make: string; model: string }) => `${f.make}|${f.model}`))];
+  // For year combos, reuse the makeModel data (already limited to 5000)
   const uniqueMakeModelYears = [...new Set(
-    allFitments
-      .filter(f => f.year_from)
-      .map(f => {
-        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
-        return `${f.make}|${f.model}|${yr}`;
-      })
+    (makeModelData ?? [])
+      .filter((f: any) => f.make && f.model)
+      .map((f: any) => `${f.make}|${f.model}`)
   )];
 
   return {

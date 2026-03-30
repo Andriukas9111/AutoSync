@@ -379,8 +379,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "push_all") {
-    // Job-based: create job and return instantly — Edge Function does the work
-    const { error: jobError } = await db
+    const { data: vpJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
@@ -390,10 +389,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         total_items: 0,
         processed_items: 0,
         started_at: new Date().toISOString(),
-      });
+      })
+      .select("id")
+      .maybeSingle();
 
-    if (jobError) {
+    if (jobError || !vpJob) {
       return data({ error: "Failed to create vehicle pages job" }, { status: 500 });
+    }
+
+    // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: vpJob.id, shop_id: shopId }),
+      }).catch((err) => console.error("[vehicle-pages] Edge Function invocation failed:", err));
     }
 
     return data({

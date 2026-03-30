@@ -144,7 +144,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fitmentCountRes, productCountRes, specsCountRes,
     collectionsCountRes,
   ] = await Promise.all([
-    db.from("tenants").select("*").order("installed_at", { ascending: false }),
+    db.from("tenants").select("shop_id, shop_domain, plan, plan_status, product_count, fitment_count, installed_at, uninstalled_at, updated_at, online_store_publication_id").order("installed_at", { ascending: false }).limit(500),
     db.from("ymme_makes").select("*", { count: "exact", head: true }),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
     db.from("ymme_engines").select("*", { count: "exact", head: true }),
