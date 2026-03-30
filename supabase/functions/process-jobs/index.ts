@@ -500,24 +500,36 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
     }
 
-    // Step 2: Atomically claim the job — only succeeds if still unclaimed.
-    // Adding locked_at filter ensures two workers can't claim the same job.
-    const { data: claimedJob, error: lockError } = await db
-      .from("sync_jobs")
-      .update({ locked_at: lockTime, status: "running" })
-      .eq("id", candidate.id)
-      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
-      .select("*")
-      .maybeSingle();
-
-    if (lockError) {
-      console.error("[process-jobs] Lock error:", lockError.message);
-      return new Response(JSON.stringify({ error: lockError.message }), { status: 500 });
+    // Step 2: Claim the job — set locked_at and status to running
+    // For direct invocation (targetJobId), skip the stale lock check since we trust the caller
+    if (targetJobId) {
+      // Direct invocation — just lock it unconditionally
+      await db.from("sync_jobs")
+        .update({ locked_at: lockTime, status: "running" })
+        .eq("id", candidate.id);
+    } else {
+      // Queue-based — only claim if not already locked by another worker
+      const { data: lockResult } = await db.from("sync_jobs")
+        .update({ locked_at: lockTime, status: "running" })
+        .eq("id", candidate.id)
+        .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+        .select("id")
+        .maybeSingle();
+      if (!lockResult) {
+        return new Response(JSON.stringify({ status: "idle", message: "Job already claimed" }));
+      }
     }
 
-    if (!claimedJob) {
-      // Another worker already claimed this job — that's fine, just exit
-      return new Response(JSON.stringify({ status: "idle", message: "Job already claimed" }));
+    // Fetch the full job record
+    const { data: claimedJob, error: lockError } = await db
+      .from("sync_jobs")
+      .select("*")
+      .eq("id", candidate.id)
+      .maybeSingle();
+
+    if (lockError || !claimedJob) {
+      console.error("[process-jobs] Job fetch error:", lockError?.message);
+      return new Response(JSON.stringify({ error: "Failed to fetch job" }), { status: 500 });
     }
 
     const job = claimedJob;
