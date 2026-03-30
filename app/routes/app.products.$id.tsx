@@ -506,6 +506,7 @@ export default function ProductDetails() {
   const [statusValue, setStatusValue] = useState(product.fitment_status);
   const [showDescription, setShowDescription] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
+  const [showProviderExpanded, setShowProviderExpanded] = useState(false);
 
   // Auto-fetch suggestions when product changes (only for non-staged products)
   useEffect(() => {
@@ -629,8 +630,8 @@ export default function ProductDetails() {
 
   const cleanDescription = product.description
     ? product.description
-        // 1. Decode HTML entities first (&lt; → <, &amp; → &, etc.)
-        .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+        // 1. Decode HTML entities first (&lt; → <, &nbsp; → space, etc.)
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
         .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
         // 2. Then strip HTML tags
         .replace(/<[^>]*>/g, " ")
@@ -809,11 +810,11 @@ export default function ProductDetails() {
                 <Divider />
 
                 {/* Key product details — responsive grid */}
-                <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 6 }} gap="400">
+                <InlineGrid columns={{ xs: 2, sm: 3, md: 5 }} gap="400">
                   {product.vendor && (
                     <BlockStack gap="050">
                       <Text as="span" variant="bodySm" tone="subdued">Vendor</Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{product.vendor}</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold" truncate>{product.vendor}</Text>
                     </BlockStack>
                   )}
                   {product.price && (
@@ -1428,22 +1429,25 @@ export default function ProductDetails() {
                     </Banner>
                   )}
 
-                  <div style={{ maxHeight: "400px", overflowY: "auto", borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
+                  {(() => {
+                    const allFields = Object.entries(product.raw_data as Record<string, unknown>)
+                      .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                      .filter(([, v]) => typeof v !== "object")
+                      .sort(([a], [b]) => {
+                        const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "cost_price", "status", "availability", "weight", "barcode"];
+                        const ai = priority.indexOf(a);
+                        const bi = priority.indexOf(b);
+                        if (ai !== -1 && bi !== -1) return ai - bi;
+                        if (ai !== -1) return -1;
+                        if (bi !== -1) return 1;
+                        return a.localeCompare(b);
+                      });
+                    const shown = showProviderExpanded ? allFields : allFields.slice(0, 12);
+                    return (
+                      <>
+                  <div style={{ borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)" }}>
                     <BlockStack gap="0">
-                      {Object.entries(product.raw_data)
-                        .filter(([, v]) => v !== null && v !== undefined && v !== "")
-                        .filter(([, v]) => typeof v !== "object")
-                        // Sort: important fields first (name, desc, image, price, code, status, link)
-                        .sort(([a], [b]) => {
-                          const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "status", "availability", "link", "weight"];
-                          const ai = priority.indexOf(a);
-                          const bi = priority.indexOf(b);
-                          if (ai !== -1 && bi !== -1) return ai - bi;
-                          if (ai !== -1) return -1;
-                          if (bi !== -1) return 1;
-                          return a.localeCompare(b);
-                        })
-                        .slice(0, 100)
+                      {shown
                         .map(([key, value], i) => {
                           // Decode HTML entities for display
                           let display = String(value)
@@ -1473,6 +1477,17 @@ export default function ProductDetails() {
                         })}
                     </BlockStack>
                   </div>
+                  {allFields.length > 12 && (
+                    <Button
+                      variant="plain"
+                      onClick={() => setShowProviderExpanded(!showProviderExpanded)}
+                    >
+                      {showProviderExpanded ? `Show less` : `Show all ${allFields.length} fields`}
+                    </Button>
+                  )}
+                      </>
+                    );
+                  })()}
                 </BlockStack>
               </Card>
             )}
