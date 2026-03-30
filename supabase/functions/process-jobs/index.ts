@@ -853,6 +853,7 @@ async function processPushChunk(
     .from("products")
     .select("id, shopify_product_id")
     .eq("shop_id", shopId)
+    .neq("status", "staged")
     .not("fitment_status", "eq", "unmapped")
     .not("shopify_product_id", "is", null)
     .order("id")
@@ -1064,11 +1065,12 @@ async function processPushChunk(
     console.error("[push] Sync active makes failed:", err);
   }
 
-  // Check total mapped — if we've processed past all of them, we're done
+  // Check total mapped (exclude staged) — if we've processed past all, we're done
   const { count: totalMapped } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
+    .neq("status", "staged")
     .not("fitment_status", "eq", "unmapped");
 
   const totalProcessedNow = alreadyProcessed + processed;
@@ -1885,7 +1887,7 @@ async function processBulkPush(
   while (true) {
     const { data: batch } = await db.from("products")
       .select("id, shopify_product_id")
-      .eq("shop_id", shopId).not("fitment_status", "eq", "unmapped")
+      .eq("shop_id", shopId).neq("status", "staged").not("fitment_status", "eq", "unmapped")
       .range(pOffset, pOffset + 999);
     if (!batch || batch.length === 0) break;
     allProducts.push(...batch);

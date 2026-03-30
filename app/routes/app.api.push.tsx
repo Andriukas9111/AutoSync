@@ -49,7 +49,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .from("sync_jobs")
     .select("id, type")
     .eq("shop_id", shopId)
-    .in("type", ["push", "cleanup"])
+    .in("type", ["push", "bulk_push", "cleanup"])
     .in("status", ["running", "pending", "processing"])
     .maybeSingle();
 
@@ -68,17 +68,27 @@ export async function action({ request }: ActionFunctionArgs) {
     .eq("shop_id", shopId)
     .not("fitment_status", "eq", "unmapped");
 
-  // Create a sync job record — Edge Function picks this up via pg_cron
+  // Auto-select bulk push for plans that support it (Growth+)
+  // Bulk operations are 10-20x faster for large catalogs
+  let useBulk = false;
+  try {
+    await assertFeature(shopId, "bulkOperations");
+    useBulk = true;
+  } catch {
+    // Plan doesn't support bulk ops — use regular push
+  }
+
+  const jobType = useBulk ? "bulk_push" : "push";
   const { data: job, error: jobError } = await db
     .from("sync_jobs")
     .insert({
       shop_id: shopId,
-      type: "push",
-      status: "pending",
+      type: jobType,
+      status: useBulk ? "running" : "pending",
       progress: 0,
       total_items: mappedCount ?? 0,
       processed_items: 0,
-      metadata: JSON.stringify({ pushTags, pushMetafields }),
+      metadata: JSON.stringify({ pushTags, pushMetafields, method: useBulk ? "bulk_operations" : "individual" }),
       started_at: new Date().toISOString(),
     })
     .select("id")
