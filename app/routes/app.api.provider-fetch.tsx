@@ -259,15 +259,61 @@ export async function action({ request }: ActionFunctionArgs) {
         return data({ error: "No remote file path configured. Go to Settings to add the path to your product file." }, { status: 400 });
       }
 
+      const ftpPassword = (() => { const p = String(config.password ?? ""); return isEncrypted(p) ? decrypt(p) : p; })();
+      const ftpConfig = {
+        host,
+        port: Number(config.port) || 21,
+        username: String(config.username ?? ""),
+        password: ftpPassword,
+        remotePath,
+        protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
+      };
+
+      // If remotePath looks like a directory (no file extension), list files first
+      const hasFileExtension = /\.\w{2,5}$/.test(remotePath);
+      if (!hasFileExtension) {
+        try {
+          const listing = await testFtpConnection(ftpConfig);
+          if (!listing.success) {
+            return data({ error: listing.error || "FTP connection failed" }, { status: 500 });
+          }
+          const files = (listing.files || []).filter(f => !f.isDirectory);
+          if (files.length === 0) {
+            return data({ error: `No files found in ${remotePath}` }, { status: 404 });
+          }
+          return data({
+            ftpFiles: files.map(f => ({
+              name: f.name,
+              size: f.size,
+              sizeFormatted: f.size > 1024 * 1024
+                ? `${(f.size / 1024 / 1024).toFixed(1)}MB`
+                : `${(f.size / 1024).toFixed(0)}KB`,
+              modified: f.modifiedAt?.toISOString() ?? null,
+            })),
+            directory: remotePath,
+            message: `Found ${files.length} files in ${remotePath}. Select a file to import.`,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "FTP directory listing failed";
+          return data({ error: message }, { status: 500 });
+        }
+      }
+
+      // Allow overriding the file path via ftp_file param (for file selection from listing)
+      let ftpRemotePath = remotePath;
+      const selectedFile = formData.get("ftp_file") as string | null;
+      if (selectedFile) {
+        const sanitizedFile = selectedFile.replace(/[/\\]/g, "").replace(/\.\./g, "");
+        if (!sanitizedFile || !/^[a-zA-Z0-9._\- ()]+$/.test(sanitizedFile)) {
+          return data({ error: "Invalid file name." }, { status: 400 });
+        }
+        const dir = ftpRemotePath.replace(/\/[^/]+\.[^/]+$/, "") || ftpRemotePath;
+        ftpRemotePath = dir.endsWith("/") ? dir + sanitizedFile : dir + "/" + sanitizedFile;
+        ftpConfig.remotePath = ftpRemotePath;
+      }
+
       try {
-        const result = await fetchFromFtp({
-          host,
-          port: Number(config.port) || 21,
-          username: String(config.username ?? ""),
-          password: (() => { const p = String(config.password ?? ""); return isEncrypted(p) ? decrypt(p) : p; })(),
-          remotePath,
-          protocol: String(config.protocol ?? "ftp") as "ftp" | "sftp" | "ftps",
-        });
+        const result = await fetchFromFtp(ftpConfig);
 
         if (!result.content || result.content.trim().length === 0) {
           return data({ error: "FTP download returned empty file." });

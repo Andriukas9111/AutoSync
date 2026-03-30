@@ -158,6 +158,10 @@ export default function ProviderImportWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // FTP file selection (when remotePath is a directory)
+  const [ftpFiles, setFtpFiles] = useState<{ name: string; size: number; sizeFormatted: string; modified: string | null }[] | null>(null);
+  const [selectedFtpFile, setSelectedFtpFile] = useState<string | null>(null);
+
   // Preview state
   const [preview, setPreview] = useState<{
     fileName: string;
@@ -356,7 +360,7 @@ export default function ProviderImportWizard() {
     }
   }, [provider.id]);
 
-  const handleFetchFromApi = useCallback(async () => {
+  const handleFetchFromApi = useCallback(async (ftpFileOverride?: string) => {
     setFetchingApi(true);
     setError(null);
 
@@ -364,6 +368,8 @@ export default function ProviderImportWizard() {
       const formData = new FormData();
       formData.set("provider_id", provider.id);
       formData.set("_action", "fetch");
+      const ftpFile = ftpFileOverride || selectedFtpFile;
+      if (ftpFile) formData.set("ftp_file", ftpFile);
 
       const response = await fetch("/app/api/provider-fetch", {
         method: "POST",
@@ -393,6 +399,14 @@ export default function ProviderImportWizard() {
         return;
       }
 
+      // Handle FTP directory listing — show file picker
+      if (result.ftpFiles) {
+        setFtpFiles(result.ftpFiles);
+        setFetchingApi(false);
+        return;
+      }
+
+      setFtpFiles(null);
       setPreview(result.preview);
 
       const enrichedMappings: ColumnMappingUI[] = (result.mappings || []).map(
@@ -417,7 +431,7 @@ export default function ProviderImportWizard() {
     } finally {
       setFetchingApi(false);
     }
-  }, [provider.id]);
+  }, [provider.id, selectedFtpFile]);
 
   // ---------------------------------------------------------------------------
   // Auto-fetch on mount for API/FTP providers
@@ -758,15 +772,47 @@ export default function ProviderImportWizard() {
                     </Banner>
                   )}
 
+                  {/* FTP file picker — shown when remotePath is a directory */}
+                  {ftpFiles && ftpFiles.length > 0 && (
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Select a file to import ({ftpFiles.length} available):
+                      </Text>
+                      <BlockStack gap="100">
+                        {ftpFiles.map((f) => (
+                          <div
+                            key={f.name}
+                            onClick={() => setSelectedFtpFile(f.name)}
+                            style={{
+                              padding: "8px 12px",
+                              borderRadius: "var(--p-border-radius-200)",
+                              border: `1px solid ${selectedFtpFile === f.name ? "var(--p-color-border-emphasis)" : "var(--p-color-border-secondary)"}`,
+                              background: selectedFtpFile === f.name ? "var(--p-color-bg-surface-selected)" : "var(--p-color-bg-surface)",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text as="span" variant="bodyMd" fontWeight={selectedFtpFile === f.name ? "semibold" : "regular"}>
+                              {f.name}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">{f.sizeFormatted}</Text>
+                          </div>
+                        ))}
+                      </BlockStack>
+                    </BlockStack>
+                  )}
+
                   <InlineStack gap="300">
                     <Button
                       variant="primary"
-                      onClick={handleFetchFromApi}
+                      onClick={() => handleFetchFromApi()}
                       loading={fetchingApi}
-                      disabled={!cfg.host || !cfg.remotePath || fetchingApi || testingConnection}
+                      disabled={!cfg.host || !cfg.remotePath || fetchingApi || testingConnection || (ftpFiles !== null && !selectedFtpFile)}
                       icon={ImportIcon}
                     >
-                      Fetch Products
+                      {ftpFiles && selectedFtpFile ? `Fetch ${selectedFtpFile}` : "Fetch Products"}
                     </Button>
                     <Button
                       onClick={handleTestConnection}
