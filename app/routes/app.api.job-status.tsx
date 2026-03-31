@@ -111,6 +111,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     vehicleCountQueries.synced,
     vehicleCountQueries.pending,
     vehicleCountQueries.failed,
+    // Fitment count — count fitments linked to non-staged products only
+    // Using shop_id filter + checking product status would require a join,
+    // but since ALL fitments belong to active products (staged products don't have fitments
+    // created through the normal flow), the shop_id filter is sufficient.
+    // Provider imports create staged products WITHOUT fitments — fitments are only added
+    // after products are activated and mapped.
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),

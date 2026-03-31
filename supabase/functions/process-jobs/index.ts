@@ -871,15 +871,22 @@ async function processPushChunk(
     console.log(`[push] Ensured metafield definitions exist for ${shopId}`);
   }
 
+  // Get the Online Store publication ID for this tenant
+  const { data: tenantPub } = await db
+    .from("tenants")
+    .select("online_store_publication_id")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  const publicationId = tenantPub?.online_store_publication_id || null;
+
   // Get products with fitments — use OFFSET to skip already-processed ones
-  // Filter out products without shopify_product_id to avoid gid://shopify/Product/null
+  // Include products WITHOUT shopify_product_id — we'll create them on Shopify
   const { data: products } = await db
     .from("products")
-    .select("id, shopify_product_id")
+    .select("id, title, description, sku, price, compare_at_price, vendor, product_type, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
     .not("fitment_status", "eq", "unmapped")
-    .not("shopify_product_id", "is", null)
     .order("id")
     .range(alreadyProcessed, alreadyProcessed + BATCH_SIZE - 1);
 
@@ -913,7 +920,95 @@ async function processPushChunk(
       continue;
     }
 
-    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+    let gid = product.shopify_gid || (product.shopify_product_id ? `gid://shopify/Product/${product.shopify_product_id}` : null);
+
+    // If product doesn't exist on Shopify yet, create it
+    if (!gid) {
+      try {
+        const createRes = await fetch(apiUrl, {
+          method: "POST", headers: gqlHeaders,
+          body: JSON.stringify({
+            query: `mutation productCreate($product: ProductCreateInput!) {
+              productCreate(product: $product) {
+                product { id }
+                userErrors { field message }
+              }
+            }`,
+            variables: {
+              product: {
+                title: (product as Record<string, unknown>).title || "Untitled",
+                descriptionHtml: (product as Record<string, unknown>).description || "",
+                vendor: (product as Record<string, unknown>).vendor || "",
+                productType: (product as Record<string, unknown>).product_type || "",
+                status: "ACTIVE",
+              },
+            },
+          }),
+        });
+        const createJson = await createRes.json();
+        await handleThrottle(createJson);
+        const createdProduct = createJson?.data?.productCreate?.product;
+        const createErrors = createJson?.data?.productCreate?.userErrors;
+        if (createdProduct?.id) {
+          gid = createdProduct.id;
+          const numericId = gid!.split("/").pop();
+          // Save Shopify ID back to our database
+          await db.from("products").update({
+            shopify_product_id: numericId,
+            shopify_gid: gid,
+            updated_at: new Date().toISOString(),
+          }).eq("id", product.id);
+
+          // Set price via variant update
+          const varRes = await fetch(apiUrl, {
+            method: "POST", headers: gqlHeaders,
+            body: JSON.stringify({ query: `{ product(id: "${gid}") { variants(first: 1) { nodes { id } } } }` }),
+          });
+          const varJson = await varRes.json();
+          const variantId = varJson?.data?.product?.variants?.nodes?.[0]?.id;
+          if (variantId && (product as Record<string, unknown>).price) {
+            await fetch(apiUrl, {
+              method: "POST", headers: gqlHeaders,
+              body: JSON.stringify({
+                query: `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+                  productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } }
+                }`,
+                variables: {
+                  productId: gid,
+                  variants: [{
+                    id: variantId,
+                    price: String((product as Record<string, unknown>).price || "0"),
+                    sku: String((product as Record<string, unknown>).sku || ""),
+                    ...((product as Record<string, unknown>).compare_at_price ? { compareAtPrice: String((product as Record<string, unknown>).compare_at_price) } : {}),
+                  }],
+                },
+              }),
+            });
+          }
+
+          // Publish to Online Store
+          if (publicationId) {
+            await fetch(apiUrl, {
+              method: "POST", headers: gqlHeaders,
+              body: JSON.stringify({
+                query: `mutation($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }`,
+                variables: { id: gid, input: [{ publicationId }] },
+              }),
+            });
+          }
+
+          console.log(`[push] Created product on Shopify: ${(product as Record<string, unknown>).title} -> ${numericId}`);
+        } else {
+          console.error(`[push] Failed to create product: ${(product as Record<string, unknown>).title}`, createErrors);
+          processed++;
+          continue;
+        }
+      } catch (err) {
+        console.error(`[push] Product creation error for ${product.id}:`, err);
+        processed++;
+        continue;
+      }
+    }
 
     // Build tags
     const tags: string[] = [];

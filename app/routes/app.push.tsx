@@ -194,14 +194,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .eq("shop_id", shopId)
     .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
 
-  // Create push job — Edge Function will process it
+  // Helper to fire Edge Function (fire-and-forget)
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const fireEdgeFunction = (jobId: string) => {
+    if (supabaseUrl && supabaseKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: jobId, shop_id: shopId }),
+      }).catch((err) => console.error("[push] Edge Function invocation failed:", err));
+    }
+  };
+
+  // Create push job + fire Edge Function immediately
   if (pushTags || pushMetafields) {
-    const { error: jobError } = await db
+    const { data: pushJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "push",
-        status: "running",
+        status: "pending",
         progress: 0,
         total_items: mappedCount ?? 0,
         processed_items: 0,
@@ -211,30 +224,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           pushMetafields,
           autoActivateMakes,
         }),
-      });
+      })
+      .select("id")
+      .single();
 
     if (jobError) {
       return data({ error: "Failed to create push job" }, { status: 500 });
     }
+    if (pushJob) fireEdgeFunction(pushJob.id);
   }
 
-  // Create collections job — Edge Function will process it
+  // Create collections job + fire Edge Function immediately
   if (createCollections) {
     // Estimate total collections needed for the progress bar
     const { count: existingCollections } = await db
       .from("collection_mappings")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId);
-    // Use existing count as starting estimate — Edge Function will set accurate total on first tick
-    // NEVER use mappedCount here — that's product count, not collection count
-    const estimatedTotal = (existingCollections ?? 0) + 50; // +50 for expected new ones
+    const estimatedTotal = (existingCollections ?? 0) + 50;
 
-    const { error: jobError } = await db
+    const { data: colJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "collections",
-        status: "running",
+        status: "pending",
         progress: 0,
         total_items: estimatedTotal,
         processed_items: 0,
@@ -243,14 +257,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           strategy,
           seoEnabled,
         }),
-      });
+      })
+      .select("id")
+      .single();
 
     if (jobError) {
       return data({ error: "Failed to create collections job" }, { status: 500 });
     }
+    if (colJob) fireEdgeFunction(colJob.id);
   }
 
-  // Return immediately — Edge Function does the work
+  // Return immediately — Edge Function processes in background
   return data({
     success: true,
     jobCreated: true,
