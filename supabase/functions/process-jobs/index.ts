@@ -1682,28 +1682,27 @@ async function processVehiclePagesChunk(
     const CREATE_DEF = `mutation {
       metaobjectDefinitionCreate(definition: {
         type: "$app:vehicle_spec"
-        name: "Vehicle Spec"
+        name: "Vehicle Specification"
         fieldDefinitions: [
           { key: "make", name: "Make", type: "single_line_text_field" }
           { key: "model", name: "Model", type: "single_line_text_field" }
-          { key: "variant", name: "Variant", type: "single_line_text_field" }
+          { key: "generation", name: "Generation", type: "single_line_text_field" }
+          { key: "engine_name", name: "Engine", type: "single_line_text_field" }
           { key: "year_range", name: "Year Range", type: "single_line_text_field" }
-          { key: "engine_code", name: "Engine Code", type: "single_line_text_field" }
           { key: "displacement", name: "Displacement", type: "single_line_text_field" }
           { key: "power", name: "Power", type: "single_line_text_field" }
-          { key: "torque", name: "Torque", type: "single_line_text_field" }
           { key: "fuel_type", name: "Fuel Type", type: "single_line_text_field" }
           { key: "body_type", name: "Body Type", type: "single_line_text_field" }
-          { key: "drive_type", name: "Drive Type", type: "single_line_text_field" }
-          { key: "transmission", name: "Transmission", type: "single_line_text_field" }
-          { key: "full_specs", name: "Full Specs", type: "json" }
+          { key: "seo_title", name: "SEO Title", type: "single_line_text_field" }
+          { key: "seo_description", name: "SEO Description", type: "multi_line_text_field" }
+          { key: "product_count", name: "Product Count", type: "number_integer" }
         ]
         capabilities: {
           publishable: { enabled: true }
-          renderable: { enabled: true, data: { metaTitleKey: "variant", metaDescriptionKey: "make" } }
+          renderable: { enabled: true, data: { metaTitleKey: "seo_title", metaDescriptionKey: "seo_description" } }
           onlineStore: { enabled: true, data: { urlHandle: "vehicle-specs" } }
         }
-        access: { storefront: PRIVATE }
+        access: { storefront: PUBLIC_READ }
       }) {
         metaobjectDefinition { type }
         userErrors { field message }
@@ -1731,20 +1730,22 @@ async function processVehiclePagesChunk(
       ? `${spec.year_from}–${spec.year_to}`
       : spec.year_from ? `${spec.year_from}+` : "";
 
+    // Field keys must match the metaobject definition created by the app
+    // Definition fields: make, model, generation, engine_name, year_range, displacement, power, fuel_type, body_type, seo_title, seo_description, product_count
+    const seoTitle = `${spec.make_name} ${spec.model_name} ${spec.variant || ""} Parts | Fitment Verified`.trim();
+    const seoDesc = `Performance parts for ${spec.make_name} ${spec.model_name} ${spec.variant || ""} (${yearRange}). ${rawSpecs["Engine code"] || ""} engine. Fitment verified.`.trim();
     const fields = [
       { key: "make", value: spec.make_name || "" },
       { key: "model", value: spec.model_name || "" },
-      { key: "variant", value: spec.variant || "" },
+      { key: "generation", value: spec.variant || "" },
+      { key: "engine_name", value: spec.variant || rawSpecs["Engine code"] || "" },
       { key: "year_range", value: yearRange },
-      { key: "engine_code", value: rawSpecs["Engine code"] || rawSpecs["engine_code"] || "" },
       { key: "displacement", value: rawSpecs["Engine displacement"] || rawSpecs["displacement_cc"] || "" },
       { key: "power", value: rawSpecs["Max. power"] || rawSpecs["power_hp"] || "" },
-      { key: "torque", value: rawSpecs["Max. torque"] || rawSpecs["torque_nm"] || "" },
       { key: "fuel_type", value: rawSpecs["Fuel type"] || rawSpecs["fuel_type"] || "" },
       { key: "body_type", value: rawSpecs["Body type"] || rawSpecs["body_type"] || "" },
-      { key: "drive_type", value: rawSpecs["Drive"] || rawSpecs["drive_type"] || "" },
-      { key: "transmission", value: rawSpecs["Gearbox"] || rawSpecs["transmission"] || "" },
-      { key: "full_specs", value: JSON.stringify(rawSpecs) },
+      { key: "seo_title", value: seoTitle },
+      { key: "seo_description", value: seoDesc },
     ].filter(f => f.value);
 
     try {
