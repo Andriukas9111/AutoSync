@@ -19,24 +19,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
 
-  // Get the offline Shopify access token for background API calls (Edge Functions)
-  // authenticate.admin() returns online session — we need the offline token from Prisma
+  // Get the Shopify access token for background API calls (Edge Functions)
+  // With expiringOfflineAccessTokens, we need the REFRESHED offline token from Prisma
   let offlineToken: string | null = null;
   try {
     const prisma = (await import("../db.server")).default;
+    // The Shopify library auto-refreshes the offline token during authenticate.admin()
+    // Read it AFTER authentication to get the fresh token
     const offlineSession = await prisma.session.findFirst({
       where: { shop: shopId, isOnline: false },
       select: { accessToken: true },
     });
     offlineToken = offlineSession?.accessToken ?? null;
-    if (!offlineToken) {
-      // Fallback: try online session token
-      offlineToken = session.accessToken ?? null;
-    }
-    if (process.env.NODE_ENV !== "production") console.log("[app.tsx] Token:", offlineToken ? `found (${offlineToken.length} chars)` : "not found");
-  } catch (tokenErr) {
-    console.error("[app.tsx] Token fetch error:", tokenErr instanceof Error ? tokenErr.message : tokenErr);
-    offlineToken = session.accessToken ?? null;
+  } catch {
+    // Prisma may fail — fall back to session token
+  }
+  if (!offlineToken && session.accessToken) {
+    offlineToken = session.accessToken;
   }
 
   // Ensure tenant record exists (upsert on every load)
@@ -48,23 +47,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (!tenant) {
     // First-time install — admin shops get enterprise, others get free
-    const { error: upsertError } = await db.from("tenants").upsert({
+    const newTenant: Record<string, unknown> = {
       shop_id: shopId,
       shop_domain: shopId,
       plan: (isAdmin ? "enterprise" : "free") as PlanTier,
       plan_status: "active",
       installed_at: new Date().toISOString(),
-      shopify_access_token: offlineToken,
-    });
+    };
+    if (offlineToken) newTenant.shopify_access_token = offlineToken;
+    const { error: upsertError } = await db.from("tenants").upsert(newTenant);
     if (upsertError) {
       console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
   } else {
     // Always update the access token + clear uninstalled state on re-install
+    // NEVER overwrite a valid token with null — only update if we have a new one
     const updates: Record<string, unknown> = {
-      shopify_access_token: offlineToken,
       updated_at: new Date().toISOString(),
     };
+    if (offlineToken) {
+      updates.shopify_access_token = offlineToken;
+    }
     // Only clear uninstall state if previously uninstalled (don't reset plan_status on every visit)
     if (tenant.uninstalled_at) {
       updates.uninstalled_at = null;
