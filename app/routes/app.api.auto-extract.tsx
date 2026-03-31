@@ -100,6 +100,18 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: "An extraction job is already running", jobId: running.id }, { status: 409 });
     }
 
+    // Refresh tenant token so Edge Function gets a fresh one
+    try {
+      const prisma = (await import("../db.server")).default;
+      const offlineSession = await prisma.session.findFirst({
+        where: { shop: shopId, isOnline: false },
+        select: { accessToken: true },
+      });
+      if (offlineSession?.accessToken) {
+        await db.from("tenants").update({ shopify_access_token: offlineSession.accessToken }).eq("shop_id", shopId);
+      }
+    } catch { /* best effort */ }
+
     const { count: unmappedCount } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
