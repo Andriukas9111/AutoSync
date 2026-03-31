@@ -842,19 +842,31 @@ async function processPushChunk(
     // Metafield definitions — app-owned namespace only ($app:vehicle_fitment)
     // compatibility but do NOT get definitions (to avoid duplicate filter entries)
     const defs = [
-      { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json" },
-      { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field" },
-      { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field" },
-      { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field" },
-      { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field" },
+      { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json", filterable: false },
+      { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", filterable: true },
     ];
     for (const d of defs) {
+      const { filterable, ...defInput } = d;
       try {
-        await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
-          query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message } } }`,
-          variables: { def: { ...d, ownerType: "PRODUCT", access: { storefront: "PUBLIC_READ" } } },
+        // Create definition with storefront access + pin + filter
+        const createRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+          query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message code } } }`,
+          variables: { def: { ...defInput, ownerType: "PRODUCT", pin: true, access: { storefront: "PUBLIC_READ" }, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
         })});
-      } catch (_e) { /* ignore — definition may already exist */ }
+        const createJson = await createRes.json();
+        const userErrors = createJson?.data?.metafieldDefinitionCreate?.userErrors || [];
+        // If definition already exists (TAKEN), update it to ensure pin + filter are enabled
+        if (userErrors.some((e: { code: string }) => e.code === "TAKEN" || e.code === "ALREADY_EXISTS")) {
+          const resolvedNs = createJson?.data?.metafieldDefinitionCreate?.userErrors?.[0]?.message?.match(/namespace: ([\w-]+)/)?.[1] || d.namespace;
+          await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+            query: `mutation($def: MetafieldDefinitionUpdateInput!) { metafieldDefinitionUpdate(definition: $def) { updatedDefinition { id } userErrors { message } } }`,
+            variables: { def: { namespace: d.namespace, key: d.key, ownerType: "PRODUCT", pin: true, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
+          })});
+        }
+      } catch (_e) { /* ignore — best effort */ }
     }
     console.log(`[push] Ensured metafield definitions exist for ${shopId}`);
   }

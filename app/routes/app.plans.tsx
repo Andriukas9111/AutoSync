@@ -911,6 +911,26 @@ export default function Plans() {
 // Build Your Plan — Enterprise extension with configurable resource scaling
 // ---------------------------------------------------------------------------
 
+/** All Enterprise features shown as badges */
+const INCLUDED_FEATURES = [
+  "Push Tags & Metafields",
+  "Auto Extraction",
+  "Bulk Operations",
+  "API Integration",
+  "FTP Import",
+  "All 7 Widgets",
+  "Smart Collections (Full)",
+  "Pricing Engine",
+  "Vehicle Pages (SEO)",
+  "CSS Widget Customisation",
+  "Analytics with Export",
+  "DVLA Plate Lookup",
+  "VIN Decode",
+  "My Garage",
+  "Wheel Finder",
+  "Collection SEO Images",
+];
+
 function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
   currentPlan: PlanTier;
   onSubscribe: (selection: { products: number; providers: number; fitments: number; scheduledFetches: number }) => void;
@@ -941,61 +961,100 @@ function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
 
   return (
     <Card>
-      <BlockStack gap="400">
+      <BlockStack gap="500">
+        {/* Header */}
         <InlineStack align="space-between" blockAlign="center">
           <InlineStack gap="200" blockAlign="center">
             <IconBadge icon={StarFilledIcon} color="var(--p-color-icon-emphasis)" />
             <BlockStack gap="050">
-              <Text as="h2" variant="headingMd" fontWeight="semibold">Build Your Plan</Text>
-              <Text as="span" variant="bodySm" tone="subdued">Enterprise + extra resources</Text>
+              <Text as="h2" variant="headingLg" fontWeight="bold">Build Your Plan</Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                All Enterprise features included. Scale your resources beyond standard plans.
+              </Text>
             </BlockStack>
           </InlineStack>
           <BlockStack gap="050" inlineAlign="end">
             <Text as="p" variant="headingXl" fontWeight="bold">${String(totalPrice)}</Text>
-            <Text as="span" variant="bodySm" tone="subdued">/month</Text>
+            <Text as="span" variant="bodySm" tone="subdued">USD/month</Text>
           </BlockStack>
         </InlineStack>
 
-        <Divider />
-
-        {/* Sliders */}
-        <BlockStack gap="400">
-          {sliders.map((s) => {
-            const tier = s.tiers[s.value];
-            return (
-              <BlockStack key={s.label} gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="050">
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">{s.label}</Text>
-                    <Text as="span" variant="bodySm" tone="subdued">{s.desc}</Text>
-                  </BlockStack>
-                  <InlineStack gap="200" blockAlign="center">
-                    <Badge>{tier.label}</Badge>
-                    {tier.addon > 0 && (
-                      <Text as="span" variant="bodySm" tone="subdued">+${String(tier.addon)}/mo</Text>
-                    )}
-                  </InlineStack>
-                </InlineStack>
-                <RangeSlider
-                  label=""
-                  labelHidden
-                  min={0}
-                  max={s.tiers.length - 1}
-                  value={s.value}
-                  onChange={(v: number) => s.set(v)}
-                />
-              </BlockStack>
-            );
-          })}
+        {/* Included features — pill badges */}
+        <BlockStack gap="200">
+          <Text as="h3" variant="headingSm" fontWeight="semibold" tone="subdued">
+            INCLUDED WITH YOUR PLAN
+          </Text>
+          <InlineStack gap="200" wrap>
+            {INCLUDED_FEATURES.map((feature) => (
+              <div key={feature} style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "4px 10px",
+                borderRadius: "var(--p-border-radius-200)",
+                background: "var(--p-color-bg-fill-success-secondary)",
+                color: "var(--p-color-text-success)",
+                fontSize: "12px",
+                fontWeight: 500,
+                lineHeight: "16px",
+                whiteSpace: "nowrap",
+              }}>
+                <Icon source={CheckSmallIcon} />
+                {feature}
+              </div>
+            ))}
+          </InlineStack>
         </BlockStack>
 
         <Divider />
 
+        {/* Scale your resources — sliders */}
+        <BlockStack gap="200">
+          <Text as="h3" variant="headingSm" fontWeight="semibold" tone="subdued">
+            SCALE YOUR RESOURCES
+          </Text>
+          <BlockStack gap="400">
+            {sliders.map((s) => {
+              const tier = s.tiers[s.value];
+              return (
+                <div key={s.label} style={{
+                  display: "grid",
+                  gridTemplateColumns: "140px 1fr 100px 80px",
+                  gap: "12px",
+                  alignItems: "center",
+                }}>
+                  <BlockStack gap="050">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">{s.label}</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">{s.desc}</Text>
+                  </BlockStack>
+                  <RangeSlider
+                    label=""
+                    labelHidden
+                    min={0}
+                    max={s.tiers.length - 1}
+                    value={s.value}
+                    onChange={(v: number) => s.set(v)}
+                  />
+                  <div style={{ textAlign: "right" }}>
+                    <Badge>{tier.label}</Badge>
+                  </div>
+                  <Text as="span" variant="bodySm" tone={tier.addon > 0 ? undefined : "subdued"} alignment="end">
+                    {tier.addon > 0 ? `+$${String(tier.addon)}/mo` : "included"}
+                  </Text>
+                </div>
+              );
+            })}
+          </BlockStack>
+        </BlockStack>
+
+        <Divider />
+
+        {/* Footer with price breakdown + CTA */}
         <InlineStack align="space-between" blockAlign="center">
-          <Text as="span" variant="bodySm" tone="subdued">
+          <Text as="span" variant="bodyMd" tone="subdued">
             {addons > 0 ? `$299 base + $${String(addons)} add-ons` : "Same as Enterprise — adjust sliders to add resources"}
           </Text>
-          <Button variant="primary" loading={loading} disabled={isActive} onClick={() => onSubscribe({
+          <Button variant="primary" size="large" loading={loading} disabled={isActive} onClick={() => onSubscribe({
             products: CUSTOM_PLAN_TIERS.products[products].value,
             providers: CUSTOM_PLAN_TIERS.providers[providers].value,
             fitments: CUSTOM_PLAN_TIERS.fitments[fitments].value,

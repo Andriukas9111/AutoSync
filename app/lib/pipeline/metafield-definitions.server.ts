@@ -90,6 +90,8 @@ export async function ensureMetafieldDefinitions(
             type: "list.single_line_text_field",
             ownerType: "PRODUCT",
             description: def.description,
+            pin: true,
+            useAsCollectionCondition: true,
             access: {
               storefront: "PUBLIC_READ",
             },
@@ -129,6 +131,7 @@ export async function ensureMetafieldDefinitions(
           type: "json",
           ownerType: "PRODUCT",
           description: "Full vehicle fitment compatibility data",
+          pin: true,
           access: {
             storefront: "PUBLIC_READ",
           },
