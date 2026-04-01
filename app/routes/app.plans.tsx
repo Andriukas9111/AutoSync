@@ -100,9 +100,9 @@ function getHighlights(config: PlanConfig): string[] {
   if (f.vinDecode) items.push("VIN Decode");
 
   // Customisation & Analytics
-  if (f.widgetCustomisation === "full_css") items.push("Full CSS widget customisation");
-  else if (f.widgetCustomisation === "full") items.push("Full widget customisation");
-  else if (f.widgetCustomisation === "basic") items.push("Basic widget styling");
+  if (f.widgetCustomisation === "full_css") items.push("Full customisation + hide branding");
+  else if (f.widgetCustomisation === "full") items.push("Widget colors + hide branding");
+  else if (f.widgetCustomisation === "basic") items.push("Widget color customisation");
 
   if (f.dashboardAnalytics === "full_export") items.push("Analytics with export");
   else if (f.dashboardAnalytics === "full") items.push("Full analytics dashboard");
@@ -131,7 +131,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   { label: "Fitments", category: "CAPACITY", getValue: (l) => l.fitments === Infinity ? "Unlimited" : l.fitments.toLocaleString() },
   { label: "Providers", category: "CAPACITY", getValue: (l) => l.providers === Infinity ? "Unlimited" : String(l.providers) },
   { label: "Active Makes", category: "CAPACITY", getValue: (l) => l.activeMakes >= 999_999 ? "Unlimited" : String(l.activeMakes) },
-  { label: "Scheduled Fetches/Day", category: "CAPACITY", getValue: (l) => l.scheduledFetchesPerDay === Infinity ? "Unlimited" : l.scheduledFetchesPerDay === 0 ? "—" : String(l.scheduledFetchesPerDay), comingSoon: true },
+  { label: "Scheduled Fetches/Day", category: "CAPACITY", getValue: (l) => l.scheduledFetchesPerDay === Infinity ? "Unlimited" : l.scheduledFetchesPerDay === 0 ? "—" : String(l.scheduledFetchesPerDay) },
   { label: "Push Tags", category: "DATA & SYNC", getValue: (l) => l.features.pushTags ? "✓" : "—" },
   { label: "Push Metafields", category: "DATA & SYNC", getValue: (l) => l.features.pushMetafields ? "✓" : "—" },
   { label: "Auto Extraction", category: "DATA & SYNC", getValue: (l) => l.features.autoExtraction ? "✓" : "—" },
@@ -156,9 +156,9 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   { label: "Vehicle Pages (SEO)", category: "ADVANCED", getValue: (l) => l.features.vehiclePages ? "✓" : "—" },
   { label: "Pricing Engine", category: "ADVANCED", getValue: (l) => l.features.pricingEngine ? "✓" : "—" },
   { label: "Widget Customisation", category: "ADVANCED", getValue: (l) => {
-    if (l.features.widgetCustomisation === "full_css") return "Full + CSS";
-    if (l.features.widgetCustomisation === "full") return "Full";
-    if (l.features.widgetCustomisation === "basic") return "Basic";
+    if (l.features.widgetCustomisation === "full_css") return "Full + Hide Branding";
+    if (l.features.widgetCustomisation === "full") return "Colors + Hide Branding";
+    if (l.features.widgetCustomisation === "basic") return "Colors Only";
     return "—";
   }},
   { label: "Analytics", category: "ADVANCED", getValue: (l) => {
@@ -192,7 +192,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Which widgets are included in each plan?",
-    a: "Free: none. Starter: YMME Search + Fitment Badge (2 widgets). Growth: adds Compatibility Table (3 widgets). Professional: adds Wheel Finder + Vehicle Pages (5 widgets). Business: adds My Garage (6 widgets). Enterprise: adds UK Plate Lookup + VIN Decode (all 7 widgets).",
+    a: "Free: none. Starter: YMME Search + Fitment Badge (2 widget types). Growth: adds Compatibility Table (3 types). Professional: adds Wheel Finder (4 types). Business: adds My Garage (5 types). Enterprise: adds UK Plate Lookup + VIN Decode (all 7 types). Widget blocks can be added to any theme — plan controls which types are active on the storefront.",
   },
   {
     q: "What are smart collections?",
@@ -923,7 +923,7 @@ const INCLUDED_FEATURES = [
   "Smart Collections (Full)",
   "Pricing Engine",
   "Vehicle Pages (SEO)",
-  "CSS Widget Customisation",
+  "Full Customisation + Hide Branding",
   "Analytics with Export",
   "DVLA Plate Lookup",
   "VIN Decode",

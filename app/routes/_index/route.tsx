@@ -605,7 +605,7 @@ const SYSTEMS = [
   { t: "Smart Extraction", d: "Pattern-matching engine with 55 make patterns, model detection, and 3-tier confidence routing.", s: "80%+ accuracy" },
   { t: "YMME Database", d: "Pre-loaded vehicle database with every make, model, and engine worldwide.", s: "29K+ engines" },
   { t: "Smart Collections", d: "Auto-creates SEO-optimized Shopify collections with brand logos and meta descriptions.", s: "3 strategies" },
-  { t: "7 Storefront Widgets", d: "YMME Search, Fitment Badge, Compatibility Table, Plate Lookup, VIN Decode, Wheel Finder, Vehicle Specs.", s: "7 widgets" },
+  { t: "7 Storefront Widgets", d: "YMME Search, Fitment Badge, Compatibility Table, My Garage, Wheel Finder, Plate Lookup, VIN Decode.", s: "7 widgets" },
   { t: "Provider Import", d: "Import from CSV, XML, JSON, REST API, or FTP. Smart column mapper auto-detects fields.", s: "5 formats" },
   { t: "Vehicle Spec Pages", d: "Auto-generated SEO pages with 90+ engine specs pushed as Shopify metaobjects.", s: "90+ fields" },
   { t: "Shopify Push Engine", d: "Pushes tags, 5 metafield types, and activates Search & Discovery filters automatically.", s: "5 metafields" },

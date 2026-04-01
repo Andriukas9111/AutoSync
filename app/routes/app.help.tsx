@@ -396,7 +396,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Wheel Finder is available on the Business plan ($179/mo) and above.
+              Wheel Finder is available on the Professional plan ($99/mo) and above.
             </Text>
           </BlockStack>
         </BlockStack>
