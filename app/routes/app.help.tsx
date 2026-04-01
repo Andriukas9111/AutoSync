@@ -560,19 +560,19 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               <strong>Free ($0)</strong> -- 50 products, 200 fitments, manual mapping only.
             </Text>
             <Text as="p" variant="bodySm">
-              <strong>Starter ($19/mo)</strong> -- 1,000 products, push tags/metafields, YMME widget, fitment badge.
+              <strong>Starter ($19/mo)</strong> -- 500 products, 2,500 fitments, push tags/metafields, YMME widget, fitment badge.
             </Text>
             <Text as="p" variant="bodySm">
-              <strong>Growth ($49/mo)</strong> -- 10,000 products, auto-extraction, bulk ops, all 4 widgets, smart collections.
+              <strong>Growth ($49/mo)</strong> -- 5,000 products, 25,000 fitments, auto-extraction, bulk ops, smart collections (by make).
             </Text>
             <Text as="p" variant="bodySm">
-              <strong>Professional ($99/mo)</strong> -- 50,000 products, API integration, custom vehicles, My Garage.
+              <strong>Professional ($99/mo)</strong> -- 25,000 products, 100,000 fitments, API/FTP integration, vehicle pages, wheel finder.
             </Text>
             <Text as="p" variant="bodySm">
-              <strong>Business ($179/mo)</strong> -- 200,000 products, FTP import, Wheel Finder, priority support.
+              <strong>Business ($179/mo)</strong> -- 100,000 products, 500,000 fitments, pricing engine, My Garage, full collections.
             </Text>
             <Text as="p" variant="bodySm">
-              <strong>Enterprise ($299/mo)</strong> -- Unlimited everything, DVLA plate lookup, VIN decode, full CSS customisation.
+              <strong>Enterprise ($299/mo)</strong> -- 500,000 products, 2M fitments, DVLA plate lookup, VIN decode, full CSS customisation.
             </Text>
           </BlockStack>
           <Button onClick={() => navigate("/app/plans")}>View Full Plan Details</Button>
