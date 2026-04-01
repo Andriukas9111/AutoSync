@@ -1083,7 +1083,15 @@
   var __widgetPlanCache = null;
   function checkWidgetPlan(proxyUrl, widgetType) {
     if (__widgetPlanCache) return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
-    __widgetPlanCache = proxyFetch(proxyUrl, 'widget-check', {}).then(function (d) { return d; }).catch(function () { return { allowed: {} }; });
+    __widgetPlanCache = proxyFetch(proxyUrl, 'widget-check', {}).then(function (d) {
+      // Auto-hide watermarks if merchant has opted out (paid plan feature)
+      if (d.hideWatermark) {
+        document.querySelectorAll('.autosync-widget-footer, .apl-footer, .avs-footer, .avsd-footer, .avd-footer').forEach(function (el) {
+          el.style.display = 'none';
+        });
+      }
+      return d;
+    }).catch(function () { return { allowed: {} }; });
     return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
   }
 

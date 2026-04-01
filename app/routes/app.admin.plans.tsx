@@ -97,7 +97,6 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       { key: "ymmeWidget", label: "YMME Widget", icon: SearchIcon },
       { key: "fitmentBadge", label: "Fitment Badge", icon: CheckCircleIcon },
       { key: "compatibilityTable", label: "Compatibility Table", icon: CategoriesIcon },
-      { key: "floatingBar", label: "Floating Bar", icon: GaugeIcon },
       { key: "myGarage", label: "My Garage", icon: ProductIcon },
       { key: "wheelFinder", label: "Wheel Finder", icon: TargetIcon },
       { key: "plateLookup", label: "Plate Lookup (DVLA)", icon: GlobeIcon },

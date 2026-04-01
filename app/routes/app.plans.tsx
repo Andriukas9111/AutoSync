@@ -89,7 +89,7 @@ function getHighlights(config: PlanConfig): string[] {
 
   // Widgets — count them
   const widgetCount = [f.ymmeWidget, f.fitmentBadge, f.compatibilityTable, f.myGarage, f.wheelFinder, f.plateLookup, f.vinDecode].filter(Boolean).length;
-  if (widgetCount > 0) items.push(`${widgetCount} storefront widget${widgetCount > 1 ? "s" : ""}`);
+  if (widgetCount > 0) items.push(`${widgetCount} widget type${widgetCount > 1 ? "s" : ""} enabled`);
 
   // Premium features
   if (f.myGarage) items.push("My Garage feature");

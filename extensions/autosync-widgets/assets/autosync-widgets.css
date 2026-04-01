@@ -1292,8 +1292,7 @@
 .avsd-footer img,
 .avsd-footer svg,
 .avd-footer img,
-.avd-footer svg,
-img[alt="AutoSync"] {
+.avd-footer svg {
   display: inline-block !important;
   width: 14px !important;
   height: 14px !important;

@@ -98,7 +98,6 @@ export interface PlanLimits {
     ymmeWidget: boolean;
     fitmentBadge: boolean;
     compatibilityTable: boolean;
-    floatingBar: boolean;
     myGarage: boolean;
     wheelFinder: boolean;
     plateLookup: boolean;

@@ -1797,6 +1797,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const { data: wTenant } = await db.from("tenants").select("plan, plan_status").eq("shop_id", widgetShop).maybeSingle();
       const wPlan = getEffectivePlan(wTenant as any);
       const wLimits = getPlanLimits(wPlan);
+      // Check if merchant has opted to hide watermark (only allowed on "full"+ customisation tiers)
+      const canHideWatermark = wLimits.features.widgetCustomisation === "full" || wLimits.features.widgetCustomisation === "full_css";
+      let hideWatermark = false;
+      if (canHideWatermark) {
+        const { data: wSettings } = await db.from("app_settings").select("hide_watermark").eq("shop_id", widgetShop).maybeSingle();
+        hideWatermark = wSettings?.hide_watermark === true;
+      }
       return json({
         plan: wPlan,
         allowed: {
@@ -1809,6 +1816,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
           vinDecode: wLimits.features.vinDecode,
           vehiclePages: wLimits.features.vehiclePages,
         },
+        hideWatermark,
+        widgetCustomisation: wLimits.features.widgetCustomisation,
       }, 200, request);
     }
     case "heartbeat":

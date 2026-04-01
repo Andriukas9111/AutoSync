@@ -42,7 +42,6 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
   ymmeWidget: "YMME Search Widget",
   fitmentBadge: "Fitment Badge Widget",
   compatibilityTable: "Compatibility Table Widget",
-  floatingBar: "Floating Vehicle Bar",
   myGarage: "My Garage",
   wheelFinder: "Wheel Finder",
   plateLookup: "Reg Plate Lookup (DVLA + MOT)",

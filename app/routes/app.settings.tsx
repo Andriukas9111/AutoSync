@@ -34,7 +34,8 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan, getSerializedPlanLimits } from "../lib/billing.server";
+import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
@@ -88,6 +89,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     plan,
     limits,
+    allLimits: getSerializedPlanLimits(),
     shopId,
     appSettings: appSettingsResult.data,
     counts: {
@@ -117,6 +119,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const tagPrefix = (formData.get("tag_prefix") as string) || "_autosync_";
     const notificationEmail =
       (formData.get("notification_email") as string) || "";
+    const hideWatermarkVal = formData.get("hide_watermark") === "true";
 
     // Note: collection_strategy and auto_create_collections are managed
     // on the Collections page only — not duplicated here
@@ -127,12 +130,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .eq("shop_id", shopId)
       .maybeSingle();
 
-    const settingsPayload = {
+    const settingsPayload: Record<string, unknown> = {
       shop_id: shopId,
       tag_prefix: tagPrefix,
       push_tags: autoPushTags,
       push_metafields: autoPushMetafields,
       notification_email: notificationEmail || null,
+      hide_watermark: hideWatermarkVal,
       updated_at: new Date().toISOString(),
     };
 
@@ -484,7 +488,7 @@ function isFilterAvailable(plan: string, requiredPlans: string[]): boolean {
 }
 
 export default function Settings() {
-  const { plan, limits, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
+  const { plan, limits, allLimits, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
 
   // Live stats polling — updates data counts every 5 seconds
   const { stats: polledStats } = useAppData();
@@ -513,6 +517,11 @@ export default function Settings() {
   // Form state — Notifications
   const [notificationEmail, setNotificationEmail] = useState(
     appSettings?.notification_email ?? "",
+  );
+
+  // Form state — Widget branding
+  const [hideWatermark, setHideWatermark] = useState(
+    appSettings?.hide_watermark ?? false,
   );
 
   const showSuccess =
@@ -562,9 +571,10 @@ export default function Settings() {
             <input type="hidden" name="tag_prefix" value="_autosync_" />
             {/* Collection settings managed on Collections page */}
             <input type="hidden" name="notification_email" value={notificationEmail} />
+            <input type="hidden" name="hide_watermark" value={String(hideWatermark)} />
 
             <BlockStack gap="500">
-              {/* Push Settings */}
+              {/* Push Settings — gated behind Starter+ */}
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
@@ -573,26 +583,39 @@ export default function Settings() {
                       Push Settings
                     </Text>
                   </InlineStack>
-                  <Text as="p" variant="bodyMd" tone="subdued">
-                    Configure how fitment data is pushed to your Shopify store.
-                  </Text>
-                  <FormLayout>
-                    <Checkbox
-                      label="Auto-push tags on fitment mapping"
-                      helpText="Automatically push _autosync_ tags to Shopify when a product is mapped"
-                      checked={autoPushTags}
-                      onChange={setAutoPushTags}
-                    />
-                    <Checkbox
-                      label="Auto-push metafields on fitment mapping"
-                      helpText="Automatically set app-owned vehicle metafields on products"
-                      checked={autoPushMetafields}
-                      onChange={setAutoPushMetafields}
-                    />
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      Tag prefix: <Text as="span" fontWeight="semibold">_autosync_</Text> (e.g. _autosync_BMW). This prefix is used system-wide and cannot be changed.
-                    </Text>
-                  </FormLayout>
+                  {limits.features.pushTags ? (
+                    <>
+                      <Text as="p" variant="bodyMd" tone="subdued">
+                        Configure how fitment data is pushed to your Shopify store.
+                      </Text>
+                      <FormLayout>
+                        <Checkbox
+                          label="Auto-push tags on fitment mapping"
+                          helpText="Automatically push _autosync_ tags to Shopify when a product is mapped"
+                          checked={autoPushTags}
+                          onChange={setAutoPushTags}
+                        />
+                        <Checkbox
+                          label="Auto-push metafields on fitment mapping"
+                          helpText="Automatically set app-owned vehicle metafields on products"
+                          checked={autoPushMetafields}
+                          onChange={setAutoPushMetafields}
+                        />
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          Tag prefix: <Text as="span" fontWeight="semibold">_autosync_</Text> (e.g. _autosync_BMW). This prefix is used system-wide and cannot be changed.
+                        </Text>
+                      </FormLayout>
+                    </>
+                  ) : (
+                    <PlanGate
+                      feature="pushTags"
+                      currentPlan={plan}
+                      limits={limits}
+                      allLimits={allLimits}
+                    >
+                      <div />
+                    </PlanGate>
+                  )}
                 </BlockStack>
               </Card>
 
@@ -620,6 +643,26 @@ export default function Settings() {
                   </FormLayout>
                 </BlockStack>
               </Card>
+
+              {/* Widget Branding — Full+ customisation tiers can hide watermark */}
+              {(limits.features.widgetCustomisation === "full" || limits.features.widgetCustomisation === "full_css") && (
+                <Card>
+                  <BlockStack gap="400">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Widget Branding</Text>
+                    </InlineStack>
+                    <FormLayout>
+                      <Checkbox
+                        label="Hide AutoSync branding on storefront widgets"
+                        helpText="Remove the 'Powered by AutoSync' watermark from all widget blocks"
+                        checked={hideWatermark}
+                        onChange={setHideWatermark}
+                      />
+                    </FormLayout>
+                  </BlockStack>
+                </Card>
+              )}
 
               <InlineStack align="start">
                 <Button variant="primary" submit loading={isSubmitting}>
