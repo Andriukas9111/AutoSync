@@ -31,21 +31,21 @@ interface ActiveJobsPanelProps {
 export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPanelProps) {
   // Filter to relevant jobs: running, paused, pending, recently completed (5 min), or failed
   const jobs = allJobs.filter((j) => {
-    if (j.status === "running" || j.status === "paused" || j.status === "pending") return true;
-    // Show completed jobs for 5 minutes after completion, then auto-dismiss
+    const createdAge = j.created_at ? Date.now() - new Date(j.created_at).getTime() : Infinity;
+    // Running/pending jobs — show for max 15 minutes, then auto-dismiss as stale
+    // (If a job is truly running for 15+ min without progress updates, it's stuck)
+    if (j.status === "running" || j.status === "paused" || j.status === "pending") {
+      return createdAge < 15 * 60 * 1000;
+    }
+    // Completed jobs — show for 5 minutes after completion
     if (j.status === "completed" && j.completed_at) {
       const age = Date.now() - new Date(j.completed_at).getTime();
       return age < 5 * 60 * 1000;
     }
-    // Show failed jobs for 30 minutes, then auto-dismiss (they also appear in Recent Activity)
-    if (j.status === "failed" && j.completed_at) {
-      const age = Date.now() - new Date(j.completed_at).getTime();
-      return age < 30 * 60 * 1000;
-    }
-    // Failed without completed_at — show for 30 min from creation
-    if (j.status === "failed" && j.created_at) {
-      const age = Date.now() - new Date(j.created_at).getTime();
-      return age < 30 * 60 * 1000;
+    // Failed jobs — show for 15 minutes then auto-dismiss
+    if (j.status === "failed") {
+      const ref = j.completed_at || j.created_at;
+      if (ref) { return (Date.now() - new Date(ref).getTime()) < 15 * 60 * 1000; }
     }
     return false;
   });
