@@ -491,12 +491,26 @@ export async function getTenant(shopId: string): Promise<Tenant | null> {
   return data as Tenant;
 }
 
+/**
+ * Get the effective plan tier for a tenant.
+ * If plan_status is "cancelled", the effective plan is "free" —
+ * the tenant keeps their data but loses paid features.
+ */
+export function getEffectivePlan(tenant: Tenant | null): PlanTier {
+  if (!tenant) return "free";
+  // Cancelled subscription → free tier (data preserved, features locked)
+  if (tenant.plan_status === "cancelled" && tenant.plan !== "free") {
+    return "free";
+  }
+  return tenant.plan ?? "free";
+}
+
 /** Throw if the tenant has reached their product limit. */
 export async function assertProductLimit(shopId: string): Promise<void> {
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
 
-  const limits = getPlanLimits(tenant.plan);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
 
   // Use REAL count from products table, not cached tenant.product_count
   // (cached counter can drift after deletes)
@@ -515,7 +529,7 @@ export async function assertProductLimit(shopId: string): Promise<void> {
 export async function assertFitmentLimit(shopId: string): Promise<void> {
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
-  const limits = getPlanLimits(tenant.plan);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
 
   // Use REAL count from vehicle_fitments table, not cached tenant.fitment_count
   const { count } = await db
@@ -533,7 +547,7 @@ export async function assertFitmentLimit(shopId: string): Promise<void> {
 export async function assertProviderLimit(shopId: string): Promise<void> {
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
-  const limits = getPlanLimits(tenant.plan);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
   const { count } = await db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId);
   if ((count ?? 0) >= limits.providers) {
     const next = getNextPlan(tenant.plan);
@@ -549,13 +563,14 @@ export async function assertFeature(
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
 
-  const limits = getPlanLimits(tenant.plan);
+  const effectivePlan = getEffectivePlan(tenant);
+  const limits = getPlanLimits(effectivePlan);
   const value = limits.features[feature];
 
   // A feature is considered disabled when it is exactly `false` or `"none"`.
   if (value === false || value === "none") {
     const requiredPlan = getMinimumPlanForFeature(feature);
-    throw new BillingGateError(feature, tenant.plan, requiredPlan);
+    throw new BillingGateError(feature, effectivePlan, requiredPlan);
   }
 }
 

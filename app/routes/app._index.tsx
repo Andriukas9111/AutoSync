@@ -39,7 +39,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getPlanConfigs } from "../lib/billing.server";
+import { getPlanLimits, getPlanConfigs, getEffectivePlan } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
@@ -112,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult.data;
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant as any) as PlanTier;
   const limits = getPlanLimits(plan);
   const isFirstTime = !tenant;
 

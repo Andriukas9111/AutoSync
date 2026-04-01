@@ -122,7 +122,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "make_model"),
     db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("tenants").select("plan").eq("shop_id", shopId).maybeSingle(),
+    db.from("tenants").select("plan, plan_status").eq("shop_id", shopId).maybeSingle(),
   ]);
 
   // ── Extract counts ──
@@ -184,7 +184,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       ymmeModels: ymme.models,
       ymmeEngines: ymme.engines,
       // Tenant
-      plan: tenantRes.data?.plan ?? "free",
+      plan: (tenantRes.data?.plan_status === "cancelled" && tenantRes.data?.plan !== "free") ? "free" : (tenantRes.data?.plan ?? "free"),
       lastPushDate: (lastPushJob as Record<string, unknown>)?.completed_at ?? null,
     },
   });
