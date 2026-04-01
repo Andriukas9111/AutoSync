@@ -507,7 +507,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise — SEO-optimized vehicle specification pages"
+        subtitle="Professional+ — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
         fullWidth
       >
@@ -641,7 +641,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise — SEO-optimized vehicle specification pages"
+        subtitle="Professional+ — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
         fullWidth
       >
@@ -676,7 +676,7 @@ export default function VehiclePages() {
   return (
     <Page
       title="Vehicle Pages"
-      subtitle="Enterprise — SEO-optimized vehicle specification pages"
+      subtitle="Professional+ — SEO-optimized vehicle specification pages"
       backAction={{ url: "/app" }}
       fullWidth
       primaryAction={{
