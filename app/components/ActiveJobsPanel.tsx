@@ -32,11 +32,21 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
   // Filter to relevant jobs: running, paused, pending, recently completed (5 min), or failed
   const jobs = allJobs.filter((j) => {
     if (j.status === "running" || j.status === "paused" || j.status === "pending") return true;
+    // Show completed jobs for 5 minutes after completion, then auto-dismiss
     if (j.status === "completed" && j.completed_at) {
       const age = Date.now() - new Date(j.completed_at).getTime();
       return age < 5 * 60 * 1000;
     }
-    if (j.status === "failed") return true;
+    // Show failed jobs for 30 minutes, then auto-dismiss (they also appear in Recent Activity)
+    if (j.status === "failed" && j.completed_at) {
+      const age = Date.now() - new Date(j.completed_at).getTime();
+      return age < 30 * 60 * 1000;
+    }
+    // Failed without completed_at — show for 30 min from creation
+    if (j.status === "failed" && j.created_at) {
+      const age = Date.now() - new Date(j.created_at).getTime();
+      return age < 30 * 60 * 1000;
+    }
     return false;
   });
 

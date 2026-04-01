@@ -107,8 +107,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
-    // Pushed products — check for completed push jobs (NOT synced_at which is set by fetch too)
-    db.from("sync_jobs").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "push").eq("status", "completed"),
+    // Pushed products — check for products that actually exist on Shopify (have shopify_product_id)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("shopify_product_id", "is", null),
   ]);
 
   const tenant = tenantResult.data;
