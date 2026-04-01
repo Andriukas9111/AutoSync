@@ -62,9 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } else {
     // Always update the access token + clear uninstalled state on re-install
     // NEVER overwrite a valid token with null — only update if we have a new one
-    const updates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+    const updates: Record<string, unknown> = {};
     if (offlineToken) {
       updates.shopify_access_token = offlineToken;
     }

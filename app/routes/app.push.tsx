@@ -138,31 +138,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const strategy = (formData.get("strategy") as CollectionStrategy) || "make";
   const seoEnabled = formData.get("seoEnabled") === "true";
 
-  // Refresh the Shopify access token in tenants table BEFORE creating jobs
-  // With expiringOfflineAccessTokens, the token refreshes on authenticate.admin()
-  // We must save it so the Edge Function gets a fresh token
-  try {
-    const prisma = (await import("../db.server")).default;
-    const offlineSession = await prisma.session.findFirst({
-      where: { shop: shopId, isOnline: false },
-      select: { accessToken: true },
-    });
-    if (offlineSession?.accessToken) {
-      await db.from("tenants").update({
-        shopify_access_token: offlineSession.accessToken,
-        updated_at: new Date().toISOString(),
-      }).eq("shop_id", shopId);
-    }
-  } catch (_e) {
-    // Fall back to session token
-    if (session.accessToken) {
-      await db.from("tenants").update({
-        shopify_access_token: session.accessToken,
-        updated_at: new Date().toISOString(),
-      }).eq("shop_id", shopId);
-    }
-  }
-
   // Save push settings so they persist between visits
   await db.from("app_settings").upsert(
     {

@@ -379,18 +379,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
 
-  // Refresh tenant token before background jobs
-  try {
-    const prisma = (await import("../db.server")).default;
-    const offlineSession = await prisma.session.findFirst({
-      where: { shop: shopId, isOnline: false },
-      select: { accessToken: true },
-    });
-    if (offlineSession?.accessToken) {
-      await db.from("tenants").update({ shopify_access_token: offlineSession.accessToken }).eq("shop_id", shopId);
-    }
-  } catch { /* best effort */ }
-
   if (intent === "push_all") {
     const { data: vpJob, error: jobError } = await db
       .from("sync_jobs")

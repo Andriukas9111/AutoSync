@@ -80,7 +80,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeSpecsResult,
     syncedProductsResult,
   ] = await Promise.all([
-    db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at, updated_at").eq("shop_id", shopId).maybeSingle(),
+    db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at").eq("shop_id", shopId).maybeSingle(),
     // Product counts — exclude staged products (same filter as job-status API to prevent flash-to-zero)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
