@@ -153,7 +153,7 @@ function logConversionEvent(
   });
 }
 
-async function handleTrack(params: URLSearchParams, body: string | null) {
+async function handleTrack(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop") ?? "";
 
   // Parse tracking data from POST body
@@ -699,7 +699,7 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
   return json({ found: false });
 }
 
-async function handleSearch(params: URLSearchParams) {
+async function handleSearch(params: URLSearchParams, request?: Request) {
   const make = params.get("make");
   const model = params.get("model");
   const year = params.get("year");
@@ -771,7 +771,7 @@ async function handleSearch(params: URLSearchParams) {
   return json({ products: products ?? [], count: resultCount });
 }
 
-async function handlePlateLookup(params: URLSearchParams, body: string | null) {
+async function handlePlateLookup(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop");
 
   // Verify plateLookup feature (Enterprise)
@@ -1158,7 +1158,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
   }
 }
 
-async function handleWheelSearch(params: URLSearchParams) {
+async function handleWheelSearch(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop");
 
   // Verify wheelFinder feature (Professional+)
@@ -1296,7 +1296,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   });
 }
 
-async function handleVinDecode(params: URLSearchParams, body: string | null) {
+async function handleVinDecode(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop");
 
   // Verify vinDecode feature (Enterprise)
@@ -1404,7 +1404,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
 
 // ---------- Loader (GET requests) ----------
 // ---------- Vehicle Specs handler (Enterprise) ----------
-async function handleVehicleSpecs(params: URLSearchParams) {
+async function handleVehicleSpecs(params: URLSearchParams, request?: Request) {
   let engineId = params.get("engine_id");
   const shop = params.get("shop");
   const handle = params.get("handle");
@@ -1741,21 +1741,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
     console.error("SHOPIFY_API_SECRET not configured");
-    return json({ error: "Server configuration error" }, 500);
+    return json({ error: "Server configuration error" }, 500, request);
   }
 
   if (!verifyProxySignature(params, secret)) {
-    return json({ error: "Invalid signature" }, 401);
+    return json({ error: "Invalid signature" }, 401, request);
   }
 
   const shop = params.get("shop");
   if (!shop) {
-    return json({ error: "Missing shop parameter" }, 400);
+    return json({ error: "Missing shop parameter" }, 400, request);
   }
 
   const path = params.get("path");
   if (!path) {
-    return json({ error: "Missing path parameter" }, 400);
+    return json({ error: "Missing path parameter" }, 400, request);
   }
 
   // Rate limiting — per shop per endpoint per minute
@@ -1780,22 +1780,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     case "collection-lookup":
       return handleCollectionLookup(params, request);
     case "search":
-      return handleSearch(params);
+      return handleSearch(params, request);
     case "wheel-search":
-      return handleWheelSearch(params);
+      return handleWheelSearch(params, request);
     case "vin-decode":
-      return handleVinDecode(params, null);
+      return handleVinDecode(params, null, request);
     case "vehicle-specs":
-      return handleVehicleSpecs(params);
+      return handleVehicleSpecs(params, request);
     case "vehicle-gallery":
       return handleVehicleGallery(params, request);
     case "widget-check": {
       // Lightweight plan check for widgets that read metafields directly.
       // Returns which widget types are allowed on the current plan.
       const widgetShop = params.get("shop") ?? shop;
-      if (!widgetShop) return json({ allowed: {} });
-      const { data: wTenant } = await db.from("tenants").select("plan").eq("shop_id", widgetShop).maybeSingle();
-      const wPlan = wTenant?.plan ?? "free";
+      if (!widgetShop) return json({ allowed: {} }, 200, request);
+      const { data: wTenant } = await db.from("tenants").select("plan, plan_status").eq("shop_id", widgetShop).maybeSingle();
+      const wPlan = getEffectivePlan(wTenant as any);
       const wLimits = getPlanLimits(wPlan);
       return json({
         plan: wPlan,
@@ -1809,10 +1809,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
           vinDecode: wLimits.features.vinDecode,
           vehiclePages: wLimits.features.vehiclePages,
         },
-      });
+      }, 200, request);
     }
     case "heartbeat":
-      return json({ ok: true, ts: Date.now() });
+      return json({ ok: true, ts: Date.now() }, 200, request);
     default:
       return json(
         { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search, vehicle-specs. POST: plate-lookup, vin-decode, track` },
@@ -1832,16 +1832,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
-    return json({ error: "Server configuration error" }, 500);
+    return json({ error: "Server configuration error" }, 500, request);
   }
 
   if (!verifyProxySignature(params, secret)) {
-    return json({ error: "Invalid signature" }, 401);
+    return json({ error: "Invalid signature" }, 401, request);
   }
 
   const shop = params.get("shop");
   if (!shop) {
-    return json({ error: "Missing shop parameter" }, 400);
+    return json({ error: "Missing shop parameter" }, 400, request);
   }
 
   const path = params.get("path");
@@ -1857,16 +1857,16 @@ export async function action({ request }: ActionFunctionArgs) {
   const body = await request.text();
 
   if (path === "plate-lookup") {
-    return handlePlateLookup(params, body);
+    return handlePlateLookup(params, body, request);
   }
 
   if (path === "vin-decode") {
-    return handleVinDecode(params, body);
+    return handleVinDecode(params, body, request);
   }
 
   if (path === "track") {
-    return handleTrack(params, body);
+    return handleTrack(params, body, request);
   }
 
-  return json({ error: "POST only supported for plate-lookup, vin-decode, and track" }, 405);
+  return json({ error: "POST only supported for plate-lookup, vin-decode, and track" }, 405, request);
 }
