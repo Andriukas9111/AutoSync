@@ -1769,7 +1769,7 @@ async function processVehiclePagesChunk(
   });
   const defJson = await defRes.json();
   const hasDef = (defJson?.data?.metaobjectDefinitions?.nodes ?? [])
-    .some((d: { type: string }) => d.type === "$app:vehicle_spec");
+    .some((d: { type: string }) => d.type.includes("vehicle_spec"));
 
   if (!hasDef) {
     // Auto-create the metaobject definition
@@ -1811,8 +1811,13 @@ async function processVehiclePagesChunk(
     const createDefJson = await createDefRes.json();
     const defErrors = createDefJson?.data?.metaobjectDefinitionCreate?.userErrors;
     if (defErrors?.length) {
-      console.error("[vehicle_pages] Definition creation errors:", defErrors);
-      return { processed: 0, hasMore: false, error: "Failed to create metaobject definition: " + defErrors.map((e: { message: string }) => e.message).join(", ") };
+      // "TAKEN" means definition already exists — that's fine, continue
+      const isTaken = defErrors.some((e: { code?: string; message: string }) => e.code === "TAKEN" || e.message?.includes("already been taken"));
+      if (!isTaken) {
+        console.error("[vehicle_pages] Definition creation errors:", defErrors);
+        return { processed: 0, hasMore: false, error: "Failed to create metaobject definition: " + defErrors.map((e: { message: string }) => e.message).join(", ") };
+      }
+      console.log("[vehicle_pages] Definition already exists, continuing...");
     }
     console.log("[vehicle_pages] Definition created successfully");
   }
