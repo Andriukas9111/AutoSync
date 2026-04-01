@@ -4,7 +4,7 @@ import db from "../lib/db.server";
 import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 
 // ── Rate Limiting (in-memory, per Vercel instance) ──────────────────────
 // Limits per shop per endpoint per minute. Resets on cold starts.
@@ -219,7 +219,7 @@ async function handleMakes(shop: string, request?: Request) {
   // Plan check: YMME widget requires Starter+
   const tenant = await getTenant(shop);
   if (!tenant) return json({ makes: [] }, 200, request);
-  const limits = getPlanLimits(tenant.plan);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
   if (!limits.features.ymmeWidget) {
     return json({ error: "YMME widget requires Starter plan or higher", makes: [] }, 403, request);
   }
@@ -253,7 +253,7 @@ async function handleModels(params: URLSearchParams, request?: Request) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.ymmeWidget) {
         return json({ error: "YMME widget requires Starter plan or higher", models: [] }, 403, request);
       }
@@ -330,7 +330,7 @@ async function handleYears(params: URLSearchParams, request?: Request) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.ymmeWidget) {
         return json({ error: "YMME widget requires Starter plan or higher", years: [] }, 403, request);
       }
@@ -389,7 +389,7 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.ymmeWidget) {
         return json({ error: "YMME widget requires Starter plan or higher", engines: [] }, 403, request);
       }
@@ -542,7 +542,7 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.smartCollections || limits.features.smartCollections === "none") {
         return json({ error: "Smart collections requires a higher plan", found: false }, 403, request);
       }
@@ -709,7 +709,7 @@ async function handleSearch(params: URLSearchParams) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.ymmeWidget) {
         return json({ error: "YMME search requires the Starter plan or higher" }, 403);
       }
@@ -780,7 +780,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.plateLookup) {
       return json({ error: "Plate lookup requires the Enterprise plan" }, 403);
     }
@@ -1167,7 +1167,7 @@ async function handleWheelSearch(params: URLSearchParams) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.wheelFinder) {
       return json({ error: "Wheel Finder requires the Professional plan or higher" }, 403);
     }
@@ -1305,7 +1305,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.vinDecode) {
       return json({ error: "VIN Decode requires the Enterprise plan" }, 403);
     }
@@ -1429,7 +1429,7 @@ async function handleVehicleSpecs(params: URLSearchParams) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.vehiclePages) {
         return json({ error: "Vehicle spec pages require the Professional plan or higher" }, 403);
       }
@@ -1587,7 +1587,7 @@ async function handleVehicleGallery(params: URLSearchParams, request?: Request) 
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.vehiclePages) {
         return json({ error: "Vehicle pages requires a higher plan", vehicles: [] }, 403, request);
       }

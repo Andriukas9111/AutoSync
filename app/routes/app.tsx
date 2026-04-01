@@ -103,9 +103,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   await loadPlanConfigsFromDB();
 
   // For admin shops, always use enterprise regardless of current DB state
+  // For other tenants, check plan_status — cancelled means free
+  const rawPlan = (tenant?.plan ?? "free") as PlanTier;
+  const planStatus = tenant?.plan_status;
   const plan = isAdmin
     ? ("enterprise" as PlanTier)
-    : ((tenant?.plan ?? "free") as PlanTier);
+    : (planStatus === "cancelled" && rawPlan !== "free" ? "free" as PlanTier : rawPlan);
   const limits = getPlanLimits(plan);
 
   // Load active announcements for this tenant
