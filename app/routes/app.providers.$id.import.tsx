@@ -44,7 +44,7 @@ import { HowItWorks } from "../components/HowItWorks";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { getTargetFields } from "../lib/providers/column-mapper.server";
 import type { PlanTier } from "../lib/types";
 import { stepNumberStyle } from "../lib/design";
@@ -88,7 +88,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant as any) as PlanTier;
   const limits = getPlanLimits(plan);
 
   // Server-side enforcement: redirect if plan doesn't allow providers

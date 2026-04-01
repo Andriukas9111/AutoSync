@@ -38,7 +38,7 @@ import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits, assertFeature } from "../lib/billing.server";
+import { getTenant, getPlanLimits, assertFeature, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
@@ -154,7 +154,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant as any) as PlanTier;
   const limits = getPlanLimits(plan);
   const analyticsLevel = limits.features.dashboardAnalytics;
 

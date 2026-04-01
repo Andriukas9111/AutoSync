@@ -41,7 +41,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import {
@@ -69,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   // If plan doesn't support pricing engine, return minimal data

@@ -26,7 +26,7 @@ import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import type { ProviderType, PlanTier } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
 import { listRowStyle, autoFitGridStyle } from "../lib/design";
@@ -182,7 +182,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Provider not found", { status: 404 });
   }
 
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   if (limits.providers === 0) {

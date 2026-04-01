@@ -49,6 +49,7 @@ import {
   assertFeature,
   BillingGateError,
   getSerializedPlanLimits,
+  getEffectivePlan,
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -140,7 +141,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (err: unknown) {
     if (err instanceof BillingGateError) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = tenant?.plan ?? "free";
+      const plan: PlanTier = getEffectivePlan(tenant as any);
       const limits = getPlanLimits(plan);
       return data(
         {
@@ -162,7 +163,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   // Run all queries in parallel

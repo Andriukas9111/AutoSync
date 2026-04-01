@@ -30,7 +30,7 @@ import { useAppData } from "../lib/use-app-data";
 import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import type { PlanTier, PlanLimits, ProviderType } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
 import { PlanGate } from "../components/PlanGate";
@@ -145,7 +145,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const plan = tenant?.plan ?? "free";
+  const plan = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
   const providers = (providersResult.data ?? []) as Provider[];
 

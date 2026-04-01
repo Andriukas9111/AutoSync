@@ -3,7 +3,7 @@ import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { fetchProductsFromShopify } from "../lib/pipeline/fetch.server";
-import { assertProductLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
+import { assertProductLimit, BillingGateError, getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 
 // Runs with a timeout guard within Vercel's serverless limit.
 const FETCH_TIMEOUT_MS = 55_000; // 55s guard — Vercel serverless has 60s limit
@@ -71,7 +71,7 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     // Get plan product limit to cap the fetch
     const tenant = await getTenant(shopId);
-    const planLimits = getPlanLimits(tenant?.plan ?? "free");
+    const planLimits = getPlanLimits(getEffectivePlan(tenant as any));
     const maxProducts = planLimits.products === Infinity ? undefined : planLimits.products;
 
     const result = await fetchProductsFromShopify({

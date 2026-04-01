@@ -39,7 +39,7 @@ import { IconBadge } from "../components/IconBadge";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { useAppData } from "../lib/use-app-data";
 
 // ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   // Server-side enforcement: redirect if plan doesn't allow providers
   const tenant = await getTenant(shopId);
-  const planLimits = getPlanLimits(tenant?.plan ?? "free");
+  const planLimits = getPlanLimits(getEffectivePlan(tenant as any));
   if (planLimits.providers === 0) {
     throw redirect("/app/providers?error=plan_limit");
   }

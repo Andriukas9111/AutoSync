@@ -37,6 +37,7 @@ import {
   createBillingSubscription,
   confirmBillingSubscription,
   getPlanConfigs,
+  getEffectivePlan,
 } from "../lib/billing.server";
 import {
   CUSTOM_PLAN_TIERS,
@@ -256,7 +257,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const currentPlan: PlanTier = tenant?.plan ?? "free";
+  const currentPlan: PlanTier = getEffectivePlan(tenant as any);
   const planConfigs = await getPlanConfigs();
 
   const serializedConfigs: Record<string, {

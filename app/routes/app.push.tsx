@@ -33,7 +33,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getTenant, assertFeature, getSerializedPlanLimits } from "../lib/billing.server";
+import { getPlanLimits, getTenant, assertFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
@@ -100,7 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(10),
   ]);
 
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   return {

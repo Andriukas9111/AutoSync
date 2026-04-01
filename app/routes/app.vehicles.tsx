@@ -35,7 +35,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getTenant } from "../lib/billing.server";
+import { getPlanLimits, getTenant, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier } from "../lib/types";
@@ -83,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult;
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   const allMakes = makesResult.data ?? [];
@@ -156,7 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (enable) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = tenant?.plan ?? "free";
+      const plan: PlanTier = getEffectivePlan(tenant as any);
       const limits = getPlanLimits(plan);
 
       const { count: currentActive } = await db

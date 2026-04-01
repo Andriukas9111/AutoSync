@@ -41,7 +41,7 @@ import {
 } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError } from "../lib/billing.server";
+import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError, getEffectivePlan } from "../lib/billing.server";
 import type { ProviderType, PlanTier, PlanLimits } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId),
   ]);
 
-  const plan = tenant?.plan ?? "free";
+  const plan = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
   const providerCount = providerCountResult.count ?? 0;
   const atLimit =
@@ -106,7 +106,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan = tenant?.plan ?? "free";
+  const plan = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   if (type === "api" && !limits.features.apiIntegration) {
