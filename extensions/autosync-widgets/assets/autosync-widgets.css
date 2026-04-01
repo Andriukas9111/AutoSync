@@ -8,7 +8,7 @@
 [class^="avd-"],
 [class^="avsd-"] {
   box-sizing: border-box !important;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: inherit;
 }
 /* Prevent theme from blowing up our SVG/img elements */
 [class^="autosync-"] img,

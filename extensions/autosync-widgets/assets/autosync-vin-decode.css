@@ -1,5 +1,5 @@
 /* AutoSync VIN Decode — Clean Light Design (matches plate-lookup) */
-.avd-root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; }
+.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; }
 .avd-root *, .avd-root *::before, .avd-root *::after { box-sizing: border-box; }
 
 /* Heading */

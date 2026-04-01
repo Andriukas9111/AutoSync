@@ -1,6 +1,6 @@
   /* ── Base ────────────────────────────────────────── */
   .autosync-vehicle-showcase {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     color: var(--avs-text);
     background: var(--avs-bg);
     margin: 0 auto;
@@ -20,7 +20,7 @@
     margin: 0 auto 14px;
   }
   .avs-heading {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 30px;
     font-weight: 800;
     margin: 0;
@@ -32,7 +32,7 @@
     background-clip: text;
   }
   .avs-subheading {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 15px;
     color: var(--avs-muted);
     margin: 0 0 28px;
@@ -66,7 +66,7 @@
     padding: 13px 16px 13px 46px;
     border: 1.5px solid var(--avs-border);
     border-radius: calc(var(--avs-radius) + 2px);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 14px;
     font-weight: 400;
     background: var(--avs-section-bg);
@@ -85,7 +85,7 @@
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--avs-primary) 12%, transparent);
   }
   .avs-filter__count {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 13px;
     color: var(--avs-muted);
     white-space: nowrap;
@@ -105,7 +105,7 @@
     gap: 16px;
   }
   .avs-loading__text {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 14px;
     color: var(--avs-muted);
     margin: 0;
@@ -139,14 +139,14 @@
     opacity: 0.5;
   }
   .avs-empty__title {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     margin: 0 0 6px;
     font-size: 16px;
     font-weight: 600;
     color: var(--avs-text);
   }
   .avs-empty__hint {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     margin: 0;
     font-size: 13px;
     color: var(--avs-muted);
@@ -213,7 +213,7 @@
     object-fit: contain;
   }
   .avs-card__logo-fallback {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 18px;
     font-weight: 800;
     letter-spacing: -0.02em;
@@ -231,7 +231,7 @@
     min-width: 0;
   }
   .avs-card__make {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -241,7 +241,7 @@
     line-height: 1.2;
   }
   .avs-card__model {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 17px;
     font-weight: 700;
     margin: 0;
@@ -253,7 +253,7 @@
     letter-spacing: -0.01em;
   }
   .avs-card__variant {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 13px;
     color: var(--avs-muted);
     margin: 2px 0 0;
@@ -276,7 +276,7 @@
     gap: 5px;
     padding: 5px 11px;
     border-radius: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 12px;
     font-weight: 500;
     background: var(--avs-section-bg);
@@ -306,7 +306,7 @@
     padding-top: 4px;
   }
   .avs-card__link {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     font-size: 13px;
     font-weight: 600;
     color: var(--avs-primary);

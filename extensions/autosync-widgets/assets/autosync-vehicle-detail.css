@@ -1,6 +1,6 @@
   /* ── Base Reset ── */
   .avsd-root {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-family: inherit;
     color: var(--avsd-text);
     background: var(--avsd-bg);
     margin: 0 auto;
