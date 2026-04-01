@@ -868,6 +868,7 @@ export default function VehiclePages() {
                         border: "var(--p-border-width-025) solid var(--p-color-border)",
                         padding: "var(--p-space-400)",
                         background: "var(--p-color-bg-surface)",
+                        overflow: "hidden",
                         transition:
                           "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
                       }}
