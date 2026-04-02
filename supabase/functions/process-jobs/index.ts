@@ -1709,12 +1709,19 @@ async function processVehiclePagesChunk(
   // Get engine details
   const { data: engines } = await db
     .from("ymme_engines")
-    .select("id, name, model_id, code, displacement_cc, fuel_type, power_hp, torque_nm, year_from, year_to")
+    .select("id, name, model_id, code, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, aspiration, drive_type, transmission_type, body_type, cylinders, cylinder_config")
     .in("id", engineBatch);
 
   if (!engines || engines.length === 0) {
     return { processed: engineBatch.length, hasMore: alreadyProcessed + VPAGE_BATCH < uniqueEngineIds.length };
   }
+
+  // Get vehicle specs for richer data (hero images, full specs JSON, etc.)
+  const { data: vehicleSpecs } = await db
+    .from("ymme_vehicle_specs")
+    .select("engine_id, hero_image_url, top_speed_kmh, acceleration_0_100, kerb_weight_kg, transmission_type, drive_type, body_type, raw_specs")
+    .in("engine_id", engineBatch);
+  const specMap = new Map((vehicleSpecs || []).map((s: Record<string, unknown>) => [s.engine_id, s]));
 
   // Get model IDs to fetch make/model names
   const modelIds = [...new Set(engines.map((e: { model_id: number }) => e.model_id))];
@@ -1733,9 +1740,11 @@ async function processVehiclePagesChunk(
   const makeMap = new Map((makes || []).map((m: { id: number; name: string }) => [m.id, m.name]));
   const modelMap = new Map((models || []).map((m: { id: number; name: string; make_id: number }) => [m.id, { name: m.name, makeName: makeMap.get(m.make_id) || "" }]));
 
-  // Build specs array for processing
+  // Build specs array for processing — merge engine data with vehicle_specs
   const specs = engines.map((e: Record<string, unknown>) => {
     const model = modelMap.get(e.model_id as number) || { name: "", makeName: "" };
+    const vs = specMap.get(e.id) as Record<string, unknown> | undefined;
+    const rawSpecs = vs?.raw_specs ? (typeof vs.raw_specs === "string" ? JSON.parse(vs.raw_specs as string) : vs.raw_specs) : {};
     return {
       id: e.id,
       make_name: model.makeName,
@@ -1744,11 +1753,18 @@ async function processVehiclePagesChunk(
       year_from: e.year_from,
       year_to: e.year_to,
       raw_specs: {
-        "Engine code": e.code || "",
-        "Engine displacement": e.displacement_cc ? `${e.displacement_cc} cc` : "",
-        "Max. power": e.power_hp ? `${e.power_hp} hp` : "",
+        ...rawSpecs,
+        "Engine code": e.code || rawSpecs?.["Engine code"] || "",
+        "Engine displacement": e.displacement_cc ? `${(Number(e.displacement_cc) / 1000).toFixed(1)}L` : "",
+        "Max. power": e.power_hp ? `${e.power_hp} HP` : "",
         "Max. torque": e.torque_nm ? `${e.torque_nm} Nm` : "",
         "Fuel type": e.fuel_type || "",
+        "Body type": e.body_type || vs?.body_type || "",
+        "Drive": e.drive_type || vs?.drive_type || "",
+        "Gearbox": e.transmission_type || vs?.transmission_type || "",
+        "hero_image_url": vs?.hero_image_url || "",
+        "drive_type": e.drive_type || vs?.drive_type || "",
+        "transmission": e.transmission_type || vs?.transmission_type || "",
       },
     };
   });
@@ -1774,30 +1790,37 @@ async function processVehiclePagesChunk(
   if (!hasDef) {
     // Auto-create the metaobject definition
     console.log("[vehicle_pages] Creating metaobject definition...");
+    // MUST match vehicle-pages.server.ts definition EXACTLY — same 17 fields, same capabilities
     const CREATE_DEF = `mutation {
       metaobjectDefinitionCreate(definition: {
         type: "$app:vehicle_spec"
         name: "Vehicle Specification"
+        displayNameKey: "variant"
         fieldDefinitions: [
           { key: "make", name: "Make", type: "single_line_text_field" }
           { key: "model", name: "Model", type: "single_line_text_field" }
           { key: "generation", name: "Generation", type: "single_line_text_field" }
-          { key: "engine_name", name: "Engine", type: "single_line_text_field" }
+          { key: "variant", name: "Variant", type: "single_line_text_field" }
           { key: "year_range", name: "Year Range", type: "single_line_text_field" }
+          { key: "engine_code", name: "Engine Code", type: "single_line_text_field" }
           { key: "displacement", name: "Displacement", type: "single_line_text_field" }
           { key: "power", name: "Power", type: "single_line_text_field" }
+          { key: "torque", name: "Torque", type: "single_line_text_field" }
           { key: "fuel_type", name: "Fuel Type", type: "single_line_text_field" }
           { key: "body_type", name: "Body Type", type: "single_line_text_field" }
-          { key: "seo_title", name: "SEO Title", type: "single_line_text_field" }
-          { key: "seo_description", name: "SEO Description", type: "multi_line_text_field" }
-          { key: "product_count", name: "Product Count", type: "number_integer" }
+          { key: "drive_type", name: "Drive Type", type: "single_line_text_field" }
+          { key: "transmission", name: "Transmission", type: "single_line_text_field" }
+          { key: "hero_image_url", name: "Hero Image", type: "single_line_text_field" }
+          { key: "overview", name: "Overview", type: "multi_line_text_field" }
+          { key: "full_specs", name: "Full Specs", type: "json" }
+          { key: "linked_products", name: "Linked Products", type: "json" }
         ]
         capabilities: {
           publishable: { enabled: true }
-          renderable: { enabled: true, data: { metaTitleKey: "seo_title", metaDescriptionKey: "seo_description" } }
+          renderable: { enabled: true, data: { metaTitleKey: "variant", metaDescriptionKey: "overview" } }
           onlineStore: { enabled: true, data: { urlHandle: "vehicle-specs" } }
         }
-        access: { storefront: PUBLIC_READ }
+        access: { admin: MERCHANT_READ_WRITE, storefront: PUBLIC_READ }
       }) {
         metaobjectDefinition { type }
         userErrors { field message }
@@ -1830,22 +1853,28 @@ async function processVehiclePagesChunk(
       ? `${spec.year_from}–${spec.year_to}`
       : spec.year_from ? `${spec.year_from}+` : "";
 
-    // Field keys must match the metaobject definition created by the app
-    // Definition fields: make, model, generation, engine_name, year_range, displacement, power, fuel_type, body_type, seo_title, seo_description, product_count
-    const seoTitle = `${spec.make_name} ${spec.model_name} ${spec.variant || ""} Parts | Fitment Verified`.trim();
-    const seoDesc = `Performance parts for ${spec.make_name} ${spec.model_name} ${spec.variant || ""} (${yearRange}). ${rawSpecs["Engine code"] || ""} engine. Fitment verified.`.trim();
+    // Field keys MUST match vehicle-pages.server.ts definition — 17 fields
+    const displacementL = rawSpecs["Engine displacement"] || (rawSpecs["displacement_cc"] ? `${(Number(rawSpecs["displacement_cc"]) / 1000).toFixed(1)}L` : "");
+    const powerStr = rawSpecs["Max. power"] || (rawSpecs["power_hp"] ? `${rawSpecs["power_hp"]} HP` : "");
+    const torqueStr = rawSpecs["Max. torque"] || (rawSpecs["torque_nm"] ? `${rawSpecs["torque_nm"]} Nm` : "");
+    const overview = `The ${spec.make_name} ${spec.model_name} ${spec.variant || ""} is powered by a ${displacementL} ${rawSpecs["Fuel type"] || rawSpecs["fuel_type"] || ""} engine producing ${powerStr} and ${torqueStr}. It features ${rawSpecs["Gearbox"] || rawSpecs["transmission"] || "a manual/automatic"} transmission with ${rawSpecs["Drive"] || rawSpecs["drive_type"] || "front/rear"} wheel drive.`.trim();
     const fields = [
       { key: "make", value: spec.make_name || "" },
       { key: "model", value: spec.model_name || "" },
-      { key: "generation", value: spec.variant || "" },
-      { key: "engine_name", value: spec.variant || rawSpecs["Engine code"] || "" },
+      { key: "generation", value: "" },
+      { key: "variant", value: spec.variant || "" },
       { key: "year_range", value: yearRange },
-      { key: "displacement", value: rawSpecs["Engine displacement"] || rawSpecs["displacement_cc"] || "" },
-      { key: "power", value: rawSpecs["Max. power"] || rawSpecs["power_hp"] || "" },
+      { key: "engine_code", value: rawSpecs["Engine code"] || rawSpecs["engine_code"] || "" },
+      { key: "displacement", value: displacementL },
+      { key: "power", value: powerStr },
+      { key: "torque", value: torqueStr },
       { key: "fuel_type", value: rawSpecs["Fuel type"] || rawSpecs["fuel_type"] || "" },
       { key: "body_type", value: rawSpecs["Body type"] || rawSpecs["body_type"] || "" },
-      { key: "seo_title", value: seoTitle },
-      { key: "seo_description", value: seoDesc },
+      { key: "drive_type", value: rawSpecs["Drive"] || rawSpecs["drive_type"] || "" },
+      { key: "transmission", value: rawSpecs["Gearbox"] || rawSpecs["transmission"] || "" },
+      { key: "hero_image_url", value: rawSpecs["hero_image_url"] || "" },
+      { key: "overview", value: overview },
+      { key: "full_specs", value: JSON.stringify(rawSpecs) },
     ].filter(f => f.value);
 
     try {
