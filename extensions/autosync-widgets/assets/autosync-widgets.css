@@ -1264,6 +1264,15 @@
    .avs-footer (vehicle specs gallery)
    .avsd-footer (vehicle spec detail)
 */
+/* When merchant hides branding, JS adds .autosync-hide-watermark to <html> */
+html.autosync-hide-watermark .autosync-widget-footer,
+html.autosync-hide-watermark .apl-footer,
+html.autosync-hide-watermark .avs-footer,
+html.autosync-hide-watermark .avsd-footer,
+html.autosync-hide-watermark .avd-footer {
+  display: none !important;
+}
+
 .autosync-widget-footer,
 .apl-footer,
 .avs-footer,
