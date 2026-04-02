@@ -1723,6 +1723,23 @@
     document.querySelectorAll('[data-autosync-wheel-finder]').forEach(initWheelFinder);
     document.querySelectorAll('[data-autosync-vin-decode]').forEach(initVinDecode);
     initConversionTracking();
+
+    // Check watermark setting — inject CSS to hide ALL footers (handles dynamic elements too)
+    var anyWidget = document.querySelector('[data-proxy-url]');
+    if (anyWidget) {
+      var pUrl = anyWidget.dataset.proxyUrl;
+      if (pUrl) {
+        proxyFetch(pUrl, 'widget-check', {}).then(function (d) {
+          if (d && d.hideWatermark) {
+            // Inject a style tag that hides ALL watermark footers globally
+            // This works for both static (Liquid) and dynamic (JS-created) footers
+            var style = document.createElement('style');
+            style.textContent = '.autosync-widget-footer, .apl-footer, .avs-footer, .avsd-footer, .avd-footer { display: none !important; }';
+            document.head.appendChild(style);
+          }
+        }).catch(function () { /* ignore — watermark stays visible */ });
+      }
+    }
   }
 
   if (document.readyState === 'loading') {
