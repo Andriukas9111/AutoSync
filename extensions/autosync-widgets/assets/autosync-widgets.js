@@ -1724,20 +1724,9 @@
     document.querySelectorAll('[data-autosync-vin-decode]').forEach(initVinDecode);
     initConversionTracking();
 
-    // Check watermark setting — add class to <html> to hide ALL footers via CSS
-    // The CSS rule `html.autosync-hide-watermark .footer { display:none!important }`
-    // has higher specificity than the base `.footer { display:flex!important }` rule
-    var anyWidget = document.querySelector('[data-proxy-url]');
-    if (anyWidget) {
-      var pUrl = anyWidget.dataset.proxyUrl;
-      if (pUrl) {
-        proxyFetch(pUrl, 'widget-check', {}).then(function (d) {
-          if (d && d.hideWatermark) {
-            document.documentElement.classList.add('autosync-hide-watermark');
-          }
-        }).catch(function () { /* ignore — watermark stays visible */ });
-      }
-    }
+    // Watermark hiding is now handled at Liquid render time via shop metafield
+    // (shop.metafields['app--334692253697--autosync']['hide_watermark'])
+    // No JS needed — zero flash, works for all widgets
   }
 
   if (document.readyState === 'loading') {

@@ -72,11 +72,13 @@
   <!-- Vehicle Grid -->
   <div class="avs-grid" data-avs-grid data-columns="{{ block.settings.columns | default: 'auto' }}" style="display:none;"></div>
 
-  <!-- Footer -->
-  <div class="avs-footer">
-    <img class="avs-footer__logo" src="{{ logo_url }}" alt="AutoSync" width="14" height="14" style="width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;" />
-    <span class="avs-footer__text">Powered by <strong>AutoSync</strong></span>
-  </div>
+  <!-- Footer (hidden if merchant opted out via Settings > Widget Branding) -->
+  {% unless shop.metafields['app--334692253697--autosync']['hide_watermark'].value == true %}
+    <div class="avs-footer">
+      <img class="avs-footer__logo" src="{{ logo_url }}" alt="AutoSync" width="14" height="14" style="width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;" />
+      <span class="avs-footer__text">Powered by <strong>AutoSync</strong></span>
+    </div>
+  {% endunless %}
 </div>
 
 {{ 'autosync-vehicle-gallery.css' | asset_url | stylesheet_tag }}

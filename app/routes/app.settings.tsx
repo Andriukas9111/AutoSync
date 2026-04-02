@@ -153,6 +153,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return data({ error: "Failed to save settings: " + error.message }, { status: 500 });
     }
 
+    // Sync the hide_watermark setting to a shop-level metafield
+    // so Liquid templates can read it at render time (zero-flash watermark control)
+    try {
+      // Get the shop GID first
+      const shopQuery = await admin.graphql(`{ shop { id } }`);
+      const shopJson = await shopQuery.json();
+      const shopGid = shopJson?.data?.shop?.id;
+      if (shopGid) {
+        await admin.graphql(`
+          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              metafields { id }
+              userErrors { message }
+            }
+          }
+        `, {
+          variables: {
+            metafields: [{
+              namespace: "$app:autosync",
+              key: "hide_watermark",
+              type: "boolean",
+              value: String(hideWatermarkVal),
+              ownerId: shopGid,
+            }],
+          },
+        });
+      }
+    } catch (e) {
+      // Non-critical — DB setting still works, metafield is for zero-flash only
+      console.error("[settings] Failed to sync hide_watermark metafield:", e);
+    }
+
     return data({ success: true, message: "Settings saved successfully" });
   }
 

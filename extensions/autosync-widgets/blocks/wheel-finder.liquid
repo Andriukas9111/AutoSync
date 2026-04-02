@@ -70,10 +70,12 @@
   <div class="autosync-wheel-finder__results autosync-wheel-finder--hidden" data-autosync-wheel-results>
     <!-- Results populated by JS -->
   </div>
-  <div class="autosync-widget-footer">
-    <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
-    <span>Powered by <strong>AutoSync</strong></span>
-  </div>
+  {% unless shop.metafields['app--334692253697--autosync']['hide_watermark'].value == true %}
+    <div class="autosync-widget-footer">
+      <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
+      <span>Powered by <strong>AutoSync</strong></span>
+    </div>
+  {% endunless %}
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}

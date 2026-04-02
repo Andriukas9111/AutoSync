@@ -14,6 +14,7 @@
   class="avsd-root"
   data-avsd-root
   data-proxy-url="{{ proxy_url }}"
+  data-hide-watermark="{{ shop.metafields['app--334692253697--autosync']['hide_watermark'].value | default: false }}"
   data-hero-style="{{ block.settings.hero_style | default: 'dark' }}"
   data-show-image="{{ block.settings.show_hero_image | default: true }}"
   data-show-stats="{{ block.settings.show_quick_stats | default: true }}"
@@ -351,24 +352,27 @@
       prodWrap.appendChild(prodGrid);
       contentEl.appendChild(prodWrap);
     }
-    var footerWrap = el('div', 'avsd-footer-wrap');
-    footerWrap.style.cssText = 'text-align:center!important;';
-    var footer = el('div', 'avsd-footer');
-    footer.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';
-    var logoImg = document.createElement('img');
-    logoImg.src = '{{ logo_url }}';
-    logoImg.alt = 'AutoSync';
-    logoImg.width = 14;
-    logoImg.height = 14;
-    logoImg.style.cssText = 'width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;display:inline-block!important;flex-shrink:0!important;';
-    footer.appendChild(logoImg);
-    var poweredText = el('span', 'avsd-footer__text');
-    poweredText.textContent = 'Powered by ';
-    var brandSpan = el('strong', '', 'AutoSync');
-    poweredText.appendChild(brandSpan);
-    footer.appendChild(poweredText);
-    footerWrap.appendChild(footer);
-    contentEl.appendChild(footerWrap);
+    /* Footer — only show if merchant hasn't hidden watermark */
+    if (root.dataset.hideWatermark !== 'true') {
+      var footerWrap = el('div', 'avsd-footer-wrap');
+      footerWrap.style.cssText = 'text-align:center!important;';
+      var footer = el('div', 'avsd-footer');
+      footer.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';
+      var logoImg = document.createElement('img');
+      logoImg.src = '{{ logo_url }}';
+      logoImg.alt = 'AutoSync';
+      logoImg.width = 14;
+      logoImg.height = 14;
+      logoImg.style.cssText = 'width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;display:inline-block!important;flex-shrink:0!important;';
+      footer.appendChild(logoImg);
+      var poweredText = el('span', 'avsd-footer__text');
+      poweredText.textContent = 'Powered by ';
+      var brandSpan = el('strong', '', 'AutoSync');
+      poweredText.appendChild(brandSpan);
+      footer.appendChild(poweredText);
+      footerWrap.appendChild(footer);
+      contentEl.appendChild(footerWrap);
+    }
   }
 })();
 </script>
