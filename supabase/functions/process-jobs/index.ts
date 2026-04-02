@@ -1713,7 +1713,9 @@ async function processVehiclePagesChunk(
     .in("id", engineBatch);
 
   if (!engines || engines.length === 0) {
-    return { processed: engineBatch.length, hasMore: alreadyProcessed + VPAGE_BATCH < uniqueEngineIds.length };
+    // No engine records found for this batch — skip them and advance the counter
+    console.log(`[vehicle_pages] No engines found for batch of ${engineBatch.length} IDs — skipping`);
+    return { processed: engineBatch.length, hasMore: (alreadyProcessed + engineBatch.length) < uniqueEngineIds.length };
   }
 
   // Get vehicle specs for richer data (hero images, full specs JSON, etc.)
@@ -1929,12 +1931,15 @@ async function processVehiclePagesChunk(
     }
   }
 
-  const totalProcessedNow = alreadyProcessed + processed;
+  // Always advance by full batch size to prevent infinite loops
+  // (some engine IDs may not have records in ymme_engines — skip them)
+  const batchAdvance = Math.max(processed, engineBatch.length);
+  const totalProcessedNow = alreadyProcessed + batchAdvance;
   const hasMore = totalProcessedNow < uniqueEngineIds.length;
 
-  console.log(`[vehicle_pages] Batch done: ${processed}, total ${totalProcessedNow}/${uniqueEngineIds.length}, hasMore=${hasMore}`);
+  console.log(`[vehicle_pages] Batch done: ${processed} created, ${batchAdvance} advanced, total ${totalProcessedNow}/${uniqueEngineIds.length}, hasMore=${hasMore}`);
 
-  return { processed, hasMore };
+  return { processed: batchAdvance, hasMore };
 }
 
 // ── Bulk Push processor ───────────────────────────────────
