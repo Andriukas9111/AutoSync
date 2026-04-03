@@ -37,6 +37,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!offlineToken && session.accessToken) {
     offlineToken = session.accessToken;
   }
+  // Always log token status for debugging sync issues
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[app.tsx] Token sync: offline=${offlineToken ? offlineToken.substring(0, 15) + "..." : "NULL"}, session=${session.accessToken ? session.accessToken.substring(0, 15) + "..." : "NULL"}`);
+  }
 
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db
@@ -64,6 +68,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // NEVER overwrite a valid token with null — only update if we have a new one
     const updates: Record<string, unknown> = {};
     if (offlineToken) {
+      updates.shopify_access_token = offlineToken;
+    }
+    // Double-check: if tenants token differs from Session token, force sync
+    // This catches cases where the token was rotated but not synced
+    if (offlineToken && tenant.shopify_access_token && offlineToken !== tenant.shopify_access_token) {
+      console.log(`[app.tsx] Token mismatch detected for ${shopId} — syncing fresh token`);
       updates.shopify_access_token = offlineToken;
     }
     // Only clear uninstall state if previously uninstalled (don't reset plan_status on every visit)
