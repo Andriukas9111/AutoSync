@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator } from "react-router";
 import {
   Page,
   Card,
@@ -180,10 +180,20 @@ export default function ProvidersIndex() {
   const { providers, providerCount: loaderProviderCount, providerLimit, plan, limits } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
 
   // Live stats polling — updates provider/product counts every 5 seconds
   const { stats: polledStats } = useAppData();
   const providerCount = polledStats?.providers ?? loaderProviderCount;
+
+  // Auto-revalidate loader data when product count changes (keeps provider cards fresh)
+  const lastTotal = useRef(polledStats?.total);
+  useEffect(() => {
+    if (polledStats?.total !== undefined && polledStats.total !== lastTotal.current) {
+      lastTotal.current = polledStats.total;
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }
+  }, [polledStats?.total]);
 
   const atLimit =
     providerLimit !== Infinity && providerCount >= providerLimit;
@@ -287,7 +297,7 @@ export default function ProvidersIndex() {
 
         {/* Stats Dashboard */}
         {(() => {
-          const providerTotalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
+          const providerTotalProducts = polledStats?.total ?? providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
           const totalImports = providers.reduce((sum, p) => sum + (p.import_count || 0), 0);
           const sourceTypeCount = new Set(providers.map(p => p.type)).size;
           const statItems = [
