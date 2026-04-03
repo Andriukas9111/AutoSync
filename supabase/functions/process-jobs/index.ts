@@ -902,7 +902,7 @@ async function processPushChunk(
   // Include products WITHOUT shopify_product_id — we'll create them on Shopify
   const { data: products } = await db
     .from("products")
-    .select("id, title, description, sku, price, compare_at_price, vendor, product_type, shopify_product_id, shopify_gid")
+    .select("id, title, description, sku, price, compare_at_price, vendor, product_type, image_url, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
     .not("fitment_status", "eq", "unmapped")
@@ -960,6 +960,9 @@ async function processPushChunk(
                 vendor: (product as Record<string, unknown>).vendor || "",
                 productType: (product as Record<string, unknown>).product_type || "",
                 status: "ACTIVE",
+                ...((product as Record<string, unknown>).image_url ? {
+                  images: [{ src: String((product as Record<string, unknown>).image_url), altText: String((product as Record<string, unknown>).title || "") }],
+                } : {}),
               },
             },
           }),
