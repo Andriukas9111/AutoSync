@@ -614,7 +614,8 @@ Deno.serve(async (req) => {
         result = await processExtractChunk(db, job);
         break;
       case "push":
-        result = await processPushChunk(db, job);
+        // Use bulk operations for product creation, then auto-transitions to bulk_push
+        result = await processBulkProductCreate(db, job);
         break;
       case "collections":
         result = await processCollectionsChunk(db, job);
@@ -2009,6 +2010,183 @@ async function processVehiclePagesChunk(
 }
 
 // ── Bulk Push processor ───────────────────────────────────
+// ── Bulk Product Creation via Shopify Bulk Operations API ──────────────
+// Creates products on Shopify in a single async operation (seconds, not minutes)
+// Flow: Generate JSONL → Upload → Start bulk mutation → Poll → Download results → Save IDs
+
+async function processBulkProductCreate(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata as string) : (job.metadata ?? {});
+
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token, online_store_publication_id").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No access token" };
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // Phase 2: Poll for bulk operation completion
+  if (meta.bulkCreateOperationId) {
+    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`,
+      variables: { id: meta.bulkCreateOperationId },
+    })});
+    const op = (await res.json())?.data?.node;
+    if (!op) return { processed: 0, hasMore: true };
+
+    if (op.status === "RUNNING" || op.status === "CREATED") {
+      console.log(`[bulk_create] Still running: ${op.objectCount ?? 0} objects`);
+      await db.from("sync_jobs").update({ processed_items: op.objectCount ?? 0 }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+    if (op.status === "FAILED") return { processed: 0, hasMore: false, error: `Bulk create failed: ${op.errorCode}` };
+
+    // COMPLETED — download results and save product IDs
+    if (op.status === "COMPLETED" && op.url) {
+      console.log(`[bulk_create] Complete! Downloading results...`);
+      const resultRes = await fetch(op.url);
+      const resultText = await resultRes.text();
+      const lines = resultText.trim().split("\n").filter(Boolean);
+
+      // Parse product IDs from results + match to our DB products
+      const productOrder: string[] = JSON.parse(meta.productOrder || "[]");
+      let savedCount = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        try {
+          const line = JSON.parse(lines[i]);
+          const product = line?.data?.productCreate?.product;
+          if (product?.id && i < productOrder.length) {
+            const gid = product.id;
+            const numericId = gid.split("/").pop();
+            await db.from("products").update({
+              shopify_product_id: numericId,
+              shopify_gid: gid,
+              synced_at: new Date().toISOString(),
+            }).eq("id", productOrder[i]);
+            savedCount++;
+          }
+        } catch (_e) { /* skip malformed lines */ }
+      }
+
+      console.log(`[bulk_create] Saved ${savedCount} Shopify IDs to database`);
+
+      // Now transition to bulk_push for tags + metafields
+      await db.from("sync_jobs").update({
+        type: "bulk_push",
+        status: "pending",
+        metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+        processed_items: savedCount,
+        locked_at: null,
+      }).eq("id", job.id);
+
+      return { processed: savedCount, hasMore: true };
+    }
+
+    return { processed: 0, hasMore: false };
+  }
+
+  // Phase 1: Generate JSONL and start bulk operation
+  console.log(`[bulk_create] Phase 1: Collecting products without Shopify IDs...`);
+
+  // Get all products that need creating on Shopify
+  const allProducts: Array<{ id: string; title: string; description: string | null; vendor: string | null; product_type: string | null; sku: string | null; price: number | null }> = [];
+  let offset = 0;
+  while (true) {
+    const { data: batch } = await db.from("products")
+      .select("id, title, description, vendor, product_type, sku, price")
+      .eq("shop_id", shopId)
+      .is("shopify_product_id", null)
+      .neq("status", "staged")
+      .not("fitment_status", "eq", "unmapped")
+      .order("id")
+      .range(offset, offset + 999);
+    if (!batch || batch.length === 0) break;
+    allProducts.push(...batch as typeof allProducts);
+    offset += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  if (allProducts.length === 0) {
+    console.log(`[bulk_create] No products to create — all have Shopify IDs. Switching to bulk_push...`);
+    // All products already on Shopify — switch directly to bulk_push
+    await db.from("sync_jobs").update({
+      type: "bulk_push",
+      status: "pending",
+      metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+      locked_at: null,
+    }).eq("id", job.id);
+    return { processed: 0, hasMore: true };
+  }
+
+  // Generate JSONL — one productCreate input per line
+  const productOrder: string[] = []; // Track our DB product IDs in order
+  const jsonlLines: string[] = [];
+
+  for (const p of allProducts) {
+    productOrder.push(p.id);
+    jsonlLines.push(JSON.stringify({
+      input: {
+        title: p.title || "Untitled",
+        descriptionHtml: p.description || "",
+        vendor: p.vendor || "",
+        productType: p.product_type || "",
+        status: "ACTIVE",
+      },
+    }));
+  }
+
+  const jsonlContent = jsonlLines.join("\n");
+  console.log(`[bulk_create] Generated JSONL with ${jsonlLines.length} products (${Math.round(jsonlContent.length / 1024)}KB)`);
+
+  // Upload JSONL to Shopify staged storage
+  const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "products.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+  })});
+  const stageJson = await stageRes.json();
+  const target = stageJson?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+  if (!target) return { processed: 0, hasMore: false, error: "Failed to create staged upload" };
+
+  // Upload the JSONL file
+  const form = new FormData();
+  for (const p of target.parameters) form.append(p.name, p.value);
+  form.append("file", new Blob([jsonlContent], { type: "text/jsonl" }));
+  await fetch(target.url, { method: "POST", body: form });
+
+  // Start bulk operation — use ProductCreateInput for API 2026-01
+  const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+    variables: {
+      mutation: `mutation call($input: ProductCreateInput!) { productCreate(product: $input) { product { id title } userErrors { message } } }`,
+      stagedUploadPath: fullResourceUrl,
+    },
+  })});
+  const bulkJson = await bulkRes.json();
+  const opId = bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id;
+  const opErrors = bulkJson?.data?.bulkOperationRunMutation?.userErrors;
+
+  if (opErrors?.length) {
+    return { processed: 0, hasMore: false, error: `Bulk create errors: ${opErrors.map((e: { message: string }) => e.message).join(", ")}` };
+  }
+  if (!opId) {
+    const topErrors = bulkJson?.errors;
+    return { processed: 0, hasMore: false, error: `Bulk create failed: ${topErrors?.[0]?.message || "unknown error"}` };
+  }
+
+  console.log(`[bulk_create] Started bulk operation: ${opId} for ${allProducts.length} products`);
+
+  // Save operation ID and product order to metadata
+  await db.from("sync_jobs").update({
+    total_items: allProducts.length,
+    started_at: new Date().toISOString(),
+    metadata: JSON.stringify({ ...meta, bulkCreateOperationId: opId, productOrder: JSON.stringify(productOrder) }),
+  }).eq("id", job.id);
+
+  return { processed: 0, hasMore: true };
+}
+
 // Two-phase: Phase 1 generates JSONL + starts operations, Phase 2 polls completion
 
 async function processBulkPush(
@@ -2060,9 +2238,11 @@ async function processBulkPush(
             for (const p of target.parameters) form.append(p.name, p.value);
             form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
             await fetch(target.url, { method: "POST", body: form });
+            const opKey = target.parameters.find((pp: { name: string }) => pp.name === "key")?.value || "";
+            const opUrl = target.url + opKey;
             const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
               query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
-              variables: { mutation, stagedUploadPath: target.resourceUrl },
+              variables: { mutation, stagedUploadPath: opUrl },
             })});
             const bulkJson = await bulkRes.json();
             return bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id ?? null;
@@ -2197,10 +2377,14 @@ async function processBulkPush(
     form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
     await fetch(target.url, { method: "POST", body: form });
 
+    // Construct full resource URL (Shopify resourceUrl can be truncated)
+    const opKey = target.parameters.find((p2: { name: string }) => p2.name === "key")?.value || "";
+    const opUrl = target.url + opKey;
+
     // Start bulk operation
     const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
-      variables: { mutation, stagedUploadPath: target.resourceUrl },
+      variables: { mutation, stagedUploadPath: opUrl },
     })});
     const bulkJson = await bulkRes.json();
     return bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id ?? null;
