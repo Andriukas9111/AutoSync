@@ -2203,6 +2203,10 @@ async function processBulkProductCreate(
   form.append("file", new Blob([jsonlContent], { type: "text/jsonl" }));
   await fetch(target.url, { method: "POST", body: form });
 
+  // Construct full resource URL (Shopify resourceUrl can be truncated)
+  const uploadKey = target.parameters.find((p: { name: string }) => p.name === "key")?.value || "";
+  const fullResourceUrl = target.url + uploadKey;
+
   // Start bulk operation — use ProductCreateInput for API 2026-01
   const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
     query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
