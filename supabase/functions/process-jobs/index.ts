@@ -2088,10 +2088,58 @@ async function processBulkProductCreate(
     return { processed: 0, hasMore: false };
   }
 
-  // Phase 1: Generate JSONL and start bulk operation
-  console.log(`[bulk_create] Phase 1: Collecting products without Shopify IDs...`);
+  // Phase 1: Dedup check + Generate JSONL + start bulk operation
+  console.log(`[bulk_create] Phase 1: Checking for existing products on Shopify (dedup)...`);
 
-  // Get all products that need creating on Shopify
+  // DEDUPLICATION: Check if products already exist on Shopify by title
+  // This prevents creating duplicates when push is retried after a failure
+  const existingCheck = await shopifyGraphQL(shopId, accessToken,
+    `{ productsCount { count } }`
+  );
+  const shopifyProductCount = existingCheck?.data?.productsCount?.count ?? 0;
+
+  if (shopifyProductCount > 0) {
+    // Fetch existing products and match by title to link them
+    console.log(`[bulk_create] Found ${shopifyProductCount} existing products on Shopify — linking by title...`);
+    let linked = 0;
+    let cursor: string | null = null;
+    while (true) {
+      const query = `{ products(first: 250${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id title } } pageInfo { hasNextPage endCursor } } }`;
+      const result = await shopifyGraphQL(shopId, accessToken, query);
+      const edges = result?.data?.products?.edges ?? [];
+      if (edges.length === 0) break;
+
+      for (const edge of edges) {
+        const shopifyTitle = (edge.node.title as string || "").trim();
+        const shopifyGid = edge.node.id as string;
+        const numericId = shopifyGid.split("/").pop();
+
+        // Match by exact title in our DB
+        const { data: match } = await db.from("products")
+          .select("id")
+          .eq("shop_id", shopId)
+          .eq("title", shopifyTitle)
+          .is("shopify_product_id", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (match) {
+          await db.from("products").update({
+            shopify_product_id: numericId,
+            shopify_gid: shopifyGid,
+          }).eq("id", match.id);
+          linked++;
+        }
+      }
+
+      const pageInfo = result?.data?.products?.pageInfo;
+      if (!pageInfo?.hasNextPage) break;
+      cursor = pageInfo.endCursor;
+    }
+    console.log(`[bulk_create] Linked ${linked} existing products by title`);
+  }
+
+  // Get all products that STILL need creating on Shopify (after dedup)
   const allProducts: Array<{ id: string; title: string; description: string | null; vendor: string | null; product_type: string | null; sku: string | null; price: number | null }> = [];
   let offset = 0;
   while (true) {
