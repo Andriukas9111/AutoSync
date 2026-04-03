@@ -934,14 +934,11 @@ async function processPushChunk(
 
   for (const product of products) {
     const productFitments = fitmentsByProduct.get(product.id);
-    if (!productFitments || productFitments.length === 0) {
-      processed++;
-      continue;
-    }
+    const hasFitments = productFitments && productFitments.length > 0;
 
     let gid = product.shopify_gid || (product.shopify_product_id ? `gid://shopify/Product/${product.shopify_product_id}` : null);
 
-    // If product doesn't exist on Shopify yet, create it
+    // If product doesn't exist on Shopify yet, create it (with or without fitments)
     if (!gid) {
       try {
         const createRes = await fetch(apiUrl, {
@@ -960,14 +957,17 @@ async function processPushChunk(
                 vendor: (product as Record<string, unknown>).vendor || "",
                 productType: (product as Record<string, unknown>).product_type || "",
                 status: "ACTIVE",
-                ...((product as Record<string, unknown>).image_url ? {
-                  images: [{ src: String((product as Record<string, unknown>).image_url), altText: String((product as Record<string, unknown>).title || "") }],
-                } : {}),
               },
             },
           }),
         });
         const createJson = await createRes.json();
+        // Check for top-level GraphQL errors (e.g., invalid arguments)
+        if (createJson?.errors?.length) {
+          console.error(`[push] GraphQL error creating product: ${(product as Record<string, unknown>).title}`, createJson.errors[0]?.message);
+          processed++;
+          continue;
+        }
         await handleThrottle(createJson);
         const createdProduct = createJson?.data?.productCreate?.product;
         const createErrors = createJson?.data?.productCreate?.userErrors;
@@ -1019,6 +1019,22 @@ async function processPushChunk(
             });
           }
 
+          // Add product image via productCreateMedia (images field removed in 2026-01 API)
+          const imgUrl = String((product as Record<string, unknown>).image_url || "");
+          if (imgUrl && imgUrl.startsWith("http") && imgUrl.length > 30) {
+            try {
+              await fetch(apiUrl, {
+                method: "POST", headers: gqlHeaders,
+                body: JSON.stringify({
+                  query: `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                    productCreateMedia(productId: $productId, media: $media) { media { id } mediaUserErrors { message } }
+                  }`,
+                  variables: { productId: gid, media: [{ originalSource: imgUrl, mediaContentType: "IMAGE", alt: String((product as Record<string, unknown>).title || "") }] },
+                }),
+              });
+            } catch (_imgErr) { /* non-critical — product still created */ }
+          }
+
           console.log(`[push] Created product on Shopify: ${(product as Record<string, unknown>).title} -> ${numericId}`);
         } else {
           console.error(`[push] Failed to create product: ${(product as Record<string, unknown>).title}`, createErrors);
@@ -1032,12 +1048,17 @@ async function processPushChunk(
       }
     }
 
-    // Build tags
+    // Build tags (only if product has fitments)
     const tags: string[] = [];
+    if (!hasFitments) {
+      // Product has no fitments — skip tags/metafields but count as processed
+      processed++;
+      continue;
+    }
     const seenMakes = new Set<string>();
     const seenModels = new Set<string>();
     const seenYearRanges = new Set<string>();
-    for (const f of productFitments) {
+    for (const f of productFitments!) {
       const make = f.make as string;
       const model = f.model as string;
       const yearFrom = f.year_from as number | null;
