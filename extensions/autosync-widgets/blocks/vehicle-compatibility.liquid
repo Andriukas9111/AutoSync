@@ -2,157 +2,179 @@
   AutoSync Vehicle Compatibility Table
   Displays all vehicles a product fits
 {% endcomment %}
-
+{% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign compat_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.compat == true
+      assign compat_allowed = true
+    endif
+  endif
+%}
+{% if compat_allowed == false %}
+<!-- Vehicle Compatibility: requires Starter plan -->
+{% else %}
 <div
   class="autosync-compat-table"
   data-autosync-compat-table
   data-proxy-url="{{ shop.url }}/apps/autosync"
   data-product-id="{{ product.id }}"
   data-metafield-vehicles='{{ product.metafields.autosync_fitment.vehicles.value | json }}'
+  data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
   id="autosync-compat-{{ block.id }}"
-  style="padding-top: {{ block.settings.padding_top }}px; padding-bottom: {{ block.settings.padding_bottom }}px;"
+  style="
+--act-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+--act-bg: {{ block.settings.background_color | default: '#ffffff' }};
+--act-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+--act-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+--act-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+--act-radius: {{ block.settings.border_radius | default: 8 }}px;
+padding-top: {{ block.settings.padding_top }}px;
+padding-bottom: {{ block.settings.padding_bottom }}px;
+  "
 >
   {% if block.settings.heading != blank %}
-    <h3 class="autosync-compat-table__heading">{{ block.settings.heading }}</h3>
+<h3 class="autosync-compat-table__heading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.heading }}</h3>
   {% endif %}
 
   <div class="autosync-compat-table__wrapper">
-    <table class="autosync-compat-table__table">
-      <thead>
-        <tr>
-          <th>Make</th>
-          <th>Model</th>
-          <th>Years</th>
+<table class="autosync-compat-table__table">
+<thead>
+<tr>
+<th>Make</th>
+<th>Model</th>
+<th>Years</th>
           {% if block.settings.show_engine %}
-            <th>Engine</th>
+<th>Engine</th>
           {% endif %}
-        </tr>
-      </thead>
-      <tbody data-autosync-compat-body>
-        <tr>
-          <td colspan="{% if block.settings.show_engine %}4{% else %}3{% endif %}">
-            Loading compatibility data...
-          </td>
-        </tr>
-      </tbody>
-    </table>
+</tr>
+</thead>
+<tbody data-autosync-compat-body>
+<tr>
+<td colspan="{% if block.settings.show_engine %}4{% else %}3{% endif %}">
+Loading compatibility data...
+</td>
+</tr>
+</tbody>
+</table>
   </div>
-  {% unless shop.metafields['app--334692253697--autosync']['hide_watermark'].value == true %}
-    <div class="autosync-widget-footer">
-      <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
-      <span>Powered by <strong>AutoSync</strong></span>
-    </div>
+  {% unless shop.metafields['$app:autosync']['hide_watermark'].value == true %}
+<div class="autosync-widget-footer">
+<img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
+<span>Powered by <strong>AutoSync</strong></span>
+</div>
   {% endunless %}
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
 
 {% schema %}
 {
-  "name": "Vehicle Compatibility",
-  "target": "section",
-  "settings": [
-    {
-      "type": "header",
-      "content": "Content"
-    },
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Vehicle Compatibility"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_engine",
-      "label": "Show Engine Column",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_years",
-      "label": "Show Year Range",
-      "default": true
-    },
-    {
-      "type": "select",
-      "id": "heading_alignment",
-      "label": "Heading Alignment",
-      "default": "left",
-      "options": [
-        { "value": "left", "label": "Left" },
-        { "value": "center", "label": "Center" }
-      ]
-    },
-    {
-      "type": "header",
-      "content": "Colors"
-    },
-    {
-      "type": "color",
-      "id": "primary_color",
-      "label": "Primary Color",
-      "default": "#005bd2"
-    },
-    {
-      "type": "color",
-      "id": "background_color",
-      "label": "Background Color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text Color",
-      "default": "#1a1a2e"
-    },
-    {
-      "type": "color",
-      "id": "border_color",
-      "label": "Border Color",
-      "default": "#e5e7eb"
-    },
-    {
-      "type": "color",
-      "id": "card_bg",
-      "label": "Alternate Row Color",
-      "default": "#f9fafb"
-    },
-    {
-      "type": "range",
-      "id": "border_radius",
-      "label": "Border Radius",
-      "min": 0,
-      "max": 24,
-      "step": 2,
-      "default": 8,
-      "unit": "px"
-    },
-    {
-      "type": "header",
-      "content": "Layout"
-    },
-    {
-      "type": "range",
-      "id": "padding_top",
-      "label": "Top Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    },
-    {
-      "type": "range",
-      "id": "padding_bottom",
-      "label": "Bottom Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    }
-  ]
+"name": "Vehicle Compatibility",
+"target": "section",
+"settings": [
+{
+"type": "header",
+"content": "Content"
+},
+{
+"type": "text",
+"id": "heading",
+"label": "Heading",
+"default": "Vehicle Compatibility"
+},
+{
+"type": "checkbox",
+"id": "show_engine",
+"label": "Show Engine Column",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_years",
+"label": "Show Year Range",
+"default": true
+},
+{
+"type": "select",
+"id": "heading_alignment",
+"label": "Heading Alignment",
+"default": "left",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" }
+]
+},
+{
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Alternate Row Color",
+"default": "#f9fafb"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+}
+]
 }
 {% endschema %}

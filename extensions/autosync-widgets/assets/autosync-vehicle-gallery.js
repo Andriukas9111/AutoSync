@@ -50,7 +50,7 @@
       return doc.documentElement;
     }
 
-    var PER_PAGE = 18;
+    var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
     var currentPage = 1;
     var currentVehicles = [];
 

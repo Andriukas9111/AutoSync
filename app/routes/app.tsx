@@ -9,10 +9,10 @@ import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, loadPlanConfigsFromDB } from "../lib/billing.server";
+import { getPlanLimits, getEffectivePlan, loadPlanConfigsFromDB } from "../lib/billing.server";
 import { isAdminShop } from "../lib/admin.server";
 import { PageFooter } from "../components/PageFooter";
-import type { PlanTier } from "../lib/types";
+import type { PlanTier, Tenant } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -71,12 +71,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       updates.uninstalled_at = null;
       updates.plan_status = "active"; // Re-activate on re-install only
     }
-    // Note: Admin plan is managed via admin panel, not auto-set here
-    // This allows testing different plan tiers on the admin shop
-    await db
-      .from("tenants")
-      .update(updates)
-      .eq("shop_id", shopId);
+    // Note: Admin shops get enterprise features via getEffectivePlan() — no need to force DB
+    if (Object.keys(updates).length > 0) {
+      await db
+        .from("tenants")
+        .update(updates)
+        .eq("shop_id", shopId);
+    }
   }
 
   // Auto-discover publication IDs for multi-tenant (runs once per tenant)
@@ -97,16 +98,115 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  // Ensure shop-level metafield definitions exist (runs once per tenant)
+  // Required for Liquid to read $app:autosync.* metafields
+  const freshTenantCheck = tenant ?? (await db.from("tenants").select("widget_metadefs_created").eq("shop_id", shopId).maybeSingle()).data;
+  if (!freshTenantCheck?.widget_metadefs_created) {
+    const shopMetaDefs = [
+      { name: "Plan Tier", key: "plan_tier", type: "single_line_text_field", description: "Current plan tier" },
+      { name: "Allowed Widgets", key: "allowed_widgets", type: "json", description: "Widget permissions by plan" },
+      { name: "Hide Watermark", key: "hide_watermark", type: "boolean", description: "Whether to hide AutoSync watermark" },
+    ];
+    let allCreated = true;
+    for (const def of shopMetaDefs) {
+      try {
+        const defRes = await admin.graphql(`
+          mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+            metafieldDefinitionCreate(definition: $definition) {
+              createdDefinition { id }
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: {
+            definition: {
+              name: def.name,
+              namespace: "$app:autosync",
+              key: def.key,
+              type: def.type,
+              ownerType: "SHOP",
+              description: def.description,
+              access: { storefront: "PUBLIC_READ" },
+            },
+          },
+        });
+        const defJson = await defRes.json();
+        const ue = defJson?.data?.metafieldDefinitionCreate?.userErrors;
+        // "taken" means already exists — that's fine
+        if (ue?.length && !ue.some((e: { message: string }) => e.message.includes("taken") || e.message.includes("already"))) {
+          console.error("[app.tsx] Metafield def error:", def.key, ue);
+          allCreated = false;
+        }
+      } catch {
+        allCreated = false;
+      }
+    }
+    if (allCreated) {
+      await db.from("tenants").update({ widget_metadefs_created: true }).eq("shop_id", shopId);
+    }
+  }
+
+  // Sync plan_tier + allowed_widgets metafields to shop
+  // These are read by Liquid widgets for zero-flash plan gating
+  try {
+    const freshTenant = tenant ?? (await db.from("tenants").select("plan, plan_status").eq("shop_id", shopId).maybeSingle()).data;
+    const effectivePlan = getEffectivePlan(freshTenant as Tenant | null);
+    const effectiveLimits = getPlanLimits(effectivePlan);
+    const shopGidRes = await admin.graphql(`{ shop { id } }`);
+    const shopGidJson = await shopGidRes.json();
+    const shopGid = shopGidJson?.data?.shop?.id;
+    if (shopGid) {
+      const allowedWidgets = JSON.stringify({
+        ymme: effectiveLimits.features.ymmeWidget,
+        badge: effectiveLimits.features.fitmentBadge,
+        compat: effectiveLimits.features.compatibilityTable,
+        garage: effectiveLimits.features.myGarage,
+        wheel: effectiveLimits.features.wheelFinder,
+        plate: effectiveLimits.features.plateLookup,
+        vin: effectiveLimits.features.vinDecode,
+        pages: effectiveLimits.features.vehiclePages,
+      });
+      // Watermark can only be hidden if plan supports it AND merchant opted in
+      const canHideWatermark = effectiveLimits.features.widgetCustomisation === "full" || effectiveLimits.features.widgetCustomisation === "full_css";
+      let hideWatermark = false;
+      if (canHideWatermark) {
+        const { data: settings } = await db.from("app_settings").select("hide_watermark").eq("shop_id", shopId).maybeSingle();
+        hideWatermark = settings?.hide_watermark === true;
+      }
+      const metaRes = await admin.graphql(`
+        mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            metafields { id namespace key }
+            userErrors { field message }
+          }
+        }
+      `, {
+        variables: {
+          metafields: [
+            { namespace: "$app:autosync", key: "plan_tier", type: "single_line_text_field", value: effectivePlan, ownerId: shopGid },
+            { namespace: "$app:autosync", key: "allowed_widgets", type: "json", value: allowedWidgets, ownerId: shopGid },
+            { namespace: "$app:autosync", key: "hide_watermark", type: "boolean", value: String(hideWatermark), ownerId: shopGid },
+          ],
+        },
+      });
+      const metaJson = await metaRes.json();
+      const userErrors = metaJson?.data?.metafieldsSet?.userErrors;
+      if (userErrors?.length) {
+        console.error("[app.tsx] Metafield sync userErrors:", JSON.stringify(userErrors));
+      } else {
+        console.log("[app.tsx] Metafield sync OK — plan:", effectivePlan, "widgets:", allowedWidgets);
+      }
+    }
+  } catch (e) {
+    // Non-critical — widgets fall back to widget-check JS endpoint
+    console.warn("[app.tsx] Plan metafield sync failed:", e);
+  }
+
   // Prime the plan config cache from DB (warm for all child loaders)
   await loadPlanConfigsFromDB();
 
-  // For admin shops, always use enterprise regardless of current DB state
-  // For other tenants, check plan_status — cancelled means free
-  const rawPlan = (tenant?.plan ?? "free") as PlanTier;
-  const planStatus = tenant?.plan_status;
-  const plan = isAdmin
-    ? ("enterprise" as PlanTier)
-    : (planStatus === "cancelled" && rawPlan !== "free" ? "free" as PlanTier : rawPlan);
+  // Use the DB plan as-is — admin panel controls the plan for testing
+  const plan = getEffectivePlan(tenant as Tenant | null);
   const limits = getPlanLimits(plan);
 
   // Load active announcements for this tenant

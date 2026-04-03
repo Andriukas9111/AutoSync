@@ -54,7 +54,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (tenantErr) errors.push(`tenants: ${tenantErr.message}`);
 
   if (errors.length > 0) {
-    console.error(`[webhook] ${topic}: Partial redaction failures:`, errors.join("; "));
+    // CRITICAL: GDPR redaction partially failed — this MUST be investigated
+    // Structured error for monitoring/alerting systems to pick up
+    console.error(JSON.stringify({
+      level: "CRITICAL",
+      event: "gdpr_redaction_failure",
+      shop,
+      topic,
+      failedTables: errors,
+      totalTables: explicitTables.length + 1,
+      failedCount: errors.length,
+      timestamp: new Date().toISOString(),
+    }));
+  } else {
+    console.log(`[webhook] ${topic}: All data redacted successfully for ${shop}`);
   }
 
   return new Response(JSON.stringify({ message: "Shop data redacted" }), {

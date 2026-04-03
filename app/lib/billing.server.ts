@@ -768,11 +768,11 @@ async function cancelBillingSubscription(
 export async function confirmBillingSubscription(
   shopId: string,
   chargeId: string,
-  admin?: any,
+  admin: { graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response> },
 ): Promise<{ plan: PlanTier }> {
   // CRITICAL: Verify the charge with Shopify API before activating
   // Prevents billing fraud via replay attacks or forged charge_ids
-  if (admin && chargeId) {
+  if (chargeId) {
     try {
       const response = await admin.graphql(`
         query appSubscription($id: ID!) {

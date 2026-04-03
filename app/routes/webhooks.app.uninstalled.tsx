@@ -37,11 +37,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Mark tenant as uninstalled in Supabase (preserve data — they might reinstall)
+  // Clear access token — it's revoked by Shopify on uninstall, no reason to keep it
   await db
     .from("tenants")
     .update({
       uninstalled_at: new Date().toISOString(),
       plan_status: "cancelled",
+      shopify_access_token: null,
     })
     .eq("shop_id", shop);
 

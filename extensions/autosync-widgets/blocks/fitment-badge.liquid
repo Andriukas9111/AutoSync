@@ -2,7 +2,18 @@
   AutoSync Fitment Badge
   Shows "Fits your vehicle" or "May not fit" based on stored vehicle in localStorage
 {% endcomment %}
-
+{% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign badge_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.badge == true
+      assign badge_allowed = true
+    endif
+  endif
+%}
+{% if badge_allowed == false %}
+<!-- Fitment Badge: requires Starter plan -->
+{% else %}
 <div
   class="autosync-fitment-badge"
   data-autosync-fitment-badge
@@ -15,6 +26,9 @@
   style="
     --autosync-badge-success: {{ block.settings.success_color }};
     --autosync-badge-warning: {{ block.settings.warning_color }};
+    --autosync-badge-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --autosync-badge-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --autosync-badge-radius: {{ block.settings.border_radius | default: 8 }}px;
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
   "
@@ -43,72 +57,73 @@
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
 
 {% schema %}
 {
-  "name": "Fitment Badge",
-  "target": "section",
-  "settings": [
-    {
-      "type": "color",
-      "id": "success_color",
-      "label": "Success Color",
-      "default": "#1a7f37"
-    },
-    {
-      "type": "color",
-      "id": "warning_color",
-      "label": "Warning Color",
-      "default": "#bf5700"
-    },
-    {
-      "type": "color",
-      "id": "background_color",
-      "label": "Background Color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text Color",
-      "default": "#1a1a2e"
-    },
-    {
-      "type": "range",
-      "id": "border_radius",
-      "label": "Border Radius",
-      "min": 0,
-      "max": 24,
-      "step": 2,
-      "default": 8,
-      "unit": "px"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_vehicle_name",
-      "label": "Show Vehicle Name",
-      "default": true
-    },
-    {
-      "type": "range",
-      "id": "padding_top",
-      "label": "Top Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    },
-    {
-      "type": "range",
-      "id": "padding_bottom",
-      "label": "Bottom Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    }
-  ]
+"name": "Fitment Badge",
+"target": "section",
+"settings": [
+{
+"type": "color",
+"id": "success_color",
+"label": "Success Color",
+"default": "#1a7f37"
+},
+{
+"type": "color",
+"id": "warning_color",
+"label": "Warning Color",
+"default": "#bf5700"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "checkbox",
+"id": "show_vehicle_name",
+"label": "Show Vehicle Name",
+"default": true
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+}
+]
 }
 {% endschema %}

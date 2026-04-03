@@ -1361,11 +1361,11 @@ async function processCollectionsChunk(
     };
 
     if (seoEnabled) {
+      const yr = new Date().getFullYear();
       input.seo = {
-        title: `${make} Parts & Accessories | Shop ${make} Compatible Products`,
-        description: `Browse ${make} compatible parts and accessories. Filter by model and year to find products verified for your ${make} vehicle. Guaranteed fitment compatibility.`,
+        title: `${make} Parts & Accessories ${yr} | Performance & Aftermarket`.slice(0, 60),
+        description: `Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension, brakes & styling upgrades.`.slice(0, 160),
       };
-      input.descriptionHtml = `<h2>${make} Parts & Accessories</h2><p>Browse our selection of parts and accessories compatible with <strong>${make}</strong> vehicles. Every product has been verified for fitment with your specific ${make} model, year, and engine.</p><p>Use the vehicle selector to filter by your exact ${make} model and year for guaranteed compatibility.</p>`;
     }
 
     try {
@@ -1377,14 +1377,16 @@ async function processCollectionsChunk(
 
       // Add rich description HTML with SEO keywords
       input.descriptionHtml = `<h2>${make} Performance Parts &amp; Accessories</h2>
-<p>Explore our extensive range of aftermarket performance parts, upgrades, and accessories for <strong>${make}</strong> vehicles. Every product in this collection has been verified for fitment compatibility, so you can shop with confidence knowing each part is designed to fit your ${make}.</p>
+<p>Explore our extensive range of aftermarket performance parts, upgrades, and accessories for <strong>${make}</strong> vehicles. Every product is fitment-verified to ensure perfect compatibility with your specific ${make} model and year.</p>
+<p>Our ${make} parts collection covers all popular models and includes everything from engine performance upgrades to suspension, brakes, exhaust systems, and styling accessories. All parts are sourced from trusted aftermarket brands and OEM suppliers.</p>
 <h3>Shop by ${make} Model</h3>
 <p>Use our vehicle selector to narrow down parts for your exact ${make} model, year, and engine specification. Our advanced fitment system ensures you only see parts that are compatible with your vehicle.</p>
-<h3>Why Choose Fitment-Verified ${make} Parts?</h3>
+<h3>Why Shop ${make} Parts With Us?</h3>
 <ul>
-<li><strong>Guaranteed Fit</strong> — Every part verified for ${make} vehicle compatibility</li>
-<li><strong>Quality Brands</strong> — Sourced from leading aftermarket manufacturers</li>
-<li><strong>Expert Knowledge</strong> — Specialist ${make} vehicle modification experience</li>
+<li><strong>Fitment Guaranteed</strong> — Advanced vehicle compatibility verification on every product</li>
+<li><strong>All Models Covered</strong> — Parts for every ${make} model in our database</li>
+<li><strong>Trusted Brands</strong> — We stock parts from leading aftermarket manufacturers</li>
+<li><strong>Expert Knowledge</strong> — Specialist ${make} modification experience and support</li>
 </ul>`;
 
       const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -1420,8 +1422,8 @@ async function processCollectionsChunk(
           shopify_collection_id: numericId,
           handle: collection.handle,
           image_url: logoMap.get(make) ?? null,
-          seo_title: seoEnabled ? `${make} Performance Parts & Accessories` : null,
-          seo_description: seoEnabled ? `Browse our range of performance parts and accessories for ${make} vehicles.` : null,
+          seo_title: seoEnabled ? `${make} Parts & Accessories ${new Date().getFullYear()} | Performance & Aftermarket`.slice(0, 60) : null,
+          seo_description: seoEnabled ? `Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension & more.`.slice(0, 160) : null,
           synced_at: new Date().toISOString(),
         }, { onConflict: "shop_id,title", ignoreDuplicates: true });
         if (insertErr) console.error(`[collections] DB insert error for ${make}:`, insertErr.message);
@@ -1464,11 +1466,11 @@ async function processCollectionsChunk(
       };
 
       if (seoEnabled) {
+        const yr = new Date().getFullYear();
         input.seo = {
-          title: `${make} ${model} Parts & Accessories | ${make} ${model} Compatible Products`,
-          description: `Find parts and accessories for the ${make} ${model}. Browse products verified for ${make} ${model} fitment. Filter by year and engine for guaranteed compatibility.`,
+          title: `${make} ${model} Parts & Accessories ${yr} | Performance Upgrades`.slice(0, 60),
+          description: `Browse ${make} ${model} performance parts, upgrades & accessories. Every part is fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`.slice(0, 160),
         };
-        input.descriptionHtml = `<h2>${make} ${model} Parts & Accessories</h2><p>Browse parts and accessories for the <strong>${make} ${model}</strong>. Every product in this collection has been verified for fitment with your ${make} ${model}.</p><p>Use the vehicle selector to filter by year and engine specification for guaranteed compatibility.</p>`;
       }
 
       try {
@@ -1478,13 +1480,15 @@ async function processCollectionsChunk(
           input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} performance parts and accessories` };
         }
         input.descriptionHtml = `<h2>${make} ${model} Performance Parts &amp; Accessories</h2>
-<p>Discover our curated range of high-quality performance parts, upgrades, and accessories specifically designed for the <strong>${make} ${model}</strong>. Each product in this collection has been verified for fitment compatibility, so you can shop with confidence knowing every part is designed to fit your vehicle.</p>
-<p>Whether you're looking for exhaust systems, intake upgrades, suspension components, or styling accessories, our ${make} ${model} collection has everything you need to enhance your vehicle. All parts are sourced from trusted aftermarket manufacturers and backed by our fitment guarantee.</p>
-<h3>Why Choose Fitment-Verified ${make} ${model} Parts?</h3>
+<p>Browse our complete range of performance parts, upgrades, and accessories for the <strong>${make} ${model}</strong>. Each product has been checked for fitment compatibility, so you can shop with confidence knowing every part is designed to fit your vehicle.</p>
+<p>Whether you're looking for power upgrades, handling improvements, or cosmetic enhancements, our ${make} ${model} collection has you covered. We stock parts from all major aftermarket brands with guaranteed vehicle compatibility.</p>
+<h3>Popular ${make} ${model} Upgrades</h3>
 <ul>
-<li><strong>Guaranteed Fit</strong> — Every part verified for ${make} ${model} compatibility</li>
-<li><strong>Quality Brands</strong> — Sourced from leading automotive manufacturers</li>
-<li><strong>Expert Support</strong> — Specialist knowledge of ${make} ${model} modifications</li>
+<li>Performance exhaust systems and downpipes</li>
+<li>Cold air intakes and induction kits</li>
+<li>Suspension springs, coilovers, and anti-roll bars</li>
+<li>Brake upgrades, pads, and discs</li>
+<li>Styling accessories and body parts</li>
 </ul>`;
 
         const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -1517,8 +1521,8 @@ async function processCollectionsChunk(
             shopify_collection_id: numId,
             handle: collection.handle,
             image_url: makeLogoRow?.logo_url ?? null,
-            seo_title: seoEnabled ? `${make} ${model} Performance Parts & Accessories` : null,
-            seo_description: seoEnabled ? `Browse parts and accessories for the ${make} ${model}.` : null,
+            seo_title: seoEnabled ? `${make} ${model} Parts & Accessories ${new Date().getFullYear()} | Performance Upgrades`.slice(0, 60) : null,
+            seo_description: seoEnabled ? `Browse ${make} ${model} performance parts & accessories. Fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`.slice(0, 160) : null,
             synced_at: new Date().toISOString(),
           }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           if (mmInsertErr) console.error(`[collections] DB insert error for ${make} ${model}:`, mmInsertErr.message);
@@ -1587,10 +1591,18 @@ async function processCollectionsChunk(
 
       if (seoEnabled) {
         input.seo = {
-          title: `${make} ${model} ${yearRange} Parts & Accessories`,
-          description: `Find parts and accessories for the ${make} ${model} ${yearRange}. All products verified for fitment with your ${make} ${model} (${yearRange}).`,
+          title: `${make} ${model} ${yearRange} Parts & Accessories | Shop Now`.slice(0, 60),
+          description: `Shop fitment-verified ${make} ${model} ${yearRange} performance parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more for your ${make} ${model}.`.slice(0, 160),
         };
-        input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Parts & Accessories</h2><p>Browse parts and accessories for the <strong>${make} ${model} (${yearRange})</strong>. Every product verified for fitment compatibility with your vehicle.</p>`;
+        input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Performance Parts &amp; Accessories</h2>
+<p>Discover our curated collection of high-quality performance parts, upgrades, and accessories specifically designed for the <strong>${make} ${model} (${yearRange})</strong>. Every product in this collection has been verified for fitment compatibility with your vehicle.</p>
+<p>From exhaust systems and intake upgrades to suspension components and styling accessories, find everything you need to enhance your ${make} ${model}. All parts are sourced from trusted manufacturers and backed by our fitment guarantee.</p>
+<h3>Why Choose Fitment-Verified ${make} Parts?</h3>
+<ul>
+<li><strong>Guaranteed Fit</strong> — Every part verified for ${make} ${model} ${yearRange} compatibility</li>
+<li><strong>Quality Brands</strong> — Sourced from leading automotive parts manufacturers</li>
+<li><strong>Expert Support</strong> — Specialist knowledge for ${make} vehicle modifications</li>
+</ul>`;
       }
 
       try {
@@ -1627,8 +1639,8 @@ async function processCollectionsChunk(
             title, handle: collection.handle,
             shopify_collection_id: numId,
             image_url: makeLogoRow?.logo_url ?? null,
-            seo_title: seoEnabled ? `${make} ${model} ${yearRange} Parts` : null,
-            seo_description: seoEnabled ? `Parts for ${make} ${model} ${yearRange}.` : null,
+            seo_title: seoEnabled ? `${make} ${model} ${yearRange} Parts & Accessories | Shop Now`.slice(0, 60) : null,
+            seo_description: seoEnabled ? `Shop fitment-verified ${make} ${model} ${yearRange} parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more.`.slice(0, 160) : null,
             synced_at: new Date().toISOString(),
           }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           console.log(`[collections] Created year collection: ${title}`);

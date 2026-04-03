@@ -164,7 +164,7 @@
   font-size: 0.8125rem;
   font-weight: 500;
   margin-bottom: 0.25rem;
-  color: inherit;
+  color: var(--autosync-muted, inherit);
   opacity: 0.8;
 }
 
@@ -706,9 +706,10 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--autosync-badge-radius, 6px);
   font-size: 0.875rem;
   font-weight: 500;
+  color: var(--autosync-badge-text, inherit);
 }
 
 .autosync-fitment-badge--hidden {
@@ -749,31 +750,37 @@
 /* --------------- Compatibility Table --------------- */
 .autosync-compat-table {
   margin: 1rem 0;
+  color: var(--act-text, inherit);
 }
 
 .autosync-compat-table__heading {
   font-size: 1.125rem;
   font-weight: 600;
   margin: 0 0 0.75rem;
+  color: var(--act-text, inherit);
 }
 
 .autosync-compat-table__wrapper {
   overflow-x: auto;
+  border-radius: var(--act-radius, 8px);
+  border: 1px solid var(--act-border, #e3e3e3);
+  overflow: hidden;
 }
 
 .autosync-compat-table__table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
+  background: var(--act-bg, #fff);
 }
 
 .autosync-compat-table__table th {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  background: #f6f6f7;
-  border-bottom: 2px solid #e3e3e3;
+  background: var(--act-card-bg, #f6f6f7);
+  border-bottom: 2px solid var(--act-border, #e3e3e3);
   font-weight: 600;
-  color: #6d7175;
+  color: var(--act-text, #6d7175);
   font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.025em;
@@ -781,11 +788,12 @@
 
 .autosync-compat-table__table td {
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #edeeef;
+  border-bottom: 1px solid var(--act-border, #edeeef);
+  color: var(--act-text, inherit);
 }
 
 .autosync-compat-table__table tbody tr:hover {
-  background: #f9fafb;
+  background: var(--act-card-bg, #f9fafb);
 }
 
 /* --------------- Plate Lookup --------------- */
@@ -927,15 +935,23 @@
 /* --------------- Wheel Finder --------------- */
 .autosync-wheel-finder {
   padding: 1.5rem;
-  border: 1px solid #e3e3e3;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--awf-border, #e3e3e3);
+  border-radius: var(--awf-radius, 8px);
+  background: var(--awf-bg, #fff);
+  color: var(--awf-text, inherit);
 }
 
 .autosync-wheel-finder__heading {
-  margin: 0 0 1rem;
+  margin: 0 0 0.25rem;
   font-size: 1.25rem;
   font-weight: 600;
+  color: var(--awf-text, inherit);
+}
+.autosync-wheel-finder__subheading {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--awf-muted, #6b7280);
+  line-height: 1.5;
 }
 
 .autosync-wheel-finder__fields {
@@ -955,6 +971,7 @@
   font-size: 0.8125rem;
   font-weight: 500;
   margin-bottom: 0.25rem;
+  color: var(--awf-muted, inherit);
 }
 
 .autosync-wheel-finder__field select,
@@ -962,14 +979,15 @@
   width: 100%;
   padding: 0.5rem 0.75rem;
   font-size: 0.875rem;
-  border: 1px solid #c9cccf;
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--awf-border, #c9cccf);
+  border-radius: calc(var(--awf-radius, 8px) / 2);
+  background: var(--awf-card-bg, #fff);
+  color: var(--awf-text, inherit);
 }
 
 .autosync-wheel-finder__field select:focus,
 .autosync-wheel-finder__field input:focus {
-  outline: 2px solid #2c6ecb;
+  outline: 2px solid var(--awf-primary, #2c6ecb);
   outline-offset: 1px;
 }
 
@@ -979,16 +997,16 @@
   font-size: 0.875rem;
   font-weight: 600;
   color: #fff;
-  background: var(--autosync-primary, #2c6ecb);
+  background: var(--awf-primary, #2c6ecb);
   border: none;
-  border-radius: calc(var(--autosync-border-radius, 8px) / 2);
+  border-radius: calc(var(--awf-radius, 8px) / 2);
   cursor: pointer;
   transition: background 0.15s ease;
   white-space: nowrap;
 }
 
 .autosync-wheel-finder__field--button button:hover {
-  background: #1f5da0;
+  filter: brightness(0.85);
 }
 
 .autosync-wheel-finder__field--button button:disabled {
@@ -1034,12 +1052,12 @@
 .autosync-wheel-finder__card {
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #e3e3e3;
-  border-radius: 8px;
+  background: var(--awf-card-bg, #fff);
+  border: 1px solid var(--awf-border, #e3e3e3);
+  border-radius: var(--awf-radius, 8px);
   overflow: hidden;
   text-decoration: none;
-  color: inherit;
+  color: var(--awf-text, inherit);
   transition: box-shadow 0.15s, border-color 0.15s;
 }
 

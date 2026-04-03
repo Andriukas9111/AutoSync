@@ -101,3 +101,9 @@
   .avd-products-section { padding: 0 16px 16px; }
   .avd-products-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
 }
+
+/* Raw Data */
+.avd-raw-section { padding: 0 24px 16px; }
+.avd-raw-toggle { background: none; border: 1px solid var(--avd-border, #e5e7eb); color: var(--avd-muted, #6b7280); font-size: 12px; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.avd-raw-toggle:hover { background: var(--avd-card-bg, #f9fafb); }
+.avd-raw-content { background: var(--avd-card-bg, #f3f4f6); border: 1px solid var(--avd-border, #e5e7eb); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 11px; line-height: 1.4; overflow-x: auto; color: var(--avd-text, #1a1a2e); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }

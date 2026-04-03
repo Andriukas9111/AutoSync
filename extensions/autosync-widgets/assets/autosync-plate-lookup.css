@@ -34,7 +34,9 @@
 .apl-error__retry:hover { border-color: var(--apl-primary); }
 
 /* Vehicle Card — Clean Light */
-.apl-card { background: var(--apl-bg); border: 1px solid var(--apl-border); border-radius: var(--apl-radius); overflow: hidden; max-width: 560px; margin: 0 auto; animation: apl-fadeIn 0.3s ease both; }
+.apl-card { background: var(--apl-bg); border: 1px solid var(--apl-border); border-radius: var(--apl-radius); overflow: hidden; max-width: 560px; margin: 0 auto; animation: apl-fadeIn 0.3s ease both; position: relative; }
+.apl-card__close { position: absolute; top: 10px; right: 10px; width: 28px; height: 28px; padding: 0; border: none; background: rgba(0,0,0,0.05); border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--apl-muted); transition: background 0.15s, color 0.15s; z-index: 2; }
+.apl-card__close:hover { background: rgba(0,0,0,0.1); color: var(--apl-text); }
 @keyframes apl-fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
 /* Card Header — Light with reg plate */
@@ -140,6 +142,13 @@
 .apl-history__item:hover { border-color: var(--apl-primary); background: color-mix(in srgb, var(--apl-primary) 4%, var(--apl-bg)); }
 .apl-history__reg { font-weight: 700; color: var(--apl-text); letter-spacing: 0.03em; }
 .apl-history__vehicle { font-weight: 400; color: var(--apl-muted); font-size: 11px; }
+
+/* Plan Gate */
+.apl-plan-gate { text-align: center; padding: 40px 24px; max-width: 400px; margin: 0 auto; }
+.apl-plan-gate svg { margin: 0 auto 12px; display: block; }
+.apl-plan-gate__title { font-size: 16px; font-weight: 600; color: var(--apl-text); margin: 0 0 8px; }
+.apl-plan-gate__text { font-size: 13px; color: var(--apl-muted); margin: 0; line-height: 1.5; }
+.apl-plan-gate__text strong { color: var(--apl-primary); }
 
 /* Responsive */
 @media (max-width: 600px) {
