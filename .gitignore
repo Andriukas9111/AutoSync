@@ -41,3 +41,5 @@ pnpm-lock.yaml
 # Local scripts with credentials
 scripts/*.cjs
 .serena/
+
+.env*.local

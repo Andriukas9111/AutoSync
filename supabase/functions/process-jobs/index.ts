@@ -2232,9 +2232,11 @@ async function processCleanupChunk(
   }
 
   // Phase 1: Remove _autosync_ tags from products
+  // NOTE: Shopify search does NOT support wildcard tag queries like "tag:_autosync_*"
+  // We must fetch ALL products and filter client-side for _autosync_ prefixed tags
   if (currentPhase === "tags") {
     const searchQuery = `{
-      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "tag:_autosync_*") {
+      products(first: ${CLEANUP_BATCH}${cursor ? `, after: "${cursor}"` : ""}) {
         edges { node { id tags } }
         pageInfo { hasNextPage endCursor }
       }
@@ -2342,12 +2344,17 @@ async function processCleanupChunk(
   // ONLY delete collections that have _autosync_ tag rules — NEVER delete merchant collections
   if (currentPhase === "collections") {
     try {
+      // Fetch ALL smart collections (no search filter — Shopify wildcards are unreliable)
+      // Filter client-side for _autosync_ tag rules
       const result = await shopifyGraphQL(shopId, accessToken,
-        `{ collections(first: 250, query: "title:*Parts") {
-          edges { node { id title handle ruleSet { rules { column relation condition } } } }
+        `{ collections(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""} sortKey: TITLE) {
+          edges { node { id title ruleSet { rules { column relation condition } } } }
+          pageInfo { hasNextPage endCursor }
         } }`
       );
       const edges = result?.data?.collections?.edges ?? [];
+      const pageInfo = result?.data?.collections?.pageInfo ?? {};
+
       // Only delete collections with _autosync_ tag rules
       const toDelete = edges.filter(({ node }: { node: Record<string, unknown> }) => {
         const rules = (node.ruleSet as Record<string, unknown>)?.rules as Array<Record<string, string>> ?? [];
@@ -2363,6 +2370,13 @@ async function processCleanupChunk(
           return 1;
         } catch (_e) { return 0; }
       });
+
+      if (pageInfo.hasNextPage) {
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
+        }).eq("id", job.id);
+        return { processed: deleted, hasMore: true };
+      }
 
       // Phase 3 done — move to vehicle pages
       await db.from("sync_jobs").update({
@@ -2402,7 +2416,7 @@ async function processCleanupChunk(
 
       // Move to Phase 5: database cleanup
       await db.from("sync_jobs").update({
-        metadata: JSON.stringify({ ...meta, phase: "database", cursor: null }),
+        metadata: JSON.stringify({ ...meta, current_phase: "database", cursor: null }),
       }).eq("id", job.id);
       return { processed: deleted, hasMore: true };
     } catch (err) {
