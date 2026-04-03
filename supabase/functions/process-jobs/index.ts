@@ -672,9 +672,16 @@ Deno.serve(async (req) => {
     } else {
       // More work to do — release lock and self-invoke for the next chunk.
       // This eliminates the 30s pg_cron delay between chunks.
+      // Calculate progress percentage for the UI progress bar
+      const totalItems = job.total_items as number | null;
+      const progressPct = totalItems && totalItems > 0
+        ? Math.min(99, Math.round((newProcessed / totalItems) * 100))
+        : null;
       await db.from("sync_jobs").update({
         processed_items: newProcessed,
         locked_at: null,
+        ...(progressPct !== null ? { progress: progressPct } : {}),
+        ...(job.started_at ? {} : { started_at: new Date().toISOString() }),
       }).eq("id", job.id);
 
       // Self-chain: immediately invoke for the next chunk (fire-and-forget)
@@ -836,8 +843,20 @@ async function processPushChunk(
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const gqlHeaders = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
-  // On first batch, ensure metafield definitions exist (idempotent)
+  // On first batch, set total_items and ensure metafield definitions exist
   if (alreadyProcessed === 0) {
+    // Count total products to push (for progress bar)
+    const { count: totalToPush } = await db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .not("fitment_status", "eq", "unmapped");
+    if (totalToPush) {
+      await db.from("sync_jobs").update({
+        total_items: totalToPush,
+        started_at: new Date().toISOString(),
+      }).eq("id", job.id);
+      (job as Record<string, unknown>).total_items = totalToPush;
+    }
     // Only create definitions for the app-owned namespace (shown in Search & Discovery)
     // Metafield definitions — app-owned namespace only ($app:vehicle_fitment)
     // compatibility but do NOT get definitions (to avoid duplicate filter entries)
