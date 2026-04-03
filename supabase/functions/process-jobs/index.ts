@@ -2011,8 +2011,35 @@ async function processVehiclePagesChunk(
 
 // ── Bulk Push processor ───────────────────────────────────
 // ── Bulk Product Creation via Shopify Bulk Operations API ──────────────
+// Helper: start a Shopify bulk operation (upload JSONL + start mutation)
+async function startBulkOp(shopId: string, accessToken: string, jsonlContent: string, mutation: string): Promise<string | null> {
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "bulk.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+  })});
+  const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+  if (!target) return null;
+
+  const form = new FormData();
+  for (const p of target.parameters) form.append(p.name, p.value);
+  form.append("file", new Blob([jsonlContent], { type: "text/jsonl" }));
+  await fetch(target.url, { method: "POST", body: form });
+
+  const uploadKey = target.parameters.find((p: { name: string }) => p.name === "key")?.value || "";
+  const fullUrl = target.url + uploadKey;
+
+  const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+    variables: { mutation, stagedUploadPath: fullUrl },
+  })});
+  const bulkJson = await bulkRes.json();
+  return bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id ?? null;
+}
+
 // Creates products on Shopify in a single async operation (seconds, not minutes)
-// Flow: Generate JSONL → Upload → Start bulk mutation → Poll → Download results → Save IDs
+// Flow: Generate JSONL → Upload → Start bulk mutation → Poll → Download results → Save IDs → Add images → Publish
 
 async function processBulkProductCreate(
   db: ReturnType<typeof createClient>,
@@ -2027,7 +2054,66 @@ async function processBulkProductCreate(
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
-  // Phase 2: Poll for bulk operation completion
+  // Phase 2b: Poll for images bulk operation, then start publish
+  if (meta.bulkImagesOperationId) {
+    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount errorCode } } }`,
+      variables: { id: meta.bulkImagesOperationId },
+    })});
+    const op = (await res.json())?.data?.node;
+    if (op?.status === "RUNNING" || op?.status === "CREATED") {
+      console.log(`[bulk_create] Images still running: ${op.objectCount ?? 0} objects`);
+      return { processed: 0, hasMore: true };
+    }
+    if (op?.status === "COMPLETED") {
+      console.log(`[bulk_create] Images complete! ${op.objectCount ?? 0} objects`);
+      // Start publish if pending
+      if (meta.pendingPublishLines && meta.publishMutation) {
+        const pubOpId = await startBulkOp(shopId, accessToken, meta.pendingPublishLines, meta.publishMutation);
+        console.log(`[bulk_create] Publish bulk operation started: ${pubOpId}`);
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({
+            ...meta, bulkImagesOperationId: null,
+            bulkPublishOperationId: pubOpId, pendingPublishLines: null, publishMutation: null,
+          }),
+          locked_at: null,
+        }).eq("id", job.id);
+        return { processed: 0, hasMore: true };
+      }
+      // No publish needed — go to bulk_push for tags
+      await db.from("sync_jobs").update({
+        type: "bulk_push", status: "pending",
+        metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+        locked_at: null,
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+    // Failed — continue anyway
+    console.error(`[bulk_create] Images failed: ${op?.errorCode}`);
+  }
+
+  // Phase 2c: Poll for publish bulk operation
+  if (meta.bulkPublishOperationId) {
+    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount errorCode } } }`,
+      variables: { id: meta.bulkPublishOperationId },
+    })});
+    const op = (await res.json())?.data?.node;
+    if (op?.status === "RUNNING" || op?.status === "CREATED") {
+      console.log(`[bulk_create] Publish still running: ${op.objectCount ?? 0} objects`);
+      return { processed: 0, hasMore: true };
+    }
+    console.log(`[bulk_create] Publish ${op?.status}: ${op?.objectCount ?? 0} objects`);
+    // Transition to bulk_push for tags + metafields
+    await db.from("sync_jobs").update({
+      type: "bulk_push", status: "pending",
+      metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+      locked_at: null,
+    }).eq("id", job.id);
+    return { processed: 0, hasMore: true };
+  }
+
+  // Phase 2: Poll for bulk product creation completion
   if (meta.bulkCreateOperationId) {
     const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`,
@@ -2073,11 +2159,55 @@ async function processBulkProductCreate(
 
       console.log(`[bulk_create] Saved ${savedCount} Shopify IDs to database`);
 
-      // Now transition to bulk_push for tags + metafields
+      // Next: add images + publish via bulk operations, then tags + metafields
+      // Get image URLs from raw_data and generate JSONL for images + publishing
+      const imgLines: string[] = [];
+      const pubLines: string[] = [];
+      const { data: pubTenant } = await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).maybeSingle();
+      const pubId = pubTenant?.online_store_publication_id;
+
+      // Fetch products with raw_data for image URLs (paginated)
+      let imgOffset = 0;
+      while (true) {
+        const { data: imgBatch } = await db.from("products")
+          .select("shopify_gid, raw_data")
+          .eq("shop_id", shopId).not("shopify_gid", "is", null)
+          .range(imgOffset, imgOffset + 999);
+        if (!imgBatch || imgBatch.length === 0) break;
+        for (const p of imgBatch) {
+          const gid2 = p.shopify_gid as string;
+          const raw = typeof p.raw_data === "string" ? JSON.parse(p.raw_data as string) : (p.raw_data ?? {});
+          const imgUrl = (raw as Record<string, unknown>).image as string;
+          if (imgUrl && typeof imgUrl === "string" && imgUrl.startsWith("http") && imgUrl.length > 30) {
+            imgLines.push(JSON.stringify({ productId: gid2, media: [{ originalSource: imgUrl, mediaContentType: "IMAGE" }] }));
+          }
+          if (pubId) {
+            pubLines.push(JSON.stringify({ id: gid2, input: [{ publicationId: pubId }] }));
+          }
+        }
+        imgOffset += imgBatch.length;
+        if (imgBatch.length < 1000) break;
+      }
+
+      console.log(`[bulk_create] Will add ${imgLines.length} images and publish ${pubLines.length} products`);
+
+      // Start images bulk operation
+      let imgOpId: string | null = null;
+      if (imgLines.length > 0) {
+        const imgMutation = `mutation call($productId: ID!, $media: [CreateMediaInput!]!) { productCreateMedia(productId: $productId, media: $media) { media { id } mediaUserErrors { message } } }`;
+        imgOpId = await startBulkOp(shopId, accessToken, imgLines.join("\n"), imgMutation);
+        console.log(`[bulk_create] Images bulk operation started: ${imgOpId}`);
+      }
+
+      // Transition to images+publish phase
       await db.from("sync_jobs").update({
-        type: "bulk_push",
-        status: "pending",
-        metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+        metadata: JSON.stringify({
+          ...meta,
+          bulkCreateOperationId: null,
+          bulkImagesOperationId: imgOpId,
+          pendingPublishLines: pubLines.length > 0 ? pubLines.join("\n") : null,
+          publishMutation: pubLines.length > 0 ? `mutation call($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }` : null,
+        }),
         processed_items: savedCount,
         locked_at: null,
       }).eq("id", job.id);
