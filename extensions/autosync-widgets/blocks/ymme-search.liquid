@@ -19,7 +19,7 @@
   assign align_class = 'autosync-ymme--align-' | append: block.settings.alignment
 %}
 {% if ymme_allowed == false %}
-<div style="text-align:center;padding:40px 24px;"><p style="font-size:14px;color:#6b7280;">Vehicle Search is available on the <strong>Starter</strong> plan and above.</p></div>
+<!-- widget not available on current plan -->
 {% else %}
 <div
   class="{{ container_class }} {{ layout_class }} {{ style_class }} {{ width_class }} {{ align_class }}"

@@ -10,7 +10,7 @@ endif
   endif
 %}
 {% if plate_allowed == false %}
-<div style="text-align:center;padding:40px 24px;"><p style="font-size:14px;color:#6b7280;">Plate Lookup is available on the <strong>Business</strong> plan and above.</p></div>
+<!-- widget not available on current plan -->
 {% else %}
 <div class="apl-root" data-apl-root data-proxy-url="{{ proxy_url }}" data-logo-url="{{ logo_url }}" data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}" data-show-mot="{{ block.settings.show_mot_history | default: true }}" data-show-tax="{{ block.settings.show_tax_status | default: true }}" id="apl-{{ block.id }}" style="--apl-primary:{{ block.settings.primary_color | default: '#005bd2' }};--apl-bg:{{ block.settings.background_color | default: '#ffffff' }};--apl-text:{{ block.settings.text_color | default: '#1a1a2e' }};--apl-muted:{{ block.settings.muted_color | default: '#6b7280' }};--apl-border:{{ block.settings.border_color | default: '#e5e7eb' }};--apl-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--apl-radius:{{ block.settings.border_radius | default: 10 }}px;padding-top:{{ block.settings.padding_top | default: 40 }}px;padding-bottom:{{ block.settings.padding_bottom | default: 40 }}px;max-width:{% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};padding-left:{{ block.settings.container_padding | default: 24 }}px;padding-right:{{ block.settings.container_padding | default: 24 }}px;">
   {% if block.settings.heading != blank %}

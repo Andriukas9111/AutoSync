@@ -1207,6 +1207,19 @@ async function processCollectionsChunk(
   job: Record<string, unknown>,
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const shopId = job.shop_id as string;
+  const currentYear = new Date().getFullYear();
+
+  // Word-boundary aware SEO truncation
+  function seoTitle(text: string): string {
+    if (text.length <= 60) return text;
+    const cut = text.lastIndexOf(" ", 57);
+    return text.slice(0, cut > 30 ? cut : 57) + "...";
+  }
+  function seoDesc(text: string): string {
+    if (text.length <= 160) return text;
+    const cut = text.lastIndexOf(" ", 157);
+    return text.slice(0, cut > 100 ? cut : 157) + "...";
+  }
 
   // Parse job metadata for strategy
   let strategy = "make", seoEnabled = true;
@@ -1361,10 +1374,9 @@ async function processCollectionsChunk(
     };
 
     if (seoEnabled) {
-      const yr = new Date().getFullYear();
       input.seo = {
-        title: `${make} Parts & Accessories ${yr} | Performance & Aftermarket`.slice(0, 60),
-        description: `Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension, brakes & styling upgrades.`.slice(0, 160),
+        title: seoTitle(`${make} Parts & Accessories ${currentYear} | Performance & Aftermarket`),
+        description: seoDesc(`Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension, brakes & styling upgrades.`),
       };
     }
 
@@ -1422,8 +1434,8 @@ async function processCollectionsChunk(
           shopify_collection_id: numericId,
           handle: collection.handle,
           image_url: logoMap.get(make) ?? null,
-          seo_title: seoEnabled ? `${make} Parts & Accessories ${new Date().getFullYear()} | Performance & Aftermarket`.slice(0, 60) : null,
-          seo_description: seoEnabled ? `Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension & more.`.slice(0, 160) : null,
+          seo_title: seoEnabled ? seoTitle(`${make} Parts & Accessories ${currentYear} | Performance & Aftermarket`) : null,
+          seo_description: seoEnabled ? seoDesc(`Explore ${make} aftermarket parts & performance accessories. Fitment-verified for all ${make} models. Shop exhaust, intake, suspension & more.`) : null,
           synced_at: new Date().toISOString(),
         }, { onConflict: "shop_id,title", ignoreDuplicates: true });
         if (insertErr) console.error(`[collections] DB insert error for ${make}:`, insertErr.message);
@@ -1466,10 +1478,9 @@ async function processCollectionsChunk(
       };
 
       if (seoEnabled) {
-        const yr = new Date().getFullYear();
         input.seo = {
-          title: `${make} ${model} Parts & Accessories ${yr} | Performance Upgrades`.slice(0, 60),
-          description: `Browse ${make} ${model} performance parts, upgrades & accessories. Every part is fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`.slice(0, 160),
+          title: seoTitle(`${make} ${model} Parts & Accessories ${currentYear} | Performance Upgrades`),
+          description: seoDesc(`Browse ${make} ${model} performance parts, upgrades & accessories. Every part is fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`),
         };
       }
 
@@ -1521,8 +1532,8 @@ async function processCollectionsChunk(
             shopify_collection_id: numId,
             handle: collection.handle,
             image_url: makeLogoRow?.logo_url ?? null,
-            seo_title: seoEnabled ? `${make} ${model} Parts & Accessories ${new Date().getFullYear()} | Performance Upgrades`.slice(0, 60) : null,
-            seo_description: seoEnabled ? `Browse ${make} ${model} performance parts & accessories. Fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`.slice(0, 160) : null,
+            seo_title: seoEnabled ? seoTitle(`${make} ${model} Parts & Accessories ${currentYear} | Performance Upgrades`) : null,
+            seo_description: seoEnabled ? seoDesc(`Browse ${make} ${model} performance parts & accessories. Fitment-verified for guaranteed compatibility. Shop exhaust, intakes, suspension & more.`) : null,
             synced_at: new Date().toISOString(),
           }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           if (mmInsertErr) console.error(`[collections] DB insert error for ${make} ${model}:`, mmInsertErr.message);
@@ -1591,8 +1602,8 @@ async function processCollectionsChunk(
 
       if (seoEnabled) {
         input.seo = {
-          title: `${make} ${model} ${yearRange} Parts & Accessories | Shop Now`.slice(0, 60),
-          description: `Shop fitment-verified ${make} ${model} ${yearRange} performance parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more for your ${make} ${model}.`.slice(0, 160),
+          title: seoTitle(`${make} ${model} ${yearRange} Parts & Accessories | Shop Now`),
+          description: seoDesc(`Shop fitment-verified ${make} ${model} ${yearRange} performance parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more for your ${make} ${model}.`),
         };
         input.descriptionHtml = `<h2>${make} ${model} ${yearRange} Performance Parts &amp; Accessories</h2>
 <p>Discover our curated collection of high-quality performance parts, upgrades, and accessories specifically designed for the <strong>${make} ${model} (${yearRange})</strong>. Every product in this collection has been verified for fitment compatibility with your vehicle.</p>
@@ -1639,8 +1650,8 @@ async function processCollectionsChunk(
             title, handle: collection.handle,
             shopify_collection_id: numId,
             image_url: makeLogoRow?.logo_url ?? null,
-            seo_title: seoEnabled ? `${make} ${model} ${yearRange} Parts & Accessories | Shop Now`.slice(0, 60) : null,
-            seo_description: seoEnabled ? `Shop fitment-verified ${make} ${model} ${yearRange} parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more.`.slice(0, 160) : null,
+            seo_title: seoEnabled ? seoTitle(`${make} ${model} ${yearRange} Parts & Accessories | Shop Now`) : null,
+            seo_description: seoEnabled ? seoDesc(`Shop fitment-verified ${make} ${model} ${yearRange} parts & accessories. Guaranteed compatibility. Browse exhaust, intake, suspension & more.`) : null,
             synced_at: new Date().toISOString(),
           }, { onConflict: "shop_id,title", ignoreDuplicates: true });
           console.log(`[collections] Created year collection: ${title}`);
