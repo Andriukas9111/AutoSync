@@ -252,63 +252,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // ---- Remove Tags from Shopify ----
-  if (_action === "remove_shopify_tags") {
-    try {
-      const result = await removeAllTags(shopId, admin);
-      if (result.processed === 0 && result.removed === 0) {
-        return data({
-          success: true,
-          message: "No products with AutoSync tags found. Nothing to remove.",
-        });
-      }
-      return data({
-        success: true,
-        message: `Removed ${result.removed} AutoSync tags from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
-      });
-    } catch (err) {
-      return data(
-        { error: "Failed to remove tags: " + (err instanceof Error ? err.message : String(err)) },
-        { status: 500 },
-      );
-    }
-  }
+  // ---- Remove Tags / Metafields / Collections from Shopify ----
+  // ALL cleanup operations run on Edge Function (NOT Vercel) so they:
+  // 1. Don't timeout (Edge has 150s vs Vercel 60s)
+  // 2. Continue if user closes the browser
+  // 3. Show progress via job polling
+  if (_action === "remove_shopify_tags" || _action === "remove_shopify_metafields" || _action === "remove_shopify_collections") {
+    const cleanupType = _action === "remove_shopify_tags" ? "cleanup_tags"
+      : _action === "remove_shopify_metafields" ? "cleanup_metafields"
+      : "cleanup_collections";
 
-  // ---- Remove Metafields from Shopify ----
-  if (_action === "remove_shopify_metafields") {
-    try {
-      const result = await removeAllMetafields(shopId, admin);
-      if (result.processed === 0 && result.removed === 0) {
-        return data({
-          success: true,
-          message: "No products with AutoSync metafields found. Nothing to remove.",
-        });
-      }
-      return data({
-        success: true,
-        message: `Removed ${result.removed} AutoSync metafields from ${result.processed} products.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
-      });
-    } catch (err) {
-      return data(
-        { error: "Failed to remove metafields: " + (err instanceof Error ? err.message : String(err)) },
-        { status: 500 },
-      );
-    }
-  }
+    const { data: cleanupJob, error: jobErr } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: cleanupType,
+        status: "running",
+        progress: 0,
+        total_items: 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .maybeSingle();
 
-  // ---- Remove Collections from Shopify ----
-  if (_action === "remove_shopify_collections") {
-    try {
-      const result = await removeAllCollections(shopId, admin);
-      return data({
-        success: true,
-        message: `Deleted ${result.deleted} AutoSync collections from Shopify.${result.errors.length > 0 ? ` (${result.errors.length} errors)` : ""}`,
-      });
-    } catch (err) {
-      return data(
-        { error: "Failed to remove collections: " + (err instanceof Error ? err.message : String(err)) },
-        { status: 500 },
-      );
+    if (jobErr || !cleanupJob) {
+      return data({ error: "Failed to create cleanup job" }, { status: 500 });
     }
+
+    // Fire-and-forget: invoke Edge Function
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: cleanupJob.id, shop_id: shopId }),
+      }).catch((err) => console.error(`[settings] Edge Function ${cleanupType} invocation failed:`, err));
+    }
+
+    const label = _action === "remove_shopify_tags" ? "Tag removal"
+      : _action === "remove_shopify_metafields" ? "Metafield removal"
+      : "Collection removal";
+
+    return data({
+      success: true,
+      message: `${label} started. Processing in background...`,
+    });
   }
 
   // ---- Full Cleanup — Shopify + DB ----

@@ -42,7 +42,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db, { paginatedSelect } from "../lib/db.server";
+import db, { paginatedSelect, batchedIn } from "../lib/db.server";
 import {
   getPlanLimits,
   getTenant,
@@ -287,20 +287,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   let ymmeEngineData: Record<string, any> = {};
   if (uniqueEngineIds.length > 0) {
-    const { data: engines } = await db
-      .from("ymme_engines")
-      .select(`
-        id, name, code, displacement_cc, power_hp, power_kw, torque_nm,
+    // Batched .in() to handle >500 unique engine IDs
+    const engines = await batchedIn(
+      "ymme_engines",
+      `id, name, code, displacement_cc, power_hp, power_kw, torque_nm,
         fuel_type, year_from, year_to, body_type, aspiration,
         cylinders, cylinder_config, modification,
         model:ymme_models!model_id (
           name, generation,
           make:ymme_makes!make_id ( name )
-        )
-      `)
-      .in("id", uniqueEngineIds);
+        )`,
+      "id",
+      uniqueEngineIds,
+    );
     if (engines) {
-      for (const e of engines) {
+      for (const e of engines as any[]) {
         ymmeEngineData[e.id] = e;
       }
     }

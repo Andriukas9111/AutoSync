@@ -121,8 +121,11 @@ export async function action({ request }: ActionFunctionArgs) {
           .limit(10000);
         if (flaggedProducts && flaggedProducts.length > 0) {
           const ids = flaggedProducts.map((p: { id: string }) => p.id);
-          // Delete old fitments so new extraction can create fresh ones
-          await db.from("vehicle_fitments").delete().eq("shop_id", shopId).in("product_id", ids);
+          // Delete old fitments — batch .in() to handle >500 IDs
+          for (let i = 0; i < ids.length; i += 500) {
+            const batch = ids.slice(i, i + 500);
+            await db.from("vehicle_fitments").delete().eq("shop_id", shopId).in("product_id", batch);
+          }
         }
       }
 

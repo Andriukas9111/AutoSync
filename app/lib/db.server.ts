@@ -58,3 +58,47 @@ export async function paginatedSelect<T = Record<string, unknown>>(
 
   return allRows;
 }
+
+/**
+ * Batched .in() query — splits large arrays into chunks to avoid PostgREST
+ * URL length limits. Supabase .in() with >500 items can fail or truncate.
+ *
+ * @param table - Table name
+ * @param select - Column selection string
+ * @param column - Column to filter with IN
+ * @param values - Array of values (will be chunked)
+ * @param extraFilters - Additional filters to apply
+ * @param batchSize - Items per batch (default 500)
+ * @returns All rows concatenated from all batches
+ */
+export async function batchedIn<T = Record<string, unknown>>(
+  table: string,
+  select: string,
+  column: string,
+  values: string[],
+  extraFilters?: (query: any) => any,
+  batchSize = 500,
+): Promise<T[]> {
+  if (values.length === 0) return [];
+  if (values.length <= batchSize) {
+    // Small enough for a single query
+    let query = db.from(table).select(select).in(column, values);
+    if (extraFilters) query = extraFilters(query);
+    const { data, error } = await query;
+    if (error) { console.error(`[batchedIn] ${table} error:`, error.message); return []; }
+    return (data ?? []) as T[];
+  }
+
+  // Split into chunks
+  const allRows: T[] = [];
+  for (let i = 0; i < values.length; i += batchSize) {
+    const chunk = values.slice(i, i + batchSize);
+    let query = db.from(table).select(select).in(column, chunk);
+    if (extraFilters) query = extraFilters(query);
+    const { data, error } = await query;
+    if (error) { console.error(`[batchedIn] ${table} batch error at ${i}:`, error.message); continue; }
+    if (data) allRows.push(...(data as T[]));
+  }
+
+  return allRows;
+}

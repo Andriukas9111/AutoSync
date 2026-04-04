@@ -339,12 +339,17 @@ async function processProviderImport(
     if (duplicateStrategy === "skip" && products.length > 0) {
       const skus = products.map((p: any) => p.sku).filter(Boolean) as string[];
       if (skus.length > 0) {
-        const { data: existing } = await db
-          .from("products")
-          .select("sku")
-          .eq("shop_id", job.shop_id)
-          .in("sku", skus);
-        const existingSkus = new Set((existing || []).map((e: any) => e.sku));
+        // Batch .in() for large SKU arrays (>500)
+        const existingSkus = new Set<string>();
+        for (let si = 0; si < skus.length; si += 500) {
+          const skuBatch = skus.slice(si, si + 500);
+          const { data: existing } = await db
+            .from("products")
+            .select("sku")
+            .eq("shop_id", job.shop_id)
+            .in("sku", skuBatch);
+          for (const e of existing || []) { if (e.sku) existingSkus.add(e.sku); }
+        }
         const filtered = products.filter((p: any) => !p.sku || !existingSkus.has(p.sku));
         if (filtered.length > 0) {
           const { error: insertErr } = await db.from("products").insert(filtered);
@@ -631,6 +636,15 @@ Deno.serve(async (req) => {
         break;
       case "cleanup":
         result = await processCleanupChunk(db, job);
+        break;
+      case "cleanup_tags":
+        result = await processCleanupTags(db, job);
+        break;
+      case "cleanup_metafields":
+        result = await processCleanupMetafields(db, job);
+        break;
+      case "cleanup_collections":
+        result = await processCleanupCollections(db, job);
         break;
       case "provider_auto_fetch":
         result = await processProviderAutoFetch(db, job);
@@ -3056,4 +3070,173 @@ async function processDeleteVehiclePages(
 
   console.log(`[delete_vehicle_pages] Complete: deleted ${totalDeleted} metaobjects, cleared sync records`);
   return { processed: totalDeleted, hasMore: false };
+}
+
+// ── Cleanup Tags processor ────────────────────────────────────
+// Removes all _autosync_* tags from Shopify products
+
+async function processCleanupTags(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No token" };
+
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  let totalProcessed = 0;
+  let totalRemoved = 0;
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  while (hasNext) {
+    const listRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id tags } } pageInfo { hasNextPage endCursor } } }`,
+      variables: { cursor },
+    })});
+    const listJson = await listRes.json();
+    const edges = listJson?.data?.products?.edges ?? [];
+    const pageInfo = listJson?.data?.products?.pageInfo;
+
+    for (const edge of edges) {
+      const tags: string[] = edge.node.tags || [];
+      const autoTags = tags.filter((t: string) => t.startsWith("_autosync_"));
+      if (autoTags.length === 0) continue;
+
+      await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+        query: `mutation($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { node { id } userErrors { message } } }`,
+        variables: { id: edge.node.id, tags: autoTags },
+      })});
+      totalRemoved += autoTags.length;
+      totalProcessed++;
+    }
+
+    hasNext = pageInfo?.hasNextPage ?? false;
+    cursor = pageInfo?.endCursor ?? null;
+
+    await db.from("sync_jobs").update({
+      processed_items: totalProcessed,
+      progress: hasNext ? Math.min(90, totalProcessed) : 100,
+    }).eq("id", job.id);
+  }
+
+  console.log(`[cleanup_tags] Removed ${totalRemoved} tags from ${totalProcessed} products`);
+  return { processed: totalProcessed, hasMore: false };
+}
+
+// ── Cleanup Metafields processor ──────────────────────────────
+// Removes all $app:vehicle_fitment and custom.vehicle_fitment metafields
+
+async function processCleanupMetafields(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No token" };
+
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+  const NAMESPACES = ["$app:vehicle_fitment", "custom.vehicle_fitment"];
+
+  let totalProcessed = 0;
+  let totalRemoved = 0;
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  while (hasNext) {
+    const listRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id metafields(first: 20) { edges { node { id namespace key } } } } } pageInfo { hasNextPage endCursor } } }`,
+      variables: { cursor },
+    })});
+    const listJson = await listRes.json();
+    const edges = listJson?.data?.products?.edges ?? [];
+    const pageInfo = listJson?.data?.products?.pageInfo;
+
+    for (const edge of edges) {
+      const mfEdges = edge.node.metafields?.edges ?? [];
+      const toDelete = mfEdges.filter((mf: any) => NAMESPACES.some(ns => mf.node.namespace === ns || mf.node.namespace.startsWith(ns)));
+
+      for (const mf of toDelete) {
+        await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `mutation($input: MetafieldDeleteInput!) { metafieldDelete(input: $input) { deletedId userErrors { message } } }`,
+          variables: { input: { id: mf.node.id } },
+        })});
+        totalRemoved++;
+      }
+      if (toDelete.length > 0) totalProcessed++;
+    }
+
+    hasNext = pageInfo?.hasNextPage ?? false;
+    cursor = pageInfo?.endCursor ?? null;
+
+    await db.from("sync_jobs").update({
+      processed_items: totalProcessed,
+      progress: hasNext ? Math.min(90, totalProcessed) : 100,
+    }).eq("id", job.id);
+  }
+
+  console.log(`[cleanup_metafields] Removed ${totalRemoved} metafields from ${totalProcessed} products`);
+  return { processed: totalProcessed, hasMore: false };
+}
+
+// ── Cleanup Collections processor ─────────────────────────────
+// Removes all AutoSync-managed smart collections from Shopify
+
+async function processCleanupCollections(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No token" };
+
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // Get all our collection mappings
+  let offset = 0;
+  const collectionGids: string[] = [];
+  while (true) {
+    const { data: batch } = await db.from("collection_mappings")
+      .select("shopify_collection_id")
+      .eq("shop_id", shopId)
+      .not("shopify_collection_id", "is", null)
+      .range(offset, offset + 999);
+    if (!batch || batch.length === 0) break;
+    for (const c of batch) { if (c.shopify_collection_id) collectionGids.push(c.shopify_collection_id); }
+    offset += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  await db.from("sync_jobs").update({ total_items: collectionGids.length }).eq("id", job.id);
+
+  let deleted = 0;
+  for (const gid of collectionGids) {
+    try {
+      await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+        query: `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
+        variables: { input: { id: gid } },
+      })});
+      deleted++;
+    } catch (_err) { /* continue */ }
+
+    if (deleted % 10 === 0) {
+      await db.from("sync_jobs").update({
+        processed_items: deleted,
+        progress: collectionGids.length > 0 ? Math.round((deleted / collectionGids.length) * 100) : 100,
+      }).eq("id", job.id);
+    }
+  }
+
+  // Clear DB records
+  await db.from("collection_mappings").delete().eq("shop_id", shopId);
+
+  console.log(`[cleanup_collections] Deleted ${deleted} collections`);
+  return { processed: deleted, hasMore: false };
 }
