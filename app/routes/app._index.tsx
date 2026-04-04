@@ -449,9 +449,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">
                     Quick Actions
                   </Text>
-                  {(liveUnmapped + liveFlagged) > 0 && (
+                  {(needsReview) > 0 && (
                     <Badge tone="warning">
-                      {`${(liveUnmapped + liveFlagged).toLocaleString()} need review`}
+                      {`${(needsReview).toLocaleString()} need review`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -468,7 +468,7 @@ export default function Dashboard() {
                     label="Auto Extract"
                     description="Automatically detect vehicle fitments"
                     onClick={() => navigate("/app/fitment")}
-                    badge={(liveUnmapped + liveFlagged) > 0 ? { content: `${(liveUnmapped + liveFlagged).toLocaleString()} pending`, tone: "warning" } : undefined}
+                    badge={(needsReview) > 0 ? { content: `${(needsReview).toLocaleString()} pending`, tone: "warning" } : undefined}
                   />
                   <QuickActionCard
                     icon={TargetIcon}
@@ -545,7 +545,7 @@ export default function Dashboard() {
                       { label: "Total Products", value: liveTotalProducts },
                       { label: "Vehicle Links", value: liveFitmentCount },
                       { label: "Mapped", value: liveMapped },
-                      { label: "Needs Review", value: liveUnmapped + liveFlagged },
+                      { label: "Needs Review", value: needsReview },
                       { label: "Makes with Parts", value: liveUniqueMakes },
                       { label: "Models with Parts", value: liveUniqueModels },
                     ].map((s) => (
@@ -636,7 +636,7 @@ export default function Dashboard() {
                 {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                   {([
-                    { icon: AlertCircleIcon, label: "Needs Review", count: liveUnmapped + liveFlagged, status: "unmapped" },
+                    { icon: AlertCircleIcon, label: "Needs Review", count: needsReview, status: "unmapped" },
                     { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
                     { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
                     { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },

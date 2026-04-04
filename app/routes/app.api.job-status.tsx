@@ -162,7 +162,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     stats: {
       // Product counts (from single query)
       total,
-      unmapped: unmapped + flagged + noMatch, // "Needs Review" — all products not yet mapped
+      unmapped, // Raw unmapped count (NOT including flagged/no_match — those are separate fields)
       autoMapped,
       smartMapped,
       manualMapped,

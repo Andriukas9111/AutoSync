@@ -134,7 +134,7 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
  */
 export function computeFromStats(stats: AppStats) {
   const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  const needsReview = stats.unmapped + stats.flagged;
+  const needsReview = stats.unmapped + stats.flagged + stats.noMatch;
   const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
   const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
