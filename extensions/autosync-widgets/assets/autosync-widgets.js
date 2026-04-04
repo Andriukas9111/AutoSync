@@ -1031,6 +1031,11 @@
 
         storeVehicle(vehicle);
 
+        // Track YMME search event for analytics
+        trackEvent(proxyUrl, 'ymme_search', {
+          source: 'ymme_widget',
+        });
+
         // Mark session as coming from YMME widget for source attribution
         try {
           sessionStorage.setItem('autosync_search_source', 'widget');

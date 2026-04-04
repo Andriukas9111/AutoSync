@@ -143,6 +143,7 @@ interface AnalyticsData {
   recentPlateLookups: Array<{ plate: string; make: string | null; model: string | null; year: number | null; fuel_type: string | null; colour: string | null; created_at: string }>;
   totalPlateLookups: number;
   topPlateMakes: Array<{ make: string; count: number }>;
+  searchCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +184,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       recentPlateLookups: [],
       totalPlateLookups: 0,
       topPlateMakes: [],
+      searchCount: 0,
     } satisfies AnalyticsData & { gated: boolean };
   }
 
@@ -228,14 +230,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Total products for this tenant
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
 
-    // Products that have at least one fitment (count only)
-    db.from("vehicle_fitments")
-      .select("product_id", { count: "exact", head: true })
-      .eq("shop_id", shopId),
+    // Products that have at least one fitment — need actual rows for unique count
+    paginatedSelect<{ product_id: string }>(
+      "vehicle_fitments", "product_id", (q) => q.eq("shop_id", shopId)
+    ).then((rows) => ({ data: rows, error: null })),
 
     // Product fitment status breakdown — server-side counts (no row limit)
     Promise.all(
-      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"].map((s) =>
+      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "no_match", "partial"].map((s) =>
         db.from("products").select("id", { count: "exact", head: true })
           .eq("shop_id", shopId).eq("fitment_status", s)
           .then((r) => ({ status: s, count: r.count ?? 0 })),
@@ -518,6 +520,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
+    searchCount: (searchEventsRes.data ?? []).length,
   } satisfies AnalyticsData;
 };
 
@@ -557,6 +560,7 @@ export default function AnalyticsPage() {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
+    searchCount,
   } = loaderData;
   const gated = "gated" in loaderData && (loaderData as Record<string, unknown>).gated === true;
 
@@ -1155,19 +1159,33 @@ export default function AnalyticsPage() {
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
-                  <Text as="h2" variant="headingMd">
-                    YMME Search Analytics
-                  </Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                    <Text as="h2" variant="headingMd">
+                      YMME Search Analytics
+                    </Text>
+                  </InlineStack>
+                  <Badge>{`${searchCount} searches (30 days)`}</Badge>
                 </InlineStack>
-                <Banner tone="info">
-                  <p>
-                    Coming soon — widget search tracking will be available when search
-                    event tracking is enabled. This will show which Year/Make/Model/Engine
-                    combinations your customers search for most.
-                  </p>
-                </Banner>
+                {popularSearches.length === 0 ? (
+                  <Banner tone="info">
+                    <p>
+                      No YMME searches recorded yet. Search tracking is now active — as customers use
+                      the Year/Make/Model/Engine widget on your storefront, their search patterns will
+                      appear here showing which vehicles are most popular.
+                    </p>
+                  </Banner>
+                ) : (
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm" tone="subdued">Top Searched Vehicles (Last 30 Days)</Text>
+                    <DataTable
+                      columnContentTypes={["text", "text", "numeric"]}
+                      headings={["Make", "Model", "Searches"]}
+                      rows={popularSearches.slice(0, 15).map((s) => [s.make, s.model, String(s.count)])}
+                    />
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
           </Layout.Section>

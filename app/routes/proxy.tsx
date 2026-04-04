@@ -190,8 +190,24 @@ async function handleTrack(params: URLSearchParams, body: string | null, request
   }
 
   let tracked = 0;
+  const SEARCH_EVENTS = ["ymme_search", "plate_lookup", "vin_decode"] as const;
+
   for (const evt of events) {
-    if (!evt.event || !VALID_CONVERSION_EVENTS.includes(evt.event as ConversionEventType)) {
+    if (!evt.event) continue;
+
+    // Route search events to search_events table
+    if (SEARCH_EVENTS.includes(evt.event as any)) {
+      logSearchEvent(shop, evt.event, {
+        make: evt.vehicle_make,
+        model: evt.vehicle_model,
+        year: evt.vehicle_year,
+      }, 0);
+      tracked++;
+      continue;
+    }
+
+    // Route conversion events to conversion_events table
+    if (!VALID_CONVERSION_EVENTS.includes(evt.event as ConversionEventType)) {
       continue;
     }
 
