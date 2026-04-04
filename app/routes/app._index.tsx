@@ -91,7 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Top makes — paginated to handle >1000 fitments
-    paginatedSelect("vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)),
+    paginatedSelect("vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)).then((rows) => ({ data: rows, error: null })),
     // Providers
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
     // Recent jobs

@@ -215,7 +215,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // 4. Fetch synced engine IDs — paginated to handle >1000
     paginatedSelect("vehicle_page_sync", "engine_id, linked_product_count", (q) =>
       q.eq("shop_id", shopId).eq("sync_status", "synced"),
-    ),
+    ).then((rows) => ({ data: rows, error: null })),
 
     // 5. Fetch app_settings
     db
