@@ -33,7 +33,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
 import { getTenant, getPlanLimits, getEffectivePlan, getSerializedPlanLimits } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -282,15 +282,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Fire-and-forget: invoke Edge Function
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: cleanupJob.id, shop_id: shopId }),
-      }).catch((err) => console.error(`[settings] Edge Function ${cleanupType} invocation failed:`, err));
-    }
+    triggerEdgeFunction(cleanupJob.id, shopId);
 
     const label = _action === "remove_shopify_tags" ? "Tag removal"
       : _action === "remove_shopify_metafields" ? "Metafield removal"
@@ -339,17 +331,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }).select("id").maybeSingle();
 
     // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey && cleanupJob) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ job_id: cleanupJob.id, shop_id: shopId }),
-      }).catch((err) => console.error("[cleanup] Edge Function invocation failed:", err));
+    if (cleanupJob) {
+      triggerEdgeFunction(cleanupJob.id, shopId);
     }
 
     return data({

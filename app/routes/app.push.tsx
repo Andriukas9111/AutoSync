@@ -32,7 +32,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
 import { getPlanLimits, getTenant, assertFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -195,17 +195,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
 
   // Helper to fire Edge Function (fire-and-forget)
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const fireEdgeFunction = (jobId: string) => {
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, shop_id: shopId }),
-      }).catch((err) => console.error("[push] Edge Function invocation failed:", err));
-    }
-  };
+  const fireEdgeFunction = (jobId: string) => triggerEdgeFunction(jobId, shopId);
 
   // Create push job + fire Edge Function immediately
   if (pushTags || pushMetafields) {

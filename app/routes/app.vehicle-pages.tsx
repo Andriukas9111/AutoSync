@@ -42,7 +42,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db, { paginatedSelect, batchedIn } from "../lib/db.server";
+import db, { paginatedSelect, batchedIn, triggerEdgeFunction } from "../lib/db.server";
 import {
   getPlanLimits,
   getTenant,
@@ -108,24 +108,7 @@ function formatPower(hp: number | null): string {
   return `${hp} HP`;
 }
 
-const stepNumberStyle = (active: boolean) =>
-  ({
-    width: "28px",
-    height: "28px",
-    borderRadius: "var(--p-border-radius-full)",
-    background: active
-      ? "var(--p-color-bg-fill-emphasis)"
-      : "var(--p-color-bg-surface-secondary)",
-    color: active
-      ? "var(--p-color-text-inverse)"
-      : "var(--p-color-text-secondary)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 600,
-    fontSize: "13px",
-    flexShrink: 0,
-  }) as const;
+// stepNumberStyle imported from design.ts (no local duplicate)
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -431,15 +414,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: vpJob.id, shop_id: shopId }),
-      }).catch((err) => console.error("[vehicle-pages] Edge Function invocation failed:", err));
-    }
+    triggerEdgeFunction(vpJob.id, shopId);
 
     return data({
       success: true,
@@ -470,15 +445,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     // Fire-and-forget: invoke Edge Function
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: deleteJob.id, shop_id: shopId }),
-      }).catch((err) => console.error("[vehicle-pages] Edge Function delete invocation failed:", err));
-    }
+    triggerEdgeFunction(deleteJob.id, shopId);
 
     return data({
       success: true,

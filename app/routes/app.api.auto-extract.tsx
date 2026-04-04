@@ -14,7 +14,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
 import { assertFeature, assertFitmentLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 import {
   buildVehicleProfile,
@@ -163,18 +163,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Fire-and-forget: invoke Edge Function
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ job_id: job.id, shop_id: shopId }),
-      }).catch((err) => console.error("[re-extract] Edge Function invocation failed:", err));
-    }
+    triggerEdgeFunction(job.id, shopId);
 
     return data({ started: true, jobId: job.id, totalReset, totalItems: job.total_items });
   }
@@ -235,18 +224,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (supabaseUrl && supabaseKey) {
-      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ job_id: job.id, shop_id: shopId }),
-      }).catch((err) => console.error("[extract] Edge Function invocation failed:", err));
-    }
+    triggerEdgeFunction(job.id, shopId);
 
     return data({ started: true, jobId: job.id, totalItems: job.total_items });
   }

@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import {
   Page,
   Layout,
@@ -28,7 +28,17 @@ import { RouteError } from "../components/RouteError";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return {};
+  // Generate plan summaries from billing source of truth (never hardcode prices)
+  const { getPlanLimits, getPlanPriceLabel } = await import("../lib/billing.server");
+  const tiers = ["free", "starter", "growth", "professional", "business", "enterprise"] as const;
+  const planSummaries = tiers.map((tier) => {
+    const limits = getPlanLimits(tier);
+    const price = getPlanPriceLabel(tier);
+    const products = limits.maxProducts === Infinity ? "Unlimited" : limits.maxProducts.toLocaleString();
+    const fitments = limits.maxFitments === Infinity ? "Unlimited" : limits.maxFitments.toLocaleString();
+    return { tier, name: tier.charAt(0).toUpperCase() + tier.slice(1), price, products, fitments };
+  });
+  return { planSummaries };
 };
 
 // ---------------------------------------------------------------------------
@@ -42,7 +52,7 @@ interface HelpSection {
   content: JSX.Element;
 }
 
-function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] {
+function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: Array<{ tier: string; name: string; price: string; products: string; fitments: string }>): HelpSection[] {
   return [
     {
       id: "getting-started",
@@ -397,7 +407,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Wheel Finder is available on the Professional plan ($99/mo) and above.
+              Wheel Finder is available on the Professional plan and above.
             </Text>
           </BlockStack>
         </BlockStack>
@@ -439,7 +449,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              DVLA/MOT plate lookup is an Enterprise-exclusive feature ($299/mo). It requires
+              DVLA/MOT plate lookup is an Enterprise-exclusive feature. It requires
               valid DVLA VES and MOT History API credentials to be configured.
             </Text>
           </BlockStack>
@@ -481,7 +491,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              VIN Decode is an Enterprise-exclusive feature ($299/mo). No additional API
+              VIN Decode is an Enterprise-exclusive feature. No additional API
               credentials or setup are needed — it works out of the box.
             </Text>
           </BlockStack>
@@ -557,24 +567,11 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
             AutoSync offers 6 tiers to fit businesses of every size.
           </Text>
           <BlockStack gap="200">
-            <Text as="p" variant="bodySm">
-              <strong>Free ($0)</strong> -- 50 products, 200 fitments, manual mapping only.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Starter ($19/mo)</strong> -- 500 products, 2,500 fitments, push tags/metafields, YMME widget, fitment badge.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Growth ($49/mo)</strong> -- 5,000 products, 25,000 fitments, auto-extraction, bulk ops, smart collections (by make).
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Professional ($99/mo)</strong> -- 25,000 products, 100,000 fitments, API/FTP integration, vehicle pages, wheel finder.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Business ($179/mo)</strong> -- 100,000 products, 500,000 fitments, pricing engine, My Garage, full collections.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Enterprise ($299/mo)</strong> -- 500,000 products, 2M fitments, DVLA plate lookup, VIN decode, full CSS customisation.
-            </Text>
+            {planSummaries.map((p) => (
+              <Text key={p.tier} as="p" variant="bodySm">
+                <strong>{`${p.name} (${p.price})`}</strong>{` — ${p.products} products, ${p.fitments} fitments.`}
+              </Text>
+            ))}
           </BlockStack>
           <Button onClick={() => navigate("/app/plans")}>View Full Plan Details</Button>
         </BlockStack>
@@ -692,11 +689,12 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
 // ---------------------------------------------------------------------------
 
 export default function Help() {
+  const { planSummaries } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
-  const sections = useMemo(() => buildSections(navigate), [navigate]);
+  const sections = useMemo(() => buildSections(navigate, planSummaries ?? []), [navigate, planSummaries]);
 
   const toggleSection = useCallback((id: string) => {
     setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));

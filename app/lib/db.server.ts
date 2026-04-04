@@ -18,6 +18,28 @@ export const db = createClient(supabaseUrl, supabaseServiceKey, {
 export default db;
 
 /**
+ * Fire-and-forget Edge Function invocation.
+ * Centralizes the Supabase URL + service key lookup that was duplicated in 7+ route files.
+ * Returns immediately — does NOT wait for the Edge Function to complete.
+ */
+export function triggerEdgeFunction(jobId: string, shopId: string): void {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("[triggerEdgeFunction] Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    return;
+  }
+  fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${supabaseKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ job_id: jobId, shop_id: shopId }),
+  }).catch((err) => console.error("[triggerEdgeFunction] Invocation failed:", err));
+}
+
+/**
  * Recount and sync the tenant's fitment_count with the actual vehicle_fitments table.
  * Call this after any bulk fitment delete to prevent counter drift.
  */

@@ -238,7 +238,7 @@ export default function ProvidersIndex() {
                   <Badge size="small" tone="info">Starter+</Badge>
                 </InlineStack>
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Import products from CSV, XML, API, or FTP sources. Available on the Starter plan ($19/mo) and above.
+                  Import products from CSV, XML, API, or FTP sources. Available on the Starter plan and above.
                 </Text>
                 <Button size="slim" onClick={() => navigate("/app/plans")}>
                   Upgrade to Starter
