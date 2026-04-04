@@ -232,14 +232,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Count unique vehicles — use engine_id if available, else make+model+engine combo
+  // Count unique vehicles — ONLY count fitments with ymme_engine_id
+  // Text-only fitments (without engine IDs) can't generate vehicle pages
   const allFitments = availableResult.data ?? [];
   const uniqueVehicleKeys = new Set<string>();
   for (const f of allFitments as Record<string, unknown>[]) {
     if (f.ymme_engine_id) {
       uniqueVehicleKeys.add(`engine:${f.ymme_engine_id}`);
-    } else if (f.make && f.model) {
-      uniqueVehicleKeys.add(`text:${f.make}|${f.model}|${f.engine ?? ""}`);
     }
   }
 
@@ -270,19 +269,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Build vehicle rows — group by engine_id or make+model+engine combo
+  // Build vehicle rows — ONLY vehicles with ymme_engine_id
+  // Fitments without engine IDs are product categories (e.g. "Brake Lines") not real vehicles
   const vehicleMap = new Map<string, VehicleRow>();
   if (vehiclesResult.data) {
     for (const row of vehiclesResult.data as Record<string, unknown>[]) {
-      // Determine unique key
-      let key: string;
-      if (row.ymme_engine_id) {
-        key = `engine:${row.ymme_engine_id}`;
-      } else if (row.make && row.model) {
-        key = `text:${row.make}|${row.model}|${row.engine ?? ""}`;
-      } else {
-        continue;
-      }
+      // Only include fitments with engine IDs — skip text-only entries
+      if (!row.ymme_engine_id) continue;
+      const key = `engine:${row.ymme_engine_id}`;
 
       if (vehicleMap.has(key)) {
         vehicleMap.get(key)!.productCount++;
