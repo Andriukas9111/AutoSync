@@ -28,7 +28,7 @@ import {
 
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { cardRowStyle, isBannerDismissed, dismissBanner } from "../lib/design";
+import { cardRowStyle, isBannerDismissed, dismissBanner, featurePillStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { isAdminShop } from "../lib/admin.server";
@@ -987,19 +987,7 @@ function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
           </Text>
           <InlineStack gap="200" wrap>
             {INCLUDED_FEATURES.map((feature) => (
-              <div key={feature} style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                padding: "4px 10px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: "var(--p-color-bg-surface-secondary)",
-                color: "var(--p-color-text-secondary)",
-                fontSize: "12px",
-                fontWeight: 500,
-                lineHeight: "16px",
-                whiteSpace: "nowrap",
-              }}>
+              <div key={feature} style={featurePillStyle}>
                 <Icon source={CheckSmallIcon} tone="subdued" />
                 {feature}
               </div>

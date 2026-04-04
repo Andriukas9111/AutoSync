@@ -482,3 +482,59 @@ export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
     "Vehicle specification pages",
   ],
 };
+
+// ─── Table Cell Styles (shared across plan comparison, fitment, admin) ──
+// Replaces ~80 hardcoded px values across multiple files
+
+export const tableCellStyle: CSSProperties = {
+  textAlign: "center",
+  padding: "var(--p-space-200) var(--p-space-200)",
+  borderBottom: "1px solid var(--p-color-border-secondary)",
+};
+
+export const tableHeaderCellStyle: CSSProperties = {
+  ...tableCellStyle,
+  fontWeight: 600,
+  fontSize: "13px",
+  background: "var(--p-color-bg-surface-secondary)",
+};
+
+export const tableRowStyle: CSSProperties = {
+  padding: "var(--p-space-200) var(--p-space-300)",
+};
+
+// ─── Pill/Badge Style (feature pills, status indicators) ──────────────
+
+export const featurePillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "4px",
+  padding: "var(--p-space-050) var(--p-space-200)",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  color: "var(--p-color-text-secondary)",
+  fontSize: "12px",
+  fontWeight: 500,
+  lineHeight: "16px",
+  whiteSpace: "nowrap",
+};
+
+// ─── Quick Action Card Style ──────────────────────────────────────────
+
+export const quickActionCardStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--p-space-200)",
+  padding: "var(--p-space-300) var(--p-space-400)",
+  borderRadius: "var(--p-border-radius-300)",
+  border: "var(--p-border-width-025) solid var(--p-color-border)",
+  cursor: "pointer",
+  transition: "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+};
+
+// ─── Comparison Table Highlight ───────────────────────────────────────
+
+export const tableHighlightCellStyle: CSSProperties = {
+  ...tableCellStyle,
+  backgroundColor: "var(--p-color-bg-surface-secondary)",
+};

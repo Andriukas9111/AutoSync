@@ -906,7 +906,7 @@ export default function VehiclePages() {
                       }}
                     >
                       {/* Header: Make Model + Published badge */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--p-space-200)", marginBottom: "var(--p-space-100)" }}>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <Text as="h3" variant="headingSm" truncate>{heading}</Text>
                         </div>
@@ -918,12 +918,12 @@ export default function VehiclePages() {
                       </div>
 
                       {/* Engine variant — single line truncated */}
-                      <div style={{ marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <div style={{ marginBottom: "var(--p-space-200)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         <Text as="p" variant="bodySm" tone="subdued" truncate>{engineLabel}</Text>
                       </div>
 
                       {/* Spec badges — max 2 rows with overflow hidden */}
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px", maxHeight: "54px", overflow: "hidden" }}>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-100)", marginBottom: "var(--p-space-200)", maxHeight: "54px", overflow: "hidden" }}>
                         {vehicle.engineCode && (
                           <Badge tone="info">{`${vehicle.engineCode}`}</Badge>
                         )}
@@ -942,7 +942,7 @@ export default function VehiclePages() {
                       </div>
 
                       {/* Footer: years + product count — pushed to bottom */}
-                      <div style={{ marginTop: "auto", borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ marginTop: "auto", borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "var(--p-space-200)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <Text as="span" variant="bodySm" tone="subdued">{`${years}`}</Text>
                         <Text as="span" variant="bodySm" tone="subdued">{`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""}`}</Text>
                       </div>

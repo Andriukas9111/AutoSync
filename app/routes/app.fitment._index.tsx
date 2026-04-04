@@ -400,7 +400,7 @@ export default function Fitment() {
         {/* CTA Cards — CSS grid for equal-height columns */}
         <div style={equalHeightGridStyle(2)}>
           <Box background="bg-surface" borderRadius="300" shadow="100" padding="400" minHeight="100%">
-            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "var(--p-space-400)" }}>
               <InlineStack gap="200" blockAlign="center">
                 <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Auto Extraction</Text>
@@ -435,7 +435,7 @@ export default function Fitment() {
           </Box>
 
           <Box background="bg-surface" borderRadius="300" shadow="100" padding="400" minHeight="100%">
-            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "16px" }}>
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "var(--p-space-400)" }}>
               <InlineStack gap="200" blockAlign="center">
                 <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
                 <Text as="h2" variant="headingMd">Manual Mapping</Text>
@@ -467,15 +467,15 @@ export default function Fitment() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                    <th style={{ textAlign: "left", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Make</Text></th>
-                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
-                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
+                    <th style={{ textAlign: "left", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Make</Text></th>
+                    <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
+                    <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
                   </tr></thead>
                   <tbody>{topMakes.map((m) => (
                     <tr key={m.make} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                      <td style={{ padding: "8px" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
-                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
-                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.models.toLocaleString()}</Text></td>
+                      <td style={{ padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
+                      <td style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
+                      <td style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.models.toLocaleString()}</Text></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -576,17 +576,17 @@ export default function Fitment() {
                               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                                   {["Make","Model","Years","Engine","Fuel","Method"].map(h => (
-                                    <th key={h} style={{ textAlign: "left", padding: "6px 8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
+                                    <th key={h} style={{ textAlign: "left", padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
                                   ))}
                                 </tr></thead>
                                 <tbody>{group.fitments.map((f, fi) => (
                                   <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
+                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
                                   </tr>
                                 ))}</tbody>
                               </table>

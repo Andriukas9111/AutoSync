@@ -290,8 +290,8 @@ function StatusChip({
         ...statMiniStyle,
         display: "flex",
         alignItems: "center",
-        gap: "10px",
-        padding: "12px 16px",
+        gap: "var(--p-space-200)",
+        padding: "var(--p-space-300) var(--p-space-400)",
         border: "1px solid var(--p-color-border-secondary)",
         cursor: onClick ? "pointer" : "default",
         flex: "1 1 0",
@@ -634,7 +634,7 @@ export default function Dashboard() {
                 <ProgressBar progress={coverage} size="small" />
 
                 {/* Compact status chips — unified icon style */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
                   {([
                     { icon: AlertCircleIcon, label: "Needs Review", count: needsReview, status: "unmapped" },
                     { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
@@ -723,7 +723,7 @@ export default function Dashboard() {
 
                   <div style={{
                     ...statGridStyle(2),
-                    gap: "12px",
+                    gap: "var(--p-space-300)",
                   }}>
                     {[
                       { label: "Makes", value: ymmeMakes },
@@ -831,7 +831,7 @@ export default function Dashboard() {
                     {recentJobs.map((job: any) => (
                       <div
                         key={job.id}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 16px", background: "var(--p-color-bg-surface)" }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--p-space-300)", padding: "var(--p-space-200) var(--p-space-400)", background: "var(--p-color-bg-surface)" }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
                           <div style={statusDotStyle(job.status)} />
@@ -966,8 +966,8 @@ export default function Dashboard() {
                     <div key={feat.label} style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
-                      padding: "6px 10px",
+                      gap: "var(--p-space-200)",
+                      padding: "var(--p-space-100) var(--p-space-200)",
                       borderRadius: "var(--p-border-radius-200)",
                       background: feat.on
                         ? "var(--p-color-bg-surface-secondary)"
