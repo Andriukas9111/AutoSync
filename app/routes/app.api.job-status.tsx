@@ -76,6 +76,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     smartMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
     manualMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "manual_mapped"),
     flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
+    noMatch: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match"),
     pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
   };
 
@@ -90,7 +91,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // ── All queries in parallel ──
   const [
     jobsResult,
-    pTotal, pUnmapped, pAuto, pSmart, pManual, pFlagged, pPushed,
+    pTotal, pUnmapped, pAuto, pSmart, pManual, pFlagged, pNoMatch, pPushed,
     vpTotal, vpSynced, vpPending, vpFailed,
     fitmentRes,
     collectionRes,
@@ -106,6 +107,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     productCountQueries.smartMapped,
     productCountQueries.manualMapped,
     productCountQueries.flagged,
+    productCountQueries.noMatch,
     productCountQueries.pushed,
     vehicleCountQueries.total,
     vehicleCountQueries.synced,
@@ -132,6 +134,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const smartMapped = pSmart.count ?? 0;
   const manualMapped = pManual.count ?? 0;
   const flagged = pFlagged.count ?? 0;
+  const noMatch = pNoMatch.count ?? 0;
   const pushedProducts = pPushed.count ?? 0;
 
   // Vehicle page counts already extracted from head-only queries above
@@ -159,11 +162,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     stats: {
       // Product counts (from single query)
       total,
-      unmapped,
+      unmapped: unmapped + flagged + noMatch, // "Needs Review" — all products not yet mapped
       autoMapped,
       smartMapped,
       manualMapped,
       flagged,
+      noMatch,
       // Fitment & collections
       fitments: fitmentRes.count ?? 0,
       collections: collectionRes.count ?? 0,

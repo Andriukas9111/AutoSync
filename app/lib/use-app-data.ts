@@ -11,11 +11,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface AppStats {
   // Product counts
   total: number;
-  unmapped: number;
+  unmapped: number; // Includes unmapped + flagged + no_match (all needing review)
   autoMapped: number;
   smartMapped: number;
   manualMapped: number;
   flagged: number;
+  noMatch: number;
   // Fitment & collections
   fitments: number;
   collections: number;

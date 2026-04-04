@@ -1336,6 +1336,31 @@ async function processCollectionsChunk(
     if (batch.length < 1000) break;
   }
 
+  // Also check Shopify for existing collections (prevents duplicates when DB mappings are cleared)
+  let shopifyCursor: string | null = null;
+  while (true) {
+    const shopifyColls = await shopifyGraphQL(shopId, accessToken,
+      `{ collections(first: 250${shopifyCursor ? `, after: "${shopifyCursor}"` : ""}) { edges { node { title ruleSet { rules { column condition } } } } pageInfo { hasNextPage endCursor } } }`
+    );
+    const edges = shopifyColls?.data?.collections?.edges ?? [];
+    for (const edge of edges) {
+      const rules = (edge.node.ruleSet?.rules ?? []) as Array<{ column: string; condition: string }>;
+      const hasAutoSync = rules.some(r => r.column === "TAG" && r.condition?.startsWith("_autosync_"));
+      if (hasAutoSync) {
+        // Extract make/model from title (e.g., "BMW 3 Series 2019-2022 Parts" → BMW|||3 Series)
+        const title = edge.node.title as string;
+        const partsIdx = title.lastIndexOf(" Parts");
+        if (partsIdx > 0) {
+          const namePart = title.substring(0, partsIdx);
+          existingSet.add(namePart); // "BMW" or "BMW 3 Series" or "BMW 3 Series 2019-2022"
+        }
+      }
+    }
+    const pi = shopifyColls?.data?.collections?.pageInfo;
+    if (!pi?.hasNextPage) break;
+    shopifyCursor = pi.endCursor;
+  }
+
   // Calculate and set total_items so progress bar works
   // For make_model_year, we need to count year combos too
   let yearComboCount = 0;
