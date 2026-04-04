@@ -1773,19 +1773,32 @@ async function processVehiclePagesChunk(
 
   const accessToken = tenant.shopify_access_token;
 
-  // Get unique engines from fitments for this shop — only push vehicles that have products
+  // Get engine IDs from TWO sources:
+  // 1. Fitments with ymme_engine_id (preferred — has product connections)
+  // 2. vehicle_page_sync records with pending status (manual selections)
   const { data: fitmentEngines } = await db
     .from("vehicle_fitments")
     .select("ymme_engine_id")
     .eq("shop_id", shopId)
     .not("ymme_engine_id", "is", null);
 
-  if (!fitmentEngines || fitmentEngines.length === 0) {
+  const { data: pendingSyncs } = await db
+    .from("vehicle_page_sync")
+    .select("engine_id")
+    .eq("shop_id", shopId)
+    .eq("sync_status", "pending");
+
+  // Combine both sources
+  const fitmentEngineIds = (fitmentEngines ?? []).map((f: { ymme_engine_id: string }) => f.ymme_engine_id);
+  const syncEngineIds = (pendingSyncs ?? []).map((s: { engine_id: string }) => s.engine_id);
+  const allEngineIds = [...new Set([...fitmentEngineIds, ...syncEngineIds])];
+
+  if (allEngineIds.length === 0) {
     return { processed: 0, hasMore: false };
   }
 
   // Get unique engine IDs
-  const uniqueEngineIds = [...new Set(fitmentEngines.map((f: { ymme_engine_id: number }) => f.ymme_engine_id))];
+  const uniqueEngineIds = allEngineIds;
 
   // Get engines with their make/model info via JOINs
   const engineBatch = uniqueEngineIds.slice(alreadyProcessed, alreadyProcessed + VPAGE_BATCH);
