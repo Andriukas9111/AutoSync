@@ -785,7 +785,7 @@ export default function ProviderImportWizard() {
                             key={f.name}
                             onClick={() => setSelectedFtpFile(f.name)}
                             style={{
-                              padding: "8px 12px",
+                              padding: "var(--p-space-200) var(--p-space-300)",
                               borderRadius: "var(--p-border-radius-200)",
                               border: `1px solid ${selectedFtpFile === f.name ? "var(--p-color-border-emphasis)" : "var(--p-color-border-secondary)"}`,
                               background: selectedFtpFile === f.name ? "var(--p-color-bg-surface-selected)" : "var(--p-color-bg-surface)",

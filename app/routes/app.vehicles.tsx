@@ -885,7 +885,7 @@ export default function Vehicles() {
                     }}
                     style={{
                       cursor: "pointer",
-                      padding: "12px 0",
+                      padding: "var(--p-space-300) 0",
                       transition: "background-color 0.15s",
                     }}
                   >

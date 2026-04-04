@@ -1488,8 +1488,8 @@ export default function ProductDetails() {
                         <div key={key} style={{
                           display: "grid",
                           gridTemplateColumns: "180px 1fr",
-                          gap: "8px",
-                          padding: "6px 12px",
+                          gap: "var(--p-space-200)",
+                          padding: "var(--p-space-150) var(--p-space-300)",
                           borderBottom: "1px solid var(--p-color-border-secondary)",
                           background: i % 2 === 0 ? undefined : "var(--p-color-bg-surface-secondary)",
                         }}>

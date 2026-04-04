@@ -476,7 +476,7 @@ export default function Plans() {
         )}
 
         {/* Header */}
-        <div style={{ textAlign: "center", padding: "8px 0 0" }}>
+        <div style={{ textAlign: "center", padding: "var(--p-space-200) 0 0" }}>
           <BlockStack gap="200" inlineAlign="center">
             <Text as="h1" variant="headingXl">Pick your plan</Text>
             <Text as="p" variant="bodyMd" tone="subdued">
@@ -489,7 +489,7 @@ export default function Plans() {
         <div className="as-plan-grid" style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
-          gap: "16px",
+          gap: "var(--p-space-400)",
         }}>
           <style>{`
             @media(max-width:900px) { .as-plan-grid { grid-template-columns: repeat(2, 1fr) !important; } }
@@ -527,7 +527,7 @@ export default function Plans() {
                 {/* Badge area — always same height so cards align */}
                 <div style={{
                   textAlign: "center",
-                  padding: "6px 0",
+                  padding: "var(--p-space-150) 0",
                   letterSpacing: "0.5px",
                   minHeight: "27px",
                   color: hasBadge ? "var(--p-color-text-emphasis)" : "transparent",
@@ -540,7 +540,7 @@ export default function Plans() {
 
                 {/* Card content */}
                 <div style={{
-                  padding: "20px",
+                  padding: "var(--p-space-500)",
                   display: "flex",
                   flexDirection: "column",
                   flex: 1,
@@ -559,7 +559,7 @@ export default function Plans() {
                   </BlockStack>
 
                   {/* Price */}
-                  <div style={{ margin: "16px 0" }}>
+                  <div style={{ margin: "var(--p-space-400) 0" }}>
                     <InlineStack gap="100" blockAlign="end">
                       <Text as="span" variant="heading2xl" fontWeight="bold">
                         {config.priceMonthly === 0 ? "$0" : `$${String(config.priceMonthly)}`}
@@ -571,7 +571,7 @@ export default function Plans() {
                   </div>
 
                   {/* Divider */}
-                  <div style={{ margin: "4px 0 12px" }}>
+                  <div style={{ margin: "var(--p-space-100) 0 var(--p-space-300)" }}>
                     <Divider />
                   </div>
 
@@ -600,7 +600,7 @@ export default function Plans() {
                   </div>
 
                   {/* CTA button — always at bottom of card */}
-                  <div style={{ marginTop: "16px" }}>
+                  <div style={{ marginTop: "var(--p-space-400)" }}>
                     {isCurrent ? (
                       <Button disabled fullWidth>Current Plan</Button>
                     ) : tierIndex > currentIndex ? (
@@ -646,7 +646,7 @@ export default function Plans() {
                   <tr>
                     <th style={{
                       textAlign: "left",
-                      padding: "12px 8px",
+                      padding: "var(--p-space-300) var(--p-space-200)",
                       borderBottom: "2px solid var(--p-color-border)",
                       position: "sticky",
                       left: 0,
@@ -661,7 +661,7 @@ export default function Plans() {
                       return (
                         <th key={tier} style={{
                           textAlign: "center",
-                          padding: "12px 6px",
+                          padding: "var(--p-space-300) var(--p-space-150)",
                           borderBottom: "2px solid var(--p-color-border)",
                           backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
                           minWidth: "90px",
@@ -682,7 +682,7 @@ export default function Plans() {
                     return [
                       <tr key={`cat-${category}`}>
                         <td colSpan={7} style={{
-                          padding: "10px 8px 6px",
+                          padding: "var(--p-space-200) var(--p-space-200) var(--p-space-150)",
                           textTransform: "uppercase",
                           letterSpacing: "0.5px",
                           borderBottom: "1px solid var(--p-color-border)",
@@ -694,7 +694,7 @@ export default function Plans() {
                       ...categoryRows.map((row) => (
                         <tr key={row.label}>
                           <td style={{
-                            padding: "10px 8px",
+                            padding: "var(--p-space-200) var(--p-space-200)",
                             borderBottom: "1px solid var(--p-color-border-secondary)",
                             position: "sticky",
                             left: 0,
@@ -708,7 +708,7 @@ export default function Plans() {
                             return (
                               <td key={tier} style={{
                                 textAlign: "center",
-                                padding: "10px 6px",
+                                padding: "var(--p-space-200) var(--p-space-150)",
                                 borderBottom: "1px solid var(--p-color-border-secondary)",
                                 backgroundColor: tier === activePlan ? "var(--p-color-bg-surface-secondary)" : undefined,
                               }}>
@@ -745,7 +745,7 @@ export default function Plans() {
                     {["Feature", "AutoSync", "Convermax", "EasySearch", "C: YMM", "PCFitment", "VFitz", "AutoFit AI", "PartFinder", "SearchAuto"].map((h, i) => (
                       <th key={i} style={{
                         textAlign: i === 0 ? "left" : "center",
-                        padding: "10px 8px",
+                        padding: "var(--p-space-200) var(--p-space-200)",
                         fontWeight: 600,
                         fontSize: "13px",
                         background: i === 1 ? "var(--p-color-bg-surface-selected)" : undefined,
@@ -776,14 +776,14 @@ export default function Plans() {
                     ["Widgets", "7", "7+", "2", "2", "1", "1", "2", "2", "1"],
                   ] as string[][]).map(([label, ...vals], ri) => (
                     <tr key={ri} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                      <td style={{ padding: "8px", fontWeight: 500 }}>{label}</td>
+                      <td style={{ padding: "var(--p-space-200)", fontWeight: 500 }}>{label}</td>
                       {vals.map((v, j) => {
                         const isAutoSync = j === 0;
                         const isYes = v === "yes";
                         const isNo = v === "no";
                         return (
                           <td key={j} style={{
-                            textAlign: "center", padding: "8px",
+                            textAlign: "center", padding: "var(--p-space-200)",
                             background: isAutoSync ? "var(--p-color-bg-surface-selected)" : undefined,
                           }}>
                             {isYes ? (
@@ -827,7 +827,7 @@ export default function Plans() {
                     onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
                     style={{
                       cursor: "pointer",
-                      padding: "14px 0",
+                      padding: "var(--p-space-300) 0",
                       borderBottom: idx < FAQ_ITEMS.length - 1 ? "1px solid var(--p-color-border-secondary)" : undefined,
                     }}
                     role="button"
@@ -850,7 +850,7 @@ export default function Plans() {
                       id={`faq-${idx}`}
                       transition={{ duration: "150ms", timingFunction: "ease-in-out" }}
                     >
-                      <div style={{ paddingTop: "10px" }}>
+                      <div style={{ paddingTop: "var(--p-space-200)" }}>
                         <Text as="p" variant="bodySm" tone="subdued">{faq.a}</Text>
                       </div>
                     </Collapsible>
@@ -1009,7 +1009,7 @@ function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
                 <div key={s.label} style={{
                   display: "grid",
                   gridTemplateColumns: "140px 1fr 100px 80px",
-                  gap: "12px",
+                  gap: "var(--p-space-300)",
                   alignItems: "center",
                 }}>
                   <BlockStack gap="050">

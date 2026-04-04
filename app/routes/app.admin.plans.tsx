@@ -352,8 +352,8 @@ function FeatureToggleRow({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "10px",
-        padding: "6px 12px",
+        gap: "var(--p-space-200)",
+        padding: "var(--p-space-150) var(--p-space-300)",
         borderRadius: "var(--p-border-radius-200)",
         background: checked ? "var(--p-color-bg-surface-secondary)" : "transparent",
         transition: "background 100ms ease",
@@ -460,7 +460,7 @@ export default function AdminPlans() {
               <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
               <Text as="h2" variant="headingMd">Select Plan to Edit</Text>
             </InlineStack>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "var(--p-space-300)", flexWrap: "wrap" }}>
               {PLAN_ORDER.map((tier) => (
                 <PlanSelectorCard
                   key={tier}
@@ -477,7 +477,7 @@ export default function AdminPlans() {
         {/* ─── Tabs ─── */}
         <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
           {selectedTab === 0 ? (
-            <div style={{ paddingTop: "16px" }}>
+            <div style={{ paddingTop: "var(--p-space-400)" }}>
               <BlockStack gap="400">
                 {/* ─── Plan Info & Pricing ─── */}
                 <Card>
@@ -488,7 +488,7 @@ export default function AdminPlans() {
                     </InlineStack>
                     <Divider />
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 180px" }}>
                         <TextField
                           label="Display Name"
@@ -545,7 +545,7 @@ export default function AdminPlans() {
                     </InlineStack>
                     <Divider />
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       {[
                         { label: "Products", icon: ProductIcon, key: "products" as const },
                         { label: "Fitments", icon: LinkIcon, key: "fitments" as const },
@@ -556,7 +556,7 @@ export default function AdminPlans() {
                             <IconBadge icon={item.icon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="span" variant="bodySm" fontWeight="semibold">{item.label}</Text>
                           </InlineStack>
-                          <div style={{ marginTop: "6px" }}>
+                          <div style={{ marginTop: "var(--p-space-150)" }}>
                             <TextField
                               label=""
                               labelHidden
@@ -574,7 +574,7 @@ export default function AdminPlans() {
                       ))}
                     </div>
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       {[
                         { label: "Active Makes", icon: DatabaseIcon, key: "activeMakes" as const },
                         { label: "Scheduled Fetches/Day", icon: ClockIcon, key: "scheduledFetchesPerDay" as const },
@@ -584,7 +584,7 @@ export default function AdminPlans() {
                             <IconBadge icon={item.icon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="span" variant="bodySm" fontWeight="semibold">{item.label}</Text>
                           </InlineStack>
-                          <div style={{ marginTop: "6px" }}>
+                          <div style={{ marginTop: "var(--p-space-150)" }}>
                             <TextField
                               label=""
                               labelHidden
@@ -648,7 +648,7 @@ export default function AdminPlans() {
                         <Divider />
 
                         {/* Boolean toggles */}
-                        <div style={autoFitGridStyle("220px", "4px")}>
+                        <div style={autoFitGridStyle("220px", "var(--p-space-100)")}>
                           {group.booleans.map((feature) => (
                             <FeatureToggleRow
                               key={feature.key}
@@ -670,7 +670,7 @@ export default function AdminPlans() {
                         {group.enums.length > 0 && (
                           <>
                             <Divider />
-                            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                               {group.enums.map((feature) => (
                                 <div key={feature.key} style={{ flex: "1 1 200px", minWidth: "200px" }}>
                                   <Select
@@ -706,7 +706,7 @@ export default function AdminPlans() {
             </div>
           ) : (
             /* ─── All Plans Overview Tab ─── */
-            <div style={{ paddingTop: "16px" }}>
+            <div style={{ paddingTop: "var(--p-space-400)" }}>
               <Card>
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
@@ -724,7 +724,7 @@ export default function AdminPlans() {
                               key={h}
                               style={{
                                 textAlign: h === "Plan" ? "left" : "center",
-                                padding: "12px 10px",
+                                padding: "var(--p-space-300) var(--p-space-200)",
                                 borderBottom: "2px solid var(--p-color-border)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.5px",
@@ -763,33 +763,33 @@ export default function AdminPlans() {
                                 }
                               }}
                             >
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                                 <Text as="span" variant="bodyMd" fontWeight="bold">{c.name}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodyMd" fontWeight="semibold">
                                   {c.priceMonthly === 0 ? "Free" : `$${String(c.priceMonthly)}`}
                                 </Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.products)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.fitments)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.providers)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.activeMakes)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.scheduledFetchesPerDay)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Badge tone="info">{`${String(enabled)}/20`}</Badge>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 {c.badge
                                   ? <Badge tone={badgeTone}>{c.badge}</Badge>
                                   : <Text as="span" variant="bodySm" tone="subdued">—</Text>}

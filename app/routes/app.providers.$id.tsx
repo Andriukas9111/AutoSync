@@ -467,7 +467,7 @@ export default function ProviderDetail() {
         {/* Stats Row — bordered grid matching providers list */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("140px", "8px"),
+            ...autoFitGridStyle("140px", "var(--p-space-200)"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[
@@ -929,12 +929,12 @@ function CopyButton({ value }: { value: string }) {
           transform: "translateX(-50%)",
           background: "var(--p-color-bg-fill-success)",
           color: "var(--p-color-text-inverse)",
-          padding: "2px 8px",
+          padding: "2px var(--p-space-200)",
           borderRadius: "var(--p-border-radius-100)",
           fontSize: "11px",
           fontWeight: 600,
           whiteSpace: "nowrap",
-          marginBottom: "4px",
+          marginBottom: "var(--p-space-100)",
         }}>
           Copied!
         </div>
@@ -946,7 +946,7 @@ function CopyButton({ value }: { value: string }) {
           background: "none",
           border: "none",
           cursor: "pointer",
-          padding: "4px",
+          padding: "var(--p-space-100)",
           borderRadius: "var(--p-border-radius-100)",
           display: "flex",
           alignItems: "center",
