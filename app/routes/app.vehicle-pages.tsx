@@ -449,20 +449,42 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "delete_all") {
-    try {
-      const { deleteVehiclePages } = await import(
-        "../lib/pipeline/vehicle-pages.server"
-      );
-      const result = await deleteVehiclePages(admin, shopId);
-      return data({
-        success: true,
-        message: `Deleted ${result.deleted} vehicle pages.`,
-      });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete vehicle pages";
-      return data({ error: message }, { status: 500 });
+    // Create a delete job — processed by Edge Function (NOT Vercel)
+    // This ensures delete continues even if the user closes the browser
+    const { data: deleteJob, error: deleteJobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "delete_vehicle_pages",
+        status: "running",
+        progress: 0,
+        total_items: 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (deleteJobError || !deleteJob) {
+      return data({ error: "Failed to create delete job" }, { status: 500 });
     }
+
+    // Fire-and-forget: invoke Edge Function
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (supabaseUrl && supabaseKey) {
+      fetch(`${supabaseUrl}/functions/v1/process-jobs`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: deleteJob.id, shop_id: shopId }),
+      }).catch((err) => console.error("[vehicle-pages] Edge Function delete invocation failed:", err));
+    }
+
+    return data({
+      success: true,
+      jobCreated: true,
+      message: "Vehicle pages delete started. Processing in background...",
+    });
   }
 
   if (intent === "sync_status") {

@@ -623,6 +623,9 @@ Deno.serve(async (req) => {
       case "vehicle_pages":
         result = await processVehiclePagesChunk(db, job);
         break;
+      case "delete_vehicle_pages":
+        result = await processDeleteVehiclePages(db, job);
+        break;
       case "bulk_push":
         result = await processBulkPush(db, job);
         break;
@@ -1796,11 +1799,23 @@ async function processVehiclePagesChunk(
   // Get engine IDs from TWO sources:
   // 1. Fitments with ymme_engine_id (preferred — has product connections)
   // 2. vehicle_page_sync records with pending status (manual selections)
-  const { data: fitmentEngines } = await db
-    .from("vehicle_fitments")
-    .select("ymme_engine_id")
-    .eq("shop_id", shopId)
-    .not("ymme_engine_id", "is", null);
+  // IMPORTANT: Paginate to handle >1000 fitments (Supabase default limit)
+  const fitmentEngineSet = new Set<string>();
+  let feOffset = 0;
+  while (true) {
+    const { data: feBatch } = await db
+      .from("vehicle_fitments")
+      .select("ymme_engine_id")
+      .eq("shop_id", shopId)
+      .not("ymme_engine_id", "is", null)
+      .range(feOffset, feOffset + 999);
+    if (!feBatch || feBatch.length === 0) break;
+    for (const f of feBatch) {
+      if (f.ymme_engine_id) fitmentEngineSet.add(f.ymme_engine_id);
+    }
+    feOffset += feBatch.length;
+    if (feBatch.length < 1000) break;
+  }
 
   const { data: pendingSyncs } = await db
     .from("vehicle_page_sync")
@@ -1809,9 +1824,9 @@ async function processVehiclePagesChunk(
     .eq("sync_status", "pending");
 
   // Combine both sources
-  const fitmentEngineIds = (fitmentEngines ?? []).map((f: { ymme_engine_id: string }) => f.ymme_engine_id);
   const syncEngineIds = (pendingSyncs ?? []).map((s: { engine_id: string }) => s.engine_id);
-  const allEngineIds = [...new Set([...fitmentEngineIds, ...syncEngineIds])];
+  for (const id of syncEngineIds) fitmentEngineSet.add(id);
+  const allEngineIds = [...fitmentEngineSet];
 
   if (allEngineIds.length === 0) {
     return { processed: 0, hasMore: false };
@@ -2927,4 +2942,91 @@ async function processCleanupChunk(
   }
 
   return { processed: 0, hasMore: false };
+}
+
+// ── Delete Vehicle Pages processor ────────────────────────────
+
+async function processDeleteVehiclePages(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+
+  // Get the Shopify access token
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("shopify_access_token")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+
+  if (!tenant?.shopify_access_token) {
+    return { processed: 0, hasMore: false, error: "No Shopify access token found." };
+  }
+
+  const accessToken = tenant.shopify_access_token;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const gqlHeaders = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // Count total metaobjects first (for progress)
+  const countRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+    query: `{ metaobjects(type: "$app:vehicle_spec", first: 1) { edges { node { id } } pageInfo { hasNextPage } } }`,
+  })});
+  const countJson = await countRes.json();
+
+  // Get total from vehicle_page_sync for progress
+  const { count: totalSync } = await db.from("vehicle_page_sync")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+
+  if ((job.processed_items as number ?? 0) === 0 && totalSync) {
+    await db.from("sync_jobs").update({ total_items: totalSync }).eq("id", job.id);
+  }
+
+  // Delete metaobjects in batches of 50
+  let totalDeleted = 0;
+  let batchNum = 0;
+  const MAX_BATCHES = 30;
+
+  while (batchNum < MAX_BATCHES) {
+    batchNum++;
+
+    const listRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+      query: `{ metaobjects(type: "$app:vehicle_spec", first: 50) { edges { node { id handle } } } }`,
+    })});
+    const listJson = await listRes.json();
+    const edges = listJson?.data?.metaobjects?.edges ?? [];
+
+    if (edges.length === 0) break;
+
+    for (const edge of edges) {
+      try {
+        const delRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+          query: `mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { message } } }`,
+          variables: { id: edge.node.id },
+        })});
+        const delJson = await delRes.json();
+        const errors = delJson?.data?.metaobjectDelete?.userErrors || [];
+        if (errors.length === 0) {
+          totalDeleted++;
+        }
+      } catch (_err) {
+        // Continue — some may fail
+      }
+    }
+
+    // Update progress
+    const progress = totalSync ? Math.round((totalDeleted / totalSync) * 100) : 50;
+    await db.from("sync_jobs").update({
+      processed_items: totalDeleted,
+      progress: Math.min(progress, 99),
+    }).eq("id", job.id);
+
+    console.log(`[delete_vehicle_pages] Batch ${batchNum}: deleted ${totalDeleted} metaobjects`);
+  }
+
+  // Clear all vehicle_page_sync records
+  await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
+
+  console.log(`[delete_vehicle_pages] Complete: deleted ${totalDeleted} metaobjects, cleared sync records`);
+  return { processed: totalDeleted, hasMore: false };
 }
