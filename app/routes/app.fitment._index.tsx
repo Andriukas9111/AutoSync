@@ -32,7 +32,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -113,10 +113,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(20),
     getTenant(shopId),
     // Top makes by fitment count
-    db.from("vehicle_fitments")
-      .select("make, model")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
+    paginatedSelect<{ make: string; model: string }>("vehicle_fitments", "make, model", (q) =>
+      q.eq("shop_id", shopId).not("make", "is", null)
+    ).then((rows) => ({ data: rows, error: null })),
     ...statuses.map((s) =>
       db.from("products")
         .select("id", { count: "exact", head: true })

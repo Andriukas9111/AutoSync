@@ -1817,15 +1817,20 @@ async function processVehiclePagesChunk(
     if (feBatch.length < 1000) break;
   }
 
-  const { data: pendingSyncs } = await db
-    .from("vehicle_page_sync")
-    .select("engine_id")
-    .eq("shop_id", shopId)
-    .eq("sync_status", "pending");
-
-  // Combine both sources
-  const syncEngineIds = (pendingSyncs ?? []).map((s: { engine_id: string }) => s.engine_id);
-  for (const id of syncEngineIds) fitmentEngineSet.add(id);
+  // Also get pending syncs — paginated
+  let psOffset = 0;
+  while (true) {
+    const { data: psBatch } = await db
+      .from("vehicle_page_sync")
+      .select("engine_id")
+      .eq("shop_id", shopId)
+      .eq("sync_status", "pending")
+      .range(psOffset, psOffset + 999);
+    if (!psBatch || psBatch.length === 0) break;
+    for (const s of psBatch) fitmentEngineSet.add(s.engine_id);
+    psOffset += psBatch.length;
+    if (psBatch.length < 1000) break;
+  }
   const allEngineIds = [...fitmentEngineSet];
 
   if (allEngineIds.length === 0) {
@@ -1987,7 +1992,22 @@ async function processVehiclePagesChunk(
     console.log("[vehicle_pages] Definition created successfully");
   }
 
+  // DEDUP: Check which engines already have synced vehicle pages — skip those
+  const { data: existingSyncs } = await db
+    .from("vehicle_page_sync")
+    .select("engine_id")
+    .eq("shop_id", shopId)
+    .eq("sync_status", "synced")
+    .in("engine_id", specs.map((s: { id: string }) => s.id));
+  const alreadySyncedSet = new Set((existingSyncs ?? []).map((s: { engine_id: string }) => s.engine_id));
+
   for (const spec of specs) {
+    // Skip engines that already have a synced vehicle page
+    if (alreadySyncedSet.has(spec.id)) {
+      processed++;
+      continue;
+    }
+
     const rawSpecs = typeof spec.raw_specs === "string" ? JSON.parse(spec.raw_specs) : (spec.raw_specs ?? {});
     const handle = `vehicle-specs-${(spec.make_name || "").toLowerCase().replace(/\s+/g, "-")}-${(spec.model_name || "").toLowerCase().replace(/\s+/g, "-")}-${(spec.variant || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.replace(/-+/g, "-").replace(/-$/, "").substring(0, 100);
 
@@ -2057,7 +2077,14 @@ async function processVehiclePagesChunk(
         }, { onConflict: "shop_id,engine_id" });
         processed++;
       } else if (errors?.some((e: { code: string }) => e.code === "TAKEN")) {
-        // Handle already exists — count as processed
+        // Handle already exists on Shopify — mark as synced in our DB too
+        await db.from("vehicle_page_sync").upsert({
+          shop_id: shopId,
+          engine_id: spec.id,
+          metaobject_handle: handle,
+          sync_status: "synced",
+          synced_at: new Date().toISOString(),
+        }, { onConflict: "shop_id,engine_id" });
         processed++;
       } else if (errors?.length) {
         console.error(`[vehicle_pages] Error for ${handle}:`, errors);

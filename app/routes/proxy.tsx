@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import crypto from "crypto";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
@@ -286,11 +286,9 @@ async function handleModels(params: URLSearchParams, request?: Request) {
       .maybeSingle();
 
     if (makeRow?.name) {
-      const { data: fitmentModels } = await db
-        .from("vehicle_fitments")
-        .select("model")
-        .eq("shop_id", shopId)
-        .ilike("make", makeRow.name);
+      const fitmentModels = await paginatedSelect<{ model: string }>(
+        "vehicle_fitments", "model", (q) => q.eq("shop_id", shopId).ilike("make", makeRow.name)
+      );
 
       const fitmentModelNames = new Set(
         (fitmentModels ?? []).map((f: any) => (f.model ?? "").toLowerCase().trim())
@@ -1594,13 +1592,11 @@ async function handleVehicleGallery(params: URLSearchParams, request?: Request) 
     }
   }
 
-  // Fetch all synced vehicle pages for this shop
-  const { data: synced } = await db
-    .from("vehicle_page_sync")
-    .select("engine_id, metaobject_handle, sync_status")
-    .eq("shop_id", shop)
-    .eq("sync_status", "synced")
-    .order("metaobject_handle", { ascending: true });
+  // Fetch all synced vehicle pages for this shop (paginated to avoid 1000-row limit)
+  const synced = await paginatedSelect<{ engine_id: string; metaobject_handle: string; sync_status: string }>(
+    "vehicle_page_sync", "engine_id, metaobject_handle, sync_status", (q) =>
+      q.eq("shop_id", shop).eq("sync_status", "synced").order("metaobject_handle", { ascending: true })
+  );
 
   if (!synced || synced.length === 0) {
     return json({ vehicles: [] });

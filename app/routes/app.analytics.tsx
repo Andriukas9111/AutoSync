@@ -37,7 +37,7 @@ import {
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { getTenant, getPlanLimits, assertFeature, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -242,17 +242,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ),
     ),
 
-    // Fitments grouped by make (top 15) — limit to prevent memory issues
-    db.from("vehicle_fitments")
-      .select("make, product_id")
-      .eq("shop_id", shopId)
-      .limit(5000),
+    // Fitments grouped by make (top 15) — paginated to avoid 1000-row limit
+    paginatedSelect<{ make: string; product_id: string }>(
+      "vehicle_fitments", "make, product_id", (q) => q.eq("shop_id", shopId)
+    ).then((rows) => ({ data: rows, error: null })),
 
-    // Fitments grouped by model (top 15) — limit to prevent memory issues
-    db.from("vehicle_fitments")
-      .select("make, model, product_id")
-      .eq("shop_id", shopId)
-      .limit(5000),
+    // Fitments grouped by model (top 15) — paginated to avoid 1000-row limit
+    paginatedSelect<{ make: string; model: string; product_id: string }>(
+      "vehicle_fitments", "make, model, product_id", (q) => q.eq("shop_id", shopId)
+    ).then((rows) => ({ data: rows, error: null })),
 
     // Provider metrics
     db.from("providers")

@@ -42,7 +42,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import {
   getPlanLimits,
   getTenant,
@@ -174,11 +174,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncedResult,
     settingsResult,
   ] = await Promise.all([
-    // 1. Count by sync_status
-    db
-      .from("vehicle_page_sync")
-      .select("sync_status")
-      .eq("shop_id", shopId),
+    // 1. Count by sync_status — use head-only count queries (NOT row fetch)
+    Promise.all([
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "pending"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "failed"),
+    ]),
 
     // 2. Count unique engine IDs from fitments (for "Total Available")
     // Uses head:true to avoid fetching all rows (Supabase 1000-row limit)
@@ -211,12 +212,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .not("ymme_engine_id", "is", null)
       .limit(1000),
 
-    // 4. Fetch synced engine IDs
-    db
-      .from("vehicle_page_sync")
-      .select("engine_id, linked_product_count")
-      .eq("shop_id", shopId)
-      .eq("sync_status", "synced"),
+    // 4. Fetch synced engine IDs — paginated to handle >1000
+    paginatedSelect("vehicle_page_sync", "engine_id, linked_product_count", (q) =>
+      q.eq("shop_id", shopId).eq("sync_status", "synced"),
+    ),
 
     // 5. Fetch app_settings
     db
@@ -226,15 +225,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .maybeSingle(),
   ]);
 
-  // Aggregate sync stats
-  const syncStats = { synced: 0, pending: 0, failed: 0 };
-  if (syncStatsResult.data) {
-    for (const row of syncStatsResult.data) {
-      if (row.sync_status === "synced") syncStats.synced++;
-      else if (row.sync_status === "pending") syncStats.pending++;
-      else if (row.sync_status === "failed") syncStats.failed++;
-    }
-  }
+  // Aggregate sync stats from head-only count queries
+  const [syncedCount, pendingCount, failedCount] = syncStatsResult as unknown as [
+    { count: number | null }, { count: number | null }, { count: number | null }
+  ];
+  const syncStats = {
+    synced: syncedCount.count ?? 0,
+    pending: pendingCount.count ?? 0,
+    failed: failedCount.count ?? 0,
+  };
 
   // Count unique vehicles — use the engine IDs from availableResult
   // Since Supabase caps at 1000 rows, we need to paginate for the count

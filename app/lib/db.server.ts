@@ -16,3 +16,45 @@ export const db = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 export default db;
+
+/**
+ * Paginated select — fetches ALL rows from a Supabase query, handling the
+ * 1000-row server cap automatically. Use this instead of raw .select() when
+ * the result set could exceed 1000 rows.
+ *
+ * @param table - Table name
+ * @param select - Column selection string
+ * @param filters - Function that applies .eq(), .not(), etc. to the query builder
+ * @param pageSize - Rows per page (default 1000, the Supabase server max)
+ * @returns All rows concatenated
+ *
+ * Usage:
+ *   const rows = await paginatedSelect("vehicle_fitments", "make, model", (q) =>
+ *     q.eq("shop_id", shopId).not("make", "is", null)
+ *   );
+ */
+export async function paginatedSelect<T = Record<string, unknown>>(
+  table: string,
+  select: string,
+  filters?: (query: ReturnType<typeof db.from>) => any,
+  pageSize = 1000,
+): Promise<T[]> {
+  const allRows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    let query = db.from(table).select(select).range(offset, offset + pageSize - 1);
+    if (filters) query = filters(query);
+    const { data, error } = await query;
+    if (error) {
+      console.error(`[paginatedSelect] ${table} error at offset ${offset}:`, error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    allRows.push(...(data as T[]));
+    if (data.length < pageSize) break; // Last page
+    offset += data.length;
+  }
+
+  return allRows;
+}

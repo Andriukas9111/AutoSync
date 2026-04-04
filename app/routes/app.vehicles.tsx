@@ -34,7 +34,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { getPlanLimits, getTenant, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
@@ -67,11 +67,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .from("tenant_active_makes")
       .select("ymme_make_id")
       .eq("shop_id", shopId),
-    db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
+    paginatedSelect<{ make: string }>("vehicle_fitments", "make", (q) =>
+      q.eq("shop_id", shopId).not("make", "is", null)
+    ).then((rows) => ({ data: rows, error: null })),
     db
       .from("ymme_models")
       .select("id", { count: "exact", head: true })
@@ -206,11 +204,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (_action === "auto_activate") {
     // Auto-activate all makes that have mapped products
-    const { data: fitments } = await db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null);
+    const fitments = await paginatedSelect<{ make: string }>(
+      "vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)
+    );
 
     const fitmentMakes = new Set(
       (fitments ?? []).map((f: { make: string }) => f.make),

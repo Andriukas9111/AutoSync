@@ -30,7 +30,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { getPlanLimits, getTenant, getSerializedPlanLimits, assertFeature, BillingGateError, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -52,10 +52,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Run ALL queries in parallel — including tenant lookup
   const [tenant, collectionsResult, appSettingsResult] = await Promise.all([
     getTenant(shopId),
-    db.from("collection_mappings")
-      .select("*")
-      .eq("shop_id", shopId)
-      .order("created_at", { ascending: false }),
+    paginatedSelect("collection_mappings", "*", (q) =>
+      q.eq("shop_id", shopId).order("created_at", { ascending: false })
+    ).then((rows) => ({ data: rows, error: null })),
     db.from("app_settings")
       .select("*")
       .eq("shop_id", shopId)
@@ -71,25 +70,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Count unique combos by querying DB with pagination (avoids 1000-row limit)
   // Get unique makes and models efficiently — don't load ALL fitments into memory
-  const { data: makesData } = await db.from("vehicle_fitments")
-    .select("make")
-    .eq("shop_id", shopId)
-    .not("make", "is", null)
-    .limit(5000);
-  const uniqueMakes = [...new Set((makesData ?? []).map((f: { make: string }) => f.make))];
+  const makesData = await paginatedSelect<{ make: string }>(
+    "vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)
+  );
+  const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
 
-  const { data: makeModelData } = await db.from("vehicle_fitments")
-    .select("make, model")
-    .eq("shop_id", shopId)
-    .not("make", "is", null)
-    .not("model", "is", null)
-    .limit(5000);
-  const uniqueMakeModels = [...new Set((makeModelData ?? []).map((f: { make: string; model: string }) => `${f.make}|${f.model}`))];
-  // For year combos, reuse the makeModel data (already limited to 5000)
+  const makeModelData = await paginatedSelect<{ make: string; model: string }>(
+    "vehicle_fitments", "make, model", (q) => q.eq("shop_id", shopId).not("make", "is", null).not("model", "is", null)
+  );
+  const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
+  // For year combos, reuse the makeModel data (already paginated)
   const uniqueMakeModelYears = [...new Set(
-    (makeModelData ?? [])
-      .filter((f: any) => f.make && f.model)
-      .map((f: any) => `${f.make}|${f.model}`)
+    makeModelData
+      .filter((f) => f.make && f.model)
+      .map((f) => `${f.make}|${f.model}`)
   )];
 
   return {
