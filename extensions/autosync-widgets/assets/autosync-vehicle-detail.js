@@ -274,7 +274,7 @@ footerWrap.style.cssText = 'text-align:center!important;';
 var footer = el('div', 'avsd-footer');
 footer.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';
 var logoImg = document.createElement('img');
-logoImg.src = '{{ logo_url }}';
+logoImg.src = root.dataset.logoUrl || '';
 logoImg.alt = 'AutoSync';
 logoImg.width = 14;
 logoImg.height = 14;
@@ -289,4 +289,5 @@ footerWrap.appendChild(footer);
 contentEl.appendChild(footerWrap);
 }
 }
+});
 })();

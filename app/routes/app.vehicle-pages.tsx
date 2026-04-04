@@ -723,10 +723,12 @@ export default function VehiclePages() {
         {/* ── Section 1: How It Works (Collapsible) ── */}
         <HowItWorks
           title="How Vehicle Pages Work"
+          subtitle="Map Fitments → Push Pages → Set Up Template → Go Live"
           steps={[
             { number: 1, title: "Map Fitments", description: "Link your products to specific vehicles using the fitment mapping tool. Each product-vehicle link becomes a potential vehicle page.", linkText: "Go to Fitment Mapping", linkUrl: "/app/fitment/manual" },
-            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs and linked products." },
-            { number: 3, title: "SEO Pages Go Live", description: "Auto-generated URLs appear on your storefront with rich vehicle data, helping you rank for long-tail automotive search terms." },
+            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs, power, displacement, and linked products." },
+            { number: 3, title: "Set Up Metaobject Template", description: "In your Shopify admin, go to Online Store → Themes → Customize. Create a new template for the \"Vehicle Specification\" metaobject type. Add the AutoSync \"Vehicle Spec Detail\" widget block to display vehicle data beautifully.", linkText: "Open Theme Editor", linkUrl: "/app/settings" },
+            { number: 4, title: "SEO Pages Go Live", description: "Each vehicle gets its own URL (e.g. /pages/vehicle-specs/audi-rs3-2-5-tfsi). Rich specs, linked products, and structured data help you rank for long-tail automotive searches like \"Audi RS3 exhaust upgrade\"." },
           ]}
         />
 

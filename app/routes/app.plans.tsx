@@ -993,14 +993,14 @@ function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
                 gap: "4px",
                 padding: "4px 10px",
                 borderRadius: "var(--p-border-radius-200)",
-                background: "var(--p-color-bg-fill-success-secondary)",
-                color: "var(--p-color-text-success)",
+                background: "var(--p-color-bg-surface-secondary)",
+                color: "var(--p-color-text-secondary)",
                 fontSize: "12px",
                 fontWeight: 500,
                 lineHeight: "16px",
                 whiteSpace: "nowrap",
               }}>
-                <Icon source={CheckSmallIcon} />
+                <Icon source={CheckSmallIcon} tone="subdued" />
                 {feature}
               </div>
             ))}
