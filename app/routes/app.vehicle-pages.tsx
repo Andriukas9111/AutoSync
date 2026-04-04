@@ -180,13 +180,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .select("sync_status")
       .eq("shop_id", shopId),
 
-    // 2. Count ALL fitments (not just ones with engine IDs)
+    // 2. Count unique engine IDs from fitments (for "Total Available")
+    // Uses head:true to avoid fetching all rows (Supabase 1000-row limit)
     db
       .from("vehicle_fitments")
-      .select("id, ymme_engine_id, make, model, engine")
-      .eq("shop_id", shopId),
+      .select("ymme_engine_id")
+      .eq("shop_id", shopId)
+      .not("ymme_engine_id", "is", null),
 
-    // 3. Fetch vehicles — both with and without ymme_engine_id
+    // 3. Fetch fitments — paginated to handle >1000 rows
+    // We fetch ALL fitments with engine IDs for the vehicle browser
     db
       .from("vehicle_fitments")
       .select(
@@ -205,7 +208,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       `,
       )
       .eq("shop_id", shopId)
-      .limit(5000),
+      .not("ymme_engine_id", "is", null)
+      .limit(1000),
 
     // 4. Fetch synced engine IDs
     db
@@ -232,18 +236,52 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Count unique vehicles — ONLY count fitments with ymme_engine_id
-  // Text-only fitments (without engine IDs) can't generate vehicle pages
-  const allFitments = availableResult.data ?? [];
-  const uniqueVehicleKeys = new Set<string>();
-  for (const f of allFitments as Record<string, unknown>[]) {
-    if (f.ymme_engine_id) {
-      uniqueVehicleKeys.add(`engine:${f.ymme_engine_id}`);
+  // Count unique vehicles — use the engine IDs from availableResult
+  // Since Supabase caps at 1000 rows, we need to paginate for the count
+  const availEngineIds = new Set<string>();
+  for (const f of (availableResult.data ?? []) as Record<string, unknown>[]) {
+    if (f.ymme_engine_id) availEngineIds.add(f.ymme_engine_id as string);
+  }
+  // If we got exactly 1000, there are more — fetch remaining pages
+  if ((availableResult.data?.length ?? 0) >= 1000) {
+    let offset = 1000;
+    while (true) {
+      const { data: moreFitments } = await db
+        .from("vehicle_fitments")
+        .select("ymme_engine_id")
+        .eq("shop_id", shopId)
+        .not("ymme_engine_id", "is", null)
+        .range(offset, offset + 999);
+      if (!moreFitments || moreFitments.length === 0) break;
+      for (const f of moreFitments) {
+        if (f.ymme_engine_id) availEngineIds.add(f.ymme_engine_id);
+      }
+      offset += moreFitments.length;
+      if (moreFitments.length < 1000) break;
+    }
+  }
+  const uniqueVehicleKeys = availEngineIds;
+
+  // Also paginate the vehicle browser fitments if needed
+  let allVehicleFitments = vehiclesResult.data ?? [];
+  if (allVehicleFitments.length >= 1000) {
+    let offset = 1000;
+    while (true) {
+      const { data: moreVehicles } = await db
+        .from("vehicle_fitments")
+        .select("id, ymme_engine_id, make, model, engine, engine_code, fuel_type, year_from, year_to, variant, product_id")
+        .eq("shop_id", shopId)
+        .not("ymme_engine_id", "is", null)
+        .range(offset, offset + 999);
+      if (!moreVehicles || moreVehicles.length === 0) break;
+      allVehicleFitments = [...allVehicleFitments, ...moreVehicles];
+      offset += moreVehicles.length;
+      if (moreVehicles.length < 1000) break;
     }
   }
 
   // Look up YMME engine data for fitments that have ymme_engine_id
-  const engineIdsFromFitments = (vehiclesResult.data ?? [])
+  const engineIdsFromFitments = allVehicleFitments
     .map((r: any) => r.ymme_engine_id)
     .filter(Boolean) as string[];
   const uniqueEngineIds = [...new Set(engineIdsFromFitments)];
@@ -272,8 +310,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Build vehicle rows — ONLY vehicles with ymme_engine_id
   // Fitments without engine IDs are product categories (e.g. "Brake Lines") not real vehicles
   const vehicleMap = new Map<string, VehicleRow>();
-  if (vehiclesResult.data) {
-    for (const row of vehiclesResult.data as Record<string, unknown>[]) {
+  if (allVehicleFitments.length > 0) {
+    for (const row of allVehicleFitments as Record<string, unknown>[]) {
       // Only include fitments with engine IDs — skip text-only entries
       if (!row.ymme_engine_id) continue;
       const key = `engine:${row.ymme_engine_id}`;
@@ -332,7 +370,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Total linked products: count distinct products with fitments linked to synced vehicle pages
   const syncedEngineIdSet = new Set(syncedEngineIds);
   const linkedProductIds = new Set<string>();
-  for (const f of (vehiclesResult.data ?? []) as Record<string, unknown>[]) {
+  for (const f of allVehicleFitments as Record<string, unknown>[]) {
     if (f.product_id && f.ymme_engine_id && syncedEngineIdSet.has(f.ymme_engine_id)) {
       linkedProductIds.add(f.product_id);
     }
