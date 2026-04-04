@@ -16,7 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BATCH_SIZE = 50; // Products per invocation (Supabase Pro: 150s timeout)
+const BATCH_SIZE = 100; // Products per Edge Function invocation (Supabase Pro: 400s wall clock)
 const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
@@ -1795,7 +1795,7 @@ async function processVehiclePagesChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const shopId = job.shop_id as string;
   const alreadyProcessed = (job.processed_items as number) ?? 0;
-  const VPAGE_BATCH = 10;
+  const VPAGE_BATCH = 25; // Vehicle pages per batch (Pro: 400s wall clock, ~500ms per page)
 
   // Get the Shopify access token
   const { data: tenant } = await db
