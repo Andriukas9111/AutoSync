@@ -850,7 +850,15 @@ export default function VehiclePages() {
                     .filter(Boolean)
                     .join(" ");
 
-                  const engineLabel = vehicle.engineName || "Unknown Engine";
+                  // Build a useful engine label from available data
+                  const engineLabel = vehicle.engineName
+                    || [
+                        vehicle.displacementCc ? formatDisplacement(vehicle.displacementCc) : null,
+                        vehicle.fuelType,
+                        vehicle.powerHp ? `${vehicle.powerHp} HP` : null,
+                        vehicle.engineCode,
+                      ].filter(Boolean).join(" · ")
+                    || "All engines";
 
                   const displacement = formatDisplacement(
                     vehicle.displacementCc,

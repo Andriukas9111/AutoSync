@@ -738,7 +738,7 @@ async function processExtractChunk(
   // Get unmapped products — exclude staged (they're in provider view, not extraction queue)
   const { data: products, error: fetchErr } = await db
     .from("products")
-    .select("id, title, description, tags, product_type, vendor, sku")
+    .select("id, title, description, tags, product_type, vendor, sku, raw_data")
     .eq("shop_id", shopId)
     .neq("status", "staged")
     .eq("fitment_status", "unmapped")
@@ -761,14 +761,34 @@ async function processExtractChunk(
 
   for (const product of products) {
     try {
-      const allText = [
+      // Build combined text from all product fields including provider raw_data
+      const textParts = [
         product.title ?? "",
         product.description ?? "",
         product.sku ?? "",
         product.vendor ?? "",
         product.product_type ?? "",
         Array.isArray(product.tags) ? product.tags.join(" ") : (product.tags ?? ""),
-      ].join(" ");
+      ];
+
+      // Extract vehicle-relevant data from provider raw_data
+      const rawData = product.raw_data as Record<string, unknown> | null;
+      if (rawData && typeof rawData === "object") {
+        for (const [key, val] of Object.entries(rawData)) {
+          if (typeof val !== "string" || !val) continue;
+          const kl = key.toLowerCase();
+          if (kl.startsWith("tags_") || kl.startsWith("tag_") ||
+              kl.includes("fitment") || kl.includes("vehicle") ||
+              kl.includes("make") || kl.includes("model") ||
+              kl.includes("year") || kl.includes("engine") ||
+              kl.includes("application") || kl.includes("compatibility") ||
+              kl.includes("car") || kl.includes("auto")) {
+            textParts.push(val);
+          }
+        }
+      }
+
+      const allText = textParts.join(" ");
 
       // Simple make detection — flag for review if make found, leave unmapped if not
       const foundMakes = knownMakes.filter((make: string) => {
