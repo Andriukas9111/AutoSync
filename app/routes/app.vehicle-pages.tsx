@@ -908,78 +908,55 @@ export default function VehiclePages() {
                       style={{
                         borderRadius: "var(--p-border-radius-300)",
                         border: "var(--p-border-width-025) solid var(--p-color-border)",
-                        padding: "var(--p-space-400)",
+                        padding: "var(--p-space-300)",
                         background: "var(--p-color-bg-surface)",
-                        overflow: "hidden",
-                        transition:
-                          "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: "160px",
+                        minWidth: 0,
                       }}
                     >
-                      <BlockStack gap="200">
-                        {/* Header row: heading + status */}
-                        <InlineStack
-                          align="space-between"
-                          blockAlign="start"
-                          wrap={false}
-                        >
-                          <BlockStack gap="050">
-                            <Text
-                              as="h3"
-                              variant="headingSm"
-                              truncate
-                            >
-                              {heading}
-                            </Text>
-                            <Text
-                              as="p"
-                              variant="bodySm"
-                              tone="subdued"
-                              truncate
-                            >
-                              {engineLabel}
-                            </Text>
-                          </BlockStack>
-                          {isSynced && (
+                      {/* Header: Make Model + Published badge */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "4px" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <Text as="h3" variant="headingSm" truncate>{heading}</Text>
+                        </div>
+                        {isSynced && (
+                          <div style={{ flexShrink: 0 }}>
                             <Badge tone="success">{`Published`}</Badge>
-                          )}
-                        </InlineStack>
+                          </div>
+                        )}
+                      </div>
 
-                        {/* Spec badges row */}
-                        <InlineStack gap="100" wrap>
-                          {vehicle.engineCode && (
-                            <Badge tone="info">
-                              {`${vehicle.engineCode}`}
-                            </Badge>
-                          )}
-                          {displacement && (
-                            <Badge>{displacement}</Badge>
-                          )}
-                          {vehicle.fuelType && (
-                            <Badge>{`${vehicle.fuelType}`}</Badge>
-                          )}
-                          {vehicle.aspiration &&
-                            vehicle.aspiration !== "NA" && (
-                              <Badge>{`${vehicle.aspiration}`}</Badge>
-                            )}
-                          {vehicle.bodyType && (
-                            <Badge>{`${vehicle.bodyType}`}</Badge>
-                          )}
-                        </InlineStack>
+                      {/* Engine variant — single line truncated */}
+                      <div style={{ marginBottom: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <Text as="p" variant="bodySm" tone="subdued" truncate>{engineLabel}</Text>
+                      </div>
 
-                        {/* Footer row: years + product count */}
-                        <Divider />
-                        <InlineStack
-                          align="space-between"
-                          blockAlign="center"
-                        >
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`Years: ${years}`}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""} linked`}
-                          </Text>
-                        </InlineStack>
-                      </BlockStack>
+                      {/* Spec badges — max 2 rows with overflow hidden */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginBottom: "8px", maxHeight: "54px", overflow: "hidden" }}>
+                        {vehicle.engineCode && (
+                          <Badge tone="info">{`${vehicle.engineCode}`}</Badge>
+                        )}
+                        {displacement && (
+                          <Badge>{displacement}</Badge>
+                        )}
+                        {vehicle.fuelType && (
+                          <Badge>{`${vehicle.fuelType}`}</Badge>
+                        )}
+                        {vehicle.aspiration && vehicle.aspiration !== "NA" && (
+                          <Badge>{`${vehicle.aspiration}`}</Badge>
+                        )}
+                        {vehicle.bodyType && (
+                          <Badge>{`${vehicle.bodyType}`}</Badge>
+                        )}
+                      </div>
+
+                      {/* Footer: years + product count — pushed to bottom */}
+                      <div style={{ marginTop: "auto", borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text as="span" variant="bodySm" tone="subdued">{`${years}`}</Text>
+                        <Text as="span" variant="bodySm" tone="subdued">{`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""}`}</Text>
+                      </div>
                     </div>
                   );
                 })}
