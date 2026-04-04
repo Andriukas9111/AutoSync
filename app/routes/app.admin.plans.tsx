@@ -51,6 +51,7 @@ import {
 import { PLAN_ORDER } from "../lib/types";
 import type { PlanTier, PlanLimits, PlanConfig } from "../lib/types";
 import { autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Feature definitions grouped by category
@@ -807,4 +808,9 @@ export default function AdminPlans() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin Plans" />;
 }

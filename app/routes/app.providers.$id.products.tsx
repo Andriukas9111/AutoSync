@@ -41,6 +41,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -770,4 +771,9 @@ export default function ProviderProducts() {
       </Modal>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Provider Products" />;
 }

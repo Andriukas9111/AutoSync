@@ -42,6 +42,7 @@ import { DataTable } from "../components/DataTable";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { formatDate } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -677,4 +678,9 @@ function DetailRow({
       )}
     </InlineStack>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Import Detail" />;
 }

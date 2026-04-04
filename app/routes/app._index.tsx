@@ -90,8 +90,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Top makes — paginated to handle >1000 fitments
-    paginatedSelect("vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)).then((rows) => ({ data: rows, error: null })),
+    // Top makes — cap at 50K rows (enough for accurate top 10, prevents OOM on huge shops)
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000).then((r) => ({ data: r.data ?? [], error: r.error })),
     // Providers
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
     // Recent jobs

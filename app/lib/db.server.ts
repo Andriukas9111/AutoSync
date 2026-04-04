@@ -18,6 +18,18 @@ export const db = createClient(supabaseUrl, supabaseServiceKey, {
 export default db;
 
 /**
+ * Recount and sync the tenant's fitment_count with the actual vehicle_fitments table.
+ * Call this after any bulk fitment delete to prevent counter drift.
+ */
+export async function syncFitmentCount(shopId: string): Promise<void> {
+  const { count } = await db
+    .from("vehicle_fitments")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+  await db.from("tenants").update({ fitment_count: count ?? 0 }).eq("shop_id", shopId);
+}
+
+/**
  * Paginated select — fetches ALL rows from a Supabase query, handling the
  * 1000-row server cap automatically. Use this instead of raw .select() when
  * the result set could exceed 1000 rows.

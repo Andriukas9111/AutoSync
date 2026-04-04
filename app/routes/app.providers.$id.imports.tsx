@@ -23,6 +23,7 @@ import { IconBadge } from "../components/IconBadge";
 import { authenticate } from "../shopify.server";
 import { formatDate } from "../lib/design";
 import db from "../lib/db.server";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -265,4 +266,9 @@ export default function ProviderImportHistory() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Import History" />;
 }

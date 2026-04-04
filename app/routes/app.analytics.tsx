@@ -45,6 +45,7 @@ import { PlanGate } from "../components/PlanGate";
 import { statGridStyle, statMiniStyle } from "../lib/design";
 import type { PlanTier, PlanLimits } from "../lib/types";
 import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -230,10 +231,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Total products for this tenant
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
 
-    // Products that have at least one fitment — need actual rows for unique count
-    paginatedSelect<{ product_id: string }>(
-      "vehicle_fitments", "product_id", (q) => q.eq("shop_id", shopId)
-    ).then((rows) => ({ data: rows, error: null })),
+    // Products that have at least one fitment — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("product_id")
+      .eq("shop_id", shopId).limit(50000),
 
     // Product fitment status breakdown — server-side counts (no row limit)
     Promise.all(
@@ -244,15 +244,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ),
     ),
 
-    // Fitments grouped by make (top 15) — paginated to avoid 1000-row limit
-    paginatedSelect<{ make: string; product_id: string }>(
-      "vehicle_fitments", "make, product_id", (q) => q.eq("shop_id", shopId)
-    ).then((rows) => ({ data: rows, error: null })),
+    // Fitments grouped by make (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
-    // Fitments grouped by model (top 15) — paginated to avoid 1000-row limit
-    paginatedSelect<{ make: string; model: string; product_id: string }>(
-      "vehicle_fitments", "make, model, product_id", (q) => q.eq("shop_id", shopId)
-    ).then((rows) => ({ data: rows, error: null })),
+    // Fitments grouped by model (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, model, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
     // Provider metrics
     db.from("providers")
@@ -1206,4 +1204,9 @@ export default function AnalyticsPage() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Analytics" />;
 }

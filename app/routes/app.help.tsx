@@ -20,6 +20,7 @@ import { BookOpenIcon } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { authenticate } from "../shopify.server";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -856,4 +857,9 @@ export default function Help() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Help" />;
 }

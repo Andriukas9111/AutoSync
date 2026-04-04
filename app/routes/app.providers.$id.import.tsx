@@ -48,6 +48,7 @@ import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.serve
 import { getTargetFields } from "../lib/providers/column-mapper.server";
 import type { PlanTier } from "../lib/types";
 import { stepNumberStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1327,4 +1328,9 @@ function StatCard({
       </Text>
     </BlockStack>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Provider Import" />;
 }

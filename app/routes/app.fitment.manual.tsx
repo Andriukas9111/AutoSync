@@ -15,6 +15,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { RouteError } from "../components/RouteError";
 
 // ── Loader ───────────────────────────────────────────────────────────────────
 
@@ -100,4 +101,9 @@ export default function FitmentManualRedirector() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Manual Mapping" />;
 }

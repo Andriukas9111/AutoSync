@@ -59,6 +59,7 @@ import {
 import type { PlanTier } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -767,4 +768,9 @@ export default function PricingPage() {
       </Modal>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Pricing" />;
 }

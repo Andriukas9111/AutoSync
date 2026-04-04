@@ -37,10 +37,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (!offlineToken && session.accessToken) {
     offlineToken = session.accessToken;
   }
-  // Always log token status for debugging sync issues
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[app.tsx] Token sync: offline=${offlineToken ? offlineToken.substring(0, 15) + "..." : "NULL"}, session=${session.accessToken ? session.accessToken.substring(0, 15) + "..." : "NULL"}`);
-  }
+  // Token status check (values never logged for security)
+  const hasOfflineToken = !!offlineToken;
+  const hasSessionToken = !!session.accessToken;
+  const tokensMatch = offlineToken === session.accessToken;
 
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db

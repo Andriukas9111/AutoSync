@@ -83,6 +83,7 @@ import { isAdminShop } from "../lib/admin.server";
 import { removeAllTags, removeAllMetafields, removeAllCollections } from "../lib/pipeline/cleanup.server";
 import { deleteVehiclePages } from "../lib/pipeline/vehicle-pages.server";
 import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -958,4 +959,9 @@ export default function AdminPanel() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin" />;
 }

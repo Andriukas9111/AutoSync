@@ -42,7 +42,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import db from "../lib/db.server";
+import db, { syncFitmentCount } from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { RouteError } from "../components/RouteError";
@@ -207,6 +207,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.from("vehicle_fitments").delete().in("product_id", ids).eq("shop_id", shopId);
     const { error } = await db.from("products").delete().in("id", ids).eq("shop_id", shopId);
     if (error) return data({ ok: false, message: error.message });
+    // Sync counters after delete
+    await syncFitmentCount(shopId);
+    const { count: prodCount } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged");
+    await db.from("tenants").update({ product_count: prodCount ?? 0 }).eq("shop_id", shopId);
     return data({ ok: true, message: `Deleted ${ids.length} products` });
   }
 

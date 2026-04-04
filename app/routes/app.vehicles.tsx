@@ -39,6 +39,7 @@ import { getPlanLimits, getTenant, getEffectivePlan } from "../lib/billing.serve
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -67,9 +68,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .from("tenant_active_makes")
       .select("ymme_make_id")
       .eq("shop_id", shopId),
-    paginatedSelect<{ make: string }>("vehicle_fitments", "make", (q) =>
-      q.eq("shop_id", shopId).not("make", "is", null)
-    ).then((rows) => ({ data: rows, error: null })),
+    db.from("vehicle_fitments").select("make")
+      .eq("shop_id", shopId).not("make", "is", null).limit(50000),
     db
       .from("ymme_models")
       .select("id", { count: "exact", head: true })
@@ -204,9 +204,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (_action === "auto_activate") {
     // Auto-activate all makes that have mapped products
-    const fitments = await paginatedSelect<{ make: string }>(
-      "vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)
-    );
+    const { data: fitments } = await db.from("vehicle_fitments")
+      .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
 
     const fitmentMakes = new Set(
       (fitments ?? []).map((f: { make: string }) => f.make),
@@ -1326,4 +1325,9 @@ export default function Vehicles() {
       {renderEngineModal()}
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="YMME Browser" />;
 }

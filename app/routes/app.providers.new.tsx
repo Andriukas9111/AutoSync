@@ -43,6 +43,7 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 import { getTenant, getPlanLimits, assertProviderLimit, BillingGateError, getEffectivePlan } from "../lib/billing.server";
 import type { ProviderType, PlanTier, PlanLimits } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader — check plan limits
@@ -872,4 +873,9 @@ export default function ProvidersNew() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="New Provider" />;
 }

@@ -41,6 +41,7 @@ import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
 import { getPlanLimits } from "../lib/billing.server";
 import { statMiniStyle, statGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -863,4 +864,9 @@ export default function TenantDetail() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin Tenant" />;
 }

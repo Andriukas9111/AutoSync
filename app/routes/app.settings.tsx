@@ -47,6 +47,7 @@ import {
 } from "../lib/pipeline/cleanup.server";
 import { deleteVehiclePages } from "../lib/pipeline/vehicle-pages.server";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -920,4 +921,9 @@ export default function Settings() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Settings" />;
 }

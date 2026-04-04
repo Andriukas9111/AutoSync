@@ -112,10 +112,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .order("updated_at", { ascending: false })
       .limit(20),
     getTenant(shopId),
-    // Top makes by fitment count
-    paginatedSelect<{ make: string; model: string }>("vehicle_fitments", "make, model", (q) =>
-      q.eq("shop_id", shopId).not("make", "is", null)
-    ).then((rows) => ({ data: rows, error: null })),
+    // Top makes by fitment count — cap at 50K rows to prevent OOM
+    db.from("vehicle_fitments").select("make, model")
+      .eq("shop_id", shopId).not("make", "is", null).limit(50000),
     ...statuses.map((s) =>
       db.from("products")
         .select("id", { count: "exact", head: true })

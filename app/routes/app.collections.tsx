@@ -68,16 +68,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Count unique combos by querying DB with pagination (avoids 1000-row limit)
-  // Get unique makes and models efficiently — don't load ALL fitments into memory
-  const makesData = await paginatedSelect<{ make: string }>(
-    "vehicle_fitments", "make", (q) => q.eq("shop_id", shopId).not("make", "is", null)
-  );
+  // Count unique combos — cap at 50K rows to prevent OOM on huge shops
+  const { data: makesRaw } = await db.from("vehicle_fitments")
+    .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
+  const makesData = (makesRaw ?? []) as { make: string }[];
   const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
 
-  const makeModelData = await paginatedSelect<{ make: string; model: string }>(
-    "vehicle_fitments", "make, model", (q) => q.eq("shop_id", shopId).not("make", "is", null).not("model", "is", null)
-  );
+  const { data: makeModelRaw } = await db.from("vehicle_fitments")
+    .select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000);
+  const makeModelData = (makeModelRaw ?? []) as { make: string; model: string }[];
   const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
   // For year combos, reuse the makeModel data (already paginated)
   const uniqueMakeModelYears = [...new Set(
