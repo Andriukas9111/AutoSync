@@ -904,6 +904,7 @@ async function processPushChunk(
       { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", filterable: true },
       { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", filterable: true },
       { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Generation", namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", filterable: true },
     ];
     for (const d of defs) {
       const { filterable, ...defInput } = d;
@@ -953,15 +954,58 @@ async function processPushChunk(
 
   // Get fitments for these products
   const productIds = products.map((p: { id: string }) => p.id);
-  const { data: fitments } = await db
-    .from("vehicle_fitments")
-    .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
-    .eq("shop_id", shopId)
-    .in("product_id", productIds);
+  // Batch .in() for large product arrays
+  let allFitments: Record<string, unknown>[] = [];
+  for (let fi = 0; fi < productIds.length; fi += 500) {
+    const batch = productIds.slice(fi, fi + 500);
+    const { data: batchFitments } = await db
+      .from("vehicle_fitments")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
+      .eq("shop_id", shopId)
+      .in("product_id", batch);
+    if (batchFitments) allFitments.push(...batchFitments);
+  }
+
+  // Enrich engine names: look up from ymme_engines for fitments with ID but no text
+  const engineIdsNeedingName = [...new Set(
+    allFitments.filter(f => f.ymme_engine_id && !f.engine).map(f => f.ymme_engine_id as string)
+  )];
+  const modelIdsNeedingGen = [...new Set(
+    allFitments.filter(f => f.ymme_model_id).map(f => f.ymme_model_id as string)
+  )];
+
+  const engineNameMap = new Map<string, string>();
+  const modelGenMap = new Map<string, string>();
+
+  // Batch look up engine names
+  for (let ei = 0; ei < engineIdsNeedingName.length; ei += 500) {
+    const batch = engineIdsNeedingName.slice(ei, ei + 500);
+    const { data: engines } = await db.from("ymme_engines").select("id, name, code").in("id", batch);
+    for (const e of engines ?? []) {
+      if (e.name) engineNameMap.set(e.id, e.name);
+    }
+  }
+
+  // Batch look up model generations
+  for (let mi = 0; mi < modelIdsNeedingGen.length; mi += 500) {
+    const batch = modelIdsNeedingGen.slice(mi, mi + 500);
+    const { data: models } = await db.from("ymme_models").select("id, generation").in("id", batch);
+    for (const m of models ?? []) {
+      if (m.generation && !m.generation.includes(" | ")) modelGenMap.set(m.id, m.generation);
+    }
+  }
+
+  // Enrich fitments with engine names and engine codes from YMME
+  for (const f of allFitments) {
+    if (f.ymme_engine_id && !f.engine) {
+      const name = engineNameMap.get(f.ymme_engine_id as string);
+      if (name) f.engine = name;
+    }
+  }
 
   // Group fitments by product
   const fitmentsByProduct = new Map<string, Array<Record<string, unknown>>>();
-  for (const f of fitments ?? []) {
+  for (const f of allFitments) {
     const list = fitmentsByProduct.get(f.product_id as string) ?? [];
     list.push(f);
     fitmentsByProduct.set(f.product_id as string, list);
@@ -1151,9 +1195,10 @@ async function processPushChunk(
           engine: f.engine, engine_code: f.engine_code, fuel_type: f.fuel_type,
         }));
 
-        // Build year list (expand ranges into individual years)
+        // Build year, engine, and generation lists
         const yearSet = new Set<string>();
         const engineSet = new Set<string>();
+        const generationSet = new Set<string>();
         for (const f of productFitments) {
           if (f.year_from) {
             const endYear = (f.year_to as number) || new Date().getFullYear();
@@ -1163,6 +1208,11 @@ async function processPushChunk(
           }
           if (f.engine) engineSet.add(f.engine as string);
           if (f.engine_code) engineSet.add(f.engine_code as string);
+          // Generation from model lookup
+          if (f.ymme_model_id) {
+            const gen = modelGenMap.get(f.ymme_model_id as string);
+            if (gen) generationSet.add(gen);
+          }
         }
 
         const metafields = [
@@ -1181,7 +1231,12 @@ async function processPushChunk(
 
         // Add engine metafield if we have engine data
         if (engineSet.size > 0) {
-          metafields.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engineSet].sort()), ownerId: gid });
+          metafields.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engineSet].sort().slice(0, 128)), ownerId: gid });
+        }
+
+        // Add generation metafield if we have generation data
+        if (generationSet.size > 0) {
+          metafields.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generationSet].sort().slice(0, 128)), ownerId: gid });
         }
 
         const mfRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -2604,7 +2659,7 @@ async function processBulkPush(
   let fOffset = 0;
   while (allFitments.length < MAX_FITMENTS) {
     const { data: batch } = await db.from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
       .eq("shop_id", shopId).range(fOffset, fOffset + 999);
     if (!batch || batch.length === 0) break;
     allFitments.push(...batch);
@@ -2613,6 +2668,29 @@ async function processBulkPush(
   }
   if (allFitments.length >= MAX_FITMENTS) {
     console.log(`[process-jobs] Fitments capped at ${MAX_FITMENTS} to prevent OOM (total may be higher)`);
+  }
+
+  // Enrich engine names from YMME for fitments with ID but no text
+  const bulkEngineIds = [...new Set(allFitments.filter(f => f.ymme_engine_id && !f.engine).map(f => f.ymme_engine_id as string))];
+  const bulkModelIds = [...new Set(allFitments.filter(f => f.ymme_model_id).map(f => f.ymme_model_id as string))];
+  const bulkEngineMap = new Map<string, string>();
+  const bulkModelGenMap = new Map<string, string>();
+
+  for (let bei = 0; bei < bulkEngineIds.length; bei += 500) {
+    const batch = bulkEngineIds.slice(bei, bei + 500);
+    const { data: engines } = await db.from("ymme_engines").select("id, name").in("id", batch);
+    for (const e of engines ?? []) { if (e.name) bulkEngineMap.set(e.id, e.name); }
+  }
+  for (let bmi = 0; bmi < bulkModelIds.length; bmi += 500) {
+    const batch = bulkModelIds.slice(bmi, bmi + 500);
+    const { data: models } = await db.from("ymme_models").select("id, generation").in("id", batch);
+    for (const m of models ?? []) { if (m.generation && !m.generation.includes(" | ")) bulkModelGenMap.set(m.id, m.generation); }
+  }
+  for (const f of allFitments) {
+    if (f.ymme_engine_id && !f.engine) {
+      const name = bulkEngineMap.get(f.ymme_engine_id as string);
+      if (name) f.engine = name;
+    }
   }
 
   // Group fitments by product
@@ -2629,7 +2707,7 @@ async function processBulkPush(
     const gid = `gid://shopify/Product/${p.shopify_product_id}`;
 
     // Metafields
-    const makes = new Set<string>(), models = new Set<string>(), years = new Set<string>(), engines = new Set<string>();
+    const makes = new Set<string>(), models = new Set<string>(), years = new Set<string>(), engines = new Set<string>(), generations = new Set<string>();
     const tags = new Set<string>();
     for (const f of fits) {
       const make = f.make as string, model = f.model as string;
@@ -2637,6 +2715,10 @@ async function processBulkPush(
       if (model) { models.add(model); tags.add(`_autosync_${model}`); }
       if (f.engine) engines.add(f.engine as string);
       if (f.engine_code) engines.add(f.engine_code as string);
+      if (f.ymme_model_id) {
+        const gen = bulkModelGenMap.get(f.ymme_model_id as string);
+        if (gen) generations.add(gen);
+      }
       if (f.year_from) {
         const end = (f.year_to as number) || new Date().getFullYear();
         for (let y = f.year_from as number; y <= Math.min(end, (f.year_from as number) + 50); y++) years.add(String(y));
@@ -2651,7 +2733,8 @@ async function processBulkPush(
       { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...models].sort()), ownerId: gid },
     ];
     if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
-    if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort()), ownerId: gid });
+    if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort().slice(0,128)), ownerId: gid });
+    if (generations.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generations].sort().slice(0,128)), ownerId: gid });
     mfLines.push(JSON.stringify({ metafields: mfs }));
     tagLines.push(JSON.stringify({ id: gid, tags: [...tags] }));
   }
