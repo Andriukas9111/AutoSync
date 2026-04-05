@@ -472,44 +472,16 @@ export function getPlanLimits(plan: PlanTier): PlanLimits {
   return DEFAULT_PLAN_LIMITS[plan];
 }
 
-// ── Per-request tenant cache (30s TTL) ──
-// Prevents redundant DB queries when getTenant is called multiple times
-// per request (directly + via assertFeature/assertProductLimit/etc.)
-const _tenantCache = new Map<string, { tenant: Tenant; cachedAt: number }>();
-const TENANT_CACHE_TTL = 30_000; // 30 seconds
-
-/** Fetch a tenant row from Supabase by shop_id (cached for 30s). */
+/** Fetch a tenant row from Supabase by shop_id. */
 export async function getTenant(shopId: string): Promise<Tenant | null> {
-  // Check cache first
-  const cached = _tenantCache.get(shopId);
-  if (cached && Date.now() - cached.cachedAt < TENANT_CACHE_TTL) {
-    return cached.tenant;
-  }
-
   const { data, error } = await db
     .from("tenants")
-    .select("shop_id, shop_domain, plan, plan_status, product_count, fitment_count, online_store_publication_id, widget_metadefs_created, installed_at, uninstalled_at, last_synced_plan")
+    .select("*")
     .eq("shop_id", shopId)
     .maybeSingle();
 
   if (error || !data) return null;
-  const tenant = data as Tenant;
-
-  // Cache for 30s
-  _tenantCache.set(shopId, { tenant, cachedAt: Date.now() });
-
-  // Prevent memory leak: cap cache at 100 tenants
-  if (_tenantCache.size > 100) {
-    const oldest = [..._tenantCache.entries()].sort((a, b) => a[1].cachedAt - b[1].cachedAt)[0];
-    if (oldest) _tenantCache.delete(oldest[0]);
-  }
-
-  return tenant;
-}
-
-/** Invalidate the tenant cache (call after plan changes, billing updates, etc.) */
-export function invalidateTenantCache(shopId: string): void {
-  _tenantCache.delete(shopId);
+  return data as Tenant;
 }
 
 /**
