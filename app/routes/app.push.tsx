@@ -409,7 +409,7 @@ export default function Push() {
                 <div style={statGridStyle(2)}>
                   <div style={statMiniStyle}>
                     <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats ? (liveStats.autoMapped + liveStats.smartMapped + liveStats.manualMapped) : productsWithFitments)}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">With Fitments</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Ready to Push</Text>
                   </div>
                   <div style={statMiniStyle}>
                     <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats?.pushedProducts ?? pushedCount)}</Text>
