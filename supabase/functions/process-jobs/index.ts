@@ -23,51 +23,143 @@ const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
  * Wrapper for Shopify GraphQL API calls with HTTP error handling.
  * Returns parsed JSON data or throws with descriptive error.
  */
+/**
+ * Shopify GraphQL client with automatic rate limit handling.
+ *
+ * Shopify uses a "leaky bucket" model:
+ *   - Shopify Plus: 20,000 point bucket, 1,000 points/second restore
+ *   - Standard:      2,000 point bucket,   100 points/second restore
+ *
+ * Each query/mutation costs points. If the bucket empties, you get throttled.
+ * The response's `extensions.cost.throttleStatus.currentlyAvailable` tells us
+ * exactly how many points remain. We use this to back off BEFORE hitting 429.
+ *
+ * Retries up to 3 times on 429/throttle errors with exponential backoff.
+ */
 async function shopifyGraphQL(
   shopId: string,
   accessToken: string,
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
-    body: JSON.stringify({ query, variables }),
-  });
+  const url = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+  const body = JSON.stringify({ query, variables });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    if (res.status === 401 || res.status === 403) {
-      throw new Error(`SHOPIFY_AUTH_ERROR: ${res.status} — Token may be revoked or store uninstalled. ${text}`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, { method: "POST", headers, body });
+
+    // Handle HTTP-level rate limiting (429)
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
+      const waitSec = Math.max(retryAfter, 2) * (attempt + 1); // Exponential backoff
+      console.warn(`[shopify] 429 rate limited for ${shopId}, waiting ${waitSec}s (attempt ${attempt + 1}/3)`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
     }
-    throw new Error(`SHOPIFY_API_ERROR: ${res.status} ${res.statusText} — ${text}`);
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(`SHOPIFY_AUTH_ERROR: ${res.status} — Token may be revoked or store uninstalled. ${text}`);
+      }
+      // On 5xx errors, retry with backoff
+      if (res.status >= 500 && attempt < 2) {
+        console.warn(`[shopify] ${res.status} server error, retrying in ${(attempt + 1) * 2}s...`);
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+        continue;
+      }
+      throw new Error(`SHOPIFY_API_ERROR: ${res.status} ${res.statusText} — ${text}`);
+    }
+
+    const json = await res.json();
+
+    // Check for THROTTLED error in GraphQL response body
+    const isThrottled = json.errors?.some((e: { extensions?: { code?: string } }) =>
+      e.extensions?.code === "THROTTLED"
+    );
+    if (isThrottled) {
+      const waitSec = 2 * (attempt + 1);
+      console.warn(`[shopify] THROTTLED for ${shopId}, waiting ${waitSec}s (attempt ${attempt + 1}/3)`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+
+    // Log non-throttle GraphQL errors
+    if (json.errors?.length > 0) {
+      const errMsg = json.errors.map((e: { message: string }) => e.message).join("; ");
+      console.warn(`[shopify] GraphQL errors for ${shopId}: ${errMsg}`);
+    }
+
+    // Proactive throttle management — wait if bucket is getting low
+    await handleThrottle(json);
+
+    return json;
   }
 
-  const json = await res.json();
-
-  // Check for GraphQL-level errors
-  if (json.errors && json.errors.length > 0) {
-    const errMsg = json.errors.map((e: { message: string }) => e.message).join("; ");
-    console.warn(`[shopify] GraphQL errors for ${shopId}: ${errMsg}`);
-  }
-
-  return json;
+  throw new Error(`SHOPIFY_RATE_LIMIT: Exhausted 3 retries for ${shopId}`);
 }
 
 /**
- * Check Shopify GraphQL throttle status and wait if needed.
- * Prevents 429 errors by pausing when the bucket is low.
+ * Proactive throttle management — read the bucket status from every Shopify response
+ * and wait proportionally when capacity is low.
+ *
+ * Shopify Plus: bucket=20,000, restore=1,000/sec
+ * If available < 1000 points (~5% of bucket), wait for restore.
+ * Formula: waitMs = ((threshold - available) / restoreRate) * 1000
  */
 async function handleThrottle(json: Record<string, unknown>): Promise<void> {
   const throttle = (json as any)?.extensions?.cost?.throttleStatus;
-  if (throttle) {
-    const available = throttle.currentlyAvailable ?? 1000;
-    if (available < 100) {
-      const waitMs = Math.min(2000, Math.max(500, (100 - available) * 20));
-      console.log(`[throttle] Low bucket: ${available} available, waiting ${waitMs}ms`);
-      await new Promise((r) => setTimeout(r, waitMs));
-    }
+  if (!throttle) return;
+
+  const available = throttle.currentlyAvailable ?? 10000;
+  const restoreRate = throttle.restoreRate ?? 1000;
+  const threshold = Math.max(1000, restoreRate); // Wait when below 1s worth of capacity
+
+  if (available < threshold) {
+    // Calculate exact wait time to restore to threshold
+    const deficit = threshold - available;
+    const waitMs = Math.min(10000, Math.ceil((deficit / restoreRate) * 1000));
+    console.log(`[throttle] Bucket low: ${available}/${throttle.maximumAvailable} available, waiting ${waitMs}ms (restore: ${restoreRate}/s)`);
+    await new Promise((r) => setTimeout(r, waitMs));
   }
+}
+
+/**
+ * Rate-limited fetch wrapper for ALL Shopify GraphQL API calls.
+ * Use this instead of raw `fetch(apiUrl, ...)` to get automatic:
+ *   - 429 retry with exponential backoff (reads Retry-After header)
+ *   - THROTTLED GraphQL error retry
+ *   - Proactive bucket management (waits when capacity low)
+ *   - 5xx server error retry
+ *
+ * Drop-in replacement: just change `fetch(apiUrl, opts)` to `shopifyFetch(apiUrl, opts)`
+ */
+async function shopifyFetch(url: string, opts: RequestInit): Promise<Response> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, opts);
+
+    // 429 Too Many Requests — respect Retry-After header
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get("Retry-After") || "2", 10);
+      const waitSec = Math.max(retryAfter, 2) * (attempt + 1);
+      console.warn(`[shopifyFetch] 429 rate limited, waiting ${waitSec}s (attempt ${attempt + 1}/3)`);
+      await new Promise((r) => setTimeout(r, waitSec * 1000));
+      continue;
+    }
+
+    // 5xx server errors — retry with backoff
+    if (res.status >= 500 && attempt < 2) {
+      console.warn(`[shopifyFetch] ${res.status} server error, retrying in ${(attempt + 1) * 2}s...`);
+      await new Promise((r) => setTimeout(r, (attempt + 1) * 2000));
+      continue;
+    }
+
+    return res;
+  }
+
+  // Final attempt — return whatever we get
+  return fetch(url, opts);
 }
 
 // Cache publication IDs per shop (TTL: 5 minutes to handle warm invocations)
@@ -915,7 +1007,7 @@ async function processPushChunk(
       const { filterable, ...defInput } = d;
       try {
         // Create definition with storefront access + pin + filter
-        const createRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+        const createRes = await shopifyFetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
           query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message code } } }`,
           variables: { def: { ...defInput, ownerType: "PRODUCT", pin: true, access: { storefront: "PUBLIC_READ" }, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
         })});
@@ -924,7 +1016,7 @@ async function processPushChunk(
         // If definition already exists (TAKEN), update it to ensure pin + filter are enabled
         if (userErrors.some((e: { code: string }) => e.code === "TAKEN" || e.code === "ALREADY_EXISTS")) {
           const resolvedNs = createJson?.data?.metafieldDefinitionCreate?.userErrors?.[0]?.message?.match(/namespace: ([\w-]+)/)?.[1] || d.namespace;
-          await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+          await shopifyFetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
             query: `mutation($def: MetafieldDefinitionUpdateInput!) { metafieldDefinitionUpdate(definition: $def) { updatedDefinition { id } userErrors { message } } }`,
             variables: { def: { namespace: d.namespace, key: d.key, ownerType: "PRODUCT", pin: true, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
           })});
@@ -1044,7 +1136,7 @@ async function processPushChunk(
     // If product doesn't exist on Shopify yet, create it (with or without fitments)
     if (!gid) {
       try {
-        const createRes = await fetch(apiUrl, {
+        const createRes = await shopifyFetch(apiUrl, {
           method: "POST", headers: gqlHeaders,
           body: JSON.stringify({
             query: `mutation productCreate($product: ProductCreateInput!) {
@@ -1085,14 +1177,14 @@ async function processPushChunk(
           }).eq("id", product.id);
 
           // Set price via variant update
-          const varRes = await fetch(apiUrl, {
+          const varRes = await shopifyFetch(apiUrl, {
             method: "POST", headers: gqlHeaders,
             body: JSON.stringify({ query: `{ product(id: "${gid}") { variants(first: 1) { nodes { id } } } }` }),
           });
           const varJson = await varRes.json();
           const variantId = varJson?.data?.product?.variants?.nodes?.[0]?.id;
           if (variantId && (product as Record<string, unknown>).price) {
-            await fetch(apiUrl, {
+            await shopifyFetch(apiUrl, {
               method: "POST", headers: gqlHeaders,
               body: JSON.stringify({
                 query: `mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -1113,7 +1205,7 @@ async function processPushChunk(
 
           // Publish to Online Store
           if (publicationId) {
-            await fetch(apiUrl, {
+            await shopifyFetch(apiUrl, {
               method: "POST", headers: gqlHeaders,
               body: JSON.stringify({
                 query: `mutation($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }`,
@@ -1126,7 +1218,7 @@ async function processPushChunk(
           const imgUrl = String((product as Record<string, unknown>).image_url || "");
           if (imgUrl && imgUrl.startsWith("http") && imgUrl.length > 30) {
             try {
-              await fetch(apiUrl, {
+              await shopifyFetch(apiUrl, {
                 method: "POST", headers: gqlHeaders,
                 body: JSON.stringify({
                   query: `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
@@ -2232,7 +2324,7 @@ async function startBulkOp(shopId: string, accessToken: string, jsonlContent: st
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
-  const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+  const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
     query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "bulk.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
   })});
   const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
@@ -2246,7 +2338,7 @@ async function startBulkOp(shopId: string, accessToken: string, jsonlContent: st
   const uploadKey = target.parameters.find((p: { name: string }) => p.name === "key")?.value || "";
   const fullUrl = target.url + uploadKey;
 
-  const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+  const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
     query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
     variables: { mutation, stagedUploadPath: fullUrl },
   })});
@@ -2272,7 +2364,7 @@ async function processBulkProductCreate(
 
   // Phase 2b: Poll for images bulk operation, then start publish
   if (meta.bulkImagesOperationId) {
-    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const res = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount errorCode } } }`,
       variables: { id: meta.bulkImagesOperationId },
     })});
@@ -2310,7 +2402,7 @@ async function processBulkProductCreate(
 
   // Phase 2c: Poll for publish bulk operation
   if (meta.bulkPublishOperationId) {
-    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const res = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount errorCode } } }`,
       variables: { id: meta.bulkPublishOperationId },
     })});
@@ -2331,7 +2423,7 @@ async function processBulkProductCreate(
 
   // Phase 2: Poll for bulk product creation completion
   if (meta.bulkCreateOperationId) {
-    const res = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const res = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`,
       variables: { id: meta.bulkCreateOperationId },
     })});
@@ -2551,7 +2643,7 @@ async function processBulkProductCreate(
   console.log(`[bulk_create] Generated JSONL with ${jsonlLines.length} products (${Math.round(jsonlContent.length / 1024)}KB)`);
 
   // Upload JSONL to Shopify staged storage
-  const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+  const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
     query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "products.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
   })});
   const stageJson = await stageRes.json();
@@ -2569,7 +2661,7 @@ async function processBulkProductCreate(
   const fullResourceUrl = target.url + uploadKey;
 
   // Start bulk operation — use ProductCreateInput for API 2026-01
-  const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+  const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
     query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
     variables: {
       mutation: `mutation call($input: ProductCreateInput!) { productCreate(product: $input) { product { id title } userErrors { message } } }`,
@@ -2651,7 +2743,7 @@ async function processBulkPush(
 
     // Check metafields operation
     if (meta.metafieldsOperationId) {
-      const res = await fetch(apiUrl, {
+      const res = await shopifyFetch(apiUrl, {
         method: "POST", headers,
         body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: meta.metafieldsOperationId } }),
       });
@@ -2673,7 +2765,7 @@ async function processBulkPush(
         if (!meta.tagsOperationId && meta.pendingTagLines && meta.pendingTagMutation) {
           console.log(`[bulk_push] Metafields done! Starting tags operation...`);
           const startOp = async (jsonl: string, mutation: string): Promise<string | null> => {
-            const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
               query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "vars.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
             })});
             const stageJson = await stageRes.json();
@@ -2685,7 +2777,7 @@ async function processBulkPush(
             await fetch(target.url, { method: "POST", body: form });
             const opKey = target.parameters.find((pp: { name: string }) => pp.name === "key")?.value || "";
             const opUrl = target.url + opKey;
-            const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
               query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
               variables: { mutation, stagedUploadPath: opUrl },
             })});
@@ -2704,7 +2796,7 @@ async function processBulkPush(
 
     // Check tags operation
     if (meta.tagsOperationId) {
-      const res = await fetch(apiUrl, {
+      const res = await shopifyFetch(apiUrl, {
         method: "POST", headers,
         body: JSON.stringify({ query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount url errorCode } } }`, variables: { id: meta.tagsOperationId } }),
       });
@@ -2842,7 +2934,7 @@ async function processBulkPush(
   // Upload and start both operations
   const startOp = async (jsonl: string, mutation: string): Promise<string | null> => {
     // Stage upload
-    const stageRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "bulk.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
     })});
     const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
@@ -2859,7 +2951,7 @@ async function processBulkPush(
     const opUrl = target.url + opKey;
 
     // Start bulk operation
-    const bulkRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
       variables: { mutation, stagedUploadPath: opUrl },
     })});
@@ -3190,7 +3282,7 @@ async function processDeleteVehiclePages(
   const gqlHeaders = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
   // Count total metaobjects first (for progress)
-  const countRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+  const countRes = await shopifyFetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
     query: `{ metaobjects(type: "$app:vehicle_spec", first: 1) { edges { node { id } } pageInfo { hasNextPage } } }`,
   })});
   const countJson = await countRes.json();
@@ -3212,7 +3304,7 @@ async function processDeleteVehiclePages(
   while (batchNum < MAX_BATCHES) {
     batchNum++;
 
-    const listRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+    const listRes = await shopifyFetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
       query: `{ metaobjects(type: "$app:vehicle_spec", first: 50) { edges { node { id handle } } } }`,
     })});
     const listJson = await listRes.json();
@@ -3222,7 +3314,7 @@ async function processDeleteVehiclePages(
 
     for (const edge of edges) {
       try {
-        const delRes = await fetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
+        const delRes = await shopifyFetch(apiUrl, { method: "POST", headers: gqlHeaders, body: JSON.stringify({
           query: `mutation($id: ID!) { metaobjectDelete(id: $id) { deletedId userErrors { message } } }`,
           variables: { id: edge.node.id },
         })});
@@ -3274,7 +3366,7 @@ async function processCleanupTags(
   let hasNext = true;
 
   while (hasNext) {
-    const listRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const listRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id tags } } pageInfo { hasNextPage endCursor } } }`,
       variables: { cursor },
     })});
@@ -3287,7 +3379,7 @@ async function processCleanupTags(
       const autoTags = tags.filter((t: string) => t.startsWith("_autosync_"));
       if (autoTags.length === 0) continue;
 
-      await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
         query: `mutation($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { node { id } userErrors { message } } }`,
         variables: { id: edge.node.id, tags: autoTags },
       })});
@@ -3330,7 +3422,7 @@ async function processCleanupMetafields(
   let hasNext = true;
 
   while (hasNext) {
-    const listRes = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    const listRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id metafields(first: 20) { edges { node { id namespace key } } } } } pageInfo { hasNextPage endCursor } } }`,
       variables: { cursor },
     })});
@@ -3343,7 +3435,7 @@ async function processCleanupMetafields(
       const toDelete = mfEdges.filter((mf: any) => NAMESPACES.some(ns => mf.node.namespace === ns || mf.node.namespace.startsWith(ns)));
 
       for (const mf of toDelete) {
-        await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+        await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
           query: `mutation($input: MetafieldDeleteInput!) { metafieldDelete(input: $input) { deletedId userErrors { message } } }`,
           variables: { input: { id: mf.node.id } },
         })});
@@ -3400,7 +3492,7 @@ async function processCleanupCollections(
   let deleted = 0;
   for (const gid of collectionGids) {
     try {
-      await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
         query: `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
         variables: { input: { id: gid } },
       })});
