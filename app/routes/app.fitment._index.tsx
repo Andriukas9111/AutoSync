@@ -29,6 +29,7 @@ import {
   GaugeIcon,
   SearchIcon,
   ChartVerticalIcon,
+  MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -351,8 +352,8 @@ export default function Fitment() {
               { icon: ProductIcon, label: "Total", count: liveTotal },
               { icon: ConnectIcon, label: "Fitments", count: liveFitments },
               { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
+              { icon: MinusCircleIcon, label: "No Match", count: stats.noMatch, critical: false as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },
-              { icon: WandIcon, label: "Smart", count: smartMapped },
               { icon: TargetIcon, label: "Manual", count: manualMapped },
             ]).map((item, i) => (
               <div
