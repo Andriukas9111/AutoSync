@@ -594,7 +594,7 @@ export default function Dashboard() {
                   <div style={statGridStyle(2)}>
                     {[
                       { label: "Pushed", value: livePushedProducts },
-                      { label: "Pending", value: Math.max(0, vehicleMapped - livePushedProducts) },
+                      { label: "Pending", value: Math.max(0, liveMapped - livePushedProducts) },
                       { label: "Collections", value: liveCollectionCount },
                       { label: "Makes", value: liveActiveMakes },
                       { label: "Pages", value: liveVehiclePages },
