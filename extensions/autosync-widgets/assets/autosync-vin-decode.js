@@ -273,4 +273,5 @@ var stored = { make: vehicle.make, model: vehicle.model, year: vehicle.modelYear
 localStorage.setItem('autosync_vehicle', JSON.stringify(stored));
 } catch(e) {}
 }
+});
 })();
