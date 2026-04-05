@@ -1268,11 +1268,13 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
   const appId = tenant?.shopify_app_id ?? "334692253697";
   const mfNs = `app--${appId}--wheel_spec`;
 
-  // Build collection URL with metafield filters
-  // Uses /collections/all which shows ALL products, filtered by metafield values
-  let url = "/collections/all";
+  // Build collection URL — use per-PCD collection (same pattern as YMME per-make collections)
+  // This keeps product counts under 5K per collection so Shopify filters work properly
+  const pcdHandle = `wheels-${pcd.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
+  let url = `/collections/${pcdHandle}`;
+
+  // Add metafield filters for diameter, width (PCD is already filtered by the collection)
   const filters: string[] = [];
-  filters.push(`filter.p.m.${mfNs}.pcd=${encodeURIComponent(pcd)}`);
   if (diameter) filters.push(`filter.p.m.${mfNs}.diameter=${encodeURIComponent(diameter)}`);
   if (width) filters.push(`filter.p.m.${mfNs}.width=${encodeURIComponent(width)}`);
   if (filters.length > 0) url += "?" + filters.join("&");
