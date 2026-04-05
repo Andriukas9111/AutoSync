@@ -138,6 +138,7 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
                         processed,
                         total,
                         otherRunningJobs: allJobs.filter((j) => j.id !== job.id),
+                        metadata: job.metadata,
                       })}
                     </Text>
                   )}

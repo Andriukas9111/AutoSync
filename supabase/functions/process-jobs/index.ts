@@ -2543,6 +2543,10 @@ async function processBulkProductCreate(
   }
 
   console.log(`[bulk_create] Phase 1: Checking for existing products on Shopify (dedup)...`);
+  // Update job metadata with phase info so UI can show meaningful progress
+  await db.from("sync_jobs").update({
+    metadata: JSON.stringify({ ...meta, phase: "linking", phaseLabel: "Linking existing products by title..." }),
+  }).eq("id", job.id);
 
   // DEDUPLICATION: Check if products already exist on Shopify by title
   // This prevents creating duplicates when push is retried after a failure
@@ -2590,6 +2594,9 @@ async function processBulkProductCreate(
       cursor = pageInfo.endCursor;
     }
     console.log(`[bulk_create] Linked ${linked} existing products by title`);
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, phase: "linked", phaseLabel: `Linked ${linked} existing products. Checking for new products to create...` }),
+    }).eq("id", job.id);
   }
 
   // Get all products that STILL need creating on Shopify (after dedup)
@@ -2616,7 +2623,7 @@ async function processBulkProductCreate(
     await db.from("sync_jobs").update({
       type: "bulk_push",
       status: "pending",
-      metadata: JSON.stringify({ push_tags: true, push_metafields: true }),
+      metadata: JSON.stringify({ ...meta, push_tags: true, push_metafields: true, phase: "pushing", phaseLabel: "All products exist on Shopify. Pushing tags & metafields..." }),
       locked_at: null,
     }).eq("id", job.id);
     return { processed: 0, hasMore: true };
@@ -2641,6 +2648,11 @@ async function processBulkProductCreate(
 
   const jsonlContent = jsonlLines.join("\n");
   console.log(`[bulk_create] Generated JSONL with ${jsonlLines.length} products (${Math.round(jsonlContent.length / 1024)}KB)`);
+  // Update job with total and phase
+  await db.from("sync_jobs").update({
+    total_items: allProducts.length,
+    metadata: JSON.stringify({ ...meta, phase: "creating", phaseLabel: `Creating ${allProducts.length.toLocaleString()} products on Shopify...` }),
+  }).eq("id", job.id);
 
   // Upload JSONL to Shopify staged storage
   const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
@@ -2826,6 +2838,9 @@ async function processBulkPush(
 
   // Phase 1: Generate JSONL and start operations
   console.log(`[bulk_push] Phase 1: Generating JSONL...`);
+  await db.from("sync_jobs").update({
+    metadata: JSON.stringify({ ...meta, phase: "generating", phaseLabel: "Generating metafield data for Shopify..." }),
+  }).eq("id", job.id);
 
   // Get all mapped products with fitments (paginated)
   const allProducts: Array<{ id: string; shopify_product_id: string }> = [];

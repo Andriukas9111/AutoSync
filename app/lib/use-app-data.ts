@@ -54,6 +54,7 @@ export interface AppJob {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface AppData {

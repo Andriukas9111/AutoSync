@@ -58,7 +58,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // ── Query 1: Jobs (recent + active) ──────────────────────────
   let jobQuery = db
     .from("sync_jobs")
-    .select("id, type, status, processed_items, total_items, error, started_at, completed_at, created_at")
+    .select("id, type, status, processed_items, total_items, error, started_at, completed_at, created_at, metadata")
     .eq("shop_id", shopId)
     .order("created_at", { ascending: false });
 

@@ -333,7 +333,7 @@ export default function Push() {
 
   // Unified data — ALL live stats from one source (useAppData)
   const { stats: liveStats, activeJobs, jobs: allJobs } = useAppData(undefined, 3000);
-  const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "collections") ?? null;
+  const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "bulk_push" || j.type === "collections") ?? null;
   const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
   // Use job-specific key so dismissing one push doesn't suppress future ones
   const completedPushKey = completedPush ? `push_complete_${completedPush.id}` : "push_complete";
@@ -366,7 +366,7 @@ export default function Push() {
         {(isSubmitting || isJobRunning) && (
           <Layout.Section>
             <OperationProgress
-              label={getJobProgressLabel({ type: activeJob?.type ?? "push", status: activeJob?.status ?? "running", processed: activeJob?.processed_items ?? 0, total: activeJob?.total_items ?? 0 })}
+              label={getJobProgressLabel({ type: activeJob?.type ?? "push", status: activeJob?.status ?? "running", processed: activeJob?.processed_items ?? 0, total: activeJob?.total_items ?? 0, metadata: activeJob?.metadata })}
               status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
               processed={activeJob?.processed_items ?? 0}
               total={activeJob?.total_items ?? productsWithFitments}

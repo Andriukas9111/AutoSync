@@ -273,17 +273,22 @@ export interface JobContext {
   processed: number;
   total: number;
   otherRunningJobs?: Array<{ type: string; status: string }>;
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Get the progress label for a running job (shown next to progress bar) */
 export function getJobProgressLabel(ctx: JobContext): string {
-  const { type, processed, total } = ctx;
+  const { type, metadata } = ctx;
+  // Use real-time phase label from Edge Function if available
+  const meta = typeof metadata === "string" ? JSON.parse(metadata) : metadata;
+  if (meta?.phaseLabel) return meta.phaseLabel as string;
+
   switch (type) {
-    case "push": return "Pushing tags & metafields — processing in background";
+    case "push": return "Creating products on Shopify — processing in background";
     case "collections": return "Creating smart collections — processing in background";
     case "extract": return "Auto-extracting vehicle fitments";
     case "vehicle_pages": return "Creating vehicle specification pages";
-    case "bulk_push": return "Bulk pushing via Shopify Operations API";
+    case "bulk_push": return "Pushing tags & metafields via Shopify Operations API";
     case "provider_import": return "Importing products from provider";
     default: return `Processing ${formatJobType(type)}`;
   }
@@ -308,6 +313,14 @@ export function getJobWaitingMessage(ctx: JobContext): string {
       return "Waiting for push to complete before creating vehicle pages...";
     }
     return "Preparing vehicle specification pages...";
+  }
+
+  // Use real-time phase label from Edge Function if available
+  const meta = typeof ctx.metadata === "string" ? JSON.parse(ctx.metadata) : ctx.metadata;
+  if (meta?.phaseLabel) return meta.phaseLabel as string;
+
+  if (type === "push" || type === "bulk_push") {
+    return "Starting push — scanning products and connecting to Shopify...";
   }
 
   return "Preparing...";
