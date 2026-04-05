@@ -75,6 +75,8 @@ const STATUS_OPTIONS = [
   { label: "Partial", value: "partial" },
   { label: "Flagged", value: "flagged" },
   { label: "No Match", value: "no_match" },
+  { label: "Wheels", value: "cat_wheels" },
+  { label: "Vehicle Parts", value: "cat_vehicle_parts" },
 ];
 
 const SOURCE_OPTIONS = [
@@ -98,6 +100,7 @@ interface Product {
   price: string | null;
   image_url: string | null;
   fitment_status: FitmentStatus;
+  product_category: string | null;
   source: string | null;
   created_at: string;
   synced_at: string | null;
@@ -137,7 +140,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
   if (status) {
-    query = query.eq("fitment_status", status);
+    if (status.startsWith("cat_")) {
+      query = query.eq("product_category", status.replace("cat_", ""));
+    } else {
+      query = query.eq("fitment_status", status);
+    }
   }
   if (source) {
     query = query.eq("source", source);
@@ -408,7 +415,15 @@ export default function Products() {
           <Text as="span" variant="bodyMd">{fmtPrice(product.price)}</Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Badge tone={badge.tone}>{badge.label}</Badge>
+          <InlineStack gap="100" wrap={false}>
+            <Badge tone={badge.tone}>{badge.label}</Badge>
+            {product.product_category === "wheels" && (
+              <Badge tone="info">Wheels</Badge>
+            )}
+            {product.product_category === "accessories" && (
+              <Badge tone="attention">Accessories</Badge>
+            )}
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text as="span" variant="bodyMd">{product.source || "—"}</Text>

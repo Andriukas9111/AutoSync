@@ -228,18 +228,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     searchEventsRes,
     conversionEventsRes,
   ] = await Promise.all([
-    // Total products for this tenant
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Total vehicle products for this tenant (exclude wheels — they use a different mapping system)
+    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).or("product_category.eq.vehicle_parts,product_category.is.null"),
 
     // Products that have at least one fitment — cap at 50K to prevent OOM
     db.from("vehicle_fitments").select("product_id")
       .eq("shop_id", shopId).limit(50000),
 
-    // Product fitment status breakdown — server-side counts (no row limit)
+    // Product fitment status breakdown — vehicle parts only (no row limit)
     Promise.all(
       ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "no_match", "partial"].map((s) =>
         db.from("products").select("id", { count: "exact", head: true })
           .eq("shop_id", shopId).eq("fitment_status", s)
+          .or("product_category.eq.vehicle_parts,product_category.is.null")
           .then((r) => ({ status: s, count: r.count ?? 0 })),
       ),
     ),

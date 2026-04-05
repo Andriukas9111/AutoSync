@@ -381,12 +381,14 @@ export default function Dashboard() {
 
   // All live values from unified hook
   const s = liveData; // Short alias
-  const { mapped: liveMapped, needsReview, notMapped, coverage, pendingPush } = computeFromStats(s);
+  const { mapped: liveMapped, needsReview, notMapped, coverage, pendingPush, vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage } = computeFromStats(s);
   const liveTotalProducts = s.total;
   const liveUnmapped = s.unmapped;
   const liveAutoMapped = s.autoMapped;
   const liveSmartMapped = s.smartMapped;
   const liveFlagged = s.flagged;
+  // Vehicle-only auto mapped (exclude wheel products from the count)
+  const vehicleAutoMapped = Math.max(0, liveAutoMapped - (s.wheelMapped ?? 0));
   const liveFitmentCount = s.fitments;
   const liveCollectionCount = s.collections;
   const livePushedProducts = s.pushedProducts;
@@ -541,20 +543,45 @@ export default function Dashboard() {
                     </InlineStack>
                     <Button onClick={() => navigate("/app/products")} variant="plain" size="slim">View all</Button>
                   </InlineStack>
-                  <div style={statGridStyle(2)}>
+                  {/* Vehicle Parts Section */}
+                  <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">Vehicle Parts</Text>
+                  <div style={statGridStyle(3)}>
                     {[
-                      { label: "Total Products", value: liveTotalProducts },
-                      { label: "Vehicle Links", value: liveFitmentCount },
-                      { label: "Wheel Specs", value: s.wheelFitments },
-                      { label: "Mapped", value: liveMapped },
-                      { label: "Not Mapped", value: notMapped },
-                      { label: "Makes with Parts", value: liveUniqueMakes },
-                    ].map((s) => (
-                      <div key={s.label} style={statMiniStyle}>
-                        <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                      { label: "Total", value: vehicleTotal },
+                      { label: "Mapped", value: vehicleMapped },
+                      { label: "Not Mapped", value: vehicleNotMapped },
+                    ].map((item) => (
+                      <div key={item.label} style={statMiniStyle}>
+                        <Text as="p" variant="headingMd" fontWeight="bold">{item.value.toLocaleString()}</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
                       </div>
                     ))}
+                  </div>
+                  {/* Wheel Products Section */}
+                  {s.wheelProducts > 0 && (
+                    <>
+                      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">Wheel Products</Text>
+                      <div style={statGridStyle(3)}>
+                        {[
+                          { label: "Total", value: s.wheelProducts },
+                          { label: "Wheel Mapped", value: s.wheelMapped },
+                          { label: "Wheel Specs", value: s.wheelFitments },
+                        ].map((item) => (
+                          <div key={item.label} style={statMiniStyle}>
+                            <Text as="p" variant="headingMd" fontWeight="bold">{item.value.toLocaleString()}</Text>
+                            <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {/* Combined summary */}
+                  <div style={{ borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "var(--p-space-200)" }}>
+                    <InlineStack gap="400">
+                      <Text as="span" variant="bodySm" tone="subdued">{`All Products: ${liveTotalProducts.toLocaleString()}`}</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">{`Vehicle Links: ${liveFitmentCount.toLocaleString()}`}</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">{`Makes: ${liveUniqueMakes.toLocaleString()}`}</Text>
+                    </InlineStack>
                   </div>
                 </BlockStack>
               </Card>
@@ -572,11 +599,11 @@ export default function Dashboard() {
                   <div style={statGridStyle(2)}>
                     {[
                       { label: "Products Pushed", value: livePushedProducts },
-                      { label: "Pending Push", value: Math.max(0, liveMapped - livePushedProducts) },
+                      { label: "Pending Push", value: Math.max(0, vehicleMapped - livePushedProducts) },
                       { label: "Collections", value: liveCollectionCount },
                       { label: "Active Makes", value: liveActiveMakes },
                       { label: "Vehicle Pages", value: liveVehiclePages },
-                      { label: "Coverage", value: `${coverage}%` as unknown as number },
+                      { label: "Vehicle Coverage", value: `${vehicleCoverage}%` as unknown as number },
                     ].map((s) => (
                       <div key={s.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</Text>
@@ -620,26 +647,26 @@ export default function Dashboard() {
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                    <Text as="h2" variant="headingMd">Vehicle Fitment Coverage</Text>
                   </InlineStack>
                   <InlineStack gap="300" blockAlign="center">
                     <Text as="span" variant="heading2xl" fontWeight="bold">
-                      {`${coverage}%`}
+                      {`${vehicleCoverage}%`}
                     </Text>
                     <Text as="span" variant="bodySm" tone="subdued">
-                      {`${liveMapped.toLocaleString()} of ${liveTotalProducts.toLocaleString()} products mapped`}
+                      {`${vehicleMapped.toLocaleString()} of ${vehicleTotal.toLocaleString()} vehicle parts mapped`}
                     </Text>
                   </InlineStack>
                 </InlineStack>
 
-                <ProgressBar progress={coverage} size="small" />
+                <ProgressBar progress={vehicleCoverage} size="small" />
 
                 {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
                   {([
                     { icon: AlertCircleIcon, label: "Flagged", count: needsReview, status: "flagged" },
                     { icon: MinusCircleIcon, label: "No Vehicle Data", count: s.noMatch ?? 0, status: "no_match" },
-                    { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
+                    { icon: CheckCircleIcon, label: "Auto Mapped", count: vehicleAutoMapped, status: "auto_mapped" },
                     { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
                     { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },
                   ] as const).map((item) => (

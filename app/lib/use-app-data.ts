@@ -21,6 +21,7 @@ export interface AppStats {
   fitments: number;
   wheelFitments: number;
   wheelProducts: number;
+  wheelMapped: number;
   collections: number;
   // Vehicle pages
   vehiclePages: number;
@@ -64,7 +65,7 @@ export interface AppData {
 
 const DEFAULT_STATS: AppStats = {
   total: 0, unmapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0, noMatch: 0,
-  fitments: 0, wheelFitments: 0, wheelProducts: 0, collections: 0,
+  fitments: 0, wheelFitments: 0, wheelProducts: 0, wheelMapped: 0, collections: 0,
   vehiclePages: 0, vehiclePagesSynced: 0, vehiclePagesPending: 0, vehiclePagesFailed: 0,
   providers: 0,
   pushedProducts: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,
@@ -146,5 +147,15 @@ export function computeFromStats(stats: AppStats) {
   const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
   const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
-  return { mapped, needsReview, notMapped, coverage, pendingPush };
+  // ── Vehicle parts only (excludes wheel products) ──
+  const vehicleTotal = stats.total - stats.wheelProducts;
+  const vehicleMapped = mapped - stats.wheelMapped;
+  const vehicleNotMapped = vehicleTotal - vehicleMapped;
+  const vehicleCoverage = vehicleTotal > 0 ? Math.round((vehicleMapped / vehicleTotal) * 100) : 0;
+
+  return {
+    mapped, needsReview, notMapped, coverage, pendingPush,
+    // Vehicle-specific
+    vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage,
+  };
 }

@@ -73,6 +73,7 @@ interface Product {
   barcode: string | null;
   variants: any[] | null;
   fitment_status: FitmentStatus;
+  product_category: string | null;
   source: string | null;
   provider_id: string | null;
   status: string | null;
@@ -106,6 +107,15 @@ interface Fitment {
   cylinders?: number | null;
   cylinder_config?: string | null;
   aspiration?: string | null;
+}
+
+interface WheelFitment {
+  pcd: string | null;
+  diameter: number | null;
+  width: number | null;
+  center_bore: number | null;
+  offset_min: number | null;
+  offset_max: number | null;
 }
 
 function formatFitmentEngine(fitment: Fitment): string | null {
@@ -160,6 +170,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .order("make", { ascending: true })
     .order("model", { ascending: true })
     .order("year_from", { ascending: true });
+  const wheelFitmentsQuery = db.from("wheel_fitments")
+    .select("pcd, diameter, width, center_bore, offset_min, offset_max")
+    .eq("product_id", productId)
+    .eq("shop_id", shopId);
 
   // Queue mode: also fetch progress stats and next product (exclude staged)
   const totalQuery = isQueueMode
@@ -172,9 +186,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
     : null;
 
-  const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
+  const [productResult, fitmentsResult, wheelFitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
     productQuery,
     fitmentsQuery,
+    wheelFitmentsQuery,
     totalQuery ?? Promise.resolve({ count: 0 }),
     unmappedQuery ?? Promise.resolve({ count: 0 }),
     nextQuery ?? Promise.resolve({ data: null }),
@@ -225,6 +240,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return {
     product: productResult.data as Product,
     fitments,
+    wheelFitments: (wheelFitmentsResult.data ?? []) as WheelFitment[],
     shopDomain: shopId,
     queueData,
   };
@@ -498,7 +514,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain, queueData } = useLoaderData<typeof loader>();
+  const { product, fitments, wheelFitments, shopDomain, queueData } = useLoaderData<typeof loader>();
   const rawActionData = useActionData<typeof action>();
   const actionData = rawActionData as { error?: string; message?: string; success?: boolean; skipped?: boolean; nextProductId?: string } | undefined;
   const submit = useSubmit();
@@ -535,9 +551,10 @@ export default function ProductDetails() {
   const [showManualForm, setShowManualForm] = useState(false);
   const [showProviderExpanded, setShowProviderExpanded] = useState(false);
 
-  // Auto-fetch suggestions when product changes (only for non-staged products)
+  // Auto-fetch suggestions when product changes (only for non-staged products, not wheels)
+  const isWheelProduct = product.product_category === "wheels";
   useEffect(() => {
-    if (product.title && !isStaged) {
+    if (product.title && !isStaged && !isWheelProduct) {
       suggestionFetcher.submit(
         JSON.stringify({
           title: product.title,
@@ -552,7 +569,7 @@ export default function ProductDetails() {
       setSuggestionsLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id, isStaged]);
+  }, [product.id, isStaged, isWheelProduct]);
 
   const suggestions = suggestionFetcher.data?.suggestions ?? [];
   const hints = suggestionFetcher.data?.hints ?? [];
@@ -727,6 +744,7 @@ export default function ProductDetails() {
         <InlineStack gap="200">
           <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
           {product.status === "staged" && <Badge tone="attention">Staged</Badge>}
+          {product.product_category === "wheels" && <Badge tone="info">Wheels</Badge>}
         </InlineStack>
       }
       primaryAction={product.status === "staged" ? {
@@ -1027,8 +1045,61 @@ export default function ProductDetails() {
               </Card>
             )}
 
-            {/* ── Smart Suggestions Card — hidden for staged provider products ── */}
-            {!isStaged && <Card>
+            {/* ── Wheel Specifications Card — shown for wheel products with wheel fitments ── */}
+            {!isStaged && product.product_category === "wheels" && wheelFitments.length > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ConnectIcon} color="var(--p-color-icon-info)" />
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Wheel Specifications</Text>
+                    <Badge tone="info">{`${wheelFitments.length} PCD${wheelFitments.length !== 1 ? "s" : ""}`}</Badge>
+                  </InlineStack>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid var(--p-color-border-secondary)" }}>
+                          {["PCD", "Diameter", "Width", "Center Bore", "Offset Range"].map((h) => (
+                            <th key={h} style={{ textAlign: "left", padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wheelFitments.map((wf, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">{wf.pcd || "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.diameter ? `${wf.diameter}"` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.width ? `${wf.width}J` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.center_bore ? `${wf.center_bore}mm` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">
+                                {wf.offset_min != null && wf.offset_max != null
+                                  ? wf.offset_min === wf.offset_max
+                                    ? `ET${wf.offset_min}`
+                                    : `ET${wf.offset_min}–${wf.offset_max}`
+                                  : "—"}
+                              </Text>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ── Smart Suggestions Card — hidden for staged provider products and wheel products ── */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -1130,8 +1201,8 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>}
 
-            {/* Current Fitments Card — hidden for staged provider products */}
-            {!isStaged && <Card>
+            {/* Current Fitments Card — hidden for staged provider products and wheel products */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -1225,8 +1296,8 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>}
 
-            {/* Manual Add Fitment Card — hidden for staged provider products */}
-            {!isStaged && <Card>
+            {/* Manual Add Fitment Card — hidden for staged provider products and wheel products */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">

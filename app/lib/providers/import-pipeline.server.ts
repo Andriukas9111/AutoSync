@@ -107,6 +107,15 @@ export async function runProviderImport(
     rows,
   } = options;
 
+  // 0. Get provider's product_category (used to tag all imported products)
+  const { data: providerData } = await db
+    .from("providers")
+    .select("product_category")
+    .eq("id", providerId)
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  const providerCategory: string | null = (providerData?.product_category as string) || null;
+
   // 1. Create import record
   const { data: importRecord, error: importError } = await db
     .from("provider_imports")
@@ -393,6 +402,7 @@ export async function runProviderImport(
       variants: product._variants ? JSON.parse(product._variants) : null,
       source: fileType,
       fitment_status: "unmapped",
+      product_category: providerCategory, // Inherit category from provider
       status: "staged", // Provider imports are staged — NOT in main catalog until approved
       raw_data: product, // Store all mapped data for reference
       created_at: new Date().toISOString(),

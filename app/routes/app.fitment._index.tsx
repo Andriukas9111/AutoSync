@@ -40,7 +40,7 @@ import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
 import { equalHeightGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
-import { useAppData } from "../lib/use-app-data";
+import { useAppData, computeFromStats } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
@@ -102,13 +102,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakesResult,
     ...statusCountResults
   ] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").or("product_category.eq.vehicle_parts,product_category.is.null"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Get recently mapped products (last 20 products that have fitments)
+    // Get recently mapped products (last 20 products that have fitments) — vehicle parts only
     db.from("products")
       .select("id, title, fitment_status, updated_at")
       .eq("shop_id", shopId)
       .neq("status", "staged")
+      .or("product_category.eq.vehicle_parts,product_category.is.null")
       .not("fitment_status", "eq", "unmapped")
       .order("updated_at", { ascending: false })
       .limit(20),
@@ -121,6 +122,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
         .neq("status", "staged")
+        .or("product_category.eq.vehicle_parts,product_category.is.null")
         .eq("fitment_status", s)
     ),
   ]);
@@ -304,17 +306,18 @@ export default function Fitment() {
     setExtractDismissed(false);
   }, [extractFetcher]);
 
-  // Use live polled stats (falls back to loader values via useAppData initial state)
-  const autoMapped = stats.autoMapped;
+  // Use vehicle-only stats (exclude wheel products from fitment page)
+  const computed = computeFromStats(stats);
+  const autoMapped = Math.max(0, stats.autoMapped - (stats.wheelMapped ?? 0));
   const smartMapped = stats.smartMapped;
   const manualMapped = stats.manualMapped;
   const flagged = stats.flagged;
   const partial = getCount(statusCounts, "partial"); // partial not in AppStats, keep from loader
   const unmapped = stats.unmapped;
-  const liveTotal = stats.total;
+  const liveTotal = computed.vehicleTotal;
   const liveFitments = stats.fitments;
-  const totalMapped = autoMapped + smartMapped + manualMapped;
-  const coveragePercent = liveTotal > 0 ? Math.round((totalMapped / liveTotal) * 100) : 0;
+  const totalMapped = computed.vehicleMapped;
+  const coveragePercent = computed.vehicleCoverage;
 
   return (
     <Page
