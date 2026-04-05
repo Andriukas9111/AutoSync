@@ -50,15 +50,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run ALL queries in parallel — including tenant lookup
-  const [tenant, collectionsResult, appSettingsResult] = await Promise.all([
+  // ALL queries in single Promise.all for maximum parallelism
+  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult] = await Promise.all([
     getTenant(shopId),
     paginatedSelect("collection_mappings", "*", (q) =>
       q.eq("shop_id", shopId).order("created_at", { ascending: false })
     ).then((rows) => ({ data: rows, error: null })),
-    db.from("app_settings")
-      .select("*")
-      .eq("shop_id", shopId)
-      .maybeSingle(),
+    db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
+    // Make/model counts — run in parallel instead of sequential
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000),
+    db.from("vehicle_fitments").select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
   ]);
 
   const plan: PlanTier = getEffectivePlan(tenant as any);
@@ -68,15 +69,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Count unique combos — cap at 50K rows to prevent OOM on huge shops
-  const { data: makesRaw } = await db.from("vehicle_fitments")
-    .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
-  const makesData = (makesRaw ?? []) as { make: string }[];
+  const makesData = (makesResult.data ?? []) as { make: string }[];
   const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
 
-  const { data: makeModelRaw } = await db.from("vehicle_fitments")
-    .select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000);
-  const makeModelData = (makeModelRaw ?? []) as { make: string; model: string }[];
+  const makeModelData = (makeModelResult.data ?? []) as { make: string; model: string }[];
   const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
   // For year combos, reuse the makeModel data (already paginated)
   const uniqueMakeModelYears = [...new Set(

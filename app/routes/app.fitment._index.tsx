@@ -84,12 +84,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // ── Lightweight data integrity fix (read-only safe) ──
-  // Only fix NULL fitment_status → "unmapped" (fast, no joins, idempotent)
-  await db.from("products")
+  // Fix NULL fitment_status → "unmapped" (fire-and-forget, non-blocking)
+  db.from("products")
     .update({ fitment_status: "unmapped" })
     .eq("shop_id", shopId)
-    .is("fitment_status", null);
+    .is("fitment_status", null)
+    .then(() => {}).catch(() => {});
 
   const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged"];
 

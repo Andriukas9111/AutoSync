@@ -58,8 +58,8 @@ export function QuickActionCard({
             <IconBadge
               icon={icon}
               size={36}
-              bg={primary ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)"}
-              color={primary ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
+              bg={primary ? "var(--p-color-bg-fill-emphasis)" : undefined}
+              color={primary ? "var(--p-color-text-inverse)" : undefined}
             />
             <Text as="span" variant="headingSm">{label}</Text>
           </InlineStack>

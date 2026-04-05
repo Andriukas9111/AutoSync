@@ -208,42 +208,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   // ── Announcements ──
-  let announcements: Array<Record<string, unknown>> = [];
-  try {
-    const { data: annData } = await db
-      .from("announcements")
-      .select("*")
-      .order("created_at", { ascending: false });
-    announcements = annData ?? [];
-  } catch {
-    // Table may not exist yet
-  }
-
-  // ── Admin activity log ──
-  let adminActivityLog: Array<Record<string, unknown>> = [];
-  try {
-    const { data: actData } = await db
-      .from("admin_activity_log")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    adminActivityLog = actData ?? [];
-  } catch {
-    // Table may not exist yet
-  }
-
-  // ── Scrape changelog (recent additions/updates) ──
-  let scrapeChangelog: Array<Record<string, unknown>> = [];
-  try {
-    const { data: clData } = await db
-      .from("scrape_changelog")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(500);
-    scrapeChangelog = clData ?? [];
-  } catch {
-    // Table may not exist yet
-  }
+  // ── Announcements, activity log, scrape changelog — ALL in parallel ──
+  const [annResult, actResult, clResult] = await Promise.all([
+    db.from("announcements").select("*").order("created_at", { ascending: false }).then(r => r.data ?? []).catch(() => []),
+    db.from("admin_activity_log").select("*").order("created_at", { ascending: false }).limit(20).then(r => r.data ?? []).catch(() => []),
+    db.from("scrape_changelog").select("*").order("created_at", { ascending: false }).limit(500).then(r => r.data ?? []).catch(() => []),
+  ]);
+  const announcements = annResult as Array<Record<string, unknown>>;
+  const adminActivityLog = actResult as Array<Record<string, unknown>>;
+  const scrapeChangelog = clResult as Array<Record<string, unknown>>;
 
   // ── YMME browse data (conditional on tab=ymme) ──
   let browseMakes: Array<Record<string, unknown>> = [];

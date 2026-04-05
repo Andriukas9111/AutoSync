@@ -107,11 +107,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Fix products with NULL fitment_status → "unmapped"
-  await db.from("products")
+  // Fix products with NULL fitment_status → "unmapped" (fire-and-forget, non-blocking)
+  db.from("products")
     .update({ fitment_status: "unmapped" })
     .eq("shop_id", shopId)
-    .is("fitment_status", null);
+    .is("fitment_status", null)
+    .then(() => {}).catch(() => {});
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
