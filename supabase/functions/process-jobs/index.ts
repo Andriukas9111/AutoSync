@@ -1002,6 +1002,7 @@ async function processPushChunk(
       { name: "Wheel Diameter", namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", filterable: true },
       { name: "Wheel Width", namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", filterable: true },
       { name: "Wheel Center Bore", namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel Offset", namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", filterable: true },
     ];
     for (const d of defs) {
       const { filterable, ...defInput } = d;
@@ -1361,12 +1362,14 @@ async function processPushChunk(
           const pcdSet = new Set<string>();
           const diamSet = new Set<string>();
           const widthSet = new Set<string>();
-          const cbSet = new Set<string>();
+          const cbSet = new Set<string>(), offsetSet = new Set<string>();
           for (const wf of wheelFits) {
             if (wf.pcd) pcdSet.add(wf.pcd);
             if (wf.diameter) diamSet.add(String(wf.diameter));
             if (wf.width) widthSet.add(String(wf.width));
             if (wf.center_bore) cbSet.add(String(wf.center_bore));
+            if (wf.offset_min != null) offsetSet.add(`ET${wf.offset_min}`);
+            if (wf.offset_max != null && wf.offset_max !== wf.offset_min) offsetSet.add(`ET${wf.offset_max}`);
             // Add wheel-specific tags
             if (wf.pcd) tags.push(`_autosync_wheel_PCD_${wf.pcd}`);
             if (wf.diameter) tags.push(`_autosync_wheel_${wf.diameter}inch`);
@@ -1376,6 +1379,7 @@ async function processPushChunk(
           if (diamSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
           if (widthSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", value: JSON.stringify([...widthSet].sort()), ownerId: gid });
           if (cbSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", value: JSON.stringify([...cbSet].sort()), ownerId: gid });
+          if (offsetSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", value: JSON.stringify([...offsetSet].sort()), ownerId: gid });
         }
 
         const mfRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
@@ -2970,6 +2974,7 @@ async function processBulkPush(
     { name: "Wheel Diameter", namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", filterable: true },
     { name: "Wheel Width", namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", filterable: true },
     { name: "Wheel Center Bore", namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel Offset", namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", filterable: true },
   ];
   for (const d of allDefs) {
     const { filterable, ...defInput } = d;
@@ -3124,12 +3129,14 @@ async function processBulkPush(
 
     // ── Wheel spec metafields (from wheel_fitments table) ──
     if (wheelFits.length > 0) {
-      const pcdSet = new Set<string>(), diamSet = new Set<string>(), widthSet = new Set<string>(), cbSet = new Set<string>();
+      const pcdSet = new Set<string>(), diamSet = new Set<string>(), widthSet = new Set<string>(), cbSet = new Set<string>(), offsetSet = new Set<string>();
       for (const wf of wheelFits) {
         if (wf.pcd) pcdSet.add(String(wf.pcd));
         if (wf.diameter) diamSet.add(String(wf.diameter));
         if (wf.width) widthSet.add(String(wf.width));
         if (wf.center_bore) cbSet.add(String(wf.center_bore));
+        if (wf.offset_min != null) offsetSet.add(`ET${wf.offset_min}`);
+        if (wf.offset_max != null && wf.offset_max !== wf.offset_min) offsetSet.add(`ET${wf.offset_max}`);
         // Wheel-specific tags
         if (wf.pcd) tags.add(`_autosync_wheel_PCD_${wf.pcd}`);
         if (wf.diameter) tags.add(`_autosync_wheel_${wf.diameter}inch`);
@@ -3139,6 +3146,7 @@ async function processBulkPush(
       if (diamSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
       if (widthSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", value: JSON.stringify([...widthSet].sort()), ownerId: gid });
       if (cbSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", value: JSON.stringify([...cbSet].sort()), ownerId: gid });
+      if (offsetSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", value: JSON.stringify([...offsetSet].sort()), ownerId: gid });
     }
 
     // Only push if there are actual metafields to set
