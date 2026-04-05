@@ -1273,8 +1273,11 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
   const pcdHandle = `wheels-${pcd.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
   let url = `/collections/${pcdHandle}`;
 
-  // Add metafield filters for diameter, width (PCD is already filtered by the collection)
+  // Add metafield filters — PCD for the chip display, diameter, width, center_bore for refinement
   const filters: string[] = [];
+  // PCD is already filtered by the collection tag rule, but adding as metafield filter
+  // makes it show as a filter chip in the sidebar for user clarity
+  filters.push(`filter.p.m.${mfNs}.pcd=${encodeURIComponent(pcd)}`);
   if (diameter) filters.push(`filter.p.m.${mfNs}.diameter=${encodeURIComponent(diameter)}`);
   if (width) filters.push(`filter.p.m.${mfNs}.width=${encodeURIComponent(width)}`);
   if (filters.length > 0) url += "?" + filters.join("&");
