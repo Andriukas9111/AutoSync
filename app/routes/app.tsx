@@ -161,6 +161,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // This saves 2-3 Shopify GraphQL calls (~500-1500ms) on every page load
   const effectivePlan = getEffectivePlan(tenant as Tenant | null);
   const lastSyncedPlan = tenant?.last_synced_plan as string | null;
+  // Re-sync if plan changed (catches lost metafields from DB crashes, theme reinstalls, etc.)
   if (lastSyncedPlan !== effectivePlan) {
     try {
       const effectiveLimits = getPlanLimits(effectivePlan);

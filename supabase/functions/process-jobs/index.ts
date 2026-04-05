@@ -2634,7 +2634,7 @@ async function processBulkProductCreate(
   let offset = 0;
   while (true) {
     const { data: batch } = await db.from("products")
-      .select("id, title, description, vendor, product_type, sku, price")
+      .select("id, title, description, vendor, product_type, sku, price, image_url")
       .eq("shop_id", shopId)
       .is("shopify_product_id", null)
       .neq("status", "staged")
@@ -2866,11 +2866,44 @@ async function processBulkPush(
     return { processed: totalItems, hasMore: false };
   }
 
-  // Phase 1: Generate JSONL and start operations
-  console.log(`[bulk_push] Phase 1: Generating JSONL...`);
+  // Phase 1: Ensure metafield definitions exist, then generate JSONL
+  console.log(`[bulk_push] Phase 1: Ensuring metafield definitions + generating JSONL...`);
   await db.from("sync_jobs").update({
-    metadata: JSON.stringify({ ...meta, phase: "generating", phaseLabel: "Generating metafield data for Shopify..." }),
+    metadata: JSON.stringify({ ...meta, phase: "generating", phaseLabel: "Creating metafield definitions & generating data..." }),
   }).eq("id", job.id);
+
+  // ── Ensure ALL metafield definitions exist on Shopify (vehicle + wheel) ──
+  // These must exist BEFORE pushing values. Creates if missing, updates if already exists.
+  const allDefs = [
+    { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json", filterable: false },
+    { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", filterable: true },
+    { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", filterable: true },
+    { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", filterable: true },
+    { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", filterable: true },
+    { name: "Vehicle Generation", namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel PCD", namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel Diameter", namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel Width", namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", filterable: true },
+    { name: "Wheel Center Bore", namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", filterable: true },
+  ];
+  for (const d of allDefs) {
+    const { filterable, ...defInput } = d;
+    try {
+      const createRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+        query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message code } } }`,
+        variables: { def: { ...defInput, ownerType: "PRODUCT", pin: true, access: { storefront: "PUBLIC_READ" }, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
+      })});
+      const createJson = await createRes.json();
+      const userErrors = createJson?.data?.metafieldDefinitionCreate?.userErrors || [];
+      if (userErrors.some((e: { code: string }) => e.code === "TAKEN" || e.code === "ALREADY_EXISTS")) {
+        await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `mutation($def: MetafieldDefinitionUpdateInput!) { metafieldDefinitionUpdate(definition: $def) { updatedDefinition { id } userErrors { message } } }`,
+          variables: { def: { namespace: d.namespace, key: d.key, ownerType: "PRODUCT", pin: true, ...(filterable ? { useAsCollectionCondition: true } : {}) } },
+        })});
+      }
+    } catch (_e) { /* ignore — best effort */ }
+  }
+  console.log(`[bulk_push] Ensured ${allDefs.length} metafield definitions exist`);
 
   // DB batch size for pagination — smaller batches to reduce DB pressure on Nano/Micro
   const DB_BATCH = 500;
