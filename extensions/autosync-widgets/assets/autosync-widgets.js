@@ -1476,30 +1476,36 @@
       state.offset = this.value;
     });
 
-    // Search button — redirect to Shopify search/collection filtered by wheel specs
-    // Same pattern as YMME: redirects to native Shopify search with product-visible terms
+    // Search button — redirect to Shopify collection with metafield filters
+    // Same pattern as YMME: calls proxy to get collection URL with filter params
+    // Uses $app:wheel_spec metafields so Search & Discovery shows filter chips
     searchBtn.addEventListener('click', function() {
       if (!state.pcd) return;
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
 
       // Track wheel search event for analytics
       trackEvent(proxyUrl, 'wheel_search', { source: 'wheel_finder_widget' });
 
-      // Build search query using specs that appear in product titles/tags
-      // PCD (e.g. "5x112") is in product titles, tags use _autosync_wheel_PCD_5x112
-      // Combine both human-readable and tag terms for best matching
-      var searchTerms = [];
-      // PCD always present — search both the raw PCD and the tag
-      searchTerms.push(state.pcd);
-      if (state.diameter) {
-        searchTerms.push(state.diameter);
-      }
-      if (state.width) {
-        searchTerms.push(state.width + 'J');
-      }
+      // Call wheel-lookup proxy endpoint to get collection URL with metafield filters
+      var lookupParams = { pcd: state.pcd };
+      if (state.diameter) lookupParams.diameter = state.diameter;
+      if (state.width) lookupParams.width = state.width;
+      if (state.offset) lookupParams.offset = state.offset;
 
-      // Redirect to Shopify search — matches product titles, descriptions, and tags
-      var searchUrl = '/search?type=product&q=' + encodeURIComponent(searchTerms.join(' '));
-      window.location.href = searchUrl;
+      proxyFetch(proxyUrl, 'wheel-lookup', lookupParams)
+        .then(function(data) {
+          if (data && data.url) {
+            window.location.href = data.url;
+          } else {
+            // Fallback: search by PCD text
+            window.location.href = '/collections/all?q=' + encodeURIComponent(state.pcd);
+          }
+        })
+        .catch(function() {
+          // Fallback on error
+          window.location.href = '/collections/all?q=' + encodeURIComponent(state.pcd);
+        });
     });
   }
 

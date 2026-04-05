@@ -1247,6 +1247,39 @@ async function handleWheelOffsets(params: URLSearchParams, request?: Request) {
   return json({ offsets: sortedOffsets }, 200, request);
 }
 
+// Returns a collection URL with metafield filters for the Wheel Finder widget.
+// Same pattern as collection-lookup for YMME — uses $app:wheel_spec metafield filters
+// so Search & Discovery shows filter chips for PCD, diameter, width, center_bore.
+async function handleWheelLookup(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  const diameter = params.get("diameter");
+  const width = params.get("width");
+  const offset = params.get("offset");
+
+  if (!pcd) return json({ error: "Missing pcd parameter" }, 400, request);
+
+  // Get the app's metafield namespace (same logic as collection-lookup)
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("shopify_app_id")
+    .eq("shop_id", shop)
+    .maybeSingle();
+  const appId = tenant?.shopify_app_id ?? "334692253697";
+  const mfNs = `app--${appId}--wheel_spec`;
+
+  // Build collection URL with metafield filters
+  // Uses /collections/all which shows ALL products, filtered by metafield values
+  let url = "/collections/all";
+  const filters: string[] = [];
+  filters.push(`filter.p.m.${mfNs}.pcd=${encodeURIComponent(pcd)}`);
+  if (diameter) filters.push(`filter.p.m.${mfNs}.diameter=${encodeURIComponent(diameter)}`);
+  if (width) filters.push(`filter.p.m.${mfNs}.width=${encodeURIComponent(width)}`);
+  if (filters.length > 0) url += "?" + filters.join("&");
+
+  return json({ url, filters: { pcd, diameter, width, offset } }, 200, request);
+}
+
 async function handleWheelSearch(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop");
 
@@ -1878,6 +1911,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleWheelOffsets(params, request);
     case "wheel-search":
       return handleWheelSearch(params, request);
+    case "wheel-lookup":
+      return handleWheelLookup(params, request);
     case "vin-decode":
       return handleVinDecode(params, null, request);
     case "vehicle-specs":
