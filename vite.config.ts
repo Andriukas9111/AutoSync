@@ -58,6 +58,11 @@ export default defineConfig({
   build: {
     assetsInlineLimit: 0,
   },
+  ssr: {
+    // GSAP uses `window` — exclude from SSR bundle so dynamic import() works
+    noExternal: [],
+    external: ["gsap", "gsap/ScrollTrigger"],
+  },
   optimizeDeps: {
     include: ["@shopify/app-bridge-react"],
   },

@@ -5,34 +5,42 @@ interface IconBadgeProps {
   icon: IconSource;
   /** Size in pixels. Default 28 */
   size?: number;
-  /** Background color CSS variable. Default "var(--p-color-bg-surface-secondary)" */
+  /** Background color CSS variable. Default: Polaris blue info secondary */
   background?: string;
   /** Shorthand alias for background */
   bg?: string;
-  /** Icon tone (Polaris semantic). Default "subdued" */
+  /** Icon tone (Polaris semantic). Only used when `color` is NOT set. Default "subdued" */
   tone?: "base" | "subdued" | "info" | "success" | "warning" | "critical" | "interactive" | "inherit";
-  /** Raw color CSS variable — overrides tone when set (e.g. "var(--p-color-icon-info)") */
+  /** Raw color CSS variable — overrides tone. Default: Polaris blue emphasis */
   color?: string;
   /** Border radius. Default "var(--p-border-radius-200)" for square, "50%" for circle */
   variant?: "square" | "circle";
 }
 
 /**
- * Consistent icon badge used across all admin pages.
+ * Consistent icon badge used across all pages.
  * Wraps a Polaris Icon in a colored container.
  *
+ * DEFAULTS TO POLARIS BLUE THEME:
+ *   bg = var(--p-color-bg-fill-info-secondary)  (light blue)
+ *   color = var(--p-color-icon-emphasis)         (Polaris blue)
+ *
+ * Only override bg/color for semantic cases:
+ *   - PlanGate lock: bg=critical-secondary, color=icon-critical
+ *   - Danger Zone: bg=critical-secondary, color=icon-critical
+ *   - Completed status: color=bg-fill-success (inline indicators only)
+ *
  * Usage:
- *   <IconBadge icon={ProductIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
- *   <IconBadge icon={SettingsIcon} tone="subdued" />
- *   <IconBadge icon={CheckCircleIcon} size={22} variant="circle" />
+ *   <IconBadge icon={ProductIcon} />                          // Blue theme (default)
+ *   <IconBadge icon={LockIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
  */
 export function IconBadge({
   icon,
   size = 28,
-  background = "var(--p-color-bg-surface-secondary)",
+  background = "var(--p-color-bg-fill-info-secondary)",
   bg,
   tone = "subdued",
-  color,
+  color = "var(--p-color-icon-emphasis)",
   variant = "square",
 }: IconBadgeProps) {
   return (

@@ -30,11 +30,19 @@ import {
   DeleteIcon,
   ImportIcon,
   ArrowLeftIcon,
+  NoteIcon,
+  LinkIcon,
+  AlertCircleIcon,
+  ProductIcon,
+  SettingsIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { formatDate } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -55,7 +63,7 @@ const FITMENT_STATUS_CONFIG: Record<
   { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   review: { tone: "warning", label: "Review" },
@@ -65,18 +73,6 @@ const FITMENT_STATUS_CONFIG: Record<
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "\u2014";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatDuration(start: string | null, end: string | null): string {
   if (!start || !end) return "\u2014";
@@ -247,6 +243,7 @@ export default function ImportDetail() {
     | undefined;
 
   const isSubmitting = fetcher.state !== "idle";
+  const [showStatusBanner, setShowStatusBanner] = useState(true);
 
   const imp = importRecord as Record<string, unknown>;
 
@@ -295,14 +292,14 @@ export default function ImportDetail() {
           </Banner>
         )}
 
-        {/* Status Banner */}
-        {status === "completed" && (
-          <Banner tone="success" title="Import completed successfully">
+        {/* Status Banner — dismissible */}
+        {status === "completed" && showStatusBanner && (
+          <Banner tone="success" title="Import completed successfully" onDismiss={() => setShowStatusBanner(false)}>
             <p>{`${importedRows.toLocaleString()} of ${totalRows.toLocaleString()} rows imported.`}</p>
           </Banner>
         )}
-        {status === "failed" && (
-          <Banner tone="critical" title="Import failed">
+        {status === "failed" && showStatusBanner && (
+          <Banner tone="critical" title="Import failed" onDismiss={() => setShowStatusBanner(false)}>
             <p>{`The import encountered errors. ${errorRows.toLocaleString()} rows failed to import.`}</p>
           </Banner>
         )}
@@ -333,7 +330,10 @@ export default function ImportDetail() {
         {/* Import Details */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Import Details</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={NoteIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Import Details</Text>
+            </InlineStack>
             <Divider />
             <InlineGrid columns={{ xs: 1, sm: 2 }} gap="400">
               <BlockStack gap="200">
@@ -389,15 +389,19 @@ export default function ImportDetail() {
         {columnMapping && Array.isArray(columnMapping) && columnMapping.length > 0 && (
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Column Mapping Snapshot</Text>
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={LinkIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Column Mapping Snapshot</Text>
+              </InlineStack>
               <Divider />
               <DataTable
-                columnContentTypes={["text", "text"]}
-                headings={["Source Column", "Target Field"]}
+                columnContentTypes={["text", "text", "text"]}
+                headings={["Source Column", "", "Mapped To"]}
                 rows={columnMapping
                   .filter((m) => m.targetField)
                   .map((m) => [
                     m.sourceColumn,
+                    "→",
                     m.targetField ?? "(skipped)",
                   ])}
               />
@@ -410,9 +414,12 @@ export default function ImportDetail() {
           <Card>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd" tone="critical">
-                  {`Errors (${errorRows.toLocaleString()})`}
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={AlertCircleIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
+                  <Text as="h2" variant="headingMd" tone="critical">
+                    {`Errors (${errorRows.toLocaleString()})`}
+                  </Text>
+                </InlineStack>
                 {errors.length > MAX_ERRORS_SHOWN && (
                   <Text as="span" variant="bodySm" tone="subdued">
                     {`Showing first ${MAX_ERRORS_SHOWN} of ${errors.length}`}
@@ -437,9 +444,12 @@ export default function ImportDetail() {
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
-              <Text as="h2" variant="headingMd">
-                {`Products from This Import (${totalProducts.toLocaleString()})`}
-              </Text>
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">
+                  {`Products from This Import (${totalProducts.toLocaleString()})`}
+                </Text>
+              </InlineStack>
             </InlineStack>
             <Divider />
 
@@ -557,7 +567,10 @@ export default function ImportDetail() {
         {/* Actions */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Actions</Text>
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
+              <Text as="h2" variant="headingMd">Actions</Text>
+            </InlineStack>
             <Divider />
             <InlineStack gap="300">
               <Button
@@ -665,4 +678,9 @@ function DetailRow({
       )}
     </InlineStack>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Import Detail" />;
 }

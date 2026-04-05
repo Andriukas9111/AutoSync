@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useNavigate } from "react-router";
+import { useNavigate, useLoaderData } from "react-router";
 import {
   Page,
   Layout,
@@ -20,6 +20,7 @@ import { BookOpenIcon } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { authenticate } from "../shopify.server";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -27,7 +28,17 @@ import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return {};
+  // Generate plan summaries from billing source of truth (never hardcode prices)
+  const { getPlanLimits, getPlanPriceLabel } = await import("../lib/billing.server");
+  const tiers = ["free", "starter", "growth", "professional", "business", "enterprise"] as const;
+  const planSummaries = tiers.map((tier) => {
+    const limits = getPlanLimits(tier);
+    const price = getPlanPriceLabel(tier);
+    const products = limits.maxProducts === Infinity ? "Unlimited" : limits.maxProducts.toLocaleString();
+    const fitments = limits.maxFitments === Infinity ? "Unlimited" : limits.maxFitments.toLocaleString();
+    return { tier, name: tier.charAt(0).toUpperCase() + tier.slice(1), price, products, fitments };
+  });
+  return { planSummaries };
 };
 
 // ---------------------------------------------------------------------------
@@ -41,7 +52,7 @@ interface HelpSection {
   content: JSX.Element;
 }
 
-function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] {
+function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: Array<{ tier: string; name: string; price: string; products: string; fitments: string }>): HelpSection[] {
   return [
     {
       id: "getting-started",
@@ -396,7 +407,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              Wheel Finder is available on the Business plan ($179/mo) and above.
+              Wheel Finder is available on the Professional plan and above.
             </Text>
           </BlockStack>
         </BlockStack>
@@ -438,7 +449,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              DVLA/MOT plate lookup is an Enterprise-exclusive feature ($299/mo). It requires
+              DVLA/MOT plate lookup is an Enterprise-exclusive feature. It requires
               valid DVLA VES and MOT History API credentials to be configured.
             </Text>
           </BlockStack>
@@ -448,7 +459,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
     {
       id: "vin-decode",
       title: "10. VIN Decode",
-      keywords: ["vin", "decode", "vehicle", "identification", "number", "nhtsa", "17", "chassis"],
+      keywords: ["vin", "decode", "vehicle", "identification", "number", "17", "chassis"],
       content: (
         <BlockStack gap="300">
           <Text as="p" variant="bodyMd">
@@ -480,7 +491,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
               Plan requirement
             </Text>
             <Text as="p" variant="bodySm" tone="subdued">
-              VIN Decode is an Enterprise-exclusive feature ($299/mo). No additional API
+              VIN Decode is an Enterprise-exclusive feature. No additional API
               credentials or setup are needed — it works out of the box.
             </Text>
           </BlockStack>
@@ -488,8 +499,53 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
       ),
     },
     {
+      id: "wheel-finder",
+      title: "11. Wheel Finder",
+      keywords: ["wheel", "finder", "pcd", "bolt", "pattern", "offset", "diameter", "width", "center", "bore", "alloy", "rim"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            The Wheel Finder widget lets your customers search for compatible alloy wheels
+            by their vehicle's bolt pattern (PCD), diameter, width, and offset.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              How it works
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Customers select from cascading dropdowns: PCD (e.g. 5x112) → Diameter (e.g. 18") →
+              Width (e.g. 8J) → Offset (e.g. ET35). Each dropdown dynamically loads options based on
+              your actual inventory. Matching wheels are displayed with images and prices.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Importing wheel data
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Import wheel products from any provider (CSV, XML, API). The column mapper automatically
+              recognizes PCD, diameter, width, center bore, and offset columns. Wheel specifications
+              are extracted and stored in a dedicated database for fast search.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              PCD (Bolt Pattern)
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              PCD stands for Pitch Circle Diameter — the bolt pattern of the wheel (e.g. 5x112 means
+              5 bolts on a 112mm circle). Customers need to match their vehicle's PCD to find compatible wheels.
+            </Text>
+          </BlockStack>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Wheel Finder is available on the Professional plan and above.
+          </Text>
+        </BlockStack>
+      ),
+    },
+    {
       id: "analytics",
-      title: "11. Analytics Dashboard",
+      title: "12. Analytics Dashboard",
       keywords: ["analytics", "fitment", "coverage", "popular", "makes", "models", "supplier", "performance", "inventory", "gap", "export", "report"],
       content: (
         <BlockStack gap="300">
@@ -556,24 +612,11 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
             AutoSync offers 6 tiers to fit businesses of every size.
           </Text>
           <BlockStack gap="200">
-            <Text as="p" variant="bodySm">
-              <strong>Free ($0)</strong> -- 50 products, 200 fitments, manual mapping only.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Starter ($19/mo)</strong> -- 1,000 products, push tags/metafields, YMME widget, fitment badge.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Growth ($49/mo)</strong> -- 10,000 products, auto-extraction, bulk ops, all 4 widgets, smart collections.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Professional ($99/mo)</strong> -- 50,000 products, API integration, custom vehicles, My Garage.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Business ($179/mo)</strong> -- 200,000 products, FTP import, Wheel Finder, priority support.
-            </Text>
-            <Text as="p" variant="bodySm">
-              <strong>Enterprise ($299/mo)</strong> -- Unlimited everything, DVLA plate lookup, VIN decode, full CSS customisation.
-            </Text>
+            {planSummaries.map((p) => (
+              <Text key={p.tier} as="p" variant="bodySm">
+                <strong>{`${p.name} (${p.price})`}</strong>{` — ${p.products} products, ${p.fitments} fitments.`}
+              </Text>
+            ))}
           </BlockStack>
           <Button onClick={() => navigate("/app/plans")}>View Full Plan Details</Button>
         </BlockStack>
@@ -691,11 +734,12 @@ function buildSections(navigate: ReturnType<typeof useNavigate>): HelpSection[] 
 // ---------------------------------------------------------------------------
 
 export default function Help() {
+  const { planSummaries } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
 
-  const sections = useMemo(() => buildSections(navigate), [navigate]);
+  const sections = useMemo(() => buildSections(navigate, planSummaries ?? []), [navigate, planSummaries]);
 
   const toggleSection = useCallback((id: string) => {
     setOpenSections((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -856,4 +900,9 @@ export default function Help() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Help" />;
 }

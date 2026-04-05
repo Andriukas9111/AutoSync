@@ -108,37 +108,52 @@ export async function removeAllTags(
   let removed = 0;
   let processed = 0;
 
-  // Only process products that have actually been pushed (have fitments)
-  // This avoids looping 1000+ products when nothing was pushed
-  const { data: products, error } = await db
-    .from("products")
-    .select("shopify_product_id")
-    .eq("shop_id", shopId)
-    .neq("fitment_status", "unmapped");
+  // Search Shopify directly for products with _autosync_ tags (don't rely on DB)
+  const SEARCH_QUERY = `
+    query searchProducts($query: String!, $first: Int!, $after: String) {
+      products(first: $first, after: $after, query: $query) {
+        edges { node { id tags } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  `;
 
-  if (error) {
-    return { removed: 0, processed: 0, errors: [error.message] };
+  const products: { gid: string; tags: string[] }[] = [];
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  while (hasNext) {
+    try {
+      const resp = await admin.graphql(SEARCH_QUERY, {
+        variables: { query: `tag:${tagPrefix}*`, first: 100, after: cursor },
+      });
+      const json = await resp.json();
+      const edges = json?.data?.products?.edges ?? [];
+      for (const { node } of edges) {
+        const autoTags = (node.tags ?? []).filter((t: string) => t.startsWith(tagPrefix));
+        if (autoTags.length > 0) {
+          products.push({ gid: node.id, tags: autoTags });
+        }
+      }
+      hasNext = json?.data?.products?.pageInfo?.hasNextPage ?? false;
+      cursor = json?.data?.products?.pageInfo?.endCursor ?? null;
+      await handleRateLimit(json);
+    } catch (err) {
+      errors.push("Search error: " + (err instanceof Error ? err.message : String(err)));
+      break;
+    }
   }
 
-  if (!products || products.length === 0) {
+  if (products.length === 0) {
     return { removed: 0, processed: 0, errors: [] };
   }
 
   for (const product of products) {
-    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+    const gid = product.gid;
 
     try {
-      // Fetch current tags for this product
-      const tagsResponse = await admin.graphql(PRODUCT_TAGS_QUERY, {
-        variables: { id: gid },
-      });
-      const tagsJson = await tagsResponse.json();
-      await handleRateLimit(tagsJson);
-
-      const currentTags: string[] = tagsJson?.data?.product?.tags ?? [];
-      const autoSyncTags = currentTags.filter((t: string) =>
-        t.startsWith(tagPrefix),
-      );
+      // We already have the autosync tags from the search query
+      const autoSyncTags = product.tags;
 
       if (autoSyncTags.length > 0) {
         const removeResponse = await admin.graphql(TAGS_REMOVE_MUTATION, {
@@ -150,7 +165,7 @@ export async function removeAllTags(
         const userErrors = removeJson?.data?.tagsRemove?.userErrors;
         if (userErrors?.length > 0) {
           errors.push(
-            `Tags for ${product.shopify_product_id}: ${userErrors[0].message}`,
+            `Tags for ${product.gid}: ${userErrors[0].message}`,
           );
         } else {
           removed += autoSyncTags.length;
@@ -159,7 +174,7 @@ export async function removeAllTags(
       processed++;
     } catch (err) {
       errors.push(
-        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+        `Product ${gid}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -177,59 +192,84 @@ export async function removeAllMetafields(
   let removed = 0;
   let processed = 0;
 
-  // Only process products that have actually been pushed (have fitments)
-  const { data: products, error } = await db
-    .from("products")
-    .select("shopify_product_id")
-    .eq("shop_id", shopId)
-    .neq("fitment_status", "unmapped");
+  // Search Shopify directly for products with vehicle_fitment metafields (don't rely on DB)
+  const SEARCH_QUERY = `
+    query searchProducts($query: String!, $first: Int!, $after: String) {
+      products(first: $first, after: $after, query: $query) {
+        edges { node { id } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  `;
 
-  if (error) {
-    return { removed: 0, processed: 0, errors: [error.message] };
+  const productGids: string[] = [];
+  let cursor: string | null = null;
+  let hasNext = true;
+
+  // Search for products that have our metafield namespace
+  while (hasNext) {
+    try {
+      const resp = await admin.graphql(SEARCH_QUERY, {
+        variables: { query: `tag:_autosync_* OR metafield_namespace:vehicle_fitment`, first: 100, after: cursor },
+      });
+      const json = await resp.json();
+      const edges = json?.data?.products?.edges ?? [];
+      for (const { node } of edges) {
+        productGids.push(node.id);
+      }
+      hasNext = json?.data?.products?.pageInfo?.hasNextPage ?? false;
+      cursor = json?.data?.products?.pageInfo?.endCursor ?? null;
+      await handleRateLimit(json);
+    } catch (err) {
+      errors.push("Search error: " + (err instanceof Error ? err.message : String(err)));
+      break;
+    }
   }
 
-  if (!products || products.length === 0) {
+  if (productGids.length === 0) {
     return { removed: 0, processed: 0, errors: [] };
   }
 
-  for (const product of products) {
-    const gid = `gid://shopify/Product/${product.shopify_product_id}`;
+  for (const gid of productGids) {
 
     try {
-      // Query metafields in the autosync_fitment namespace
-      const mfResponse = await admin.graphql(PRODUCT_METAFIELDS_QUERY, {
-        variables: { id: gid, namespace: "autosync_fitment" },
-      });
-      const mfJson = await mfResponse.json();
-      await handleRateLimit(mfJson);
-
-      const edges = mfJson?.data?.product?.metafields?.edges ?? [];
-      if (edges.length > 0) {
-        const metafields = edges.map((e: any) => ({
-          ownerId: gid,
-          namespace: e.node.namespace,
-          key: e.node.key,
-        }));
-
-        const delResponse = await admin.graphql(METAFIELDS_DELETE_MUTATION, {
-          variables: { metafields },
+      // Query metafields in both current ($app:vehicle_fitment) and legacy (autosync_fitment) namespaces
+      const namespacesToClean = ["$app:vehicle_fitment", "autosync_fitment"];
+      for (const ns of namespacesToClean) {
+        const mfResponse = await admin.graphql(PRODUCT_METAFIELDS_QUERY, {
+          variables: { id: gid, namespace: ns },
         });
-        const delJson = await delResponse.json();
-        await handleRateLimit(delJson);
+        const mfJson = await mfResponse.json();
+        await handleRateLimit(mfJson);
 
-        const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
-        if (userErrors?.length > 0) {
-          errors.push(
-            `Metafields for ${product.shopify_product_id}: ${userErrors[0].message}`,
-          );
-        } else {
-          removed += edges.length;
+        const edges = mfJson?.data?.product?.metafields?.edges ?? [];
+        if (edges.length > 0) {
+          const metafields = edges.map((e: any) => ({
+            ownerId: gid,
+            namespace: e.node.namespace,
+            key: e.node.key,
+          }));
+
+          const delResponse = await admin.graphql(METAFIELDS_DELETE_MUTATION, {
+            variables: { metafields },
+          });
+          const delJson = await delResponse.json();
+          await handleRateLimit(delJson);
+
+          const userErrors = delJson?.data?.metafieldsDelete?.userErrors;
+          if (userErrors?.length > 0) {
+            errors.push(
+              `Metafields (${ns}) for ${gid}: ${userErrors[0].message}`,
+            );
+          } else {
+            removed += edges.length;
+          }
         }
       }
       processed++;
     } catch (err) {
       errors.push(
-        `Product ${product.shopify_product_id}: ${err instanceof Error ? err.message : String(err)}`,
+        `Product ${gid}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -282,9 +322,13 @@ export async function removeAllCollections(
       const collections = json?.data?.collections?.edges ?? [];
       for (const edge of collections) {
         const title: string = edge.node.title ?? "";
-        // Only delete collections that match our naming pattern: "X Parts" or "X Y Parts"
-        // and contain a tag rule with _autosync_ prefix
-        if (title.endsWith(" Parts") && !collectionIdsToDelete.has(edge.node.id)) {
+        // Only delete collections that are ours: title ends in " Parts" AND has _autosync_ tag rule
+        const rules = edge.node.rules ?? edge.node.ruleSet?.rules ?? [];
+        const hasAutoSyncRule = Array.isArray(rules) && rules.some(
+          (r: { column?: string; condition?: string }) =>
+            r.column === "TAG" && r.condition?.includes("_autosync_")
+        );
+        if (title.endsWith(" Parts") && hasAutoSyncRule && !collectionIdsToDelete.has(edge.node.id)) {
           collectionIdsToDelete.add(edge.node.id);
         }
       }
@@ -305,8 +349,8 @@ export async function removeAllCollections(
       for (const edge of collections) {
         collectionIdsToDelete.add(edge.node.id);
       }
-    } catch {
-      // This strategy is optional — continue regardless
+    } catch (_e) {
+      console.warn("[cleanup] optional collection scan strategy failed");
     }
 
     if (collectionIdsToDelete.size === 0) {

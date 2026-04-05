@@ -65,6 +65,7 @@ export async function fetchFromFtp(
 
   const client = new FtpClient();
   client.ftp.verbose = false;
+  client.ftp.timeout = 30_000; // 30 second timeout for all operations
 
   try {
     const port = config.port || 21;
@@ -77,10 +78,17 @@ export async function fetchFromFtp(
       secure: config.protocol === "ftps" || port === 990,
     });
 
-    // Download file into memory buffer
+    // Download file into memory buffer (with size limit)
+    const MAX_FTP_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     const chunks: Buffer[] = [];
+    let totalSize = 0;
     const writable = new Writable({
       write(chunk, _encoding, callback) {
+        totalSize += chunk.length;
+        if (totalSize > MAX_FTP_FILE_SIZE) {
+          callback(new Error(`File exceeds ${MAX_FTP_FILE_SIZE / 1024 / 1024}MB limit`));
+          return;
+        }
         chunks.push(Buffer.from(chunk));
         callback();
       },

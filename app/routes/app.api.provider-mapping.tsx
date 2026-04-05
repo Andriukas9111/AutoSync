@@ -40,7 +40,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     );
   }
 
-  const mappings = await loadSavedMappings(providerId);
+  const mappings = await loadSavedMappings(providerId, shopId);
 
   return data({ mappings });
 }

@@ -5,13 +5,22 @@
 {% endcomment %}
 
 {% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign ymme_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.ymme == true
+      assign ymme_allowed = true
+    endif
+  endif
   assign container_class = 'autosync-ymme-search'
   assign layout_class = 'autosync-ymme--' | append: block.settings.layout
   assign style_class = 'autosync-ymme--style-' | append: block.settings.style
   assign width_class = 'autosync-ymme--width-' | append: block.settings.container_width
   assign align_class = 'autosync-ymme--align-' | append: block.settings.alignment
 %}
-
+{% if ymme_allowed == false %}
+<!-- widget not available on current plan -->
+{% else %}
 <div
   class="{{ container_class }} {{ layout_class }} {{ style_class }} {{ width_class }} {{ align_class }}"
   data-autosync-ymme
@@ -26,6 +35,8 @@
     --autosync-text: {{ block.settings.text_color }};
     --autosync-border-radius: {{ block.settings.border_radius }}px;
     --autosync-border: {{ block.settings.border_color | default: '#e3e3e3' }};
+    --autosync-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --autosync-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
     --autosync-shadow: 0 1px 3px rgba(0,0,0,0.08);
     --autosync-radius: {{ block.settings.border_radius }}px;
     --autosync-container-padding: {{ block.settings.container_padding }}px;
@@ -145,162 +156,177 @@
     </div>
     <div data-autosync-garage style="display:none;"></div>
   {% endif %}
-  <div class="autosync-widget-footer">
-    <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
-    <span>Powered by <strong>AutoSync</strong></span>
-  </div>
+  {% unless shop.metafields['$app:autosync']['hide_watermark'].value == true %}
+    <div class="autosync-widget-footer">
+      <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
+      <span>Powered by <strong>AutoSync</strong></span>
+    </div>
+  {% endunless %}
 </div>
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
 
 {% schema %}
 {
-  "name": "YMME Vehicle Search",
-  "target": "section",
-  "settings": [
-    {
-      "type": "text",
-      "id": "heading",
-      "label": "Heading",
-      "default": "Find Parts for Your Vehicle"
-    },
-    {
-      "type": "text",
-      "id": "subheading",
-      "label": "Subheading"
-    },
-    {
-      "type": "text",
-      "id": "button_text",
-      "label": "Button Text",
-      "default": "Find Parts"
-    },
-    {
-      "type": "select",
-      "id": "layout",
-      "label": "Layout",
-      "options": [
-        { "value": "horizontal", "label": "Horizontal" },
-        { "value": "vertical", "label": "Vertical" }
-      ],
-      "default": "horizontal"
-    },
-    {
-      "type": "select",
-      "id": "style",
-      "label": "Visual Style",
-      "options": [
-        { "value": "default", "label": "Default" },
-        { "value": "minimal", "label": "Minimal" },
-        { "value": "card", "label": "Card" }
-      ],
-      "default": "default"
-    },
-    {
-      "type": "select",
-      "id": "container_width",
-      "label": "Container Width",
-      "options": [
-        { "value": "full", "label": "Full Width" },
-        { "value": "contained", "label": "Contained (1200px)" },
-        { "value": "narrow", "label": "Narrow (800px)" }
-      ],
-      "default": "contained"
-    },
-    {
-      "type": "range",
-      "id": "container_padding",
-      "label": "Container Padding",
-      "min": 0,
-      "max": 60,
-      "step": 4,
-      "default": 20,
-      "unit": "px"
-    },
-    {
-      "type": "select",
-      "id": "alignment",
-      "label": "Horizontal Alignment",
-      "options": [
-        { "value": "left", "label": "Left" },
-        { "value": "center", "label": "Center" },
-        { "value": "right", "label": "Right" }
-      ],
-      "default": "center"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_engine",
-      "label": "Show Engine Dropdown",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_garage",
-      "label": "Show My Garage",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "show_logos",
-      "label": "Show Brand Logos",
-      "default": true
-    },
-    {
-      "type": "color",
-      "id": "primary_color",
-      "label": "Primary Color",
-      "default": "#005bd2"
-    },
-    {
-      "type": "color",
-      "id": "background_color",
-      "label": "Background Color",
-      "default": "#ffffff"
-    },
-    {
-      "type": "color",
-      "id": "text_color",
-      "label": "Text Color",
-      "default": "#1a1a1a"
-    },
-    {
-      "type": "color",
-      "id": "border_color",
-      "label": "Border Color",
-      "default": "#e3e3e3"
-    },
-    {
-      "type": "range",
-      "id": "border_radius",
-      "label": "Border Radius",
-      "min": 0,
-      "max": 16,
-      "step": 2,
-      "default": 8,
-      "unit": "px"
-    },
-    {
-      "type": "range",
-      "id": "padding_top",
-      "label": "Top Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    },
-    {
-      "type": "range",
-      "id": "padding_bottom",
-      "label": "Bottom Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    }
-  ]
+"name": "YMME Vehicle Search",
+"target": "section",
+"settings": [
+{
+"type": "text",
+"id": "heading",
+"label": "Heading",
+"default": "Find Parts for Your Vehicle"
+},
+{
+"type": "text",
+"id": "subheading",
+"label": "Subheading"
+},
+{
+"type": "text",
+"id": "button_text",
+"label": "Button Text",
+"default": "Find Parts"
+},
+{
+"type": "select",
+"id": "layout",
+"label": "Layout",
+"options": [
+{ "value": "horizontal", "label": "Horizontal" },
+{ "value": "vertical", "label": "Vertical" }
+],
+"default": "horizontal"
+},
+{
+"type": "select",
+"id": "style",
+"label": "Visual Style",
+"options": [
+{ "value": "default", "label": "Default" },
+{ "value": "minimal", "label": "Minimal" },
+{ "value": "card", "label": "Card" }
+],
+"default": "default"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "contained", "label": "Contained (1200px)" },
+{ "value": "narrow", "label": "Narrow (800px)" }
+],
+"default": "contained"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 20,
+"unit": "px"
+},
+{
+"type": "select",
+"id": "alignment",
+"label": "Horizontal Alignment",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" },
+{ "value": "right", "label": "Right" }
+],
+"default": "center"
+},
+{
+"type": "checkbox",
+"id": "show_engine",
+"label": "Show Engine Dropdown",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_garage",
+"label": "Show My Garage",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_logos",
+"label": "Show Brand Logos",
+"default": true
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a1a"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e3e3e3"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Dropdown Background",
+"default": "#ffffff"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 16,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+}
+]
 }
 {% endschema %}

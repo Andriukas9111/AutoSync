@@ -34,3 +34,12 @@ pnpm-lock.yaml
 
 .vercel
 *.log
+
+# Log files
+*.log
+
+# Local scripts with credentials
+scripts/*.cjs
+.serena/
+
+.env*.local

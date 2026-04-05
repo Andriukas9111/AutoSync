@@ -5,7 +5,7 @@ import db from "../lib/db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop} product ${payload?.id}`);
+  console.log(`[webhook] ${topic} product ${payload?.id}`);
 
   switch (topic) {
     case "PRODUCTS_CREATE":
@@ -33,7 +33,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             tags: payload.tags ? (payload.tags as string).split(", ") : [],
             updated_at: new Date().toISOString(),
           })
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .eq("shop_id", shop);
       }
       break;
     }
@@ -45,6 +46,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .delete()
         .eq("shop_id", shop)
         .eq("shopify_product_id", payload.id);
+      // Recalculate tenant product count after delete
+      try {
+        const { count } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shop);
+        await db.from("tenants").update({ product_count: count ?? 0 }).eq("shop_id", shop);
+      } catch (_e) { console.warn("[webhook:products] product_count recount failed"); }
       break;
     }
   }

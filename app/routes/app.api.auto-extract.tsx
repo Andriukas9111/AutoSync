@@ -14,8 +14,8 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { assertFeature, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
+import { assertFeature, assertFitmentLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 import {
   buildVehicleProfile,
   buildSearchPatterns,
@@ -44,13 +44,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .limit(1)
     .maybeSingle();
 
-  // Get live counts
+  // Get live counts — exclude staged products (they're in provider view, not extraction queue)
   const [totalRes, unmappedRes, autoRes, smartRes, flaggedRes] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
   ]);
 
   return data({
@@ -84,9 +84,93 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
+  // ── RE-EXTRACT: Reset flagged/no_match products and re-run extraction ──
+  if (actionType === "re-extract") {
+    // Check for already-running job
+    const { data: running } = await db
+      .from("sync_jobs")
+      .select("id, status")
+      .eq("shop_id", shopId)
+      .eq("type", "extract")
+      .in("status", ["pending", "running"])
+      .limit(1)
+      .maybeSingle();
+
+    if (running) {
+      return data({ error: "An extraction job is already running", jobId: running.id }, { status: 409 });
+    }
+
+    // Which statuses to re-extract? Default: flagged + no_match
+    const includeStatuses = (formData.get("statuses") as string || "flagged,no_match").split(",");
+
+    // Reset products back to unmapped so the extraction pipeline picks them up
+    let totalReset = 0;
+    for (const status of includeStatuses) {
+      const trimmed = status.trim();
+      if (!["flagged", "no_match"].includes(trimmed)) continue;
+
+      // Also delete existing fitments for flagged products that will be re-extracted
+      // (auto_mapped products are not re-extracted — they already have good fitments)
+      if (trimmed === "flagged") {
+        const { data: flaggedProducts } = await db
+          .from("products")
+          .select("id")
+          .eq("shop_id", shopId)
+          .neq("status", "staged")
+          .eq("fitment_status", "flagged")
+          .limit(10000);
+        if (flaggedProducts && flaggedProducts.length > 0) {
+          const ids = flaggedProducts.map((p: { id: string }) => p.id);
+          // Delete old fitments — batch .in() to handle >500 IDs
+          for (let i = 0; i < ids.length; i += 500) {
+            const batch = ids.slice(i, i + 500);
+            await db.from("vehicle_fitments").delete().eq("shop_id", shopId).in("product_id", batch);
+          }
+        }
+      }
+
+      const { count } = await db
+        .from("products")
+        .update({ fitment_status: "unmapped", updated_at: new Date().toISOString() })
+        .eq("shop_id", shopId)
+        .neq("status", "staged")
+        .eq("fitment_status", trimmed)
+        .select("id", { count: "exact", head: true });
+
+      totalReset += count ?? 0;
+    }
+
+    if (totalReset === 0) {
+      return data({ error: "No products found to re-extract" });
+    }
+
+    // Create extraction job
+    const { data: job, error: jobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "extract",
+        status: "running",
+        processed_items: 0,
+        total_items: totalReset,
+        started_at: new Date().toISOString(),
+      })
+      .select("id, total_items")
+      .maybeSingle();
+
+    if (jobError || !job) {
+      return data({ error: "Failed to create re-extraction job" }, { status: 500 });
+    }
+
+    // Fire-and-forget: invoke Edge Function
+    triggerEdgeFunction(job.id, shopId);
+
+    return data({ started: true, jobId: job.id, totalReset, totalItems: job.total_items });
+  }
+
   // ── START: Create a new job ───────────────────────────────────
   if (actionType === "start") {
-    // Check for already-running job
+    // Check for already-running job (TOCTOU: narrow race window with immediate insert)
     const { data: running } = await db
       .from("sync_jobs")
       .select("id, status")
@@ -104,6 +188,7 @@ export async function action({ request }: ActionFunctionArgs) {
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
 
     const { data: job, error: jobError } = await db
@@ -117,11 +202,29 @@ export async function action({ request }: ActionFunctionArgs) {
         started_at: new Date().toISOString(),
       })
       .select("id, total_items")
-      .single();
+      .maybeSingle();
 
     if (jobError || !job) {
       return data({ error: "Failed to create job" }, { status: 500 });
     }
+
+    // Post-insert duplicate guard: if another job was created concurrently,
+    // keep the OLDEST (lowest id) and cancel ours if we lost the race
+    const { data: activeJobs } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("type", "extract")
+      .in("status", ["pending", "running"])
+      .order("id", { ascending: true })
+      .limit(2);
+    if (activeJobs && activeJobs.length > 1 && activeJobs[0].id !== job.id) {
+      await db.from("sync_jobs").delete().eq("id", job.id);
+      return data({ error: "An extraction job is already running" }, { status: 409 });
+    }
+
+    // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+    triggerEdgeFunction(job.id, shopId);
 
     return data({ started: true, jobId: job.id, totalItems: job.total_items });
   }
@@ -147,10 +250,15 @@ export async function action({ request }: ActionFunctionArgs) {
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
+        .neq("status", "staged")
         .eq("fitment_status", "unmapped");
 
+      // Get processed count directly from the job record
+      const { data: jobData } = await db.from("sync_jobs").select("processed_items").eq("id", jobId).maybeSingle();
+      const processedCount = jobData?.processed_items ?? 0;
+
       await db.from("sync_jobs")
-        .update({ status: "running", total_items: (remaining ?? 0) + (await getProcessedCount(jobId)) })
+        .update({ status: "running", total_items: (remaining ?? 0) + processedCount })
         .eq("id", jobId)
         .eq("shop_id", shopId);
     }
@@ -174,11 +282,12 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ done: true, reason: job?.status || "not_found" });
     }
 
-    // Get next chunk of unmapped products
+    // Get next chunk of unmapped products (exclude staged — they're in provider view)
     const { data: products } = await db
       .from("products")
-      .select("id, title, description, handle, tags, product_type, vendor, sku")
+      .select("id, title, description, handle, tags, product_type, vendor, sku, raw_data")
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped")
       .order("id")
       .limit(CHUNK_SIZE);
@@ -215,7 +324,7 @@ export async function action({ request }: ActionFunctionArgs) {
           .range(modelOffset, modelOffset + 999);
         if (!modelBatch || modelBatch.length === 0) break;
         for (const m of modelBatch) {
-          const makeId = (m as any).make_id as string;
+          const makeId = (m as { make_id: string }).make_id;
           if (!preloadedModels.has(makeId)) preloadedModels.set(makeId, []);
           preloadedModels.get(makeId)!.push({ id: m.id, name: m.name });
         }
@@ -255,14 +364,35 @@ export async function action({ request }: ActionFunctionArgs) {
 
     for (const product of products) {
       try {
-        const allText = [
+        // Build combined text from ALL product fields including provider raw_data
+        const textParts = [
           product.title ?? "",
           product.description ?? "",
           product.sku ?? "",
           product.vendor ?? "",
           product.product_type ?? "",
           Array.isArray(product.tags) ? product.tags.join(" ") : (product.tags ?? ""),
-        ].join(" ");
+        ];
+
+        // Extract vehicle-relevant data from provider raw_data (tags_BMW, tags_VW, fitment_data, etc.)
+        const rawData = product.raw_data as Record<string, unknown> | null;
+        if (rawData && typeof rawData === "object") {
+          for (const [key, val] of Object.entries(rawData)) {
+            if (typeof val !== "string" || !val) continue;
+            const kl = key.toLowerCase();
+            // Include fields that likely contain vehicle/fitment data
+            if (kl.startsWith("tags_") || kl.startsWith("tag_") ||
+                kl.includes("fitment") || kl.includes("vehicle") ||
+                kl.includes("make") || kl.includes("model") ||
+                kl.includes("year") || kl.includes("engine") ||
+                kl.includes("application") || kl.includes("compatibility") ||
+                kl.includes("car") || kl.includes("auto")) {
+              textParts.push(val);
+            }
+          }
+        }
+
+        const allText = textParts.join(" ");
 
         const profile = buildVehicleProfile(allText, knownMakes);
         const allMakes = [...profile.makeGroup, ...profile.directMakes];
@@ -390,13 +520,18 @@ export async function action({ request }: ActionFunctionArgs) {
         const best = unique[0];
         const confidence = best?.confidence ?? 0;
 
-        // Route by confidence
-        // Only auto-map Strong Match engines that match the detected model
-        // Medium/Good matches from other models are flagged for manual review
-        if (confidence >= 0.8 && unique.length > 0) {
-          const detectedModel = profile.model || profile.chassisCode;
+        // Route by confidence — lowered threshold from 0.8 to 0.65
+        // Products with a strong model name match AND good score should auto-map,
+        // not sit in the flagged queue where a human has to approve them.
+        // The model name filter below ensures we only auto-map engines from the
+        // correct model, so false positives are still prevented.
+        const AUTO_MAP_THRESHOLD = 0.65;
+        const FLAG_THRESHOLD = 0.40;
+
+        if (confidence >= AUTO_MAP_THRESHOLD && unique.length > 0) {
+          const detectedModel = profile.modelNames[0] || profile.chassisCodes[0] || null;
           const top = unique.filter((s) => {
-            if (s.confidence < 0.7) return false;
+            if (s.confidence < 0.55) return false;
             // If we detected a specific model, only auto-map engines from that model
             if (detectedModel && s.model?.name) {
               const modelUpper = s.model.name.toUpperCase();
@@ -408,19 +543,56 @@ export async function action({ request }: ActionFunctionArgs) {
             }
             return true;
           }).slice(0, 5);
-          const inserts = top.map((s) => ({
-            product_id: product.id, shop_id: shopId,
-            make: s.make.name, model: s.model?.name ?? null,
-            variant: s.engine?.name ?? null,
-            year_from: s.yearFrom, year_to: s.yearTo,
-            engine: s.engine?.displayName ?? null,
-            engine_code: s.engine?.code ?? null,
-            fuel_type: s.engine?.fuelType ?? null,
-            ymme_make_id: s.make.id, ymme_model_id: s.model?.id ?? null,
-            ymme_engine_id: s.engine?.id ?? null,
-            extraction_method: "smart", confidence_score: s.confidence,
-            source_text: product.title ?? "",
-          }));
+          // CRITICAL: Only create fitments that have complete engine data (make+model+engine IDs)
+          // Fitments without engine IDs break vehicle pages and provide no value.
+          let inserts = top
+            .filter((s) => s.engine?.id && s.model?.id && s.make.id) // Guard: NEVER insert without IDs
+            .map((s) => ({
+              product_id: product.id, shop_id: shopId,
+              make: s.make.name, model: s.model?.name ?? null,
+              variant: s.engine?.name ?? null,
+              year_from: s.yearFrom, year_to: s.yearTo,
+              engine: s.engine?.displayName ? s.engine.displayName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : null,
+              engine_code: s.engine?.code ?? null,
+              fuel_type: s.engine?.fuelType ?? null,
+              ymme_make_id: s.make.id, ymme_model_id: s.model!.id,
+              ymme_engine_id: s.engine!.id,
+              extraction_method: "smart", confidence_score: s.confidence,
+              source_text: product.title ?? "",
+            }));
+
+          // Deduplicate: skip fitments that already exist for this product+engine
+          const existingIds = inserts.filter(i => i.ymme_engine_id).map(i => i.ymme_engine_id);
+          if (existingIds.length > 0) {
+            const { data: existing } = await db.from("vehicle_fitments")
+              .select("ymme_engine_id")
+              .eq("product_id", product.id)
+              .eq("shop_id", shopId)
+              .in("ymme_engine_id", existingIds as string[]);
+            const existingSet = new Set((existing ?? []).map(e => e.ymme_engine_id));
+            inserts = inserts.filter(i => !i.ymme_engine_id || !existingSet.has(i.ymme_engine_id));
+          }
+
+          if (inserts.length === 0) {
+            // All fitments already exist — mark as auto_mapped without inserting duplicates
+            await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkAutoMapped++;
+            continue;
+          }
+
+          // Enforce fitment limit before inserting
+          try {
+            await assertFitmentLimit(shopId);
+          } catch (limitErr) {
+            if (limitErr instanceof BillingGateError) {
+              // Plan limit reached — flag remaining products instead of inserting
+              await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkFlagged++;
+              continue;
+            }
+            throw limitErr;
+          }
+
           const { error: fitErr } = await db.from("vehicle_fitments").insert(inserts);
           if (!fitErr) {
             chunkFitments += inserts.length;
@@ -430,12 +602,14 @@ export async function action({ request }: ActionFunctionArgs) {
             await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
             chunkFlagged++;
           }
-        } else if (confidence >= 0.5) {
+        } else if (confidence >= FLAG_THRESHOLD) {
+          // Medium confidence — flag for manual review
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
         } else {
-          // Leave as unmapped but mark as scanned so we don't reprocess
-          await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+          // Low/no confidence — mark as "no_match" to prevent infinite reprocessing
+          // Products can be manually re-scanned later if needed
+          await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
         }
       } catch (err) {
@@ -458,11 +632,12 @@ export async function action({ request }: ActionFunctionArgs) {
       await db.from("tenants").update({ fitment_count: (tenant?.fitment_count ?? 0) + chunkFitments }).eq("shop_id", shopId);
     }
 
-    // Check if more products remain
+    // Check if more products remain (exclude staged)
     const { count: remaining } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
 
     return data({

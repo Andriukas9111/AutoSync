@@ -3,7 +3,7 @@
  */
 
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, Outlet, useLocation } from "react-router";
 import {
   Page,
   Card,
@@ -17,8 +17,13 @@ import {
   Pagination,
 } from "@shopify/polaris";
 
+import { ClockIcon } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
+
 import { authenticate } from "../shopify.server";
+import { formatDate } from "../lib/design";
 import db from "../lib/db.server";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,17 +94,12 @@ export default function ProviderImportHistory() {
   const { provider, imports, totalImports, totalPages, currentPage } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  // If on a child route (import detail), render the child
+  const isChildRoute = /\/imports\/[a-f0-9-]+/.test(location.pathname);
+  if (isChildRoute) {
+    return <Outlet />;
   }
 
   function formatDuration(start: string | null, end: string | null): string {
@@ -125,6 +125,10 @@ export default function ProviderImportHistory() {
       }}
     >
       <BlockStack gap="400">
+        <InlineStack gap="200" blockAlign="center">
+          <IconBadge icon={ClockIcon} color="var(--p-color-icon-emphasis)" />
+          <Text as="h2" variant="headingMd">{`Import History (${totalImports})`}</Text>
+        </InlineStack>
         {imports.length === 0 ? (
           <Card>
             <EmptyState
@@ -262,4 +266,9 @@ export default function ProviderImportHistory() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Import History" />;
 }

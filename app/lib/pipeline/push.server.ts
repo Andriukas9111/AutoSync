@@ -175,18 +175,28 @@ export async function pushToShopify(
     .eq("id", jobId);
 
   try {
-    // 1. Query all products that have fitments for this shop
-    const { data: products, error: productsError } = await db
-      .from("products")
-      .select("id, shopify_product_id")
-      .eq("shop_id", shopId)
-      .not("fitment_status", "eq", "unmapped");
-
-    if (productsError) {
-      throw new Error(`Failed to query products: ${productsError.message}`);
+    // 1. Query all products that have fitments for this shop (paginated to avoid 1000-row limit)
+    const products: any[] = [];
+    let pOffset = 0;
+    while (true) {
+      const { data: batch, error: batchErr } = await db
+        .from("products")
+        .select("id, shopify_product_id")
+        .eq("shop_id", shopId)
+        .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"])
+        .not("shopify_product_id", "is", null)  // Skip products without Shopify ID (avoids gid://shopify/Product/null)
+        .order("id", { ascending: true })
+        .range(pOffset, pOffset + 999);
+      if (batchErr) {
+        throw new Error(`Failed to query products: ${batchErr.message}`);
+      }
+      if (!batch || batch.length === 0) break;
+      products.push(...batch);
+      pOffset += batch.length;
+      if (batch.length < 1000) break;
     }
 
-    if (!products || products.length === 0) {
+    if (products.length === 0) {
       await db
         .from("sync_jobs")
         .update({
@@ -370,9 +380,9 @@ export async function pushToShopify(
           const newMakes = ymmeMakes.filter((m: any) => !existingIds.has(m.id));
           if (newMakes.length > 0) {
             await db.from("tenant_active_makes").insert(
-              newMakes.map((m: any) => ({ shop_id: shopId, ymme_make_id: m.id }))
+              newMakes.map((m: { id: string; name: string }) => ({ shop_id: shopId, ymme_make_id: m.id }))
             );
-            console.log(`[push] Auto-activated ${newMakes.length} makes: ${newMakes.map((m: any) => m.name).join(", ")}`);
+            // Auto-activated makes logged via debug
           }
         }
       }

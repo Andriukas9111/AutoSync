@@ -11,13 +11,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface AppStats {
   // Product counts
   total: number;
-  unmapped: number;
+  unmapped: number; // Includes unmapped + flagged + no_match (all needing review)
   autoMapped: number;
   smartMapped: number;
   manualMapped: number;
   flagged: number;
+  noMatch: number;
   // Fitment & collections
   fitments: number;
+  wheelFitments: number;
+  wheelProducts: number;
   collections: number;
   // Vehicle pages
   vehiclePages: number;
@@ -60,8 +63,8 @@ export interface AppData {
 }
 
 const DEFAULT_STATS: AppStats = {
-  total: 0, unmapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0,
-  fitments: 0, collections: 0,
+  total: 0, unmapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0, noMatch: 0,
+  fitments: 0, wheelFitments: 0, wheelProducts: 0, collections: 0,
   vehiclePages: 0, vehiclePagesSynced: 0, vehiclePagesPending: 0, vehiclePagesFailed: 0,
   providers: 0,
   pushedProducts: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,
@@ -102,23 +105,21 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
   }, []);
 
   useEffect(() => {
-    poll(); // Initial poll
+    // Defer initial poll to avoid React hydration mismatch (#418)
+    // The first render uses loaderStats from the server; polling starts after hydration
+    const initialTimer = setTimeout(poll, 100);
 
-    // Use slower polling interval — Realtime handles instant updates
-    // Polling is just a safety net in case WebSocket disconnects
-    const safeInterval = activeJobs.length > 0 ? pollInterval : pollInterval * 3;
+    // Active jobs: poll at normal interval (5s) for live progress
+    // Idle: poll much slower (30s) — just a safety net for stale data
+    // At 1000 tenants idle, this reduces polling from ~67/sec to ~33/sec
+    const safeInterval = activeJobs.length > 0 ? pollInterval : pollInterval * 6;
     intervalRef.current = setInterval(poll, safeInterval);
 
     return () => {
+      clearTimeout(initialTimer);
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [poll, pollInterval, activeJobs.length]);
-
-  // Computed values
-  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  const needsReview = stats.unmapped + stats.flagged;
-  const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
-  const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
   return {
     stats: {
@@ -136,9 +137,14 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
  */
 export function computeFromStats(stats: AppStats) {
   const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  const needsReview = stats.unmapped + stats.flagged;
+  // "Needs Review" = only FLAGGED products (extraction found partial matches that need human decision)
+  // NOT no_match (those have zero vehicle data — reviewing won't help)
+  // NOT unmapped (those haven't been processed yet — run extraction first)
+  const needsReview = stats.flagged;
+  // "Not Mapped" = everything that doesn't have fitments yet
+  const notMapped = stats.total - mapped;
   const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
   const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
-  return { mapped, needsReview, coverage, pendingPush };
+  return { mapped, needsReview, notMapped, coverage, pendingPush };
 }

@@ -78,9 +78,14 @@ export async function lookupVehicleByReg(
       throw new VesError(429, "DVLA rate limit exceeded. Try again later.", "RATE_LIMITED");
     }
 
+    // Return user-friendly messages instead of raw API error JSON
+    if (response.status === 400) {
+      throw new VesError(400, "Invalid registration number. Please enter a valid UK vehicle registration (e.g. AB12 CDE).", "INVALID_REG");
+    }
+
     throw new VesError(
       response.status,
-      `DVLA API error (${response.status}): ${errorText}`,
+      "Unable to look up this registration. Please check the number and try again.",
       "API_ERROR",
     );
   }

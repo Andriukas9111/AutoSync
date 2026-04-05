@@ -111,8 +111,9 @@ function calculatePrice(
       break;
     case "margin":
       // Margin: selling price where profit = margin% of selling price
-      // price = cost / (1 - margin/100)
-      newPrice = basePrice / (1 - rule.value / 100);
+      // price = cost / (1 - margin/100). Clamp to 0-99 to prevent Infinity/NaN.
+      { const clampedMargin = Math.min(99, Math.max(0, rule.value));
+        newPrice = basePrice / (1 - clampedMargin / 100); }
       break;
     case "fixed":
       // Fixed: add a fixed amount
@@ -208,7 +209,7 @@ export async function createPricingRule(
     .from("pricing_rules")
     .insert({ ...rule, shop_id: shopId })
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`Failed to create pricing rule: ${error.message}`);
   return data as PricingRule;
@@ -226,7 +227,7 @@ export async function updatePricingRule(
     .eq("id", ruleId)
     .eq("shop_id", shopId)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`Failed to update pricing rule: ${error.message}`);
   return data as PricingRule;
@@ -251,20 +252,30 @@ export async function previewPriceChanges(shopId: string): Promise<PricingPrevie
     return { changes: [], total_affected: 0, avg_markup_percent: 0, total_revenue_change: 0 };
   }
 
-  // Get all products
-  const { data: products, error } = await db
-    .from("products")
-    .select("id, title, price, compare_at_price, vendor, product_type, provider_id, tags, sku")
-    .eq("shop_id", shopId);
+  // Get all products in batches (Supabase default limit is 1000)
+  const allProducts: ProductRow[] = [];
+  let previewOffset = 0;
+  const previewBatchSize = 500;
+  while (true) {
+    const { data: batch, error } = await db
+      .from("products")
+      .select("id, title, price, compare_at_price, vendor, product_type, provider_id, tags, sku")
+      .eq("shop_id", shopId)
+      .range(previewOffset, previewOffset + previewBatchSize - 1);
 
-  if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+    if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+    if (!batch || batch.length === 0) break;
+    allProducts.push(...(batch as ProductRow[]));
+    if (batch.length < previewBatchSize) break;
+    previewOffset += previewBatchSize;
+  }
 
   const changes: PriceChange[] = [];
   let totalRevenueChange = 0;
   let totalMarkupPercent = 0;
   let markupCount = 0;
 
-  for (const product of (products ?? []) as ProductRow[]) {
+  for (const product of allProducts) {
     const basePrice = parseFloat(product.price ?? "0");
     if (!basePrice || basePrice <= 0) continue;
 

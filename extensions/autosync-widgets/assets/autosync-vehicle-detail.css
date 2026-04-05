@@ -1,6 +1,6 @@
   /* ── Base Reset ── */
   .avsd-root {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: inherit;
     color: var(--avsd-text);
     background: var(--avsd-bg);
     margin: 0 auto;

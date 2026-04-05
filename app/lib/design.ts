@@ -326,3 +326,215 @@ export function getJobCompletionMessage(ctx: JobContext): string {
     default: return `${processed.toLocaleString()} items processed`;
   }
 }
+
+// ─── Banner Dismiss Persistence (sessionStorage) ────────────────────
+// Banners dismissed within a browser session stay dismissed.
+// Banners reappear in a new session (next day, new tab).
+
+/** Check if a banner was dismissed (persists across sessions via localStorage) */
+export function isBannerDismissed(key: string): boolean {
+  try { return localStorage.getItem(`autosync_banner_${key}`) === "1"; } catch { return false; }
+}
+
+/** Mark a banner as dismissed (persists until explicitly cleared) */
+export function dismissBanner(key: string): void {
+  try { localStorage.setItem(`autosync_banner_${key}`, "1"); } catch { /* SSR-safe */ }
+}
+
+/** Clear a dismissed banner (e.g., when a new job completes) */
+export function clearBannerDismissal(key: string): void {
+  try { localStorage.removeItem(`autosync_banner_${key}`); } catch { /* SSR-safe */ }
+}
+
+/** CSS grid that forces all children (Cards) to stretch to equal height */
+export const equalHeightGridStyle = (cols: number, gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+  gap,
+  alignItems: "stretch",
+});
+
+// ── Plan Gate Data ───────────────────────────────────────────────────────────
+
+/** Plan pricing for display in the gate component */
+export const PLAN_PRICING: Record<string, string> = {
+  free: "$0/mo",
+  starter: "$19/mo",
+  growth: "$49/mo",
+  professional: "$99/mo",
+  business: "$179/mo",
+  enterprise: "$299/mo",
+  custom: "From $299/mo",
+};
+
+/** Key highlights for each plan tier (used in PlanGate upgrade prompt) */
+/** Format a date string for display (e.g., "26 Mar, 23:15") */
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "\u2014";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ─── Selectable Card (clickable option card with selected/disabled states) ──
+// Used in: Provider type selection, plan selection, any card-based picker
+export const selectableCardStyle = (selected: boolean, disabled = false): CSSProperties => ({
+  cursor: disabled ? "not-allowed" : "pointer",
+  borderRadius: "var(--p-border-radius-300)",
+  border: selected
+    ? "2px solid var(--p-color-border-emphasis)"
+    : "1px solid var(--p-color-border)",
+  padding: "var(--p-space-400)",
+  background: selected
+    ? "var(--p-color-bg-surface-secondary)"
+    : "var(--p-color-bg-surface)",
+  opacity: disabled ? 0.6 : 1,
+  transition: "box-shadow 120ms ease, border-color 120ms ease",
+  position: "relative" as const,
+});
+
+// ─── Format Badge (small pill for file formats) ─────────────────────────────
+export const formatBadgeStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "2px 8px",
+  borderRadius: "var(--p-border-radius-100)",
+  background: "var(--p-color-bg-surface-secondary)",
+  fontSize: "11px",
+  fontWeight: 500,
+  color: "var(--p-color-text-secondary)",
+  lineHeight: "18px",
+};
+
+// ─── Auto-fit Grid (responsive grid that wraps naturally) ──────────────────
+export const autoFitGridStyle = (minWidth = "250px", gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}, 1fr))`,
+  gap,
+});
+
+// ─── FTP File Card ─────────────────────────────────────────────────────────
+export const ftpFileCardStyle = (selected: boolean): CSSProperties => ({
+  padding: "10px 14px",
+  borderRadius: "var(--p-border-radius-200)",
+  border: selected
+    ? "2px solid var(--p-color-border-emphasis)"
+    : "1px solid var(--p-color-border)",
+  background: selected
+    ? "var(--p-color-bg-surface-secondary)"
+    : "var(--p-color-bg-surface)",
+  cursor: "pointer",
+  transition: "border-color 120ms ease, background 120ms ease",
+});
+
+// ─── Variant Table (product detail page) ───────────────────────────────────
+export const variantTableStyle: CSSProperties = {
+  width: "100%",
+  borderCollapse: "collapse",
+  fontSize: "13px",
+};
+
+export const variantTableHeaderStyle: CSSProperties = {
+  textAlign: "left" as const,
+  padding: "8px 10px",
+  borderBottom: "2px solid var(--p-color-border)",
+  fontWeight: 600,
+  fontSize: "12px",
+  color: "var(--p-color-text-secondary)",
+};
+
+export const variantTableCellStyle: CSSProperties = {
+  padding: "8px 10px",
+  borderBottom: "1px solid var(--p-color-border-secondary)",
+};
+
+export const variantTableRowStyle = (isLast: boolean): CSSProperties => ({
+  borderBottom: isLast ? "none" : undefined,
+});
+
+export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
+  starter: [
+    "Up to 500 products & 2,500 fitments",
+    "Push tags & metafields to Shopify",
+    "YMME search widget & fitment badge",
+  ],
+  growth: [
+    "Up to 5,000 products & 25,000 fitments",
+    "Auto fitment extraction from titles",
+    "Smart collections by make",
+    "Compatibility table widget",
+  ],
+  professional: [
+    "Up to 50,000 products & 250,000 fitments",
+    "API integration & custom vehicles",
+    "My Garage & collections by model",
+    "Competitive pricing engine",
+  ],
+  business: [
+    "Up to 200,000 products & 1M fitments",
+    "FTP import & Wheel Finder widget",
+    "Collection SEO images",
+    "Priority support",
+  ],
+  enterprise: [
+    "Unlimited products & fitments",
+    "DVLA plate lookup & VIN decode",
+    "Full CSS widget customisation",
+    "Vehicle specification pages",
+  ],
+};
+
+// ─── Table Cell Styles (shared across plan comparison, fitment, admin) ──
+// Replaces ~80 hardcoded px values across multiple files
+
+export const tableCellStyle: CSSProperties = {
+  textAlign: "center",
+  padding: "var(--p-space-200) var(--p-space-200)",
+  borderBottom: "1px solid var(--p-color-border-secondary)",
+};
+
+export const tableHeaderCellStyle: CSSProperties = {
+  ...tableCellStyle,
+  fontWeight: 600,
+  fontSize: "13px",
+  background: "var(--p-color-bg-surface-secondary)",
+};
+
+export const tableRowStyle: CSSProperties = {
+  padding: "var(--p-space-200) var(--p-space-300)",
+};
+
+// ─── Pill/Badge Style (feature pills, status indicators) ──────────────
+
+export const featurePillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "4px",
+  padding: "var(--p-space-050) var(--p-space-200)",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  color: "var(--p-color-text-secondary)",
+  fontSize: "12px",
+  fontWeight: 500,
+  lineHeight: "16px",
+  whiteSpace: "nowrap",
+};
+
+// ─── Quick Action Card Style ──────────────────────────────────────────
+
+export const quickActionCardStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--p-space-200)",
+  padding: "var(--p-space-300) var(--p-space-400)",
+  borderRadius: "var(--p-border-radius-300)",
+  border: "var(--p-border-width-025) solid var(--p-color-border)",
+  cursor: "pointer",
+  transition: "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+};
+
+// ─── Comparison Table Highlight ───────────────────────────────────────
+
+export const tableHighlightCellStyle: CSSProperties = {
+  ...tableCellStyle,
+  backgroundColor: "var(--p-color-bg-surface-secondary)",
+};

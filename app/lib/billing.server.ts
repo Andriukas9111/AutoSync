@@ -53,7 +53,6 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: false,
       fitmentBadge: false,
       compatibilityTable: false,
-      floatingBar: false,
       myGarage: false,
       wheelFinder: false,
       plateLookup: false,
@@ -83,7 +82,6 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: false,
-      floatingBar: false,
       myGarage: false,
       wheelFinder: false,
       plateLookup: false,
@@ -98,7 +96,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   growth: {
     products: 5_000,
     fitments: 25_000,
-    providers: 3,
+    providers: 2,
     scheduledFetchesPerDay: 1,
     activeMakes: 30,
     features: {
@@ -113,7 +111,6 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: true,
-      floatingBar: true,
       myGarage: false,
       wheelFinder: false,
       plateLookup: false,
@@ -128,7 +125,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   professional: {
     products: 25_000,
     fitments: 100_000,
-    providers: 5,
+    providers: 3,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
     features: {
@@ -143,7 +140,6 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: true,
-      floatingBar: true,
       myGarage: false,
       wheelFinder: true,
       plateLookup: false,
@@ -158,8 +154,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   business: {
     products: 100_000,
     fitments: 500_000,
-    providers: 15,
-    scheduledFetchesPerDay: 6,
+    providers: 4,
+    scheduledFetchesPerDay: 4,
     activeMakes: 999_999,
     features: {
       pushTags: true,
@@ -173,7 +169,6 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: true,
-      floatingBar: true,
       myGarage: true,
       wheelFinder: true,
       plateLookup: false,
@@ -186,10 +181,10 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   enterprise: {
-    products: Infinity,
-    fitments: Infinity,
-    providers: Infinity,
-    scheduledFetchesPerDay: Infinity,
+    products: 500_000,
+    fitments: 2_000_000,
+    providers: 5,
+    scheduledFetchesPerDay: 12,
     activeMakes: 999_999,
     features: {
       pushTags: true,
@@ -203,7 +198,35 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
       ymmeWidget: true,
       fitmentBadge: true,
       compatibilityTable: true,
-      floatingBar: true,
+      myGarage: true,
+      wheelFinder: true,
+      plateLookup: true,
+      vinDecode: true,
+      pricingEngine: true,
+      vehiclePages: true,
+      widgetCustomisation: "full_css",
+      dashboardAnalytics: "full_export",
+    },
+  },
+
+  custom: {
+    products: 25_000,
+    fitments: 100_000,
+    providers: 5,
+    scheduledFetchesPerDay: 2,
+    activeMakes: 999_999,
+    features: {
+      pushTags: true,
+      pushMetafields: true,
+      autoExtraction: true,
+      bulkOperations: true,
+      smartCollections: "full",
+      collectionSeoImages: true,
+      apiIntegration: true,
+      ftpImport: true,
+      ymmeWidget: true,
+      fitmentBadge: true,
+      compatibilityTable: true,
       myGarage: true,
       wheelFinder: true,
       plateLookup: true,
@@ -226,6 +249,7 @@ const DEFAULT_PLAN_CONFIGS: Record<PlanTier, Omit<PlanConfig, "limits">> = {
   professional: { tier: "professional", name: "Professional", priceMonthly: 99, badge: null, description: "Integrate with external data providers and APIs", isActive: true },
   business: { tier: "business", name: "Business", priceMonthly: 179, badge: "BEST VALUE", description: "Convert visitors with advanced features and analytics", isActive: true },
   enterprise: { tier: "enterprise", name: "Enterprise", priceMonthly: 299, badge: null, description: "The complete automotive platform with every feature", isActive: true },
+  custom: { tier: "custom", name: "Custom", priceMonthly: 299, badge: "FLEXIBLE", description: "Tailored plan with custom limits", isActive: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -419,6 +443,27 @@ export class BillingGateError extends Error {
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Convert Infinity values to a large integer safe for JSON serialization. */
+export function serializeLimits(limits: PlanLimits): PlanLimits & Record<string, unknown> {
+  return {
+    ...limits,
+    products: limits.products === Infinity ? 999_999_999 : limits.products,
+    fitments: limits.fitments === Infinity ? 999_999_999 : limits.fitments,
+    providers: limits.providers === Infinity ? 999_999_999 : limits.providers,
+    scheduledFetchesPerDay: limits.scheduledFetchesPerDay === Infinity ? 999_999_999 : limits.scheduledFetchesPerDay,
+    activeMakes: limits.activeMakes === Infinity ? 999_999_999 : limits.activeMakes,
+  };
+}
+
+/** Return all plan limits serialized (Infinity → 999_999_999) for use in loaders. */
+export function getSerializedPlanLimits(): Record<PlanTier, PlanLimits> {
+  const result = {} as Record<PlanTier, PlanLimits>;
+  for (const tier of PLAN_ORDER) {
+    result[tier] = serializeLimits(getPlanLimits(tier));
+  }
+  return result;
+}
+
 /** Return the full limits object for a given plan tier (cache-aware). */
 export function getPlanLimits(plan: PlanTier): PlanLimits {
   if (_planConfigCache?.limits[plan]) {
@@ -439,16 +484,67 @@ export async function getTenant(shopId: string): Promise<Tenant | null> {
   return data as Tenant;
 }
 
+/**
+ * Get the effective plan tier for a tenant.
+ * If plan_status is "cancelled", the effective plan is "free" —
+ * the tenant keeps their data but loses paid features.
+ */
+export function getEffectivePlan(tenant: Tenant | null): PlanTier {
+  if (!tenant) return "free";
+  // Cancelled subscription → free tier (data preserved, features locked)
+  if (tenant.plan_status === "cancelled" && tenant.plan !== "free") {
+    return "free";
+  }
+  return tenant.plan ?? "free";
+}
+
 /** Throw if the tenant has reached their product limit. */
 export async function assertProductLimit(shopId: string): Promise<void> {
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
 
-  const limits = getPlanLimits(tenant.plan);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
 
-  if (tenant.product_count >= limits.products) {
+  // Use REAL count from products table, not cached tenant.product_count
+  // (cached counter can drift after deletes)
+  const { count } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+
+  if ((count ?? 0) >= limits.products) {
     const next = getNextPlan(tenant.plan);
     throw new BillingGateError("products", tenant.plan, next);
+  }
+}
+
+/** Throw if the tenant has exceeded their plan's fitment limit. */
+export async function assertFitmentLimit(shopId: string): Promise<void> {
+  const tenant = await getTenant(shopId);
+  if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
+
+  // Use REAL count from vehicle_fitments table, not cached tenant.fitment_count
+  const { count } = await db
+    .from("vehicle_fitments")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId);
+
+  if ((count ?? 0) >= limits.fitments) {
+    const next = getNextPlan(tenant.plan);
+    throw new BillingGateError("fitments", tenant.plan, next);
+  }
+}
+
+/** Throw if the tenant has exceeded their plan's provider limit. */
+export async function assertProviderLimit(shopId: string): Promise<void> {
+  const tenant = await getTenant(shopId);
+  if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
+  const { count } = await db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId);
+  if ((count ?? 0) >= limits.providers) {
+    const next = getNextPlan(tenant.plan);
+    throw new BillingGateError("providers", tenant.plan, next);
   }
 }
 
@@ -460,13 +556,14 @@ export async function assertFeature(
   const tenant = await getTenant(shopId);
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
 
-  const limits = getPlanLimits(tenant.plan);
+  const effectivePlan = getEffectivePlan(tenant);
+  const limits = getPlanLimits(effectivePlan);
   const value = limits.features[feature];
 
   // A feature is considered disabled when it is exactly `false` or `"none"`.
   if (value === false || value === "none") {
     const requiredPlan = getMinimumPlanForFeature(feature);
-    throw new BillingGateError(feature, tenant.plan, requiredPlan);
+    throw new BillingGateError(feature, effectivePlan, requiredPlan);
   }
 }
 
@@ -501,6 +598,14 @@ function getPlanPrice(tier: PlanTier): number {
   return DEFAULT_PLAN_CONFIGS[tier].priceMonthly;
 }
 
+/** Get a human-readable price label for a tier (e.g., "$49/mo", "From $299/mo") */
+export function getPlanPriceLabel(tier: PlanTier): string {
+  const price = getPlanPrice(tier);
+  if (price === 0) return "Free";
+  if (tier === "custom") return `From $${price}/mo`;
+  return `$${price}/mo`;
+}
+
 /** Get the display name for a tier (cache-aware) */
 function getPlanName(tier: PlanTier): string {
   if (_planConfigCache?.configs[tier]) {
@@ -531,17 +636,29 @@ export async function createBillingSubscription(
     return { cancelled: true };
   }
 
-  const price = getPlanPrice(newPlan);
+  // Determine if this is a downgrade (lower plan → defer to end of cycle)
+  const tenant = await getTenant(shopId);
+
+  // Use custom price if admin set one for this tenant, otherwise standard plan price
+  const price = (tenant as Record<string, unknown>)?.custom_price != null
+    ? Number((tenant as Record<string, unknown>).custom_price)
+    : getPlanPrice(newPlan);
   const name = `AutoSync ${getPlanName(newPlan)}`;
+  const currentPlanIndex = PLAN_ORDER.indexOf(tenant?.plan ?? "free");
+  const newPlanIndex = PLAN_ORDER.indexOf(newPlan);
+  const isDowngrade = newPlanIndex < currentPlanIndex;
+  // Upgrades apply immediately; downgrades defer to end of billing cycle
+  const replacementBehavior = isDowngrade ? "APPLY_ON_NEXT_BILLING_CYCLE" : "APPLY_IMMEDIATELY";
 
   const response = await admin.graphql(
     `#graphql
-      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
+      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $replacementBehavior: AppSubscriptionReplacementBehavior) {
         appSubscriptionCreate(
           name: $name
           returnUrl: $returnUrl
           lineItems: $lineItems
           test: $test
+          replacementBehavior: $replacementBehavior
         ) {
           appSubscription {
             id
@@ -559,7 +676,15 @@ export async function createBillingSubscription(
       variables: {
         name,
         returnUrl,
-        test: process.env.NODE_ENV !== "production",
+        replacementBehavior,
+        // Billing test mode: explicit env var, fail-fast if accidentally set in production
+        test: (() => {
+          const testMode = process.env.BILLING_TEST_MODE === "true";
+          if (process.env.NODE_ENV === "production" && testMode) {
+            throw new Error("BILLING_TEST_MODE=true is set in production — real charges won't be created. Remove BILLING_TEST_MODE from production env vars.");
+          }
+          return testMode;
+        })(),
         lineItems: [
           {
             plan: {
@@ -643,7 +768,36 @@ async function cancelBillingSubscription(
 export async function confirmBillingSubscription(
   shopId: string,
   chargeId: string,
+  admin: { graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response> },
 ): Promise<{ plan: PlanTier }> {
+  // CRITICAL: Verify the charge with Shopify API before activating
+  // Prevents billing fraud via replay attacks or forged charge_ids
+  if (chargeId) {
+    try {
+      const response = await admin.graphql(`
+        query appSubscription($id: ID!) {
+          node(id: $id) {
+            ... on AppSubscription {
+              id
+              status
+              name
+            }
+          }
+        }
+      `, { variables: { id: chargeId } });
+      const json = await response.json();
+      const subscription = json?.data?.node;
+
+      if (!subscription || subscription.status !== "ACTIVE") {
+        throw new Error(`Subscription ${chargeId} is not active (status: ${subscription?.status ?? "not found"})`);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("not active")) throw err;
+      // Security: if we can't verify the charge, reject it — don't activate unverified plans
+      throw new Error(`Failed to verify billing subscription: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   // Get the pending plan from the tenant record
   const { data: tenant } = await db
     .from("tenants")
@@ -652,6 +806,11 @@ export async function confirmBillingSubscription(
     .maybeSingle();
 
   const newPlan = (tenant?.pending_plan as PlanTier) || "free";
+
+  if (newPlan === "free") {
+    // No pending plan — don't activate anything
+    return { plan: "free" };
+  }
 
   // Activate the plan
   await db
@@ -701,3 +860,13 @@ export async function incrementFitmentCount(
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Re-export custom plan helpers (client-safe types + pricing calculator)
+// ---------------------------------------------------------------------------
+export {
+  CUSTOM_PLAN_TIERS,
+  CUSTOM_PLAN_BASE_PRICE,
+  calculateCustomPrice,
+} from "./custom-plan";
+export type { CustomPlanTier, CustomPlanConfig } from "./custom-plan";

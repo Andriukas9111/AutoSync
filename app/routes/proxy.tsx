@@ -1,22 +1,69 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import crypto from "crypto";
-import db from "../lib/db.server";
+import db, { paginatedSelect } from "../lib/db.server";
 import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 
-// ---------- CORS helpers ----------
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+// ── Rate Limiting (in-memory, per Vercel instance) ──────────────────────
+// Limits per shop per endpoint per minute. Resets on cold starts.
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMITS: Record<string, number> = {
+  "plate-lookup": 30,    // 30 lookups/min per shop (DVLA costs money)
+  "vin-decode": 20,      // 20 VIN decodes/min per shop
+  "search": 120,         // 120 searches/min per shop (normal browsing)
+  "wheel-search": 60,    // 60 wheel searches/min per shop
+  "fitment-check": 200,  // 200 badge checks/min per shop (every product page)
+  "default": 100,        // fallback
 };
 
-function json(body: unknown, status = 200) {
+let lastCleanup = Date.now();
+
+function checkRateLimit(shop: string, endpoint: string): boolean {
+  const key = `${shop}:${endpoint}`;
+  const limit = RATE_LIMITS[endpoint] ?? RATE_LIMITS.default;
+  const now = Date.now();
+
+  // Lazy cleanup: purge stale entries every 5 minutes instead of setInterval
+  // (setInterval keeps the process alive on serverless runtimes)
+  if (now - lastCleanup > 5 * 60_000) {
+    lastCleanup = now;
+    for (const [k, val] of rateLimitMap) {
+      if (now > val.resetAt) rateLimitMap.delete(k);
+    }
+  }
+
+  const entry = rateLimitMap.get(key);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+
+  if (entry.count >= limit) return false;
+  entry.count++;
+  return true;
+}
+
+// ---------- CORS helpers ----------
+// Dynamic CORS: allow the requesting Shopify store domain, not wildcard
+function getCorsHeaders(request?: Request): Record<string, string> {
+  const origin = request?.headers.get("origin") ?? "";
+  // Strict domain validation — only allow actual Shopify domains (suffix match)
+  const allowed = /\.myshopify\.com$/.test(origin.replace(/^https?:\/\//, ""))
+    || /\.shopify\.com$/.test(origin.replace(/^https?:\/\//, ""));
+  return {
+    "Access-Control-Allow-Origin": allowed ? origin : "",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+function json(body: unknown, status = 200, request?: Request) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders },
+    headers: { "Content-Type": "application/json", ...getCorsHeaders(request) },
   });
 }
 
@@ -106,7 +153,7 @@ function logConversionEvent(
   });
 }
 
-async function handleTrack(params: URLSearchParams, body: string | null) {
+async function handleTrack(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop") ?? "";
 
   // Parse tracking data from POST body
@@ -143,8 +190,24 @@ async function handleTrack(params: URLSearchParams, body: string | null) {
   }
 
   let tracked = 0;
+  const SEARCH_EVENTS = ["ymme_search", "plate_lookup", "vin_decode"] as const;
+
   for (const evt of events) {
-    if (!evt.event || !VALID_CONVERSION_EVENTS.includes(evt.event as ConversionEventType)) {
+    if (!evt.event) continue;
+
+    // Route search events to search_events table
+    if (SEARCH_EVENTS.includes(evt.event as any)) {
+      logSearchEvent(shop, evt.event, {
+        make: evt.vehicle_make,
+        model: evt.vehicle_model,
+        year: evt.vehicle_year,
+      }, 0);
+      tracked++;
+      continue;
+    }
+
+    // Route conversion events to conversion_events table
+    if (!VALID_CONVERSION_EVENTS.includes(evt.event as ConversionEventType)) {
       continue;
     }
 
@@ -168,7 +231,15 @@ async function handleTrack(params: URLSearchParams, body: string | null) {
 
 // ---------- Sub-route handlers ----------
 
-async function handleMakes(shop: string) {
+async function handleMakes(shop: string, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const tenant = await getTenant(shop);
+  if (!tenant) return json({ makes: [] }, 200, request);
+  const limits = getPlanLimits(getEffectivePlan(tenant));
+  if (!limits.features.ymmeWidget) {
+    return json({ error: "YMME widget requires Starter plan or higher", makes: [] }, 403, request);
+  }
+
   // Only return makes the tenant has activated (tenant_active_makes junction table)
   // If no tenant active makes exist, return empty array — forces merchant to activate makes first
   const { data: activeMakeIds } = await db
@@ -192,11 +263,25 @@ async function handleMakes(shop: string) {
   return json({ makes });
 }
 
-async function handleModels(params: URLSearchParams) {
+async function handleModels(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", models: [] }, 403, request);
+      }
+    }
+  }
+
   const makeId = params.get("make_id");
   if (!makeId) return json({ error: "Missing make_id parameter" }, 400);
+  const shopId = shop;
 
-  const { data: models, error } = await db
+  // First get all models for this make from YMME DB
+  const { data: allModels, error } = await db
     .from("ymme_models")
     .select("id, name, generation, year_from, year_to, body_type")
     .eq("make_id", makeId)
@@ -206,9 +291,46 @@ async function handleModels(params: URLSearchParams) {
 
   if (error) return json({ error: error.message }, 500);
 
-  // Clean up pipe-separated generation strings — don't send massive concatenated
-  // generation lists to the storefront widget (they make dropdowns unreadable)
-  const cleanModels = (models ?? []).map((m) => ({
+  // Filter to only models that have fitments for this shop (by model NAME text match)
+  // vehicle_fitments uses text columns (make, model), not UUID FKs
+  if (shopId) {
+    // Get the make name for this make_id
+    const { data: makeRow } = await db
+      .from("ymme_makes")
+      .select("name")
+      .eq("id", makeId)
+      .maybeSingle();
+
+    if (makeRow?.name) {
+      const fitmentModels = await paginatedSelect<{ model: string }>(
+        "vehicle_fitments", "model", (q) => q.eq("shop_id", shopId).ilike("make", makeRow.name)
+      );
+
+      const fitmentModelNames = new Set(
+        (fitmentModels ?? []).map((f: any) => (f.model ?? "").toLowerCase().trim())
+      );
+
+      if (fitmentModelNames.size > 0) {
+        // Filter YMME models to only those with matching fitments
+        const filteredModels = (allModels ?? []).filter((m: any) =>
+          fitmentModelNames.has((m.name ?? "").toLowerCase().trim())
+        );
+
+        const cleanModels = filteredModels.map((m: any) => ({
+          ...m,
+          generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
+        }));
+
+        return json({ models: cleanModels });
+      }
+    }
+
+    // No fitments found — return empty
+    return json({ models: [] });
+  }
+
+  // Fallback: no shop context — return all models (admin/preview mode)
+  const cleanModels = (allModels ?? []).map((m: any) => ({
     ...m,
     generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
   }));
@@ -216,7 +338,19 @@ async function handleModels(params: URLSearchParams) {
   return json({ models: cleanModels });
 }
 
-async function handleYears(params: URLSearchParams) {
+async function handleYears(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", years: [] }, 403, request);
+      }
+    }
+  }
+
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
@@ -236,7 +370,6 @@ async function handleYears(params: URLSearchParams) {
     .eq("model_id", modelId)
     .eq("active", true)
     .not("year_from", "is", null);
-
   if (error) return json({ error: error.message }, 500);
 
   const currentYear = new Date().getFullYear();
@@ -264,12 +397,126 @@ async function handleYears(params: URLSearchParams) {
   return json({ years });
 }
 
-async function handleEngines(params: URLSearchParams) {
+async function handleEngines(params: URLSearchParams, request?: Request) {
+  // Plan check: YMME widget requires Starter+
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.ymmeWidget) {
+        return json({ error: "YMME widget requires Starter plan or higher", engines: [] }, 403, request);
+      }
+    }
+  }
+
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
   const year = params.get("year");
+  const shopId = shop;
 
+  // Get model info (name + make) for this model_id
+  const { data: modelRow } = await db
+    .from("ymme_models")
+    .select("name, make_id")
+    .eq("id", modelId)
+    .maybeSingle();
+
+  if (!modelRow) return json({ engines: [] });
+
+  let makeName = "";
+  const modelName = modelRow.name ?? "";
+  if (modelRow.make_id) {
+    const { data: makeRow } = await db
+      .from("ymme_makes")
+      .select("name")
+      .eq("id", modelRow.make_id)
+      .maybeSingle();
+    makeName = makeRow?.name ?? "";
+  }
+
+  // When shop context exists, use fitment-driven approach:
+  // Search engines across ALL sibling models (same name, same make) — not just this model_id.
+  // This handles cases where engines are under "4 Series Coupe (F32)" but the
+  // widget shows consolidated "4 Series" which is a different model_id.
+  if (shopId && makeName && modelName) {
+    // Get fitment engine names for this shop + make + model
+    const { data: fitmentEngines } = await db
+      .from("vehicle_fitments")
+      .select("engine")
+      .eq("shop_id", shopId)
+      .ilike("make", makeName)
+      .ilike("model", modelName)
+      .not("engine", "is", null);
+
+    const fitmentEngineNames = new Set(
+      (fitmentEngines ?? []).map((f: any) => (f.engine ?? "").toLowerCase().trim())
+    );
+
+    if (fitmentEngineNames.size > 0) {
+      // Search engines across ALL models for this make — not just one model_id.
+      // BMW "M440i" could be under "4 Series Coupe (F32)", "4 Series Gran Coupe (F36)",
+      // or any other sub-model. We search the entire make's engine catalog.
+      const { data: allMakeModels } = await db
+        .from("ymme_models")
+        .select("id")
+        .eq("make_id", modelRow.make_id);
+
+      const allMakeModelIds = (allMakeModels ?? []).map((m: any) => m.id);
+
+      // Get ALL engines across the entire make (batched if needed)
+      let engineQuery = db
+        .from("ymme_engines")
+        .select(
+          "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
+        )
+        .in("model_id", allMakeModelIds)
+        .eq("active", true)
+        .order("name")
+        .limit(5000);
+
+      const { data: allEngines, error } = await engineQuery;
+      if (error) return json({ error: error.message }, 500);
+
+      // Filter to only engines matching fitment names (strip dedup suffix before comparison)
+      const matched = (allEngines ?? []).filter((e: any) => {
+        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+        return fitmentEngineNames.has(cleanName);
+      });
+
+      // Deduplicate by clean name (same engine might appear under multiple sibling models)
+      const seen = new Set<string>();
+      const deduped = matched.filter((e: any) => {
+        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+        if (seen.has(cleanName)) return false;
+        seen.add(cleanName);
+        return true;
+      });
+
+      const cleanEngines = deduped.map((e: any) => ({
+        ...e,
+        name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
+      }));
+
+      return json({ engines: cleanEngines });
+    }
+
+    // Check if there are model-level fitments (engine = null means "all engines")
+    const { count: modelFitments } = await db
+      .from("vehicle_fitments")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .ilike("make", makeName)
+      .ilike("model", modelName);
+
+    if ((modelFitments ?? 0) === 0) {
+      return json({ engines: [] });
+    }
+    // Fall through to show all engines for this model
+  }
+
+  // Fallback: no shop context or model-level fitments — show all engines for this model
   let query = db
     .from("ymme_engines")
     .select(
@@ -286,11 +533,11 @@ async function handleEngines(params: URLSearchParams) {
     }
   }
 
-  const { data: engines, error } = await query;
-  if (error) return json({ error: error.message }, 500);
+  const { data: fallbackEngines, error: fallbackError } = await query;
+  if (fallbackError) return json({ error: fallbackError.message }, 500);
 
   // Strip dedup suffixes like " [92efc5dd]" from engine names for clean display
-  const cleanEngines = (engines ?? []).map((e) => ({
+  const cleanEngines = (fallbackEngines ?? []).map((e: any) => ({
     ...e,
     name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
   }));
@@ -298,12 +545,23 @@ async function handleEngines(params: URLSearchParams) {
   return json({ engines: cleanEngines });
 }
 
-async function handleCollectionLookup(params: URLSearchParams) {
+async function handleCollectionLookup(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop") ?? "";
   const make = params.get("make");
   const model = params.get("model");
   const year = params.get("year");
   const engine = params.get("engine");
+
+  // Plan check: smartCollections feature required (not false/none)
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.smartCollections || limits.features.smartCollections === "none") {
+        return json({ error: "Smart collections requires a higher plan", found: false }, 403, request);
+      }
+    }
+  }
 
   if (!make) return json({ error: "Missing make parameter" }, 400);
 
@@ -455,7 +713,7 @@ async function handleCollectionLookup(params: URLSearchParams) {
   return json({ found: false });
 }
 
-async function handleSearch(params: URLSearchParams) {
+async function handleSearch(params: URLSearchParams, request?: Request) {
   const make = params.get("make");
   const model = params.get("model");
   const year = params.get("year");
@@ -465,7 +723,7 @@ async function handleSearch(params: URLSearchParams) {
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
       if (!limits.features.ymmeWidget) {
         return json({ error: "YMME search requires the Starter plan or higher" }, 403);
       }
@@ -481,10 +739,8 @@ async function handleSearch(params: URLSearchParams) {
     .from("vehicle_fitments")
     .select("product_id, make, model, generation, year_from, year_to, engine_code");
 
-  if (shop) {
-    fitmentQuery = fitmentQuery.eq("shop_id", shop);
-  }
-  fitmentQuery = fitmentQuery.ilike("make", make);
+  if (!shop) return json({ error: "Missing shop parameter" }, 400);
+  fitmentQuery = fitmentQuery.eq("shop_id", shop).ilike("make", make);
   fitmentQuery = fitmentQuery.ilike("model", model);
 
   if (year) {
@@ -496,7 +752,7 @@ async function handleSearch(params: URLSearchParams) {
     }
   }
 
-  const { data: fitments, error: fitError } = await fitmentQuery;
+  const { data: fitments, error: fitError } = await fitmentQuery.limit(500);
   if (fitError) return json({ error: fitError.message }, 500);
 
   if (!fitments || fitments.length === 0) {
@@ -511,13 +767,13 @@ async function handleSearch(params: URLSearchParams) {
     .from("products")
     .select("id, shopify_gid, title, handle, image_url, price, status")
     .in("id", productIds)
-    .eq("status", "approved");
+    .neq("fitment_status", "unmapped");
 
   if (shop) {
     prodQuery = prodQuery.eq("shop_id", shop);
   }
 
-  const { data: products, error: prodError } = await prodQuery;
+  const { data: products, error: prodError } = await prodQuery.limit(100);
 
   if (prodError) return json({ error: prodError.message }, 500);
 
@@ -529,7 +785,7 @@ async function handleSearch(params: URLSearchParams) {
   return json({ products: products ?? [], count: resultCount });
 }
 
-async function handlePlateLookup(params: URLSearchParams, body: string | null) {
+async function handlePlateLookup(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop");
 
   // Verify plateLookup feature (Enterprise)
@@ -538,7 +794,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.plateLookup) {
       return json({ error: "Plate lookup requires the Enterprise plan" }, 403);
     }
@@ -636,16 +892,16 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
         // Try aliases for the make (e.g., "VW" → "Volkswagen")
         const { data: makeAlias } = await db
           .from("ymme_aliases")
-          .select("canonical_name")
-          .ilike("alias_name", dvlaMake)
-          .eq("alias_type", "make")
+          .select("entity_id")
+          .ilike("alias", dvlaMake)
+          .eq("entity_type", "make")
           .limit(1)
           .maybeSingle();
         if (makeAlias) {
           const { data: aliasedMake } = await db
             .from("ymme_makes")
             .select("id, name")
-            .ilike("name", makeAlias.canonical_name)
+            .eq("id", makeAlias.entity_id)
             .eq("active", true)
             .limit(1)
             .maybeSingle();
@@ -677,18 +933,14 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
             fuel_type: string | null; year_from: number | null;
             year_to: number | null; power_hp: number | null;
           }[] = [];
-          // Batch in small groups — Supabase caps at ~1000 rows per query regardless of .limit()
-          const BATCH_SIZE = 5;
-          for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
-            const batch = modelIds.slice(i, i + BATCH_SIZE);
-            const { data: batchEngines } = await db
-              .from("ymme_engines")
-              .select("id, model_id, name, code, displacement_cc, fuel_type, year_from, year_to, power_hp")
-              .in("model_id", batch)
-              .eq("active", true)
-              .limit(1000);
-            if (batchEngines) allEngines.push(...batchEngines);
-          }
+          // Single query for ALL model engines — avoid N+1 pattern
+          const { data: fetchedEngines } = await db
+            .from("ymme_engines")
+            .select("id, model_id, name, code, displacement_cc, fuel_type, year_from, year_to, power_hp")
+            .in("model_id", modelIds)
+            .eq("active", true)
+            .limit(2000);
+          if (fetchedEngines) allEngines.push(...fetchedEngines);
 
           debugInfo.enginesCount = allEngines.length;
 
@@ -830,16 +1082,16 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
 
           // Fallback: check aliases
           if (!resolved.modelId) {
-            const { data: aliases } = await db
+            const { data: modelAlias } = await db
               .from("ymme_aliases")
-              .select("canonical_name")
-              .ilike("alias_name", `%${dvlaModel}%`)
-              .eq("alias_type", "model")
+              .select("entity_id")
+              .ilike("alias", `%${dvlaModel}%`)
+              .eq("entity_type", "model")
               .limit(1)
               .maybeSingle();
-            if (aliases) {
+            if (modelAlias) {
               const aliasModel = ymmeModels.find(
-                (m) => m.name.toUpperCase() === aliases.canonical_name.toUpperCase()
+                (m) => m.id === modelAlias.entity_id
               );
               if (aliasModel) {
                 resolved.modelId = aliasModel.id;
@@ -856,16 +1108,10 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       }
 
       debugInfo.resolved = resolved;
-      console.log("[proxy] YMME resolution result:", JSON.stringify({
-        dvla: { make: dvlaMake, model: dvlaModel, year: dvlaYear, cc: dvlaCC, fuel: dvlaFuel },
-        resolved,
-        enginesCount: debugInfo.enginesCount,
-        modelsCount: debugInfo.ymmeModelsCount,
-        candidatesCount: (debugInfo.topCandidates as unknown[])?.length ?? 0,
-      }));
+      // Debug info saved to response — no console.log on every customer request
     } catch (searchErr) {
       const errMsg = searchErr instanceof Error ? searchErr.message : String(searchErr);
-      console.error("[proxy] YMME resolution FAILED:", errMsg, searchErr instanceof Error ? searchErr.stack : "");
+      if (process.env.NODE_ENV !== "production") console.error("[proxy] YMME resolution FAILED:", errMsg);
       debugInfo.searchError = errMsg;
     }
 
@@ -873,7 +1119,9 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
     if (shop) {
       db.from("plate_lookups").insert({
         shop_id: shop,
-        plate: registration.toUpperCase(),
+        plate: process.env.PLATE_HASH_PEPPER
+          ? crypto.createHash("sha256").update(registration.toUpperCase() + process.env.PLATE_HASH_PEPPER).digest("hex").substring(0, 16)
+          : crypto.createHash("sha256").update(registration.toUpperCase()).digest("hex").substring(0, 16),
         make: vehicle.make,
         model: vehicle.model,
         year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,
@@ -913,7 +1161,7 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
       resolved,
       resolvedEngine: resolved.engineName || "",
       compatibleCount,
-      _debug: debugInfo,
+      ...(process.env.NODE_ENV !== "production" ? { _debug: debugInfo } : {}),
     });
   } catch (err) {
     if (err instanceof VesError) {
@@ -924,7 +1172,82 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null) {
   }
 }
 
-async function handleWheelSearch(params: URLSearchParams) {
+// ── Wheel Finder Cascading Dropdown Endpoints ──────────────────────
+
+async function handleWheelPcds(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.wheelFinder) return json({ error: "Wheel Finder requires Professional plan or higher" }, 403, request);
+    }
+  }
+  const { data: pcds } = await db.from("wheel_fitments")
+    .select("pcd")
+    .eq("shop_id", shop)
+    .not("pcd", "is", null)
+    .limit(10000);
+  const uniquePcds = [...new Set((pcds ?? []).map((r: { pcd: string }) => r.pcd))].sort();
+  return json({ pcds: uniquePcds }, 200, request);
+}
+
+async function handleWheelDiameters(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  if (!pcd) return json({ error: "Missing pcd parameter" }, 400, request);
+  const { data: rows } = await db.from("wheel_fitments")
+    .select("diameter")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .not("diameter", "is", null)
+    .limit(10000);
+  const uniqueDiameters = [...new Set((rows ?? []).map((r: { diameter: number }) => r.diameter))].sort((a, b) => a - b);
+  return json({ diameters: uniqueDiameters }, 200, request);
+}
+
+async function handleWheelWidths(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  const diameter = params.get("diameter");
+  if (!pcd || !diameter) return json({ error: "Missing pcd or diameter" }, 400, request);
+  let query = db.from("wheel_fitments")
+    .select("width")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .eq("diameter", parseInt(diameter))
+    .not("width", "is", null)
+    .limit(10000);
+  const { data: rows } = await query;
+  const uniqueWidths = [...new Set((rows ?? []).map((r: { width: number }) => r.width))].sort((a, b) => a - b);
+  return json({ widths: uniqueWidths }, 200, request);
+}
+
+async function handleWheelOffsets(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  const diameter = params.get("diameter");
+  const width = params.get("width");
+  if (!pcd || !diameter) return json({ error: "Missing pcd or diameter" }, 400, request);
+  let query = db.from("wheel_fitments")
+    .select("offset_min, offset_max")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .eq("diameter", parseInt(diameter))
+    .limit(10000);
+  if (width) query = query.eq("width", parseFloat(width));
+  const { data: rows } = await query;
+  // Build unique offset values from min/max ranges
+  const offsetValues = new Set<number>();
+  for (const r of rows ?? []) {
+    if (r.offset_min != null) offsetValues.add(r.offset_min);
+    if (r.offset_max != null && r.offset_max !== r.offset_min) offsetValues.add(r.offset_max);
+  }
+  const sortedOffsets = [...offsetValues].sort((a, b) => a - b);
+  return json({ offsets: sortedOffsets }, 200, request);
+}
+
+async function handleWheelSearch(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop");
 
   // Verify wheelFinder feature (Professional+)
@@ -933,7 +1256,7 @@ async function handleWheelSearch(params: URLSearchParams) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.wheelFinder) {
       return json({ error: "Wheel Finder requires the Professional plan or higher" }, 403);
     }
@@ -993,7 +1316,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   }
 
   // Only return approved products
-  query = query.eq("products.status", "approved");
+  query = query.neq("products.fitment_status", "unmapped");
 
   const { data: wheelFitments, error } = await query.limit(100);
 
@@ -1023,7 +1346,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   }>();
 
   for (const wf of wheelFitments ?? []) {
-    const product = (wf as any).products;
+    const product = (wf as Record<string, unknown>).products as { id: string; shopify_gid: string; title: string; handle: string; image_url: string | null; price: number | null; status: string } | undefined;
     if (!product) continue;
 
     const existing = productMap.get(product.id);
@@ -1062,7 +1385,7 @@ async function handleWheelSearch(params: URLSearchParams) {
   });
 }
 
-async function handleVinDecode(params: URLSearchParams, body: string | null) {
+async function handleVinDecode(params: URLSearchParams, body: string | null, request?: Request) {
   const shop = params.get("shop");
 
   // Verify vinDecode feature (Enterprise)
@@ -1071,7 +1394,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
     if (!tenant) {
       return json({ error: "Shop not found" }, 404);
     }
-    const limits = getPlanLimits(tenant.plan);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     if (!limits.features.vinDecode) {
       return json({ error: "VIN Decode requires the Enterprise plan" }, 403);
     }
@@ -1109,6 +1432,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
       const { data: fitments } = await db
         .from("vehicle_fitments")
         .select("product_id")
+        .eq("shop_id", shop)
         .ilike("make", decoded.make)
         .ilike("model", `%${decoded.model}%`)
         .lte("year_from", decoded.modelYear)
@@ -1120,19 +1444,30 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
           .from("products")
           .select("id, shopify_gid, title, handle, image_url, price")
           .in("id", productIds.slice(0, 50))
-          .eq("status", "approved");
+          .eq("shop_id", shop)
+          .neq("fitment_status", "unmapped");
         compatibleProducts = products ?? [];
       }
     } catch (searchErr) {
       console.warn("[proxy] Product search after VIN decode failed:", searchErr);
     }
 
+    // Map product fields to match what vin-decode.liquid expects
+    const mappedProducts = (compatibleProducts as Array<Record<string, unknown>>).map((p) => ({
+      ...p,
+      url: p.handle ? `/products/${p.handle}` : "#",
+      image: p.image_url ?? null,
+    }));
+
     return json({
       vehicle: {
         vin: decoded.vin,
         make: decoded.make,
         model: decoded.model,
-        year: decoded.modelYear,
+        modelYear: decoded.modelYear, // Widget reads vehicle.modelYear
+        year: decoded.modelYear, // Also provide as year for compatibility
+        makeName: decoded.make, // Needed for fitment badge cross-reference
+        modelName: decoded.model, // Needed for fitment badge cross-reference
         bodyClass: decoded.bodyClass,
         driveType: decoded.driveType,
         engineCylinders: decoded.engineCylinders,
@@ -1144,8 +1479,8 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
         vehicleType: decoded.vehicleType,
         plantCountry: decoded.plantCountry,
       },
-      compatibleProducts,
-      compatibleCount: compatibleProducts.length,
+      compatibleProducts: mappedProducts,
+      compatibleCount: mappedProducts.length,
     });
   } catch (err) {
     if (err instanceof VinDecodeError) {
@@ -1158,7 +1493,7 @@ async function handleVinDecode(params: URLSearchParams, body: string | null) {
 
 // ---------- Loader (GET requests) ----------
 // ---------- Vehicle Specs handler (Enterprise) ----------
-async function handleVehicleSpecs(params: URLSearchParams) {
+async function handleVehicleSpecs(params: URLSearchParams, request?: Request) {
   let engineId = params.get("engine_id");
   const shop = params.get("shop");
   const handle = params.get("handle");
@@ -1179,13 +1514,13 @@ async function handleVehicleSpecs(params: URLSearchParams) {
 
   if (!engineId) return json({ error: "Missing engine_id or handle" }, 400);
 
-  // Verify fitmentBadge feature (Starter+) — powers compatibility table, specs, floating bar
+  // Verify vehiclePages feature (Professional+) — vehicle spec detail pages
   if (shop) {
     const tenant = await getTenant(shop);
     if (tenant) {
-      const limits = getPlanLimits(tenant.plan);
-      if (!limits.features.fitmentBadge) {
-        return json({ error: "Vehicle specs requires the Starter plan or higher" }, 403);
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.vehiclePages) {
+        return json({ error: "Vehicle spec pages require the Professional plan or higher" }, 403);
       }
     }
   }
@@ -1334,16 +1669,25 @@ function filterNulls(obj: Record<string, string | null | undefined>): Record<str
 }
 
 // ---------- Vehicle Gallery handler (lists all vehicle spec pages) ----------
-async function handleVehicleGallery(params: URLSearchParams) {
+async function handleVehicleGallery(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop") ?? "";
 
-  // Fetch all synced vehicle pages for this shop
-  const { data: synced } = await db
-    .from("vehicle_page_sync")
-    .select("engine_id, metaobject_handle, sync_status")
-    .eq("shop_id", shop)
-    .eq("sync_status", "synced")
-    .order("metaobject_handle", { ascending: true });
+  // Plan check: vehiclePages feature required
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.vehiclePages) {
+        return json({ error: "Vehicle pages requires a higher plan", vehicles: [] }, 403, request);
+      }
+    }
+  }
+
+  // Fetch all synced vehicle pages for this shop (paginated to avoid 1000-row limit)
+  const synced = await paginatedSelect<{ engine_id: string; metaobject_handle: string; sync_status: string }>(
+    "vehicle_page_sync", "engine_id, metaobject_handle, sync_status", (q) =>
+      q.eq("shop_id", shop).eq("sync_status", "synced").order("metaobject_handle", { ascending: true })
+  );
 
   if (!synced || synced.length === 0) {
     return json({ vehicles: [] });
@@ -1477,53 +1821,102 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Handle CORS preflight
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
   }
 
   // Verify HMAC signature
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
     console.error("SHOPIFY_API_SECRET not configured");
-    return json({ error: "Server configuration error" }, 500);
+    return json({ error: "Server configuration error" }, 500, request);
   }
 
   if (!verifyProxySignature(params, secret)) {
-    return json({ error: "Invalid signature" }, 401);
+    return json({ error: "Invalid signature" }, 401, request);
   }
 
   const shop = params.get("shop");
   if (!shop) {
-    return json({ error: "Missing shop parameter" }, 400);
+    return json({ error: "Missing shop parameter" }, 400, request);
   }
 
   const path = params.get("path");
   if (!path) {
-    return json({ error: "Missing path parameter" }, 400);
+    return json({ error: "Missing path parameter" }, 400, request);
+  }
+
+  // Rate limiting — per shop per endpoint per minute
+  const rateLimitEndpoint = path.includes("plate") ? "plate-lookup"
+    : path.includes("vin") ? "vin-decode"
+    : path.includes("wheel") ? "wheel-search"
+    : path.includes("fitment") || path.includes("badge") ? "fitment-check"
+    : "search";
+  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
   }
 
   switch (path) {
     case "makes":
-      return handleMakes(shop);
+      return handleMakes(shop, request);
     case "models":
-      return handleModels(params);
+      return handleModels(params, request);
     case "years":
-      return handleYears(params);
+      return handleYears(params, request);
     case "engines":
-      return handleEngines(params);
+      return handleEngines(params, request);
     case "collection-lookup":
-      return handleCollectionLookup(params);
+      return handleCollectionLookup(params, request);
     case "search":
-      return handleSearch(params);
+      return handleSearch(params, request);
+    case "wheel-pcds":
+      return handleWheelPcds(params, request);
+    case "wheel-diameters":
+      return handleWheelDiameters(params, request);
+    case "wheel-widths":
+      return handleWheelWidths(params, request);
+    case "wheel-offsets":
+      return handleWheelOffsets(params, request);
     case "wheel-search":
-      return handleWheelSearch(params);
+      return handleWheelSearch(params, request);
     case "vin-decode":
-      return handleVinDecode(params, null);
+      return handleVinDecode(params, null, request);
     case "vehicle-specs":
-      return handleVehicleSpecs(params);
+      return handleVehicleSpecs(params, request);
     case "vehicle-gallery":
-      return handleVehicleGallery(params);
+      return handleVehicleGallery(params, request);
+    case "widget-check": {
+      // Lightweight plan check for widgets that read metafields directly.
+      // Returns which widget types are allowed on the current plan.
+      const widgetShop = params.get("shop") ?? shop;
+      if (!widgetShop) return json({ allowed: {} }, 200, request);
+      const { data: wTenant } = await db.from("tenants").select("plan, plan_status").eq("shop_id", widgetShop).maybeSingle();
+      const wPlan = getEffectivePlan(wTenant as any);
+      const wLimits = getPlanLimits(wPlan);
+      // Check if merchant has opted to hide watermark (only allowed on "full"+ customisation tiers)
+      const canHideWatermark = wLimits.features.widgetCustomisation === "full" || wLimits.features.widgetCustomisation === "full_css";
+      let hideWatermark = false;
+      if (canHideWatermark) {
+        const { data: wSettings } = await db.from("app_settings").select("hide_watermark").eq("shop_id", widgetShop).maybeSingle();
+        hideWatermark = wSettings?.hide_watermark === true;
+      }
+      return json({
+        plan: wPlan,
+        allowed: {
+          ymmeWidget: wLimits.features.ymmeWidget,
+          fitmentBadge: wLimits.features.fitmentBadge,
+          compatibilityTable: wLimits.features.compatibilityTable,
+          myGarage: wLimits.features.myGarage,
+          wheelFinder: wLimits.features.wheelFinder,
+          plateLookup: wLimits.features.plateLookup,
+          vinDecode: wLimits.features.vinDecode,
+          vehiclePages: wLimits.features.vehiclePages,
+        },
+        hideWatermark,
+        widgetCustomisation: wLimits.features.widgetCustomisation,
+      }, 200, request);
+    }
     case "heartbeat":
-      return json({ ok: true, ts: Date.now() });
+      return json({ ok: true, ts: Date.now() }, 200, request);
     default:
       return json(
         { error: `Unknown path: '${path}'. Available GET: makes, models, years, engines, search, wheel-search, vehicle-specs. POST: plate-lookup, vin-decode, track` },
@@ -1538,33 +1931,46 @@ export async function action({ request }: ActionFunctionArgs) {
   const params = url.searchParams;
 
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
   }
 
   const secret = process.env.SHOPIFY_API_SECRET;
   if (!secret) {
-    return json({ error: "Server configuration error" }, 500);
+    return json({ error: "Server configuration error" }, 500, request);
   }
 
   if (!verifyProxySignature(params, secret)) {
-    return json({ error: "Invalid signature" }, 401);
+    return json({ error: "Invalid signature" }, 401, request);
+  }
+
+  const shop = params.get("shop");
+  if (!shop) {
+    return json({ error: "Missing shop parameter" }, 400, request);
   }
 
   const path = params.get("path");
 
+  // Rate limiting on POST endpoints (DVLA plate lookups cost money per request)
+  const rateLimitEndpoint = path === "plate-lookup" ? "plate-lookup"
+    : path === "vin-decode" ? "vin-decode"
+    : "track";
+  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
+  }
+
   const body = await request.text();
 
   if (path === "plate-lookup") {
-    return handlePlateLookup(params, body);
+    return handlePlateLookup(params, body, request);
   }
 
   if (path === "vin-decode") {
-    return handleVinDecode(params, body);
+    return handleVinDecode(params, body, request);
   }
 
   if (path === "track") {
-    return handleTrack(params, body);
+    return handleTrack(params, body, request);
   }
 
-  return json({ error: "POST only supported for plate-lookup, vin-decode, and track" }, 405);
+  return json({ error: "POST only supported for plate-lookup, vin-decode, and track" }, 405, request);
 }
