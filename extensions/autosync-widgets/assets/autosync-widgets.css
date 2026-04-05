@@ -1229,11 +1229,14 @@
 /* --------------- Responsive: Tablet (768px) --------------- */
 @media (max-width: 768px) {
   .autosync-ymme--horizontal .autosync-ymme__fields {
-    flex-direction: column;
+    flex-direction: column !important;
+    align-items: stretch !important;
   }
 
   .autosync-ymme--horizontal .autosync-ymme__field {
-    min-width: auto;
+    min-width: auto !important;
+    flex: none !important;
+    width: 100% !important;
   }
 
   .autosync-ymme--width-narrow,
@@ -1241,16 +1244,51 @@
     max-width: none;
   }
 
+  /* Search button row: full width on tablet */
+  .autosync-ymme__search-row {
+    flex-direction: row !important;
+    width: 100% !important;
+  }
+
+  .autosync-ymme__search-btn,
+  .autosync-ymme__btn {
+    flex: 1 !important;
+  }
+
   .autosync-plate-lookup__form {
     flex-direction: column;
   }
 
   .autosync-wheel-finder__fields {
-    flex-direction: column;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .autosync-wheel-finder__field {
+    flex: none !important;
+    width: 100% !important;
+    min-width: auto !important;
+  }
+
+  .autosync-wheel-finder__field--button {
+    width: 100% !important;
+  }
+
+  .autosync-wheel-finder__field--button button {
+    width: 100% !important;
   }
 
   .autosync-vin-decode__form {
-    flex-direction: column;
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .autosync-vin-decode__form > * {
+    width: 100% !important;
+  }
+
+  .autosync-plate-lookup__form > * {
+    width: 100% !important;
   }
 
   .autosync-wheel-finder__grid {

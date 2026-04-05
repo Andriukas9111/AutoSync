@@ -347,13 +347,26 @@
       height: 30px;
     }
   }
-  @media (max-width: 480px) {
+  @media (max-width: 640px) {
     .autosync-vehicle-showcase {
-      padding-left: 14px;
-      padding-right: 14px;
+      padding-left: 12px !important;
+      padding-right: 12px !important;
     }
     .avs-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 10px !important;
+    }
+    .avs-card {
+      padding: 14px !important;
+    }
+    .avs-card__make { font-size: 10px !important; }
+    .avs-card__model { font-size: 14px !important; }
+    .avs-card__variant { font-size: 11px !important; }
+    .avs-card__pill { font-size: 10px !important; padding: 3px 6px !important; }
+  }
+  @media (max-width: 420px) {
+    .avs-grid {
+      grid-template-columns: 1fr !important;
     }
     .avs-heading {
       font-size: 22px;
