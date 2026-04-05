@@ -905,6 +905,11 @@ async function processPushChunk(
       { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", filterable: true },
       { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", filterable: true },
       { name: "Vehicle Generation", namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", filterable: true },
+      // Wheel spec metafields (for Wheel Finder widget + Search & Discovery)
+      { name: "Wheel PCD", namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Diameter", namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Width", namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Center Bore", namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", filterable: true },
     ];
     for (const d of defs) {
       const { filterable, ...defInput } = d;
@@ -1011,12 +1016,28 @@ async function processPushChunk(
     fitmentsByProduct.set(f.product_id as string, list);
   }
 
+  // Batch query wheel fitments for all products in this batch
+  const wheelFitmentsByProduct = new Map<string, Array<Record<string, unknown>>>();
+  for (let wfi = 0; wfi < productIds.length; wfi += 500) {
+    const batch = productIds.slice(wfi, wfi + 500);
+    const { data: wheelBatch } = await db.from("wheel_fitments")
+      .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
+      .eq("shop_id", shopId).in("product_id", batch);
+    for (const wf of wheelBatch ?? []) {
+      const list = wheelFitmentsByProduct.get(wf.product_id as string) ?? [];
+      list.push(wf);
+      wheelFitmentsByProduct.set(wf.product_id as string, list);
+    }
+  }
+
   let processed = 0;
   const activeMakes = new Set<string>();
 
   for (const product of products) {
     const productFitments = fitmentsByProduct.get(product.id);
     const hasFitments = productFitments && productFitments.length > 0;
+    const productWheelFitments = wheelFitmentsByProduct.get(product.id);
+    const hasWheelFitments = productWheelFitments && productWheelFitments.length > 0;
 
     let gid = product.shopify_gid || (product.shopify_product_id ? `gid://shopify/Product/${product.shopify_product_id}` : null);
 
@@ -1130,17 +1151,17 @@ async function processPushChunk(
       }
     }
 
-    // Build tags (only if product has fitments)
+    // Build tags (only if product has vehicle OR wheel fitments)
     const tags: string[] = [];
-    if (!hasFitments) {
-      // Product has no fitments — skip tags/metafields but count as processed
+    if (!hasFitments && !hasWheelFitments) {
+      // Product has no fitments of any kind — skip tags/metafields
       processed++;
       continue;
     }
     const seenMakes = new Set<string>();
     const seenModels = new Set<string>();
     const seenYearRanges = new Set<string>();
-    for (const f of productFitments!) {
+    for (const f of productFitments ?? []) {
       const make = f.make as string;
       const model = f.model as string;
       const yearFrom = f.year_from as number | null;
@@ -1189,7 +1210,7 @@ async function processPushChunk(
 
       // Push metafields (JSON data blob + list metafields for Search & Discovery filters)
       if (pushMetafields) {
-        const fitmentData = productFitments.map((f) => ({
+        const fitmentData = (productFitments ?? []).map((f) => ({
           make: f.make, model: f.model,
           year_from: f.year_from, year_to: f.year_to,
           engine: f.engine, engine_code: f.engine_code, fuel_type: f.fuel_type,
@@ -1199,7 +1220,7 @@ async function processPushChunk(
         const yearSet = new Set<string>();
         const engineSet = new Set<string>();
         const generationSet = new Set<string>();
-        for (const f of productFitments) {
+        for (const f of productFitments ?? []) {
           if (f.year_from) {
             const endYear = (f.year_to as number) || new Date().getFullYear();
             for (let y = f.year_from as number; y <= Math.min(endYear, (f.year_from as number) + 50); y++) {
@@ -1215,13 +1236,16 @@ async function processPushChunk(
           }
         }
 
-        const metafields = [
-          // JSON data blob (for display widgets) — app-owned for security
-          { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fitmentData), ownerId: gid },
-          // List metafields (for Search & Discovery filters)
-          { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...seenMakes].sort()), ownerId: gid },
-          { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...seenModels].sort()), ownerId: gid },
-        ];
+        const metafields: Array<{ namespace: string; key: string; type: string; value: string; ownerId: string }> = [];
+
+        // Vehicle fitment metafields (only if product has vehicle fitments)
+        if (hasFitments && fitmentData.length > 0) {
+          metafields.push(
+            { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fitmentData), ownerId: gid },
+            { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...seenMakes].sort()), ownerId: gid },
+            { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...seenModels].sort()), ownerId: gid },
+          );
+        }
 
         // Add year metafield if we have year data
         if (yearSet.size > 0) {
@@ -1237,6 +1261,29 @@ async function processPushChunk(
         // Add generation metafield if we have generation data
         if (generationSet.size > 0) {
           metafields.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generationSet].sort().slice(0, 128)), ownerId: gid });
+        }
+
+        // ── Wheel spec metafields (from batch-queried wheel_fitments) ──
+        if (hasWheelFitments) {
+          const wheelFits = productWheelFitments!;
+          const pcdSet = new Set<string>();
+          const diamSet = new Set<string>();
+          const widthSet = new Set<string>();
+          const cbSet = new Set<string>();
+          for (const wf of wheelFits) {
+            if (wf.pcd) pcdSet.add(wf.pcd);
+            if (wf.diameter) diamSet.add(String(wf.diameter));
+            if (wf.width) widthSet.add(String(wf.width));
+            if (wf.center_bore) cbSet.add(String(wf.center_bore));
+            // Add wheel-specific tags
+            if (wf.pcd) tags.push(`_autosync_wheel_PCD_${wf.pcd}`);
+            if (wf.diameter) tags.push(`_autosync_wheel_${wf.diameter}inch`);
+            if (wf.width) tags.push(`_autosync_wheel_${wf.width}J`);
+          }
+          if (pcdSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...pcdSet].sort()), ownerId: gid });
+          if (diamSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
+          if (widthSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", value: JSON.stringify([...widthSet].sort()), ownerId: gid });
+          if (cbSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", value: JSON.stringify([...cbSet].sort()), ownerId: gid });
         }
 
         const mfRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {

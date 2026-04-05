@@ -46,49 +46,34 @@
   <div class="autosync-wheel-finder__fields">
     <div class="autosync-wheel-finder__field">
       <label for="autosync-pcd-{{ block.id }}">PCD (Bolt Pattern)</label>
-      <select id="autosync-pcd-{{ block.id }}" data-autosync-wheel-pcd>
-        <option value="">Select PCD</option>
-        <option value="4x100">4x100</option>
-        <option value="4x108">4x108</option>
-        <option value="4x114.3">4x114.3</option>
-        <option value="5x100">5x100</option>
-        <option value="5x108">5x108</option>
-        <option value="5x112">5x112</option>
-        <option value="5x114.3">5x114.3</option>
-        <option value="5x120">5x120</option>
-        <option value="5x130">5x130</option>
+      <select id="autosync-pcd-{{ block.id }}" data-autosync-wheel-level="pcd">
+        <option value="">Loading...</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field">
       <label for="autosync-diameter-{{ block.id }}">Diameter</label>
-      <select id="autosync-diameter-{{ block.id }}" data-autosync-wheel-diameter>
-        <option value="">Select Diameter</option>
-        <option value="15">15"</option>
-        <option value="16">16"</option>
-        <option value="17">17"</option>
-        <option value="18">18"</option>
-        <option value="19">19"</option>
-        <option value="20">20"</option>
-        <option value="21">21"</option>
-        <option value="22">22"</option>
+      <select id="autosync-diameter-{{ block.id }}" data-autosync-wheel-level="diameter" disabled>
+        <option value="">Select PCD first</option>
+      </select>
+    </div>
+
+    <div class="autosync-wheel-finder__field">
+      <label for="autosync-width-{{ block.id }}">Width</label>
+      <select id="autosync-width-{{ block.id }}" data-autosync-wheel-level="width" disabled>
+        <option value="">Select Diameter first</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field">
       <label for="autosync-offset-{{ block.id }}">Offset (ET)</label>
-      <input
-        type="number"
-        id="autosync-offset-{{ block.id }}"
-        data-autosync-wheel-offset
-        placeholder="e.g. 35"
-        min="-30"
-        max="60"
-      />
+      <select id="autosync-offset-{{ block.id }}" data-autosync-wheel-level="offset" disabled>
+        <option value="">Select Width first</option>
+      </select>
     </div>
 
     <div class="autosync-wheel-finder__field autosync-wheel-finder__field--button">
-      <button type="button" data-autosync-wheel-search>
+      <button type="button" data-autosync-wheel-search disabled>
         {{ block.settings.button_text | default: "Search Wheels" }}
       </button>
     </div>

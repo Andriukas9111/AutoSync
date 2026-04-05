@@ -1375,106 +1375,168 @@
     });
   }
 
-  // --------------- Wheel Finder ---------------
+  // --------------- Wheel Finder (Cascading Dropdowns) ---------------
 
   function initWheelFinder(container) {
     var proxyUrl = container.dataset.proxyUrl;
-    var currencyCode = container.dataset.currencyCode || 'USD'; // From Liquid: {{ cart.currency.iso_code }}
+    var currencyCode = container.dataset.currencyCode || 'USD';
     var formatter;
     try { formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode }); } catch (_e) { formatter = null; }
+
+    var pcdEl = container.querySelector('[data-autosync-wheel-level="pcd"]');
+    var diameterEl = container.querySelector('[data-autosync-wheel-level="diameter"]');
+    var widthEl = container.querySelector('[data-autosync-wheel-level="width"]');
+    var offsetEl = container.querySelector('[data-autosync-wheel-level="offset"]');
     var searchBtn = container.querySelector('[data-autosync-wheel-search]');
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
-    if (!searchBtn) return;
+    if (!pcdEl || !searchBtn) return;
 
-    searchBtn.addEventListener('click', function () {
-      var pcdEl = container.querySelector('[data-autosync-wheel-pcd]');
-      var diameterEl = container.querySelector('[data-autosync-wheel-diameter]');
-      var offsetEl = container.querySelector('[data-autosync-wheel-offset]');
+    var state = { pcd: '', diameter: '', width: '', offset: '' };
+    var btnText = searchBtn.textContent || 'Search Wheels';
 
-      var pcd = pcdEl ? pcdEl.value : '';
-      var diameter = diameterEl ? diameterEl.value : '';
-      var offset = offsetEl ? offsetEl.value : '';
+    function resetSelect(el, placeholder) {
+      clearChildren(el);
+      var opt = document.createElement('option');
+      opt.value = ''; opt.textContent = placeholder;
+      el.appendChild(opt);
+      el.disabled = true;
+    }
 
-      if (!pcd && !diameter) return;
+    function populateSelect(el, items, formatter, placeholder) {
+      clearChildren(el);
+      var defOpt = document.createElement('option');
+      defOpt.value = ''; defOpt.textContent = placeholder || 'Select...';
+      el.appendChild(defOpt);
+      items.forEach(function(item) {
+        var opt = document.createElement('option');
+        opt.value = String(item);
+        opt.textContent = formatter ? formatter(item) : String(item);
+        el.appendChild(opt);
+      });
+      el.disabled = false;
+    }
 
+    // Load PCDs on init
+    proxyFetch(proxyUrl, 'wheel-pcds', {}).then(function(data) {
+      if (data.pcds && data.pcds.length > 0) {
+        populateSelect(pcdEl, data.pcds, null, 'Select PCD');
+      } else {
+        resetSelect(pcdEl, 'No wheels available');
+      }
+    }).catch(function() { resetSelect(pcdEl, 'Error loading'); });
+
+    // PCD change → load diameters
+    pcdEl.addEventListener('change', function() {
+      state.pcd = this.value;
+      state.diameter = ''; state.width = ''; state.offset = '';
+      resetSelect(diameterEl, 'Loading...');
+      resetSelect(widthEl, 'Select Diameter first');
+      resetSelect(offsetEl, 'Select Width first');
+      searchBtn.disabled = true;
+      if (resultsDiv) { clearChildren(resultsDiv); resultsDiv.classList.add('autosync-wheel-finder--hidden'); }
+      if (!state.pcd) { resetSelect(diameterEl, 'Select PCD first'); return; }
+      proxyFetch(proxyUrl, 'wheel-diameters', { pcd: state.pcd }).then(function(data) {
+        populateSelect(diameterEl, data.diameters || [], function(d) { return d + '"'; }, 'Select Diameter');
+      }).catch(function() { resetSelect(diameterEl, 'Error loading'); });
+    });
+
+    // Diameter change → load widths
+    diameterEl.addEventListener('change', function() {
+      state.diameter = this.value;
+      state.width = ''; state.offset = '';
+      resetSelect(widthEl, 'Loading...');
+      resetSelect(offsetEl, 'Select Width first');
+      searchBtn.disabled = true;
+      if (!state.diameter) { resetSelect(widthEl, 'Select Diameter first'); return; }
+      proxyFetch(proxyUrl, 'wheel-widths', { pcd: state.pcd, diameter: state.diameter }).then(function(data) {
+        populateSelect(widthEl, data.widths || [], function(w) { return w + 'J'; }, 'Select Width');
+      }).catch(function() { resetSelect(widthEl, 'Error loading'); });
+    });
+
+    // Width change → load offsets + enable search
+    widthEl.addEventListener('change', function() {
+      state.width = this.value;
+      state.offset = '';
+      searchBtn.disabled = !state.width;
+      resetSelect(offsetEl, 'Loading...');
+      if (!state.width) { resetSelect(offsetEl, 'Select Width first'); return; }
+      proxyFetch(proxyUrl, 'wheel-offsets', { pcd: state.pcd, diameter: state.diameter, width: state.width }).then(function(data) {
+        var offsets = data.offsets || [];
+        if (offsets.length > 0) {
+          populateSelect(offsetEl, offsets, function(o) { return 'ET' + o; }, 'All Offsets');
+        } else {
+          resetSelect(offsetEl, 'No offset data');
+        }
+      }).catch(function() { resetSelect(offsetEl, 'Error'); });
+    });
+
+    // Offset change
+    offsetEl.addEventListener('change', function() {
+      state.offset = this.value;
+    });
+
+    // Search button
+    searchBtn.addEventListener('click', function() {
+      if (!state.pcd || !state.diameter) return;
       searchBtn.disabled = true;
       searchBtn.textContent = 'Searching...';
+      var params = { pcd: state.pcd, diameter: state.diameter };
+      if (state.width) params.width = state.width;
+      if (state.offset) params.offset = state.offset;
 
-      proxyFetch(proxyUrl, 'wheel-search', { pcd: pcd, diameter: diameter, offset: offset })
-        .then(function (data) {
-          searchBtn.disabled = false;
-          searchBtn.textContent = 'Search Wheels';
-
-          if (resultsDiv) {
-            clearChildren(resultsDiv);
-
-            if (data.error) {
-              var errP = document.createElement('p');
-              errP.className = 'autosync-wheel-finder__error';
-              errP.textContent = escapeText(data.error);
-              resultsDiv.appendChild(errP);
-            } else if (data.wheels && data.wheels.length > 0) {
-              var heading = document.createElement('p');
-              heading.className = 'autosync-wheel-finder__count';
-              heading.textContent = data.count + ' matching wheel' + (data.count !== 1 ? 's' : '') + ' found';
-              resultsDiv.appendChild(heading);
-
-              var grid = document.createElement('div');
-              grid.className = 'autosync-wheel-finder__grid';
-
-              data.wheels.forEach(function (item) {
-                var card = document.createElement('a');
-                card.className = 'autosync-wheel-finder__card';
-                card.href = '/products/' + escapeText(item.product.handle);
-
-                if (item.product.image_url) {
-                  var img = document.createElement('img');
-                  img.src = item.product.image_url;
-                  img.alt = escapeText(item.product.title);
-                  img.loading = 'lazy';
-                  card.appendChild(img);
-                }
-
-                var title = document.createElement('span');
-                title.className = 'autosync-wheel-finder__title';
-                title.textContent = escapeText(item.product.title);
-                card.appendChild(title);
-
-                if (item.product.price) {
-                  var price = document.createElement('span');
-                  price.className = 'autosync-wheel-finder__price';
-                  var amount = Number(item.product.price);
-                  price.textContent = formatter ? formatter.format(amount) : ('$' + amount.toFixed(2));
-                  card.appendChild(price);
-                }
-
-                grid.appendChild(card);
-              });
-
-              resultsDiv.appendChild(grid);
-            } else {
-              var noResults = document.createElement('p');
-              noResults.textContent = 'No wheels found matching your criteria.';
-              resultsDiv.appendChild(noResults);
+      proxyFetch(proxyUrl, 'wheel-search', params).then(function(data) {
+        searchBtn.disabled = false;
+        searchBtn.textContent = btnText;
+        if (!resultsDiv) return;
+        clearChildren(resultsDiv);
+        if (data.error) {
+          var errP = document.createElement('p');
+          errP.className = 'autosync-wheel-finder__error';
+          errP.textContent = escapeText(data.error);
+          resultsDiv.appendChild(errP);
+        } else if (data.wheels && data.wheels.length > 0) {
+          var heading = document.createElement('p');
+          heading.className = 'autosync-wheel-finder__count';
+          heading.textContent = data.count + ' matching wheel' + (data.count !== 1 ? 's' : '') + ' found';
+          resultsDiv.appendChild(heading);
+          var grid = document.createElement('div');
+          grid.className = 'autosync-wheel-finder__grid';
+          data.wheels.forEach(function(item) {
+            var card = document.createElement('a');
+            card.className = 'autosync-wheel-finder__card';
+            card.href = '/products/' + escapeText(item.product.handle);
+            if (item.product.image_url) {
+              var img = document.createElement('img');
+              img.src = item.product.image_url;
+              img.alt = escapeText(item.product.title);
+              img.loading = 'lazy';
+              card.appendChild(img);
             }
-
-            resultsDiv.classList.remove('autosync-wheel-finder--hidden');
-          }
-        })
-        .catch(function () {
-          searchBtn.disabled = false;
-          searchBtn.textContent = 'Search Wheels';
-          // Show error message to user
-          if (resultsDiv) {
-            clearChildren(resultsDiv);
-            var errorMsg = document.createElement('p');
-            errorMsg.textContent = 'Unable to search wheels right now. Please try again.';
-            errorMsg.style.cssText = 'color: #c0392b; text-align: center; padding: 16px;';
-            resultsDiv.appendChild(errorMsg);
-            resultsDiv.classList.remove('autosync-wheel-finder--hidden');
-          }
-        });
+            var title = document.createElement('span');
+            title.className = 'autosync-wheel-finder__title';
+            title.textContent = escapeText(item.product.title);
+            card.appendChild(title);
+            if (item.product.price) {
+              var price = document.createElement('span');
+              price.className = 'autosync-wheel-finder__price';
+              var amount = Number(item.product.price);
+              price.textContent = formatter ? formatter.format(amount) : ('$' + amount.toFixed(2));
+              card.appendChild(price);
+            }
+            grid.appendChild(card);
+          });
+          resultsDiv.appendChild(grid);
+        } else {
+          var noResults = document.createElement('p');
+          noResults.textContent = 'No wheels found matching your criteria.';
+          resultsDiv.appendChild(noResults);
+        }
+        resultsDiv.classList.remove('autosync-wheel-finder--hidden');
+      }).catch(function() {
+        searchBtn.disabled = false;
+        searchBtn.textContent = btnText;
+      });
     });
   }
 

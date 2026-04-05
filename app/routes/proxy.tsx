@@ -1172,6 +1172,81 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null, r
   }
 }
 
+// ── Wheel Finder Cascading Dropdown Endpoints ──────────────────────
+
+async function handleWheelPcds(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.wheelFinder) return json({ error: "Wheel Finder requires Professional plan or higher" }, 403, request);
+    }
+  }
+  const { data: pcds } = await db.from("wheel_fitments")
+    .select("pcd")
+    .eq("shop_id", shop)
+    .not("pcd", "is", null)
+    .limit(10000);
+  const uniquePcds = [...new Set((pcds ?? []).map((r: { pcd: string }) => r.pcd))].sort();
+  return json({ pcds: uniquePcds }, 200, request);
+}
+
+async function handleWheelDiameters(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  if (!pcd) return json({ error: "Missing pcd parameter" }, 400, request);
+  const { data: rows } = await db.from("wheel_fitments")
+    .select("diameter")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .not("diameter", "is", null)
+    .limit(10000);
+  const uniqueDiameters = [...new Set((rows ?? []).map((r: { diameter: number }) => r.diameter))].sort((a, b) => a - b);
+  return json({ diameters: uniqueDiameters }, 200, request);
+}
+
+async function handleWheelWidths(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  const diameter = params.get("diameter");
+  if (!pcd || !diameter) return json({ error: "Missing pcd or diameter" }, 400, request);
+  let query = db.from("wheel_fitments")
+    .select("width")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .eq("diameter", parseInt(diameter))
+    .not("width", "is", null)
+    .limit(10000);
+  const { data: rows } = await query;
+  const uniqueWidths = [...new Set((rows ?? []).map((r: { width: number }) => r.width))].sort((a, b) => a - b);
+  return json({ widths: uniqueWidths }, 200, request);
+}
+
+async function handleWheelOffsets(params: URLSearchParams, request?: Request) {
+  const shop = params.get("shop") ?? "";
+  const pcd = params.get("pcd");
+  const diameter = params.get("diameter");
+  const width = params.get("width");
+  if (!pcd || !diameter) return json({ error: "Missing pcd or diameter" }, 400, request);
+  let query = db.from("wheel_fitments")
+    .select("offset_min, offset_max")
+    .eq("shop_id", shop)
+    .eq("pcd", pcd)
+    .eq("diameter", parseInt(diameter))
+    .limit(10000);
+  if (width) query = query.eq("width", parseFloat(width));
+  const { data: rows } = await query;
+  // Build unique offset values from min/max ranges
+  const offsetValues = new Set<number>();
+  for (const r of rows ?? []) {
+    if (r.offset_min != null) offsetValues.add(r.offset_min);
+    if (r.offset_max != null && r.offset_max !== r.offset_min) offsetValues.add(r.offset_max);
+  }
+  const sortedOffsets = [...offsetValues].sort((a, b) => a - b);
+  return json({ offsets: sortedOffsets }, 200, request);
+}
+
 async function handleWheelSearch(params: URLSearchParams, request?: Request) {
   const shop = params.get("shop");
 
@@ -1793,6 +1868,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return handleCollectionLookup(params, request);
     case "search":
       return handleSearch(params, request);
+    case "wheel-pcds":
+      return handleWheelPcds(params, request);
+    case "wheel-diameters":
+      return handleWheelDiameters(params, request);
+    case "wheel-widths":
+      return handleWheelWidths(params, request);
+    case "wheel-offsets":
+      return handleWheelOffsets(params, request);
     case "wheel-search":
       return handleWheelSearch(params, request);
     case "vin-decode":

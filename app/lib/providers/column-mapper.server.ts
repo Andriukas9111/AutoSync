@@ -210,6 +210,33 @@ const FIELD_PATTERNS: Record<string, string[]> = {
     "supplier_sku", "supplier_code", "supplier_ref", "external_sku",
     "vendor_sku", "source_sku", "original_sku",
   ],
+  // ── Wheel-specific fields (alloy wheels, rims) ──
+  wheel_pcd: [
+    "pcd", "bolt_pattern", "bolt pattern", "stud_pattern", "stud pattern",
+    "pcd_size", "lochkreis", "bolt_circle", "entraxe",
+  ],
+  wheel_diameter: [
+    "diameter", "rim_diameter", "wheel_diameter", "rim_size",
+    "wheel_size", "felgengroesse", "taille",
+  ],
+  wheel_width: [
+    "width", "rim_width", "wheel_width", "felgenbreite", "jante_largeur",
+  ],
+  wheel_center_bore: [
+    "center_bore", "centre_bore", "hub_bore", "cb", "center bore",
+    "centre bore", "nabenbohrung", "alesage",
+  ],
+  wheel_offset: [
+    "offset", "et", "et_offset", "einpresstiefe", "deport",
+  ],
+  wheel_max_load: [
+    "max_load", "load_rating", "load_index", "tragfaehigkeit",
+    "tuv_max_load", "load_capacity",
+  ],
+  wheel_colour: [
+    "colour", "color", "finish", "wheel_color", "wheel_colour",
+    "acc_colour", "farbe", "couleur",
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -329,6 +356,23 @@ export function smartAutoMapColumns(
       if (/your.price|trade.price|wholesale|cost/i.test(header) && /^\d/.test(val)) {
         mapping.targetField = "cost_price";
         usedTargets.add("cost_price");
+      }
+    }
+
+    // Auto-detect PCD (bolt pattern) values like "5x112", "4x100", "5x114.3"
+    if (!mapping.targetField && !usedTargets.has("wheel_pcd")) {
+      if (/^\d[xX]\d{2,3}(\.\d)?$/.test(val)) {
+        mapping.targetField = "wheel_pcd";
+        usedTargets.add("wheel_pcd");
+      }
+    }
+
+    // Auto-detect wheel width values like "7.5", "8.0", "8.5" (half-inch increments)
+    if (!mapping.targetField && !usedTargets.has("wheel_width")) {
+      const header = mapping.sourceColumn.toLowerCase();
+      if (header.includes("width") && /^\d+\.?\d*$/.test(val) && parseFloat(val) >= 4 && parseFloat(val) <= 16) {
+        mapping.targetField = "wheel_width";
+        usedTargets.add("wheel_width");
       }
     }
   }

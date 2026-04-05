@@ -420,6 +420,101 @@ export async function runProviderImport(
     }
   }
 
+  // 5b. Create wheel_fitments records for wheel products
+  // Check if any products have wheel-specific data (PCD, diameter, etc.)
+  if (insertedCount > 0) {
+    try {
+      const { data: insertedProducts } = await db
+        .from("products")
+        .select("id, title, description, raw_data")
+        .eq("shop_id", shopId)
+        .eq("provider_id", providerId)
+        .order("created_at", { ascending: false })
+        .limit(insertedCount);
+
+      const wheelFitments: Array<Record<string, unknown>> = [];
+
+      for (const product of insertedProducts ?? []) {
+        const raw = (product.raw_data ?? {}) as Record<string, unknown>;
+        const title = (product.title ?? "") as string;
+        const desc = (product.description ?? "") as string;
+
+        // Source A: Mapped columns from raw_data
+        let pcd = raw.wheel_pcd as string | undefined;
+        let diameter = raw.wheel_diameter as string | undefined;
+        let width = raw.wheel_width as string | undefined;
+        let centerBore = raw.wheel_center_bore as string | undefined;
+        let offset = raw.wheel_offset as string | undefined;
+
+        // Source B: Extract from title/description if not in mapped columns
+        if (!pcd) {
+          const pcdMatch = `${title} ${desc}`.match(/\b(\d)[xX](\d{2,3}(?:\.\d)?)\b/);
+          if (pcdMatch) pcd = `${pcdMatch[1]}x${pcdMatch[2]}`;
+        }
+        if (!diameter) {
+          const diaMatch = title.match(/\b(\d{2})(?:\s*(?:inch|"|''))\b/i);
+          if (diaMatch) diameter = diaMatch[1];
+          // Also check "size" in raw_data
+          if (!diameter && raw.size) diameter = String(raw.size);
+        }
+        if (!width) {
+          const widthMatch = `${title} ${desc}`.match(/\b(\d+\.?\d*)\s*J\b/i);
+          if (widthMatch) width = widthMatch[1];
+        }
+        if (!offset) {
+          const etMatch = `${title} ${desc}`.match(/\bET\s*(\d+)\b/i);
+          if (etMatch) offset = etMatch[1];
+        }
+
+        // Must have at least PCD or diameter to create a wheel fitment
+        if (!pcd && !diameter) continue;
+
+        // Normalize PCD format
+        if (pcd) {
+          pcd = pcd.replace(/\s+/g, "").replace(/[\/\-]/, "x").replace(/^pcd\s*/i, "");
+          if (!/^\d[xX]\d/.test(pcd)) pcd = undefined;
+        }
+
+        // Parse offset range
+        let offsetMin: number | null = null;
+        let offsetMax: number | null = null;
+        if (offset) {
+          const cleaned = offset.replace(/^ET\s*/i, "").trim();
+          const rangeMatch = cleaned.match(/^(\d+)\s*[-–]\s*(\d+)$/);
+          if (rangeMatch) {
+            offsetMin = parseInt(rangeMatch[1]);
+            offsetMax = parseInt(rangeMatch[2]);
+          } else {
+            const single = parseInt(cleaned);
+            if (!isNaN(single)) { offsetMin = single; offsetMax = single; }
+          }
+        }
+
+        wheelFitments.push({
+          shop_id: shopId,
+          product_id: product.id,
+          pcd: pcd || null,
+          diameter: diameter ? parseInt(diameter) || null : null,
+          width: width ? parseFloat(width) || null : null,
+          center_bore: centerBore ? parseFloat(String(centerBore)) || null : null,
+          offset_min: offsetMin,
+          offset_max: offsetMax,
+        });
+      }
+
+      // Batch insert wheel fitments
+      if (wheelFitments.length > 0) {
+        for (let wi = 0; wi < wheelFitments.length; wi += 500) {
+          const batch = wheelFitments.slice(wi, wi + 500);
+          await db.from("wheel_fitments").insert(batch);
+        }
+        console.log(`[import] Created ${wheelFitments.length} wheel fitments for ${shopId}`);
+      }
+    } catch (wheelErr) {
+      console.error("[import] Wheel fitment creation error:", wheelErr instanceof Error ? wheelErr.message : wheelErr);
+    }
+  }
+
   // 6. Save column mappings for next time
   await saveMappings(shopId, providerId, mappings);
 
