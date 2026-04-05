@@ -166,10 +166,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged")
     : null;
   const unmappedQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged"])
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"])
     : null;
   const nextQuery = isQueueMode
-    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
     : null;
 
   const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
@@ -309,7 +309,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterAdd } = await db.from("products")
       .select("id").eq("shop_id", shopId).neq("status", "staged")
-      .in("fitment_status", ["unmapped", "flagged"])
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
@@ -371,7 +371,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterSuggest } = await db.from("products")
       .select("id").eq("shop_id", shopId).neq("status", "staged")
-      .in("fitment_status", ["unmapped", "flagged"])
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
@@ -408,7 +408,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { data: nextProduct } = await db.from("products")
       .select("id").eq("shop_id", shopId).neq("status", "staged")
-      .in("fitment_status", ["unmapped", "flagged"])
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
