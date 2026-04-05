@@ -1226,7 +1226,7 @@
   font-size: 0.875rem;
 }
 
-/* --------------- Responsive --------------- */
+/* --------------- Responsive: Tablet (768px) --------------- */
 @media (max-width: 768px) {
   .autosync-ymme--horizontal .autosync-ymme__fields {
     flex-direction: column;
@@ -1244,7 +1244,6 @@
   .autosync-plate-lookup__form {
     flex-direction: column;
   }
-
 
   .autosync-wheel-finder__fields {
     flex-direction: column;
@@ -1270,6 +1269,127 @@
   .autosync-ymme__garage-chip-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  /* Compatibility table: horizontal scroll */
+  .autosync-compat__table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* --------------- Responsive: Mobile (480px) --------------- */
+@media (max-width: 480px) {
+  /* Reduce container padding on small phones */
+  [data-autosync-ymme] {
+    padding: 12px !important;
+  }
+
+  /* YMME: Full-width stacked layout */
+  .autosync-ymme--horizontal .autosync-ymme__fields,
+  .autosync-ymme__fields {
+    flex-direction: column !important;
+    gap: 0.5rem;
+  }
+
+  .autosync-ymme--horizontal .autosync-ymme__field,
+  .autosync-ymme__field {
+    min-width: auto !important;
+    width: 100% !important;
+  }
+
+  /* YMME: search button full width */
+  .autosync-ymme__search-btn,
+  .autosync-ymme__btn {
+    width: 100% !important;
+    min-width: auto !important;
+  }
+
+  /* Smaller title on mobile */
+  .autosync-ymme__title {
+    font-size: 1rem !important;
+  }
+
+  /* YMME: field labels smaller */
+  .autosync-ymme__field label {
+    font-size: 0.75rem;
+  }
+
+  /* YMME: select dropdowns full width */
+  .autosync-ymme__field select {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  /* Garage button smaller */
+  .autosync-ymme__garage-toggle {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+  }
+
+  /* Garage popover full-width on mobile */
+  .autosync-ymme__garage-popover {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+    bottom: 8px !important;
+    top: auto !important;
+    z-index: 10000 !important;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-radius: 12px !important;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
+  }
+
+  /* Compatibility table: stack on mobile */
+  .autosync-compat__table th,
+  .autosync-compat__table td {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  /* Badge: smaller on mobile */
+  .autosync-badge {
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* Wheel finder: single column on phones */
+  .autosync-wheel-finder__grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Plate lookup: reduce padding */
+  .autosync-plate-lookup {
+    padding: 12px !important;
+  }
+
+  /* VIN decode: reduce padding */
+  .autosync-vin-decode {
+    padding: 12px !important;
+  }
+}
+
+/* --------------- Responsive: Small phones (360px) --------------- */
+@media (max-width: 360px) {
+  [data-autosync-ymme] {
+    padding: 8px !important;
+  }
+
+  .autosync-ymme__title {
+    font-size: 0.875rem !important;
+  }
+
+  .autosync-ymme__field select {
+    font-size: 0.8125rem;
+    padding: 0.4375rem 0.625rem;
+  }
+
+  .autosync-ymme__subtitle {
+    font-size: 0.75rem;
   }
 }
 
