@@ -37,6 +37,7 @@ import {
   WandIcon,
   TargetIcon,
   AlertCircleIcon,
+  MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
@@ -73,6 +74,7 @@ const STATUS_OPTIONS = [
   { label: "Manual Mapped", value: "manual_mapped" },
   { label: "Partial", value: "partial" },
   { label: "Flagged", value: "flagged" },
+  { label: "No Match", value: "no_match" },
 ];
 
 const SOURCE_OPTIONS = [
@@ -579,10 +581,11 @@ export default function Products() {
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { key: "total", icon: ProductIcon, label: "Total", count: totalCount, critical: false },
-              { key: "not_mapped", icon: AlertCircleIcon, label: "Not Mapped", count: totalCount - (activeBreakdown["auto_mapped"] ?? 0) - (activeBreakdown["smart_mapped"] ?? 0) - (activeBreakdown["manual_mapped"] ?? 0), critical: true },
+              // ALWAYS use global stats from polling — NOT the filtered page count
+              { key: "total", icon: ProductIcon, label: "Total", count: polledStats?.total ?? totalCount, critical: false },
+              { key: "flagged", icon: AlertCircleIcon, label: "Flagged", count: activeBreakdown["flagged"] ?? 0, critical: true },
+              { key: "no_match", icon: MinusCircleIcon, label: "No Match", count: polledStats?.noMatch ?? 0, critical: false },
               { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
-              { key: "smart_mapped", icon: WandIcon, label: "Smart", count: activeBreakdown["smart_mapped"] ?? 0, critical: false },
               { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },
             ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
               const isFilter = item.key !== "total";
