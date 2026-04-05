@@ -2616,7 +2616,10 @@ async function processBulkPush(
       if (op) {
         totalObjects += op.objectCount ?? 0;
         if (op.status === "RUNNING" || op.status === "CREATED") {
-          await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
+          // objectCount is GraphQL objects (metafields), NOT products. Estimate product progress.
+          const totalItems = (job.total_items as number) || 1;
+          const estimatedProducts = Math.min(totalItems, Math.round(totalObjects / 5));
+          await db.from("sync_jobs").update({ processed_items: estimatedProducts, progress: Math.round((estimatedProducts / totalItems) * 100) }).eq("id", job.id);
           console.log(`[bulk_push] Metafields still running: ${totalObjects} objects`);
           return { processed: 0, hasMore: true };
         }
@@ -2666,19 +2669,23 @@ async function processBulkPush(
       if (op) {
         totalObjects += op.objectCount ?? 0;
         if (op.status === "RUNNING" || op.status === "CREATED") {
-          await db.from("sync_jobs").update({ processed_items: totalObjects }).eq("id", job.id);
-          console.log(`[bulk_push] Tags still running: ${totalObjects} objects`);
+          const totalItems = (job.total_items as number) || 1;
+          const estimatedProducts = Math.min(totalItems, Math.round(totalObjects / 2));
+          await db.from("sync_jobs").update({ processed_items: estimatedProducts, progress: Math.round((estimatedProducts / totalItems) * 100) }).eq("id", job.id);
+          console.log(`[bulk_push] Tags still running: ${estimatedProducts}/${totalItems} products`);
           return { processed: 0, hasMore: true };
         }
         if (op.status === "FAILED") return { processed: totalObjects, hasMore: false, error: `Tags bulk op failed: ${op.errorCode}` };
       }
     }
 
-    // Both operations complete
+    // Both operations complete — set processed_items to match total_items (not GraphQL objectCount)
+    const totalItems = (job.total_items as number) || 0;
+    await db.from("sync_jobs").update({ processed_items: totalItems, progress: 100 }).eq("id", job.id);
     await db.from("products").update({ synced_at: new Date().toISOString() })
       .eq("shop_id", shopId).in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
-    console.log(`[bulk_push] Complete! ${totalObjects} objects processed`);
-    return { processed: totalObjects, hasMore: false };
+    console.log(`[bulk_push] Complete! ${totalItems} products processed`);
+    return { processed: totalItems, hasMore: false };
   }
 
   // Phase 1: Generate JSONL and start operations
