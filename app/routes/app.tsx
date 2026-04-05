@@ -45,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db
     .from("tenants")
-    .select("shop_id, plan, plan_status, shopify_access_token, online_store_publication_id, widget_metadefs_created, uninstalled_at, last_synced_plan")
+    .select("*")
     .eq("shop_id", shopId)
     .maybeSingle();
 
