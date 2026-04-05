@@ -1,0 +1,757 @@
+import { useState, useCallback } from "react";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import {
+  useLoaderData,
+  useSearchParams,
+  useNavigate,
+  useFetcher,
+} from "react-router";
+import { data } from "react-router";
+import {
+  Page,
+  Layout,
+  Card,
+  IndexTable,
+  Text,
+  Badge,
+  InlineStack,
+  BlockStack,
+  TextField,
+  Select,
+  Pagination,
+  EmptyState,
+  Banner,
+  Spinner,
+  Thumbnail,
+  Box,
+  Button,
+  Icon,
+  useIndexResourceState,
+} from "@shopify/polaris";
+import {
+  SearchIcon,
+  ProductIcon,
+  FilterIcon,
+  ListBulletedIcon,
+  ImportIcon,
+  WandIcon,
+  TargetIcon,
+  AlertCircleIcon,
+  MinusCircleIcon,
+} from "@shopify/polaris-icons";
+
+import { authenticate } from "../shopify.server";
+import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import db, { syncFitmentCount } from "../lib/db.server";
+import type { FitmentStatus } from "../lib/types";
+import { formatPrice } from "../lib/types";
+import { RouteError } from "../components/RouteError";
+import { useAppData } from "../lib/use-app-data";
+import { autoFitGridStyle } from "../lib/design";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 50;
+
+const STATUS_CONFIG: Record<
+  string,
+  { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
+> = {
+  unmapped: { tone: undefined, label: "Unmapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
+  smart_mapped: { tone: "success", label: "Smart Mapped" },
+  manual_mapped: { tone: "success", label: "Manual Mapped" },
+  partial: { tone: "warning", label: "Partial" },
+  flagged: { tone: "critical", label: "Flagged" },
+};
+
+const STATUS_OPTIONS = [
+  { label: "All Statuses", value: "" },
+  { label: "Unmapped", value: "unmapped" },
+  { label: "Auto Mapped", value: "auto_mapped" },
+  { label: "Smart Mapped", value: "smart_mapped" },
+  { label: "Manual Mapped", value: "manual_mapped" },
+  { label: "Partial", value: "partial" },
+  { label: "Flagged", value: "flagged" },
+  { label: "No Match", value: "no_match" },
+];
+
+const SOURCE_OPTIONS = [
+  { label: "All Sources", value: "" },
+  { label: "Shopify", value: "shopify" },
+  { label: "CSV", value: "csv" },
+  { label: "API", value: "api" },
+  { label: "FTP", value: "ftp" },
+];
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Product {
+  id: string;
+  shop_id: string;
+  shopify_product_id: string | null;
+  title: string;
+  handle: string;
+  vendor: string | null;
+  product_type: string | null;
+  price: string | null;
+  image_url: string | null;
+  fitment_status: FitmentStatus;
+  source: string | null;
+  created_at: string;
+  synced_at: string | null;
+}
+
+// ── Loader ────────────────────────────────────────────────────────────────────
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+
+  // Fix products with NULL fitment_status → "unmapped" (fire-and-forget, non-blocking)
+  db.from("products")
+    .update({ fitment_status: "unmapped" })
+    .eq("shop_id", shopId)
+    .is("fitment_status", null)
+    .then(() => {}).catch(() => {});
+
+  const url = new URL(request.url);
+  const search = url.searchParams.get("search") || "";
+  const status = url.searchParams.get("status") || "";
+  const source = url.searchParams.get("source") || "";
+  const providerId = url.searchParams.get("provider") || "";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const offset = (page - 1) * PAGE_SIZE;
+
+  let query = db
+    .from("products")
+    .select("*", { count: "exact" })
+    .eq("shop_id", shopId)
+    .neq("status", "staged"); // Exclude staged provider imports — they live in provider products view
+
+  if (search) {
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,handle.ilike.%${sanitized}%`);
+    }
+  }
+  if (status) {
+    query = query.eq("fitment_status", status);
+  }
+  if (source) {
+    query = query.eq("source", source);
+  }
+  if (providerId) {
+    query = query.eq("provider_id", providerId);
+  }
+
+  query = query
+    .order("created_at", { ascending: false })
+    .range(offset, offset + PAGE_SIZE - 1);
+
+  const { data: products, count: totalCount, error } = await query;
+
+  if (error) {
+    console.error("Products query error:", error);
+  }
+
+  // Status breakdown for the header — use server-side counts (no row limit)
+  const statuses = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"] as const;
+  const statusResults = await Promise.all(
+    statuses.map((s) =>
+      db.from("products").select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", s),
+    ),
+  );
+  const breakdown: Record<string, number> = {};
+  statuses.forEach((s, i) => {
+    const c = statusResults[i].count ?? 0;
+    if (c > 0) breakdown[s] = c;
+  });
+
+  return {
+    products: (products ?? []) as Product[],
+    totalCount: totalCount ?? 0,
+    currentPage: page,
+    filters: { search, status, source, provider: providerId },
+    statusBreakdown: breakdown,
+    queryError: error?.message || null,
+  };
+};
+
+// ── Action ────────────────────────────────────────────────────────────────────
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "bulk-status") {
+    const ids = (formData.get("ids") as string).split(",").filter(Boolean);
+    const newStatus = formData.get("new_status") as string;
+    if (!ids.length || !newStatus) {
+      return data({ ok: false, message: "Missing parameters" });
+    }
+    const { error } = await db
+      .from("products")
+      .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("shop_id", shopId);
+    if (error) return data({ ok: false, message: error.message });
+    return data({ ok: true, message: `Updated ${ids.length} products to ${newStatus.replace("_", " ")}` });
+  }
+
+  if (intent === "bulk-delete") {
+    const ids = (formData.get("ids") as string).split(",").filter(Boolean);
+    if (!ids.length) return data({ ok: false, message: "No products selected" });
+    // Delete fitments first, then products
+    await db.from("vehicle_fitments").delete().in("product_id", ids).eq("shop_id", shopId);
+    const { error } = await db.from("products").delete().in("id", ids).eq("shop_id", shopId);
+    if (error) return data({ ok: false, message: error.message });
+    // Sync counters after delete
+    await syncFitmentCount(shopId);
+    const { count: prodCount } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged");
+    await db.from("tenants").update({ product_count: prodCount ?? 0 }).eq("shop_id", shopId);
+    return data({ ok: true, message: `Deleted ${ids.length} products` });
+  }
+
+  return data({ ok: false, message: "Unknown action" });
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
+export default function Products() {
+  const {
+    products,
+    totalCount,
+    currentPage,
+    filters,
+    statusBreakdown,
+    queryError,
+  } = useLoaderData<typeof loader>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const fetcher = useFetcher();
+  const bulkFetcher = useFetcher<{ ok: boolean; message: string }>();
+
+  const [searchValue, setSearchValue] = useState(filters.search);
+  const [dismissed, setDismissed] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Live stats via unified polling hook
+  const { stats: polledStats } = useAppData();
+  const activeBreakdown: Record<string, number> = {
+    unmapped: polledStats?.unmapped ?? statusBreakdown.unmapped ?? 0,
+    auto_mapped: polledStats?.autoMapped ?? statusBreakdown.auto_mapped ?? 0,
+    smart_mapped: polledStats?.smartMapped ?? statusBreakdown.smart_mapped ?? 0,
+    manual_mapped: polledStats?.manualMapped ?? statusBreakdown.manual_mapped ?? 0,
+    flagged: polledStats?.flagged ?? statusBreakdown.flagged ?? 0,
+  };
+
+  const isFetching = fetcher.state !== "idle";
+  const isBulkAction = bulkFetcher.state !== "idle";
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+  const fetcherData = fetcher.data as
+    | { success: true; fetched: number; errors: string[] }
+    | { error: string }
+    | undefined;
+
+  // Index table selection
+  const resourceName = { singular: "product", plural: "products" };
+  const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
+    useIndexResourceState(products as unknown as { [key: string]: unknown }[]);
+
+  // ── Filter Helpers ──────────────────────────────────────────────────────
+
+  const updateFilters = useCallback(
+    (key: string, value: string) => {
+      const params = new URLSearchParams(searchParams);
+      if (value) params.set(key, value);
+      else params.delete(key);
+      if (key !== "page") params.delete("page");
+      setSearchParams(params);
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const handleSearchSubmit = useCallback(() => {
+    updateFilters("search", searchValue);
+  }, [searchValue, updateFilters]);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchValue("");
+    updateFilters("search", "");
+  }, [updateFilters]);
+
+  const handleFetchProducts = useCallback(() => {
+    fetcher.submit(null, { method: "POST", action: "/app/api/fetch-products" });
+  }, [fetcher]);
+
+  // ── Formatting ──────────────────────────────────────────────────────────
+
+  const fmtDate = (d: string | null) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  // Use shared formatPrice from types.ts
+  const fmtPrice = formatPrice;
+
+  // ── Bulk Actions ────────────────────────────────────────────────────────
+
+  const promotedBulkActions = [
+    {
+      content: "Set Unmapped",
+      onAction: () => {
+        bulkFetcher.submit(
+          { intent: "bulk-status", ids: selectedResources.join(","), new_status: "unmapped" },
+          { method: "POST" },
+        );
+        clearSelection();
+      },
+    },
+    {
+      content: "Set Auto Mapped",
+      onAction: () => {
+        bulkFetcher.submit(
+          { intent: "bulk-status", ids: selectedResources.join(","), new_status: "auto_mapped" },
+          { method: "POST" },
+        );
+        clearSelection();
+      },
+    },
+  ];
+
+  const bulkActions = [
+    {
+      content: "Set Manual Mapped",
+      onAction: () => {
+        bulkFetcher.submit(
+          { intent: "bulk-status", ids: selectedResources.join(","), new_status: "manual_mapped" },
+          { method: "POST" },
+        );
+        clearSelection();
+      },
+    },
+    {
+      content: "Flag Selected",
+      onAction: () => {
+        bulkFetcher.submit(
+          { intent: "bulk-status", ids: selectedResources.join(","), new_status: "flagged" },
+          { method: "POST" },
+        );
+        clearSelection();
+      },
+    },
+    {
+      content: "Delete Selected",
+      destructive: true,
+      onAction: () => {
+        setShowDeleteConfirm(true);
+      },
+    },
+  ];
+
+  // ── Table Rows ──────────────────────────────────────────────────────────
+
+  const rowMarkup = products.map((product, index) => {
+    const badge = STATUS_CONFIG[product.fitment_status] ?? STATUS_CONFIG.unmapped;
+
+    return (
+      <IndexTable.Row
+        id={product.id}
+        key={product.id}
+        position={index}
+        selected={selectedResources.includes(product.id)}
+      >
+        <IndexTable.Cell>
+          <Thumbnail
+            source={
+              product.image_url ||
+              "https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png"
+            }
+            alt={product.title}
+            size="small"
+          />
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/app/products/${product.id}${isFitmentContext ? "?from=fitment" : ""}`);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                navigate(`/app/products/${product.id}${isFitmentContext ? "?from=fitment" : ""}`);
+              }
+            }}
+            style={{ cursor: "pointer", color: "var(--p-color-text-emphasis)" }}
+          >
+            <Text as="span" variant="bodyMd" fontWeight="semibold">
+              {product.title}
+            </Text>
+          </div>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd">{product.vendor || "—"}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd">{fmtPrice(product.price)}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Badge tone={badge.tone}>{badge.label}</Badge>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd">{product.source || "—"}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodySm" tone="subdued">
+            {fmtDate(product.synced_at || product.created_at)}
+          </Text>
+        </IndexTable.Cell>
+      </IndexTable.Row>
+    );
+  });
+
+  // ── Active filters ──────────────────────────────────────────────────────
+
+  const hasActiveFilters = !!(filters.search || filters.status || filters.source || filters.provider);
+  // When viewing fitment-related filters, link to mapping mode
+  const isFitmentContext = ["unmapped", "flagged"].includes(filters.status ?? "");
+
+  // ── Empty state (no products at all) ────────────────────────────────────
+
+  if (products.length === 0 && !hasActiveFilters) {
+    return (
+      <Page
+        fullWidth
+        title="Products"
+        primaryAction={{
+          content: isFetching ? "Fetching..." : "Fetch Products",
+          onAction: handleFetchProducts,
+          loading: isFetching,
+        }}
+      >
+        <Layout>
+          {isFetching && (
+            <Layout.Section>
+              <Banner tone="info">
+                <InlineStack gap="200" blockAlign="center">
+                  <Spinner size="small" />
+                  <Text as="span" variant="bodyMd">
+                    Fetching products from Shopify...
+                  </Text>
+                </InlineStack>
+              </Banner>
+            </Layout.Section>
+          )}
+          <Layout.Section>
+            <Card>
+              <Box paddingBlockEnd="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ImportIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">Get Started</Text>
+                </InlineStack>
+              </Box>
+              <EmptyState
+                heading="No products yet"
+                image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                action={{
+                  content: "Fetch from Shopify",
+                  onAction: handleFetchProducts,
+                  loading: isFetching,
+                }}
+                secondaryAction={{
+                  content: "Upload CSV",
+                  onAction: () => navigate("/app/providers/new"),
+                }}
+              >
+                <p>
+                  Import products from Shopify or upload a CSV from a provider to
+                  start mapping vehicle fitment data.
+                </p>
+              </EmptyState>
+            </Card>
+          </Layout.Section>
+        </Layout>
+      </Page>
+    );
+  }
+
+  // ── Main Render ─────────────────────────────────────────────────────────
+
+  return (
+    <Page
+      fullWidth
+      title="Products"
+      subtitle={`${totalCount.toLocaleString()} products across all sources`}
+      primaryAction={{
+        content: isFetching ? "Fetching..." : "Fetch Products",
+        onAction: handleFetchProducts,
+        loading: isFetching,
+      }}
+      secondaryActions={[
+        {
+          content: "Upload CSV",
+          onAction: () => navigate("/app/providers/new"),
+        },
+      ]}
+    >
+      <BlockStack gap="400">
+        {/* How It Works */}
+        <HowItWorks
+          steps={[
+            { number: 1, title: "Import Products", description: "Fetch your Shopify products or upload from CSV/XML providers. Products sync automatically with your store catalog." },
+            { number: 2, title: "Map Fitments", description: "Use auto-extraction or manual mapping to assign vehicle compatibility. Click any product to view and edit its fitment data.", linkText: "Go to Fitment", linkUrl: "/app/fitment" },
+            { number: 3, title: "Push & Publish", description: "Push mapped products to Shopify with tags and metafields, then create vehicle-based collections for your storefront.", linkText: "Push to Shopify", linkUrl: "/app/push" },
+          ]}
+        />
+
+        {/* ── Banners ── */}
+        {queryError && (
+          <Banner tone="critical" title="Failed to load products">
+            <p>{queryError}</p>
+          </Banner>
+        )}
+        {fetcherData && "success" in fetcherData && (
+          <Banner
+            tone="success"
+            title={`Fetched ${fetcherData.fetched} products from Shopify`}
+            onDismiss={() => {}}
+          />
+        )}
+        {fetcherData && "error" in fetcherData && (
+          <Banner tone="critical" title="Fetch failed" onDismiss={() => {}}>
+            <p>{fetcherData.error}</p>
+          </Banner>
+        )}
+        {bulkFetcher.data?.message && !dismissed && (
+          <Banner
+            tone={bulkFetcher.data.ok ? "success" : "critical"}
+            title={bulkFetcher.data.message}
+            onDismiss={() => setDismissed(true)}
+          />
+        )}
+        {isFetching && (
+          <Banner tone="info">
+            <InlineStack gap="200" blockAlign="center">
+              <Spinner size="small" />
+              <Text as="span" variant="bodyMd">Fetching products from Shopify...</Text>
+            </InlineStack>
+          </Banner>
+        )}
+        {showDeleteConfirm && (
+          <Banner
+            tone="critical"
+            title={`Delete ${selectedResources.length} product${selectedResources.length === 1 ? "" : "s"}? This cannot be undone.`}
+            onDismiss={() => setShowDeleteConfirm(false)}
+          >
+            <InlineStack gap="200">
+              <Button
+                tone="critical"
+                onClick={() => {
+                  bulkFetcher.submit(
+                    { intent: "bulk-delete", ids: selectedResources.join(",") },
+                    { method: "POST" },
+                  );
+                  clearSelection();
+                  setShowDeleteConfirm(false);
+                }}
+              >
+                Yes, delete
+              </Button>
+              <Button onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+            </InlineStack>
+          </Banner>
+        )}
+
+        {/* ── Status Overview ── */}
+        <Card padding="0">
+          <div style={{
+            ...autoFitGridStyle("120px", "var(--p-space-200)"),
+            borderBottom: "1px solid var(--p-color-border-secondary)",
+          }}>
+            {([
+              // ALWAYS use global stats from polling — NOT the filtered page count
+              { key: "total", icon: ProductIcon, label: "Total", count: polledStats?.total ?? totalCount, critical: false },
+              { key: "flagged", icon: AlertCircleIcon, label: "Flagged", count: activeBreakdown["flagged"] ?? 0, critical: true },
+              { key: "no_match", icon: MinusCircleIcon, label: "No Match", count: polledStats?.noMatch ?? 0, critical: false },
+              { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
+              { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },
+            ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
+              const isFilter = item.key !== "total";
+              const isActive = isFilter && filters.status === item.key;
+              return (
+                <div
+                  key={item.key}
+                  role={isFilter ? "button" : undefined}
+                  tabIndex={isFilter ? 0 : undefined}
+                  onClick={isFilter ? () => updateFilters("status", isActive ? "" : item.key) : undefined}
+                  onKeyDown={isFilter ? (e) => { if (e.key === "Enter") updateFilters("status", isActive ? "" : item.key); } : undefined}
+                  style={{
+                    padding: "var(--p-space-400)",
+                    cursor: isFilter ? "pointer" : "default",
+                    borderRight: i < 5 ? "1px solid var(--p-color-border-secondary)" : "none",
+                    background: isActive ? "var(--p-color-bg-surface-selected)" : "transparent",
+                    textAlign: "center",
+                    transition: "background 0.15s",
+                  }}
+                >
+                  <BlockStack gap="200" inlineAlign="center">
+                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="p" variant="headingLg" fontWeight="bold" tone={item.critical && item.count > 0 ? "critical" : undefined}>
+                      {item.count.toLocaleString()}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                  </BlockStack>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
+        {/* ── Filters Row ── */}
+        <Card padding="400">
+          <BlockStack gap="400">
+          <InlineStack gap="200" blockAlign="center">
+            <IconBadge icon={FilterIcon} color="var(--p-color-icon-emphasis)" />
+            <Text as="h2" variant="headingMd">Filters</Text>
+          </InlineStack>
+          <InlineStack gap="300" align="start" blockAlign="end" wrap>
+            <div style={{ flexGrow: 1, maxWidth: "400px" }}>
+              <TextField
+                label="Search products"
+                labelHidden
+                value={searchValue}
+                onChange={setSearchValue}
+                placeholder="Search by title or handle..."
+                clearButton
+                onClearButtonClick={handleSearchClear}
+                autoComplete="off"
+                onBlur={handleSearchSubmit}
+                prefix={
+                  <Icon source={SearchIcon} />
+                }
+              />
+            </div>
+            <Button onClick={handleSearchSubmit} variant="secondary">Search</Button>
+            <div style={{ minWidth: "170px" }}>
+              <Select
+                label="Status"
+                labelHidden
+                options={STATUS_OPTIONS}
+                value={filters.status}
+                onChange={(v) => updateFilters("status", v)}
+              />
+            </div>
+            <div style={{ minWidth: "150px" }}>
+              <Select
+                label="Source"
+                labelHidden
+                options={SOURCE_OPTIONS}
+                value={filters.source}
+                onChange={(v) => updateFilters("source", v)}
+              />
+            </div>
+            {hasActiveFilters && (
+              <Button
+                onClick={() => {
+                  setSearchValue("");
+                  setSearchParams(new URLSearchParams());
+                }}
+                variant="plain"
+              >
+                Clear all
+              </Button>
+            )}
+          </InlineStack>
+          </BlockStack>
+        </Card>
+
+        {/* ── Products Table ── */}
+        {products.length === 0 && hasActiveFilters ? (
+          <Card>
+            <Box paddingBlockEnd="200">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ListBulletedIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Product Catalog</Text>
+              </InlineStack>
+            </Box>
+            <EmptyState
+              heading="No products match your filters"
+              image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+            >
+              <p>Try adjusting or clearing your search filters.</p>
+            </EmptyState>
+          </Card>
+        ) : (
+          <Card padding="0">
+            <Box padding="400" paddingBlockEnd="200">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ListBulletedIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Product Catalog</Text>
+              </InlineStack>
+            </Box>
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={products.length}
+              selectedItemsCount={
+                allResourcesSelected ? "All" : selectedResources.length
+              }
+              onSelectionChange={handleSelectionChange}
+              headings={[
+                { title: "" },
+                { title: "Product" },
+                { title: "Vendor" },
+                { title: "Price" },
+                { title: "Fitment Status" },
+                { title: "Source" },
+                { title: "Date" },
+              ]}
+              promotedBulkActions={promotedBulkActions}
+              bulkActions={bulkActions}
+              hasMoreItems={currentPage < totalPages}
+              lastColumnSticky
+            >
+              {rowMarkup}
+            </IndexTable>
+          </Card>
+        )}
+
+        {/* ── Pagination ── */}
+        {totalPages > 1 && (
+          <Box padding="400">
+            <InlineStack align="center" gap="400" blockAlign="center">
+              <Pagination
+                hasPrevious={currentPage > 1}
+                hasNext={currentPage < totalPages}
+                onPrevious={() => updateFilters("page", String(currentPage - 1))}
+                onNext={() => updateFilters("page", String(currentPage + 1))}
+              />
+              <Text as="span" variant="bodySm" tone="subdued">
+                Page {currentPage} of {totalPages} · Showing {products.length} of{" "}
+                {totalCount.toLocaleString()} products
+              </Text>
+            </InlineStack>
+          </Box>
+        )}
+      </BlockStack>
+    </Page>
+  );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Products" />;
+}

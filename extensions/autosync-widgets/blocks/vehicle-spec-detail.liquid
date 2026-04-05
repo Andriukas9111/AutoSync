@@ -1,0 +1,190 @@
+{% comment %}
+  AutoSync Vehicle Spec Detail — Premium Edition
+  Renders full vehicle specification data on metaobject vehicle spec pages.
+  Fetches data from the App Proxy by extracting the handle from the current URL.
+  Place this block on the Vehicle Specification (default) metaobject template.
+{% endcomment %}
+
+{% liquid
+  assign proxy_url = shop.url | append: '/apps/autosync'
+  assign logo_url = 'autosync-logo.svg' | asset_url
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign pages_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.pages == true
+      assign pages_allowed = true
+    endif
+  endif
+%}
+{% if pages_allowed == false %}
+<!-- widget not available on current plan -->
+{% else %}
+<div
+  class="avsd-root"
+  data-avsd-root
+  data-proxy-url="{{ proxy_url }}"
+  data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
+  data-logo-url="{{ 'autosync-logo.svg' | asset_url }}"
+  data-hero-style="{{ block.settings.hero_style | default: 'dark' }}"
+  data-show-image="{{ block.settings.show_hero_image | default: true }}"
+  data-show-stats="{{ block.settings.show_quick_stats | default: true }}"
+  data-show-overview="{{ block.settings.show_overview | default: true }}"
+  data-show-products="{{ block.settings.show_products | default: true }}"
+  id="avsd-{{ block.id }}"
+  style="
+    --avsd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --avsd-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --avsd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --avsd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --avsd-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --avsd-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --avsd-radius: {{ block.settings.border_radius | default: 12 }}px;
+    padding-top: {{ block.settings.padding_top | default: 0 }}px;
+    padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
+    max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
+  "
+>
+  <!-- Loading State -->
+  <div class="avsd-loading" data-avsd-loading>
+    <div class="avsd-spinner"></div>
+    <p>Loading vehicle specifications...</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="avsd-error" data-avsd-error style="display:none;">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <p>Unable to load vehicle specifications.</p>
+    <button class="avsd-retry-btn" data-avsd-retry>Try Again</button>
+  </div>
+
+  <!-- Content (populated by JS using safe DOM methods) -->
+  <div class="avsd-content" data-avsd-content style="display:none;"></div>
+</div>
+
+{{ 'autosync-vehicle-detail.css' | asset_url | stylesheet_tag }}
+
+<script src="{{ "autosync-vehicle-detail.js" | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+"name": "Vehicle Spec Detail",
+"target": "section",
+"templates": ["metaobject"],
+"settings": [
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Standard (1200px)" },
+{ "value": "1000", "label": "Narrow (1000px)" }
+],
+"default": "1200"
+},
+{
+"type": "select",
+"id": "hero_style",
+"label": "Hero Style",
+"options": [
+{ "value": "dark", "label": "Dark Gradient" },
+{ "value": "light", "label": "Light" },
+{ "value": "minimal", "label": "Minimal" }
+],
+"default": "dark"
+},
+{
+"type": "checkbox",
+"id": "show_hero_image",
+"label": "Show Vehicle Image",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_quick_stats",
+"label": "Show Quick Stats Strip",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_overview",
+"label": "Show Overview Text",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_products",
+"label": "Show Compatible Products",
+"default": true
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Card Background",
+"default": "#f9fafb"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 12,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+}
+]
+}
+{% endschema %}
