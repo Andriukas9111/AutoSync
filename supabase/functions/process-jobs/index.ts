@@ -2474,19 +2474,24 @@ async function processBulkProductCreate(
       const { data: pubTenant } = await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).maybeSingle();
       const pubId = pubTenant?.online_store_publication_id;
 
-      // Fetch products with raw_data for image URLs (paginated)
+      // Fetch products with image_url + raw_data for image URLs (paginated)
       let imgOffset = 0;
       while (true) {
         const { data: imgBatch } = await db.from("products")
-          .select("shopify_gid, raw_data")
+          .select("shopify_gid, image_url, raw_data")
           .eq("shop_id", shopId).not("shopify_gid", "is", null)
           .range(imgOffset, imgOffset + 999);
         if (!imgBatch || imgBatch.length === 0) break;
         for (const p of imgBatch) {
           const gid2 = p.shopify_gid as string;
-          const raw = typeof p.raw_data === "string" ? JSON.parse(p.raw_data as string) : (p.raw_data ?? {});
-          const imgUrl = (raw as Record<string, unknown>).image as string;
-          if (imgUrl && typeof imgUrl === "string" && imgUrl.startsWith("http") && imgUrl.length > 30) {
+          // Priority: image_url field → raw_data.photo → raw_data.image → raw_data.photo1
+          let imgUrl = p.image_url as string | null;
+          if (!imgUrl) {
+            const raw = typeof p.raw_data === "string" ? JSON.parse(p.raw_data as string) : (p.raw_data ?? {});
+            const r = raw as Record<string, unknown>;
+            imgUrl = (r.photo || r.image || r.image_url || r.photo1 || r.picture || r.img) as string | null;
+          }
+          if (imgUrl && typeof imgUrl === "string" && imgUrl.startsWith("http") && /\.(jpg|jpeg|png|webp|gif)/i.test(imgUrl)) {
             imgLines.push(JSON.stringify({ productId: gid2, media: [{ originalSource: imgUrl, mediaContentType: "IMAGE" }] }));
           }
           if (pubId) {
