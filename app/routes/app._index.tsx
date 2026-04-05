@@ -80,6 +80,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeEnginesResult,
     ymmeSpecsResult,
     syncedProductsResult,
+    wheelProductsResult,
+    wheelMappedResult,
+    wheelFitmentsResult,
   ] = await Promise.all([
     db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at").eq("shop_id", shopId).maybeSingle(),
     // Product counts — exclude staged products (same filter as job-status API to prevent flash-to-zero)
@@ -110,6 +113,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
     // Pushed products — check for products that actually exist on Shopify (have shopify_product_id)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("shopify_product_id", "is", null),
+    // Wheel counts — needed for initial render to prevent flash (useAppData defaults to 0)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
 
   const tenant = tenantResult.data;
@@ -179,6 +186,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Unique makes/models — same source as job-status.tsx (tenant_active_makes)
     uniqueMakes: activeMakesResult.count ?? 0,
     uniqueModels: modelCollectionResult.count ?? 0,
+    // Wheel counts — prevents flash-of-wrong-data on initial render
+    wheelProducts: wheelProductsResult.count ?? 0,
+    wheelMapped: wheelMappedResult.count ?? 0,
+    wheelFitments: wheelFitmentsResult.count ?? 0,
   };
 };
 
@@ -357,6 +368,9 @@ export default function Dashboard() {
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
     uniqueModels: loaderUniqueModels,
+    wheelProducts: loaderWheelProducts,
+    wheelMapped: loaderWheelMapped,
+    wheelFitments: loaderWheelFitments,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
@@ -377,6 +391,10 @@ export default function Dashboard() {
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
     uniqueModels: loaderUniqueModels,
+    // Wheel counts — prevents flash-of-wrong-data on initial render
+    wheelProducts: loaderWheelProducts,
+    wheelMapped: loaderWheelMapped,
+    wheelFitments: loaderWheelFitments,
   });
 
   // All live values from unified hook
