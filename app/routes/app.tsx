@@ -280,6 +280,7 @@ export default function App() {
             <s-link href="/app">Dashboard</s-link>
             <s-link href="/app/products">Products</s-link>
             <s-link href="/app/fitment">Fitment</s-link>
+            <s-link href="/app/wheels">Wheels</s-link>
             <s-link href="/app/providers">Providers</s-link>
             <s-link href="/app/push">Push to Shopify</s-link>
             <s-link href="/app/collections">Collections</s-link>

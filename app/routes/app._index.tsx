@@ -543,45 +543,22 @@ export default function Dashboard() {
                     </InlineStack>
                     <Button onClick={() => navigate("/app/products")} variant="plain" size="slim">View all</Button>
                   </InlineStack>
-                  {/* Vehicle Parts Section */}
-                  <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">Vehicle Parts</Text>
-                  <div style={statGridStyle(3)}>
+                  <div style={statGridStyle(2)}>
                     {[
-                      { label: "Total", value: vehicleTotal },
+                      { label: "Vehicle Parts", value: vehicleTotal },
                       { label: "Mapped", value: vehicleMapped },
-                      { label: "Not Mapped", value: vehicleNotMapped },
+                      { label: "Fitments", value: liveFitmentCount },
+                      { label: "Unmapped", value: vehicleNotMapped },
+                      ...(s.wheelProducts > 0 ? [
+                        { label: "Wheels", value: s.wheelProducts },
+                        { label: "W. Mapped", value: s.wheelMapped },
+                      ] : []),
                     ].map((item) => (
                       <div key={item.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{item.value.toLocaleString()}</Text>
                         <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
                       </div>
                     ))}
-                  </div>
-                  {/* Wheel Products Section */}
-                  {s.wheelProducts > 0 && (
-                    <>
-                      <Text as="p" variant="bodySm" fontWeight="semibold" tone="subdued">Wheel Products</Text>
-                      <div style={statGridStyle(3)}>
-                        {[
-                          { label: "Total", value: s.wheelProducts },
-                          { label: "Wheel Mapped", value: s.wheelMapped },
-                          { label: "Wheel Specs", value: s.wheelFitments },
-                        ].map((item) => (
-                          <div key={item.label} style={statMiniStyle}>
-                            <Text as="p" variant="headingMd" fontWeight="bold">{item.value.toLocaleString()}</Text>
-                            <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                  {/* Combined summary */}
-                  <div style={{ borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "var(--p-space-200)" }}>
-                    <InlineStack gap="400">
-                      <Text as="span" variant="bodySm" tone="subdued">{`All Products: ${liveTotalProducts.toLocaleString()}`}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">{`Vehicle Links: ${liveFitmentCount.toLocaleString()}`}</Text>
-                      <Text as="span" variant="bodySm" tone="subdued">{`Makes: ${liveUniqueMakes.toLocaleString()}`}</Text>
-                    </InlineStack>
                   </div>
                 </BlockStack>
               </Card>
@@ -598,12 +575,12 @@ export default function Dashboard() {
                   </InlineStack>
                   <div style={statGridStyle(2)}>
                     {[
-                      { label: "Products Pushed", value: livePushedProducts },
-                      { label: "Pending Push", value: Math.max(0, vehicleMapped - livePushedProducts) },
+                      { label: "Pushed", value: livePushedProducts },
+                      { label: "Pending", value: Math.max(0, vehicleMapped - livePushedProducts) },
                       { label: "Collections", value: liveCollectionCount },
-                      { label: "Active Makes", value: liveActiveMakes },
-                      { label: "Vehicle Pages", value: liveVehiclePages },
-                      { label: "Vehicle Coverage", value: `${vehicleCoverage}%` as unknown as number },
+                      { label: "Makes", value: liveActiveMakes },
+                      { label: "Pages", value: liveVehiclePages },
+                      { label: "Coverage", value: `${vehicleCoverage}%` as unknown as number },
                     ].map((s) => (
                       <div key={s.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</Text>
