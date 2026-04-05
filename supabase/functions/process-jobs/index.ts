@@ -2548,55 +2548,85 @@ async function processBulkProductCreate(
     metadata: JSON.stringify({ ...meta, phase: "linking", phaseLabel: "Linking existing products by title..." }),
   }).eq("id", job.id);
 
-  // DEDUPLICATION: Check if products already exist on Shopify by title
-  // This prevents creating duplicates when push is retried after a failure
-  const existingCheck = await shopifyGraphQL(shopId, accessToken,
-    `{ productsCount { count } }`
-  );
-  const shopifyProductCount = existingCheck?.data?.productsCount?.count ?? 0;
-
-  if (shopifyProductCount > 0) {
-    // Fetch existing products and match by title to link them
-    console.log(`[bulk_create] Found ${shopifyProductCount} existing products on Shopify — linking by title...`);
-    let linked = 0;
-    let cursor: string | null = null;
+  // DEDUPLICATION: Link existing Shopify products to our DB by title matching.
+  // Uses batch approach: pre-load all unlinked DB product titles into a Map,
+  // then scan Shopify products and match in-memory. O(n) instead of O(n*m).
+  {
+    // Step 1: Pre-load ALL unlinked products from our DB into a Map<title, id>
+    const unlinkMap = new Map<string, string>(); // title → our DB product ID
+    let dbOffset = 0;
     while (true) {
-      const query = `{ products(first: 250${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id title } } pageInfo { hasNextPage endCursor } } }`;
-      const result = await shopifyGraphQL(shopId, accessToken, query);
-      const edges = result?.data?.products?.edges ?? [];
-      if (edges.length === 0) break;
+      const { data: batch } = await db.from("products")
+        .select("id, title")
+        .eq("shop_id", shopId)
+        .is("shopify_product_id", null)
+        .neq("status", "staged")
+        .order("id")
+        .range(dbOffset, dbOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const p of batch) {
+        if (p.title) unlinkMap.set(p.title.trim(), p.id);
+      }
+      dbOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
 
-      for (const edge of edges) {
-        const shopifyTitle = (edge.node.title as string || "").trim();
-        const shopifyGid = edge.node.id as string;
-        const numericId = shopifyGid.split("/").pop();
+    if (unlinkMap.size > 0) {
+      console.log(`[bulk_create] ${unlinkMap.size} unlinked products in DB — scanning Shopify for matches...`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, phase: "linking", phaseLabel: `Linking ${unlinkMap.size} products by title...` }),
+      }).eq("id", job.id);
 
-        // Match by exact title in our DB
-        const { data: match } = await db.from("products")
-          .select("id")
-          .eq("shop_id", shopId)
-          .eq("title", shopifyTitle)
-          .is("shopify_product_id", null)
-          .limit(1)
-          .maybeSingle();
+      // Step 2: Scan Shopify products and match against our Map
+      let linked = 0;
+      let cursor: string | null = null;
+      while (true) {
+        const query = `{ products(first: 250${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id title } } pageInfo { hasNextPage endCursor } } }`;
+        const result = await shopifyGraphQL(shopId, accessToken, query);
+        const edges = result?.data?.products?.edges ?? [];
+        if (edges.length === 0) break;
 
-        if (match) {
-          await db.from("products").update({
-            shopify_product_id: numericId,
-            shopify_gid: shopifyGid,
-          }).eq("id", match.id);
-          linked++;
+        // Batch: collect all matches from this page, then update DB in parallel
+        const updates: Array<{ dbId: string; shopifyGid: string; numericId: string }> = [];
+        for (const edge of edges) {
+          const shopifyTitle = (edge.node.title as string || "").trim();
+          const shopifyGid = edge.node.id as string;
+          const dbId = unlinkMap.get(shopifyTitle);
+          if (dbId) {
+            updates.push({ dbId, shopifyGid, numericId: shopifyGid.split("/").pop()! });
+            unlinkMap.delete(shopifyTitle); // Remove so we don't match again
+          }
         }
+
+        // Batch update — 10 concurrent DB writes per Shopify page
+        if (updates.length > 0) {
+          const BATCH = 10;
+          for (let i = 0; i < updates.length; i += BATCH) {
+            await Promise.all(updates.slice(i, i + BATCH).map((u) =>
+              db.from("products").update({
+                shopify_product_id: u.numericId,
+                shopify_gid: u.shopifyGid,
+              }).eq("id", u.dbId)
+            ));
+          }
+          linked += updates.length;
+        }
+
+        const pageInfo = result?.data?.products?.pageInfo;
+        if (!pageInfo?.hasNextPage) break;
+        cursor = pageInfo.endCursor;
+
+        // Early exit: if all unlinked products are matched, no need to scan more
+        if (unlinkMap.size === 0) break;
       }
 
-      const pageInfo = result?.data?.products?.pageInfo;
-      if (!pageInfo?.hasNextPage) break;
-      cursor = pageInfo.endCursor;
+      console.log(`[bulk_create] Linked ${linked} existing products by title`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, phase: "linked", phaseLabel: `Linked ${linked} products. Checking for new products to create...` }),
+      }).eq("id", job.id);
+    } else {
+      console.log(`[bulk_create] No unlinked products — skipping dedup scan`);
     }
-    console.log(`[bulk_create] Linked ${linked} existing products by title`);
-    await db.from("sync_jobs").update({
-      metadata: JSON.stringify({ ...meta, phase: "linked", phaseLabel: `Linked ${linked} existing products. Checking for new products to create...` }),
-    }).eq("id", job.id);
   }
 
   // Get all products that STILL need creating on Shopify (after dedup)
