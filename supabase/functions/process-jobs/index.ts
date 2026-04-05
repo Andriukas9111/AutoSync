@@ -2932,13 +2932,34 @@ async function processBulkPush(
   const fitMap = new Map<string, Array<Record<string, unknown>>>();
   for (const f of allFitments) { const list = fitMap.get(f.product_id as string) ?? []; list.push(f); fitMap.set(f.product_id as string, list); }
 
+  // ── Wheel fitments — query and group by product (same pattern as vehicle fitments) ──
+  const allWheelFitments: Array<Record<string, unknown>> = [];
+  let wfOffset = 0;
+  while (allWheelFitments.length < MAX_FITMENTS) {
+    const { data: wfBatch } = await db.from("wheel_fitments")
+      .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
+      .eq("shop_id", shopId).range(wfOffset, wfOffset + 999);
+    if (!wfBatch || wfBatch.length === 0) break;
+    allWheelFitments.push(...wfBatch);
+    wfOffset += wfBatch.length;
+    if (wfBatch.length < 1000) break;
+  }
+  const wheelFitMap = new Map<string, Array<Record<string, unknown>>>();
+  for (const wf of allWheelFitments) {
+    const list = wheelFitMap.get(wf.product_id as string) ?? [];
+    list.push(wf);
+    wheelFitMap.set(wf.product_id as string, list);
+  }
+  console.log(`[bulk_push] Loaded ${allFitments.length} vehicle fitments + ${allWheelFitments.length} wheel fitments`);
+
   // Generate JSONL for metafields
   const mfLines: string[] = [];
   const tagLines: string[] = [];
 
   for (const p of allProducts) {
     const fits = fitMap.get(p.id) || [];
-    if (fits.length === 0) continue;
+    const wheelFits = wheelFitMap.get(p.id) || [];
+    if (fits.length === 0 && wheelFits.length === 0) continue;
     const gid = `gid://shopify/Product/${p.shopify_product_id}`;
 
     // Metafields
@@ -2970,8 +2991,33 @@ async function processBulkPush(
     if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
     if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort().slice(0,128)), ownerId: gid });
     if (generations.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generations].sort().slice(0,128)), ownerId: gid });
-    mfLines.push(JSON.stringify({ metafields: mfs }));
-    tagLines.push(JSON.stringify({ id: gid, tags: [...tags] }));
+
+    // ── Wheel spec metafields (from wheel_fitments table) ──
+    if (wheelFits.length > 0) {
+      const pcdSet = new Set<string>(), diamSet = new Set<string>(), widthSet = new Set<string>(), cbSet = new Set<string>();
+      for (const wf of wheelFits) {
+        if (wf.pcd) pcdSet.add(String(wf.pcd));
+        if (wf.diameter) diamSet.add(String(wf.diameter));
+        if (wf.width) widthSet.add(String(wf.width));
+        if (wf.center_bore) cbSet.add(String(wf.center_bore));
+        // Wheel-specific tags
+        if (wf.pcd) tags.add(`_autosync_wheel_PCD_${wf.pcd}`);
+        if (wf.diameter) tags.add(`_autosync_wheel_${wf.diameter}inch`);
+        if (wf.width) tags.add(`_autosync_wheel_${wf.width}J`);
+      }
+      if (pcdSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...pcdSet].sort()), ownerId: gid });
+      if (diamSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
+      if (widthSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", value: JSON.stringify([...widthSet].sort()), ownerId: gid });
+      if (cbSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", value: JSON.stringify([...cbSet].sort()), ownerId: gid });
+    }
+
+    // Only push if there are actual metafields to set
+    if (mfs.length > 0) {
+      mfLines.push(JSON.stringify({ metafields: mfs }));
+    }
+    if (tags.size > 0) {
+      tagLines.push(JSON.stringify({ id: gid, tags: [...tags] }));
+    }
   }
 
   console.log(`[bulk_push] Generated ${mfLines.length} metafield lines + ${tagLines.length} tag lines`);
