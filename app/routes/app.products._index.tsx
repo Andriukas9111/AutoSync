@@ -575,12 +575,12 @@ export default function Products() {
         {/* ── Status Overview ── */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("120px", "8px"),
+            ...autoFitGridStyle("120px", "var(--p-space-200)"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
               { key: "total", icon: ProductIcon, label: "Total", count: totalCount, critical: false },
-              { key: "unmapped", icon: AlertCircleIcon, label: "Needs Review", count: (activeBreakdown["unmapped"] ?? 0) + (activeBreakdown["flagged"] ?? 0) + (activeBreakdown["partial"] ?? 0), critical: true },
+              { key: "not_mapped", icon: AlertCircleIcon, label: "Not Mapped", count: totalCount - (activeBreakdown["auto_mapped"] ?? 0) - (activeBreakdown["smart_mapped"] ?? 0) - (activeBreakdown["manual_mapped"] ?? 0), critical: true },
               { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
               { key: "smart_mapped", icon: WandIcon, label: "Smart", count: activeBreakdown["smart_mapped"] ?? 0, critical: false },
               { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },

@@ -293,7 +293,7 @@ export default function PricingPage() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              ...autoFitGridStyle("120px", "8px"),
+              ...autoFitGridStyle("120px", "var(--p-space-200)"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[

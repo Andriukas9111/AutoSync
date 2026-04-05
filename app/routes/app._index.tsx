@@ -380,7 +380,7 @@ export default function Dashboard() {
 
   // All live values from unified hook
   const s = liveData; // Short alias
-  const { mapped: liveMapped, needsReview, coverage, pendingPush } = computeFromStats(s);
+  const { mapped: liveMapped, needsReview, notMapped, coverage, pendingPush } = computeFromStats(s);
   const liveTotalProducts = s.total;
   const liveUnmapped = s.unmapped;
   const liveAutoMapped = s.autoMapped;
@@ -449,9 +449,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">
                     Quick Actions
                   </Text>
-                  {(needsReview) > 0 && (
+                  {needsReview > 0 && (
                     <Badge tone="warning">
-                      {`${(needsReview).toLocaleString()} need review`}
+                      {`${needsReview.toLocaleString()} need review`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -468,7 +468,7 @@ export default function Dashboard() {
                     label="Auto Extract"
                     description="Automatically detect vehicle fitments"
                     onClick={() => navigate("/app/fitment")}
-                    badge={(needsReview) > 0 ? { content: `${(needsReview).toLocaleString()} pending`, tone: "warning" } : undefined}
+                    badge={needsReview > 0 ? { content: `${needsReview.toLocaleString()} flagged`, tone: "warning" } : undefined}
                   />
                   <QuickActionCard
                     icon={TargetIcon}
@@ -545,7 +545,7 @@ export default function Dashboard() {
                       { label: "Total Products", value: liveTotalProducts },
                       { label: "Vehicle Links", value: liveFitmentCount },
                       { label: "Mapped", value: liveMapped },
-                      { label: "Needs Review", value: needsReview },
+                      { label: "Not Mapped", value: notMapped },
                       { label: "Makes with Parts", value: liveUniqueMakes },
                       { label: "Models with Parts", value: liveUniqueModels },
                     ].map((s) => (
@@ -636,7 +636,7 @@ export default function Dashboard() {
                 {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
                   {([
-                    { icon: AlertCircleIcon, label: "Needs Review", count: needsReview, status: "unmapped" },
+                    { icon: AlertCircleIcon, label: "Flagged", count: needsReview, status: "flagged" },
                     { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
                     { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
                     { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },

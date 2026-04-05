@@ -350,7 +350,7 @@ export default function Fitment() {
             {([
               { icon: ProductIcon, label: "Total", count: liveTotal },
               { icon: ConnectIcon, label: "Fitments", count: liveFitments },
-              { icon: AlertCircleIcon, label: "Needs Review", count: unmapped + flagged + partial, critical: true as boolean },
+              { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },
               { icon: WandIcon, label: "Smart", count: smartMapped },
               { icon: TargetIcon, label: "Manual", count: manualMapped },

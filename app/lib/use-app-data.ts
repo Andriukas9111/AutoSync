@@ -135,9 +135,14 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
  */
 export function computeFromStats(stats: AppStats) {
   const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  const needsReview = stats.unmapped + stats.flagged + stats.noMatch;
+  // "Needs Review" = only FLAGGED products (extraction found partial matches that need human decision)
+  // NOT no_match (those have zero vehicle data — reviewing won't help)
+  // NOT unmapped (those haven't been processed yet — run extraction first)
+  const needsReview = stats.flagged;
+  // "Not Mapped" = everything that doesn't have fitments yet
+  const notMapped = stats.total - mapped;
   const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
   const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
-  return { mapped, needsReview, coverage, pendingPush };
+  return { mapped, needsReview, notMapped, coverage, pendingPush };
 }
