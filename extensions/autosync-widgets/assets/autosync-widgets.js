@@ -1433,7 +1433,7 @@
       resetSelect(diameterEl, 'Loading...');
       resetSelect(widthEl, 'Select Diameter first');
       resetSelect(offsetEl, 'Select Width first');
-      searchBtn.disabled = true;
+      searchBtn.disabled = !state.pcd;
       if (resultsDiv) { clearChildren(resultsDiv); resultsDiv.classList.add('autosync-wheel-finder--hidden'); }
       if (!state.pcd) { resetSelect(diameterEl, 'Select PCD first'); return; }
       proxyFetch(proxyUrl, 'wheel-diameters', { pcd: state.pcd }).then(function(data) {
@@ -1447,7 +1447,7 @@
       state.width = ''; state.offset = '';
       resetSelect(widthEl, 'Loading...');
       resetSelect(offsetEl, 'Select Width first');
-      searchBtn.disabled = true;
+      searchBtn.disabled = !state.pcd;
       if (!state.diameter) { resetSelect(widthEl, 'Select Diameter first'); return; }
       proxyFetch(proxyUrl, 'wheel-widths', { pcd: state.pcd, diameter: state.diameter }).then(function(data) {
         populateSelect(widthEl, data.widths || [], function(w) { return w + 'J'; }, 'Select Width');
@@ -1476,67 +1476,30 @@
       state.offset = this.value;
     });
 
-    // Search button
+    // Search button — redirect to Shopify search/collection filtered by wheel specs
+    // Same pattern as YMME: redirects to native Shopify search with product-visible terms
     searchBtn.addEventListener('click', function() {
-      if (!state.pcd || !state.diameter) return;
-      searchBtn.disabled = true;
-      searchBtn.textContent = 'Searching...';
-      var params = { pcd: state.pcd, diameter: state.diameter };
-      if (state.width) params.width = state.width;
-      if (state.offset) params.offset = state.offset;
+      if (!state.pcd) return;
 
-      proxyFetch(proxyUrl, 'wheel-search', params).then(function(data) {
-        searchBtn.disabled = false;
-        searchBtn.textContent = btnText;
-        if (!resultsDiv) return;
-        clearChildren(resultsDiv);
-        if (data.error) {
-          var errP = document.createElement('p');
-          errP.className = 'autosync-wheel-finder__error';
-          errP.textContent = escapeText(data.error);
-          resultsDiv.appendChild(errP);
-        } else if (data.wheels && data.wheels.length > 0) {
-          var heading = document.createElement('p');
-          heading.className = 'autosync-wheel-finder__count';
-          heading.textContent = data.count + ' matching wheel' + (data.count !== 1 ? 's' : '') + ' found';
-          resultsDiv.appendChild(heading);
-          var grid = document.createElement('div');
-          grid.className = 'autosync-wheel-finder__grid';
-          data.wheels.forEach(function(item) {
-            var card = document.createElement('a');
-            card.className = 'autosync-wheel-finder__card';
-            card.href = '/products/' + escapeText(item.product.handle);
-            if (item.product.image_url) {
-              var img = document.createElement('img');
-              img.src = item.product.image_url;
-              img.alt = escapeText(item.product.title);
-              img.loading = 'lazy';
-              card.appendChild(img);
-            }
-            var title = document.createElement('span');
-            title.className = 'autosync-wheel-finder__title';
-            title.textContent = escapeText(item.product.title);
-            card.appendChild(title);
-            if (item.product.price) {
-              var price = document.createElement('span');
-              price.className = 'autosync-wheel-finder__price';
-              var amount = Number(item.product.price);
-              price.textContent = formatter ? formatter.format(amount) : ('$' + amount.toFixed(2));
-              card.appendChild(price);
-            }
-            grid.appendChild(card);
-          });
-          resultsDiv.appendChild(grid);
-        } else {
-          var noResults = document.createElement('p');
-          noResults.textContent = 'No wheels found matching your criteria.';
-          resultsDiv.appendChild(noResults);
-        }
-        resultsDiv.classList.remove('autosync-wheel-finder--hidden');
-      }).catch(function() {
-        searchBtn.disabled = false;
-        searchBtn.textContent = btnText;
-      });
+      // Track wheel search event for analytics
+      trackEvent(proxyUrl, 'wheel_search', { source: 'wheel_finder_widget' });
+
+      // Build search query using specs that appear in product titles/tags
+      // PCD (e.g. "5x112") is in product titles, tags use _autosync_wheel_PCD_5x112
+      // Combine both human-readable and tag terms for best matching
+      var searchTerms = [];
+      // PCD always present — search both the raw PCD and the tag
+      searchTerms.push(state.pcd);
+      if (state.diameter) {
+        searchTerms.push(state.diameter);
+      }
+      if (state.width) {
+        searchTerms.push(state.width + 'J');
+      }
+
+      // Redirect to Shopify search — matches product titles, descriptions, and tags
+      var searchUrl = '/search?type=product&q=' + encodeURIComponent(searchTerms.join(' '));
+      window.location.href = searchUrl;
     });
   }
 
