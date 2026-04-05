@@ -499,8 +499,53 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
       ),
     },
     {
+      id: "wheel-finder",
+      title: "11. Wheel Finder",
+      keywords: ["wheel", "finder", "pcd", "bolt", "pattern", "offset", "diameter", "width", "center", "bore", "alloy", "rim"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            The Wheel Finder widget lets your customers search for compatible alloy wheels
+            by their vehicle's bolt pattern (PCD), diameter, width, and offset.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              How it works
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Customers select from cascading dropdowns: PCD (e.g. 5x112) → Diameter (e.g. 18") →
+              Width (e.g. 8J) → Offset (e.g. ET35). Each dropdown dynamically loads options based on
+              your actual inventory. Matching wheels are displayed with images and prices.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Importing wheel data
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Import wheel products from any provider (CSV, XML, API). The column mapper automatically
+              recognizes PCD, diameter, width, center bore, and offset columns. Wheel specifications
+              are extracted and stored in a dedicated database for fast search.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              PCD (Bolt Pattern)
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              PCD stands for Pitch Circle Diameter — the bolt pattern of the wheel (e.g. 5x112 means
+              5 bolts on a 112mm circle). Customers need to match their vehicle's PCD to find compatible wheels.
+            </Text>
+          </BlockStack>
+          <Text as="p" variant="bodySm" tone="subdued">
+            Wheel Finder is available on the Professional plan and above.
+          </Text>
+        </BlockStack>
+      ),
+    },
+    {
       id: "analytics",
-      title: "11. Analytics Dashboard",
+      title: "12. Analytics Dashboard",
       keywords: ["analytics", "fitment", "coverage", "popular", "makes", "models", "supplier", "performance", "inventory", "gap", "export", "report"],
       content: (
         <BlockStack gap="300">

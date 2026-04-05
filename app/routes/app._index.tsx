@@ -545,10 +545,10 @@ export default function Dashboard() {
                     {[
                       { label: "Total Products", value: liveTotalProducts },
                       { label: "Vehicle Links", value: liveFitmentCount },
+                      { label: "Wheel Specs", value: s.wheelFitments },
                       { label: "Mapped", value: liveMapped },
                       { label: "Not Mapped", value: notMapped },
                       { label: "Makes with Parts", value: liveUniqueMakes },
-                      { label: "Models with Parts", value: liveUniqueModels },
                     ].map((s) => (
                       <div key={s.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>

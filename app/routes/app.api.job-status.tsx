@@ -99,6 +99,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     modelCollectionRes,
     providerRes,
     tenantRes,
+    wheelFitmentRes,
   ] = await Promise.all([
     jobQuery.limit(5),
     productCountQueries.total,
@@ -125,6 +126,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "make_model"),
     db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("tenants").select("plan, plan_status").eq("shop_id", shopId).maybeSingle(),
+    // Wheel fitment count
+    db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
 
   // ── Extract counts ──
@@ -170,6 +173,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       noMatch,
       // Fitment & collections
       fitments: fitmentRes.count ?? 0,
+      wheelFitments: wheelFitmentRes.count ?? 0,
       collections: collectionRes.count ?? 0,
       // Vehicle pages (head-only count queries)
       vehiclePages: vpTotalCount,
