@@ -2862,7 +2862,87 @@ async function processBulkPush(
       }
     }
 
-    // Both operations complete — set processed_items to match total_items (not GraphQL objectCount)
+    // Metafields + tags complete — now push images if not done yet
+    if (!meta.imagesPushed) {
+      console.log(`[bulk_push] Metafields+tags done. Starting image push...`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, phase: "images", phaseLabel: "Pushing product images to Shopify..." }),
+      }).eq("id", job.id);
+
+      // Generate image JSONL for products with image_url but no Shopify image
+      const imgLines: string[] = [];
+      let imgOffset = 0;
+      while (true) {
+        const { data: imgBatch } = await db.from("products")
+          .select("shopify_gid, image_url, raw_data")
+          .eq("shop_id", shopId).not("shopify_gid", "is", null)
+          .not("image_url", "is", null).neq("image_url", "")
+          .range(imgOffset, imgOffset + 499);
+        if (!imgBatch || imgBatch.length === 0) break;
+        for (const p of imgBatch) {
+          let imgUrl = p.image_url as string;
+          if (!imgUrl) {
+            const raw = typeof p.raw_data === "string" ? JSON.parse(p.raw_data as string) : (p.raw_data ?? {});
+            const r = raw as Record<string, unknown>;
+            imgUrl = (r.photo || r.image || r.photo1 || r.picture) as string;
+          }
+          if (imgUrl && typeof imgUrl === "string" && imgUrl.startsWith("http") && /\.(jpg|jpeg|png|webp|gif)/i.test(imgUrl)) {
+            imgLines.push(JSON.stringify({ productId: p.shopify_gid, media: [{ originalSource: imgUrl, mediaContentType: "IMAGE" }] }));
+          }
+        }
+        imgOffset += imgBatch.length;
+        if (imgBatch.length < 500) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      if (imgLines.length > 0) {
+        console.log(`[bulk_push] Uploading ${imgLines.length} product images...`);
+        const imgMutation = `mutation call($productId: ID!, $media: [CreateMediaInput!]!) { productCreateMedia(productId: $productId, media: $media) { media { id } mediaUserErrors { message } } }`;
+
+        // Upload JSONL
+        const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "images.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url parameters { name value } } userErrors { message } } }`,
+        })});
+        const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+        if (target) {
+          const form = new FormData();
+          for (const p2 of target.parameters) form.append(p2.name, p2.value);
+          form.append("file", new Blob([imgLines.join("\n")], { type: "text/jsonl" }));
+          await fetch(target.url, { method: "POST", body: form });
+          const opKey = target.parameters.find((p3: { name: string }) => p3.name === "key")?.value || "";
+          const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id } userErrors { message } } }`,
+            variables: { mutation: imgMutation, stagedUploadPath: target.url + opKey },
+          })});
+          const imgOpId = (await bulkRes.json())?.data?.bulkOperationRunMutation?.bulkOperation?.id;
+          if (imgOpId) {
+            console.log(`[bulk_push] Image BulkOperation started: ${imgOpId}`);
+            await db.from("sync_jobs").update({
+              metadata: JSON.stringify({ ...meta, imagesPushed: true, imagesOperationId: imgOpId, phaseLabel: `Pushing ${imgLines.length} images to Shopify...` }),
+            }).eq("id", job.id);
+            return { processed: 0, hasMore: true };
+          }
+        }
+      }
+      // No images to push or failed — mark as done
+      meta.imagesPushed = true;
+    }
+
+    // Check images BulkOperation if running
+    if (meta.imagesOperationId) {
+      const imgRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+        query: `query($id: ID!) { node(id: $id) { ... on BulkOperation { status objectCount } } }`,
+        variables: { id: meta.imagesOperationId },
+      })});
+      const imgOp = (await imgRes.json())?.data?.node;
+      if (imgOp?.status === "RUNNING" || imgOp?.status === "CREATED") {
+        console.log(`[bulk_push] Images still uploading: ${imgOp.objectCount} objects`);
+        return { processed: 0, hasMore: true };
+      }
+      console.log(`[bulk_push] Images ${imgOp?.status}: ${imgOp?.objectCount} objects`);
+    }
+
+    // ALL operations complete
     const totalItems = (job.total_items as number) || 0;
     await db.from("sync_jobs").update({ processed_items: totalItems, progress: 100 }).eq("id", job.id);
     await db.from("products").update({ synced_at: new Date().toISOString() })

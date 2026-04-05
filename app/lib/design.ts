@@ -195,10 +195,15 @@ export const STATUS_TONES: Record<string, "success" | "warning" | "critical" | "
 export const JOB_TYPE_LABELS: Record<string, string> = {
   extract: "Auto Extraction",
   push: "Push to Shopify",
+  bulk_push: "Push to Shopify",
   collections: "Creating Collections",
   vehicle_pages: "Vehicle Pages",
   sync: "Product Sync",
   provider_import: "Provider Import",
+  cleanup: "Cleanup",
+  cleanup_tags: "Removing Tags",
+  cleanup_metafields: "Removing Metafields",
+  delete_vehicle_pages: "Deleting Vehicle Pages",
 };
 
 // ─── Fitment Status Labels ─────────────────────────────────────────
