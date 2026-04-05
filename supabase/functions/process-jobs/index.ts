@@ -2601,6 +2601,35 @@ async function processBulkPush(
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
+  // ── AUTO-CREATE: Check if any mapped products need creating on Shopify first ──
+  // Products imported from providers (CSV/API/FTP) won't have a shopify_gid.
+  // They must be created on Shopify before we can push tags/metafields to them.
+  if (!meta.metafieldsOperationId && !meta.tagsOperationId && !meta._creationDone) {
+    const { count: needsCreation } = await db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .is("shopify_product_id", null)
+      .neq("status", "staged")
+      .not("fitment_status", "eq", "unmapped");
+
+    if (needsCreation && needsCreation > 0) {
+      console.log(`[bulk_push] Found ${needsCreation} products without Shopify IDs — creating on Shopify first`);
+      // Switch job type to "push" which handles product creation then auto-transitions back to bulk_push
+      // Preserve original metadata so tags/metafields options carry through
+      await db.from("sync_jobs").update({
+        type: "push",
+        status: "pending",
+        locked_at: null,
+        metadata: JSON.stringify({ ...meta, _creationDone: false }),
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+    // Mark creation as done so we don't re-check on next invocation
+    if (!meta._creationDone) {
+      meta._creationDone = true;
+    }
+  }
+
   // Phase 2: If we already have operation IDs, poll for completion
   if (meta.metafieldsOperationId || meta.tagsOperationId) {
     let totalObjects = 0;
