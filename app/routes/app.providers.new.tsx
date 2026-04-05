@@ -129,6 +129,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const duplicateStrategy = String(
     formData.get("duplicate_strategy") || "skip",
   );
+  const productCategory = String(
+    formData.get("product_category") || "vehicle_parts",
+  );
   const logoUrl = String(formData.get("logo_url") || "").trim();
 
   const config: Record<string, unknown> = {};
@@ -178,6 +181,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       notes: notes || null,
       logo_url: logoUrl || null,
       duplicate_strategy: duplicateStrategy,
+      product_category: productCategory,
       config,
       product_count: 0,
       import_count: 0,
@@ -412,6 +416,7 @@ export default function ProvidersNew() {
   // Form state
   const [name, setName] = useState("");
   const [duplicateStrategy, setDuplicateStrategy] = useState("skip");
+  const [productCategory, setProductCategory] = useState("vehicle_parts");
 
   // CSV
   const [csvDelimiter, setCsvDelimiter] = useState(",");
@@ -837,6 +842,19 @@ export default function ProvidersNew() {
                     Import settings
                   </Text>
                 </InlineStack>
+
+                <Select
+                  label="Product category"
+                  name="product_category"
+                  value={productCategory}
+                  onChange={setProductCategory}
+                  options={[
+                    { label: "Vehicle Parts — Exhaust, intake, suspension, etc.", value: "vehicle_parts" },
+                    { label: "Wheels — Alloy wheels, rims, wheel accessories", value: "wheels" },
+                    { label: "Accessories — Universal parts, tools, merchandise", value: "accessories" },
+                  ]}
+                  helpText="This determines how products are categorized and which mapping system is used"
+                />
 
                 <Select
                   label="When a product with the same SKU already exists"
