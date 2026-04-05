@@ -638,7 +638,7 @@ export default function Dashboard() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
                   {([
                     { icon: AlertCircleIcon, label: "Flagged", count: needsReview, status: "flagged" },
-                    { icon: MinusCircleIcon, label: "No Vehicle Data", count: s.noMatch, status: "no_match" },
+                    { icon: MinusCircleIcon, label: "No Vehicle Data", count: s.noMatch ?? 0, status: "no_match" },
                     { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
                     { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
                     { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },
