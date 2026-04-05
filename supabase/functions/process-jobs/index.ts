@@ -2872,34 +2872,42 @@ async function processBulkPush(
     metadata: JSON.stringify({ ...meta, phase: "generating", phaseLabel: "Generating metafield data for Shopify..." }),
   }).eq("id", job.id);
 
-  // Get all mapped products with fitments (paginated)
+  // Get all mapped products with fitments (paginated with delays)
   const allProducts: Array<{ id: string; shopify_product_id: string }> = [];
   let pOffset = 0;
   while (true) {
-    const { data: batch } = await db.from("products")
+    const { data: batch, error: pErr } = await db.from("products")
       .select("id, shopify_product_id")
       .eq("shop_id", shopId).neq("status", "staged").not("fitment_status", "eq", "unmapped")
-      .range(pOffset, pOffset + 999);
+      .not("shopify_product_id", "is", null)
+      .range(pOffset, pOffset + BATCH_SIZE - 1);
+    if (pErr) { console.warn(`[bulk_push] Product query error:`, pErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!batch || batch.length === 0) break;
     allProducts.push(...batch);
     pOffset += batch.length;
-    if (batch.length < 1000) break;
+    if (batch.length < BATCH_SIZE) break;
+    await new Promise(r => setTimeout(r, 100));
   }
 
   if (allProducts.length === 0) return { processed: 0, hasMore: false };
 
-  // Get fitments (paginated with safety cap to prevent OOM in Edge Function)
-  const MAX_FITMENTS = 50_000; // Safety cap — Edge Function has ~150MB memory
+  // Get fitments (paginated with small batches + delays to avoid DB overload)
+  // Nano compute: 0.5GB RAM, 60 connections — must be gentle
+  const MAX_FITMENTS = 50_000; // Safety cap
+  const BATCH_SIZE = 500; // Smaller batches to reduce DB pressure
   const allFitments: Array<Record<string, unknown>> = [];
   let fOffset = 0;
   while (allFitments.length < MAX_FITMENTS) {
-    const { data: batch } = await db.from("vehicle_fitments")
+    const { data: batch, error: fErr } = await db.from("vehicle_fitments")
       .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
-      .eq("shop_id", shopId).range(fOffset, fOffset + 999);
+      .eq("shop_id", shopId).range(fOffset, fOffset + BATCH_SIZE - 1);
+    if (fErr) { console.warn(`[bulk_push] Fitment query error at offset ${fOffset}:`, fErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!batch || batch.length === 0) break;
     allFitments.push(...batch);
     fOffset += batch.length;
-    if (batch.length < 1000) break;
+    if (batch.length < BATCH_SIZE) break;
+    // Small delay between batches to avoid connection exhaustion
+    await new Promise(r => setTimeout(r, 100));
   }
   if (allFitments.length >= MAX_FITMENTS) {
     console.log(`[process-jobs] Fitments capped at ${MAX_FITMENTS} to prevent OOM (total may be higher)`);
@@ -2932,17 +2940,19 @@ async function processBulkPush(
   const fitMap = new Map<string, Array<Record<string, unknown>>>();
   for (const f of allFitments) { const list = fitMap.get(f.product_id as string) ?? []; list.push(f); fitMap.set(f.product_id as string, list); }
 
-  // ── Wheel fitments — query and group by product (same pattern as vehicle fitments) ──
+  // ── Wheel fitments — query with small batches + delays ──
   const allWheelFitments: Array<Record<string, unknown>> = [];
   let wfOffset = 0;
   while (allWheelFitments.length < MAX_FITMENTS) {
-    const { data: wfBatch } = await db.from("wheel_fitments")
+    const { data: wfBatch, error: wfErr } = await db.from("wheel_fitments")
       .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
-      .eq("shop_id", shopId).range(wfOffset, wfOffset + 999);
+      .eq("shop_id", shopId).range(wfOffset, wfOffset + BATCH_SIZE - 1);
+    if (wfErr) { console.warn(`[bulk_push] Wheel fitment query error at offset ${wfOffset}:`, wfErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!wfBatch || wfBatch.length === 0) break;
     allWheelFitments.push(...wfBatch);
     wfOffset += wfBatch.length;
-    if (wfBatch.length < 1000) break;
+    if (wfBatch.length < BATCH_SIZE) break;
+    await new Promise(r => setTimeout(r, 100));
   }
   const wheelFitMap = new Map<string, Array<Record<string, unknown>>>();
   for (const wf of allWheelFitments) {
