@@ -2435,6 +2435,21 @@ async function processBulkProductCreate(
   }
 
   // Phase 1: Dedup check + Generate JSONL + start bulk operation
+  // GUARD: Check if a mutation bulk operation is already running on Shopify
+  // This prevents duplicate product creation from repeated invocations
+  const runningOpCheck = await shopifyGraphQL(shopId, accessToken,
+    `{ currentBulkOperation(type: MUTATION) { id status objectCount } }`
+  );
+  const runningOp = runningOpCheck?.data?.currentBulkOperation;
+  if (runningOp && (runningOp.status === "RUNNING" || runningOp.status === "CREATED")) {
+    console.log(`[bulk_create] BulkOperation already running: ${runningOp.id} (${runningOp.status}) — waiting...`);
+    // Save the operation ID so next invocation polls it properly
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, bulkCreateOperationId: runningOp.id }),
+    }).eq("id", job.id);
+    return { processed: 0, hasMore: true };
+  }
+
   console.log(`[bulk_create] Phase 1: Checking for existing products on Shopify (dedup)...`);
 
   // DEDUPLICATION: Check if products already exist on Shopify by title
