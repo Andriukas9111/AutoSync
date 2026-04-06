@@ -402,16 +402,21 @@ export async function action({ request }: ActionFunctionArgs) {
       .eq("provider_id", providerId)
       .eq("shop_id", shopId);
 
-    if (!savedMappingRows || savedMappingRows.length === 0) {
-      return data({ error: "No saved column mappings found. Import at least once using the Import wizard first." }, { status: 400 });
-    }
+    let mappings: ColumnMapping[];
 
-    const mappings = savedMappingRows.map((r) => ({
-      sourceColumn: r.source_column,
-      targetField: r.target_field,
-      transformRule: r.transform_rule ?? undefined,
-      isUserEdited: r.is_user_edited,
-    }));
+    if (savedMappingRows && savedMappingRows.length > 0) {
+      // Use saved mappings from previous import
+      mappings = savedMappingRows.map((r) => ({
+        sourceColumn: r.source_column,
+        targetField: r.target_field ?? null,
+        transformRule: r.transform_rule ?? undefined,
+        isUserEdited: r.is_user_edited,
+      }));
+    } else {
+      // No saved mappings — will use auto-detection during import
+      // The provider-import Edge Function handles this with getSmartMappings()
+      mappings = [];
+    }
 
     // 2. Check for duplicate running refresh
     const { count: runningCount } = await db

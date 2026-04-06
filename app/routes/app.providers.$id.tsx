@@ -628,7 +628,7 @@ export default function ProviderDetail() {
               >
                 {type === "api" ? "Fetch & Import" : "Import Products"}
               </Button>
-              {hasSavedMappings && (type === "api" || type === "ftp") && (
+              {(type === "api" || type === "ftp") && (
                 <Button
                   icon={ImportIcon}
                   onClick={handleRefreshProducts}

@@ -1280,6 +1280,7 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
   filters.push(`filter.p.m.${mfNs}.pcd=${encodeURIComponent(pcd)}`);
   if (diameter) filters.push(`filter.p.m.${mfNs}.diameter=${encodeURIComponent(diameter)}`);
   if (width) filters.push(`filter.p.m.${mfNs}.width=${encodeURIComponent(width)}`);
+  if (offset) filters.push(`filter.p.m.${mfNs}.offset=${encodeURIComponent("ET" + offset)}`);
   if (filters.length > 0) url += "?" + filters.join("&");
 
   return json({ url, filters: { pcd, diameter, width, offset } }, 200, request);
