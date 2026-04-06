@@ -587,6 +587,58 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Scheduled provider auto-fetch — scan for due providers ──
+    // Creates a provider_refresh job for providers with next_scheduled_fetch <= NOW()
+    if (!targetJobId) {
+      try {
+        const { data: dueProvider } = await db.from("providers")
+          .select("id, shop_id, name, fetch_schedule, duplicate_strategy")
+          .lte("next_scheduled_fetch", new Date().toISOString())
+          .neq("fetch_schedule", "manual")
+          .eq("status", "active")
+          .order("next_scheduled_fetch", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (dueProvider) {
+          // Check saved mappings exist
+          const { count: mappingCount } = await db.from("provider_column_mappings")
+            .select("id", { count: "exact", head: true })
+            .eq("provider_id", dueProvider.id);
+
+          // Check no running refresh for this provider
+          const { count: runningCount } = await db.from("sync_jobs")
+            .select("id", { count: "exact", head: true })
+            .eq("shop_id", dueProvider.shop_id)
+            .in("type", ["provider_refresh", "provider_import"])
+            .in("status", ["running", "pending"]);
+
+          if (mappingCount && mappingCount > 0 && (!runningCount || runningCount === 0)) {
+            console.log(`[process-jobs] Scheduled fetch due for provider ${dueProvider.name} — creating job`);
+            // Create provider_refresh job
+            const { data: newJob } = await db.from("sync_jobs").insert({
+              shop_id: dueProvider.shop_id,
+              type: "provider_refresh",
+              status: "pending",
+              total_items: 0,
+              processed_items: 0,
+              metadata: { provider_id: dueProvider.id, provider_name: dueProvider.name, trigger: "scheduled", duplicate_strategy: dueProvider.duplicate_strategy || "update" },
+            }).select("id").single();
+
+            if (newJob) targetJobId = newJob.id;
+          }
+
+          // Calculate next fetch time regardless
+          const hours = parseInt(dueProvider.fetch_schedule) || 24;
+          await db.from("providers").update({
+            next_scheduled_fetch: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
+          }).eq("id", dueProvider.id);
+        }
+      } catch (e) {
+        console.warn("[process-jobs] Scheduled fetch scan error:", e);
+      }
+    }
+
     let candidate: { id: string } | null = null;
 
     if (targetJobId) {
@@ -756,6 +808,7 @@ Deno.serve(async (req) => {
         result = await processCleanupCollections(db, job);
         break;
       case "provider_auto_fetch":
+      case "provider_refresh":
         result = await processProviderAutoFetch(db, job);
         break;
       case "provider_import":

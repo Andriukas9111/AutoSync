@@ -169,13 +169,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const providerId = params.id;
   if (!providerId) throw new Response("Provider ID required", { status: 400 });
 
-  const [providerResult, tenant, importsResult] = await Promise.all([
+  const [providerResult, tenant, importsResult, savedMappingsResult] = await Promise.all([
     db.from("providers").select("*").eq("id", providerId).eq("shop_id", shopId).maybeSingle(),
     getTenant(shopId),
     db.from("provider_imports")
       .select("id, file_name, status, imported_rows, total_rows, created_at")
       .eq("provider_id", providerId).eq("shop_id", shopId)
       .order("created_at", { ascending: false }).limit(5),
+    db.from("provider_column_mappings")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", providerId).eq("shop_id", shopId),
   ]);
 
   if (providerResult.error || !providerResult.data) {
@@ -195,6 +198,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     canUseApi: limits.features.apiIntegration,
     canUseFtp: limits.features.ftpImport,
     recentImports: (importsResult.data || []) as ProviderImport[],
+    hasSavedMappings: (savedMappingsResult.count ?? 0) > 0,
   };
 };
 
@@ -293,7 +297,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export default function ProviderDetail() {
-  const { provider, canUseApi, canUseFtp, recentImports } =
+  const { provider, canUseApi, canUseFtp, recentImports, hasSavedMappings } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const fetcher = useFetcher();
@@ -302,6 +306,11 @@ export default function ProviderDetail() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<{
     success: boolean;
     message: string;
   } | null>(null);
@@ -397,6 +406,33 @@ export default function ProviderDetail() {
     }
   }, [provider.id]);
 
+  const handleRefreshProducts = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("provider_id", provider.id);
+      formData.set("_action", "refresh");
+
+      const response = await fetch("/app/api/provider-fetch", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      setRefreshResult({
+        success: result.success ?? false,
+        message: result.message || result.error || "Unknown result",
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Refresh failed";
+      setRefreshResult({ success: false, message });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [provider.id]);
+
   // If we're on a child route (import, products, imports), render the child only
   const isChildRoute = /\/(import|products|imports)(\/|$|\?)/.test(location.pathname);
   if (isChildRoute) {
@@ -461,6 +497,15 @@ export default function ProviderDetail() {
             onDismiss={() => setConnectionResult(null)}
           >
             <p>{connectionResult.message}</p>
+          </Banner>
+        )}
+
+        {refreshResult && (
+          <Banner
+            tone={refreshResult.success ? "success" : "critical"}
+            onDismiss={() => setRefreshResult(null)}
+          >
+            <p>{refreshResult.message}</p>
           </Banner>
         )}
 
@@ -583,6 +628,16 @@ export default function ProviderDetail() {
               >
                 {type === "api" ? "Fetch & Import" : "Import Products"}
               </Button>
+              {hasSavedMappings && (type === "api" || type === "ftp") && (
+                <Button
+                  icon={ImportIcon}
+                  onClick={handleRefreshProducts}
+                  loading={refreshing}
+                  disabled={refreshing}
+                >
+                  Refresh Products
+                </Button>
+              )}
               {(type === "api" || type === "ftp") && (
                 <Button
                   icon={ConnectIcon}

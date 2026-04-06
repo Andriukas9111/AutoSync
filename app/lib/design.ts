@@ -200,6 +200,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   vehicle_pages: "Vehicle Pages",
   sync: "Product Sync",
   provider_import: "Provider Import",
+  provider_refresh: "Refreshing Products",
   cleanup: "Cleanup",
   cleanup_tags: "Removing Tags",
   cleanup_metafields: "Removing Metafields",
@@ -295,6 +296,7 @@ export function getJobProgressLabel(ctx: JobContext): string {
     case "vehicle_pages": return "Creating vehicle specification pages";
     case "bulk_push": return "Pushing tags & metafields via Shopify Operations API";
     case "provider_import": return "Importing products from provider";
+    case "provider_refresh": return "Re-fetching and updating products from provider";
     default: return `Processing ${formatJobType(type)}`;
   }
 }
@@ -327,6 +329,9 @@ export function getJobWaitingMessage(ctx: JobContext): string {
   if (type === "push" || type === "bulk_push") {
     return "Starting push — scanning products and connecting to Shopify...";
   }
+  if (type === "provider_refresh") {
+    return "Connecting to provider and downloading latest products...";
+  }
 
   return "Preparing...";
 }
@@ -341,6 +346,7 @@ export function getJobCompletionMessage(ctx: JobContext): string {
     case "vehicle_pages": return `${processed.toLocaleString()} vehicle pages created`;
     case "bulk_push": return `${processed.toLocaleString()} products pushed via bulk operations`;
     case "provider_import": return `${processed.toLocaleString()} products imported`;
+    case "provider_refresh": return `${processed.toLocaleString()} products refreshed from provider`;
     default: return `${processed.toLocaleString()} items processed`;
   }
 }

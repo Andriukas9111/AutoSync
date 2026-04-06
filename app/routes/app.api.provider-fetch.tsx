@@ -393,7 +393,110 @@ export async function action({ request }: ActionFunctionArgs) {
     });
   }
 
-  return data({ error: "Invalid action. Use 'test', 'fetch', or 'import'." }, { status: 400 });
+  // ── ACTION: REFRESH — One-click re-fetch + import with saved mappings ──
+  if (actionType === "refresh") {
+    // 1. Load saved column mappings
+    const { data: savedMappingRows } = await db
+      .from("provider_column_mappings")
+      .select("source_column, target_field, transform_rule, is_user_edited")
+      .eq("provider_id", providerId)
+      .eq("shop_id", shopId);
+
+    if (!savedMappingRows || savedMappingRows.length === 0) {
+      return data({ error: "No saved column mappings found. Import at least once using the Import wizard first." }, { status: 400 });
+    }
+
+    const mappings = savedMappingRows.map((r) => ({
+      sourceColumn: r.source_column,
+      targetField: r.target_field,
+      transformRule: r.transform_rule ?? undefined,
+      isUserEdited: r.is_user_edited,
+    }));
+
+    // 2. Check for duplicate running refresh
+    const { count: runningCount } = await db
+      .from("sync_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .in("type", ["provider_refresh", "provider_import"])
+      .in("status", ["running", "pending"]);
+
+    if (runningCount && runningCount > 0) {
+      return data({ error: "A provider import or refresh is already running. Wait for it to complete." }, { status: 409 });
+    }
+
+    const duplicateStrategy = provider.duplicate_strategy || "update";
+
+    // 3. For API providers — fire-and-forget Edge Function
+    if (provider.type === "api") {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseKey) return data({ error: "Server configuration error" }, { status: 500 });
+
+      fetch(`${supabaseUrl}/functions/v1/provider-import`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shop_id: shopId,
+          provider_id: providerId,
+          mappings,
+          duplicate_strategy: duplicateStrategy,
+          current_offset: 0,
+        }),
+      }).catch(() => {});
+
+      return data({
+        success: true,
+        message: `Refresh started for ${provider.name}. Products will be updated in the background using "${duplicateStrategy}" strategy.`,
+      });
+    }
+
+    // 4. For FTP providers — handle inline (Edge Function doesn't support FTP)
+    if (provider.type === "ftp") {
+      try {
+        const config = typeof provider.config === "string" ? JSON.parse(provider.config) : (provider.config ?? {});
+        let password = config.ftp_password || "";
+        if (password && isEncrypted(password)) password = await decrypt(password);
+
+        const ftpResult = await fetchFromFtp({
+          host: config.ftp_host || "",
+          port: parseInt(config.ftp_port || "21", 10),
+          username: config.ftp_username || "",
+          password,
+          remotePath: config.ftp_path || "/",
+          protocol: config.ftp_protocol || "ftp",
+        });
+
+        if (!ftpResult.content) return data({ error: "FTP fetch returned no data" }, { status: 500 });
+
+        const parsed = parseFile(ftpResult.content, ftpResult.fileName || "data.csv");
+        if (!parsed.rows || parsed.rows.length === 0) return data({ error: "Parsed file has no rows" }, { status: 500 });
+
+        const result = await runProviderImport({
+          shopId,
+          providerId,
+          fileName: ftpResult.fileName || "ftp-refresh",
+          fileSize: ftpResult.content.length,
+          fileType: parsed.fileType || "csv",
+          mappings,
+          duplicateStrategy,
+          rows: parsed.rows,
+        });
+
+        return data({
+          success: true,
+          message: `Refresh complete: ${result.importedRows} imported, ${result.skippedRows} skipped, ${result.duplicateRows} updated.`,
+          ...result,
+        });
+      } catch (err) {
+        return data({ error: `FTP refresh failed: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
+      }
+    }
+
+    return data({ error: "Refresh is only supported for API and FTP providers. Use the Import wizard for CSV/XML files." }, { status: 400 });
+  }
+
+  return data({ error: "Invalid action. Use 'test', 'fetch', 'import', or 'refresh'." }, { status: 400 });
 }
 
 // ---------------------------------------------------------------------------
