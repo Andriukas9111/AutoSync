@@ -34,10 +34,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch {
     // Prisma may fail — fall back to session token
   }
-  // NEVER fall back to session.accessToken — it's a short-lived session token
-  // that expires in hours. Using it would overwrite the permanent offline token
-  // in the tenants table, causing 401 errors for all background API calls.
-  // The offline token should ONLY come from Prisma's offline session.
+  // Fall back to session.accessToken from authenticate.admin() token exchange.
+  // In Shopify's managed installation flow, this IS the valid offline access token.
+  if (!offlineToken && session.accessToken) {
+    offlineToken = session.accessToken;
+  }
   // Token status check (values never logged for security)
   const hasOfflineToken = !!offlineToken;
   const hasSessionToken = !!session.accessToken;
