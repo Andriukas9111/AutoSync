@@ -67,6 +67,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     smartMappedResult,
     manualMappedResult,
     flaggedResult,
+    noMatchResult,
     fitmentCountResult,
     collectionCountResult,
     topMakesResult,
@@ -92,6 +93,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "manual_mapped"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Top makes — cap at 50K rows (enough for accurate top 10, prevents OOM on huge shops)
@@ -111,8 +113,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
-    // Pushed products — check for products that actually exist on Shopify (have shopify_product_id)
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("shopify_product_id", "is", null),
+    // Pushed products — MUST match job-status.tsx query (synced_at NOT NULL, NOT shopify_product_id)
+    // to prevent flash-of-wrong-data when poll replaces loader values
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
     // Wheel counts — needed for initial render to prevent flash (useAppData defaults to 0)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged"),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "auto_mapped"),
@@ -163,6 +166,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     smartMapped: smartMappedResult.count ?? 0,
     manualMapped: manualMappedResult.count ?? 0,
     flagged: flaggedResult.count ?? 0,
+    noMatch: noMatchResult.count ?? 0,
     mapped: (autoMappedResult.count ?? 0) + (smartMappedResult.count ?? 0) + (manualMappedResult.count ?? 0),
     // Fitments
     fitmentCount: fitmentCountResult.count ?? 0,
@@ -352,6 +356,7 @@ export default function Dashboard() {
     smartMapped,
     manualMapped,
     flagged,
+    noMatch: loaderNoMatch,
     mapped,
     fitmentCount,
     topMakes,
@@ -384,6 +389,7 @@ export default function Dashboard() {
     smartMapped,
     manualMapped,
     flagged,
+    noMatch: loaderNoMatch,
     fitments: fitmentCount,
     collections: collectionCount,
     pushedProducts: loaderPushedProducts,
