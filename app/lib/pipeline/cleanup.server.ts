@@ -124,10 +124,10 @@ export async function removeAllTags(
 
   while (hasNext) {
     try {
-      const resp = await admin.graphql(SEARCH_QUERY, {
+      const resp: Response = await admin.graphql(SEARCH_QUERY, {
         variables: { query: `tag:${tagPrefix}*`, first: 100, after: cursor },
       });
-      const json = await resp.json();
+      const json: Record<string, any> = await resp.json();
       const edges = json?.data?.products?.edges ?? [];
       for (const { node } of edges) {
         const autoTags = (node.tags ?? []).filter((t: string) => t.startsWith(tagPrefix));

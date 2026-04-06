@@ -28,6 +28,7 @@ export const PLAN_NAMES: Record<PlanTier, string> = {
   professional: "Professional",
   business: "Business",
   enterprise: "Enterprise",
+  custom: "Custom",
 };
 
 export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
