@@ -49,6 +49,12 @@
   max-height: 32px !important;
 }
 
+/* ===== Unified CSS variable bridges ===== */
+/* These map the global --as-* overrides into each widget's own namespace.
+   Liquid sets --as-* on the root; widgets consume their own --awf-*, --autosync-* etc.
+   The --as-btn-bg / --as-btn-text / --as-muted / --as-primary variables let merchants
+   override all widget buttons & footer text from a single place. */
+
 /* --------------- YMME Search --------------- */
 .autosync-ymme-search {
   --autosync-border: var(--autosync-border-color, #e3e3e3);
@@ -453,8 +459,8 @@
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #fff;
-  background: var(--autosync-primary, #2c6ecb);
+  color: var(--as-btn-text, #fff);
+  background: var(--as-btn-bg, var(--autosync-primary, #2c6ecb));
   border: none;
   border-radius: calc(var(--autosync-radius, 8px) / 2);
   cursor: pointer;
@@ -996,8 +1002,8 @@
   padding: 0.5rem 1.25rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #fff;
-  background: var(--awf-primary, #2c6ecb);
+  color: var(--as-btn-text, #fff);
+  background: var(--as-btn-bg, var(--awf-primary, #2c6ecb));
   border: none;
   border-radius: calc(var(--awf-radius, 8px) / 2);
   cursor: pointer;
@@ -1462,7 +1468,7 @@ html.autosync-hide-watermark .avd-footer {
   padding: 12px 0 0 !important;
   margin-top: 16px !important;
   font-size: 11px !important;
-  color: #9ca3af !important;
+  color: var(--as-muted, #9ca3af) !important;
   opacity: 0.5 !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   line-height: 1 !important;
@@ -1501,5 +1507,5 @@ html.autosync-hide-watermark .avd-footer {
 .avsd-footer__text strong,
 .avd-footer__text strong {
   font-weight: 600 !important;
-  color: #005bd2 !important;
+  color: var(--as-primary, #005bd2) !important;
 }

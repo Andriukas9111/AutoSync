@@ -28,7 +28,16 @@
     --avd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
     --avd-border: {{ block.settings.border_color | default: '#e5e7eb' }};
     --avd-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
-    --avd-radius: {{ block.settings.border_radius | default: 12 }}px;
+    --avd-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
+    --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
     padding-top: {{ block.settings.padding_top | default: 40 }}px;
     padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
     max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
@@ -95,6 +104,10 @@
 "target": "section",
 "settings": [
 {
+"type": "header",
+"content": "Content"
+},
+{
 "type": "text",
 "id": "heading",
 "label": "Heading",
@@ -119,6 +132,20 @@
 "default": "Decode VIN"
 },
 {
+"type": "select",
+"id": "heading_alignment",
+"label": "Heading Alignment",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" }
+],
+"default": "center"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
 "type": "checkbox",
 "id": "show_products",
 "label": "Show compatible products",
@@ -131,36 +158,8 @@
 "default": false
 },
 {
-"type": "select",
-"id": "heading_alignment",
-"label": "Heading Alignment",
-"options": [
-{ "value": "left", "label": "Left" },
-{ "value": "center", "label": "Center" }
-],
-"default": "center"
-},
-{
-"type": "select",
-"id": "container_width",
-"label": "Container Width",
-"options": [
-{ "value": "800", "label": "Narrow (800px)" },
-{ "value": "1000", "label": "Medium (1000px)" },
-{ "value": "1200", "label": "Wide (1200px)" },
-{ "value": "full", "label": "Full Width" }
-],
-"default": "1200"
-},
-{
-"type": "range",
-"id": "container_padding",
-"label": "Side Padding",
-"min": 0,
-"max": 60,
-"step": 4,
-"default": 24,
-"unit": "px"
+"type": "header",
+"content": "Colors"
 },
 {
 "type": "color",
@@ -199,13 +198,52 @@
 "default": "#f9fafb"
 },
 {
+"type": "color",
+"id": "button_color",
+"label": "Button Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "button_text_color",
+"label": "Button Text Color",
+"default": "#ffffff"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "800", "label": "Narrow (800px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "1200", "label": "Wide (1200px)" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "full", "label": "Full Width" }
+],
+"default": "1200"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Side Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
 "type": "range",
 "id": "border_radius",
 "label": "Border Radius",
 "min": 0,
 "max": 24,
 "step": 2,
-"default": 12,
+"default": 8,
 "unit": "px"
 },
 {

@@ -156,9 +156,7 @@ addedCount++;
 }
 
 if (addedCount % 2 !== 0) {
-var spacer = el('div', 'avd-spec-item');
-spacer.style.background = 'transparent';
-spacer.style.borderRight = 'none';
+var spacer = el('div', 'avd-spec-item avd-spec-item--spacer');
 grid.appendChild(spacer);
 }
 
@@ -249,14 +247,12 @@ card.appendChild(rawSection);
 /* Footer — only show if merchant hasn't hidden watermark */
 if (root.dataset.hideWatermark !== 'true') {
 var footer = el('div', 'avd-footer');
-footer.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';
 var logoImg = document.createElement('img');
 logoImg.src = logoUrl;
 logoImg.alt = 'AutoSync';
 logoImg.width = 14;
 logoImg.height = 14;
 logoImg.className = 'avd-footer__logo';
-logoImg.style.cssText = 'width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;display:inline-block!important;flex-shrink:0!important;';
 footer.appendChild(logoImg);
 var pw = el('span', 'avd-footer__text');
 pw.textContent = 'Powered by ';
@@ -268,10 +264,26 @@ card.appendChild(footer);
 resultsEl.appendChild(card);
 resultsEl.style.display = 'block';
 
+// Store vehicle for badge/compat widgets
 try {
-var stored = { make: vehicle.make, model: vehicle.model, year: vehicle.modelYear, source: 'vin' };
+var stored = {
+makeName: vehicle.make || '',
+modelName: vehicle.model || '',
+year: String(vehicle.modelYear || ''),
+fuelType: vehicle.fuelType || '',
+bodyClass: vehicle.bodyClass || '',
+source: 'vin'
+};
 localStorage.setItem('autosync_vehicle', JSON.stringify(stored));
+window.dispatchEvent(new CustomEvent('autosync:vehicle-changed', { detail: stored }));
 } catch(e) {}
+
+// Auto-populate YMME widget if present on the page
+if (window.__autosyncPopulateYMME && vehicle.make && vehicle.model) {
+try {
+window.__autosyncPopulateYMME(proxyUrl, vehicle.make, vehicle.model, vehicle.modelYear || '');
+} catch(e) { /* non-critical */ }
+}
 }
 });
 })();

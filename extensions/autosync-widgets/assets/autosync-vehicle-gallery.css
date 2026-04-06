@@ -381,6 +381,27 @@
     }
   }
 
+  /* ── Classes for JS-rendered elements ── */
+  .avs-load-more-wrap {
+    text-align: center;
+    padding: 24px 0;
+    grid-column: 1 / -1;
+  }
+  .avs-load-more-btn {
+    background: var(--as-btn-bg, var(--avs-primary, #005bd2));
+    color: var(--as-btn-text, #fff);
+    border: none;
+    padding: 12px 32px;
+    border-radius: var(--as-radius, 8px);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  .avs-load-more-btn:hover {
+    opacity: 0.9;
+  }
+
   /* ── Footer ───────────────────────────────────── */
   /* .avs-footer styles unified in autosync-widgets.css */
 

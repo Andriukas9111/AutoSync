@@ -250,10 +250,7 @@ prodImg.alt = prod.title;
 prodImg.loading = 'lazy';
 imgWrap.appendChild(prodImg);
 } else {
-var prodPh = el('div', 'avsd-product-card__img');
-prodPh.style.display = 'flex';
-prodPh.style.alignItems = 'center';
-prodPh.style.justifyContent = 'center';
+var prodPh = el('div', 'avsd-product-card__img avsd-product-placeholder');
 prodPh.appendChild(svgEl(icons.imgPlaceholder));
 imgWrap.appendChild(prodPh);
 }
@@ -270,15 +267,13 @@ contentEl.appendChild(prodWrap);
 /* Footer — only show if merchant hasn't hidden watermark */
 if (root.dataset.hideWatermark !== 'true') {
 var footerWrap = el('div', 'avsd-footer-wrap');
-footerWrap.style.cssText = 'text-align:center!important;';
 var footer = el('div', 'avsd-footer');
-footer.style.cssText = 'display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';
 var logoImg = document.createElement('img');
 logoImg.src = root.dataset.logoUrl || '';
 logoImg.alt = 'AutoSync';
 logoImg.width = 14;
 logoImg.height = 14;
-logoImg.style.cssText = 'width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;display:inline-block!important;flex-shrink:0!important;';
+logoImg.className = 'avsd-footer__logo';
 footer.appendChild(logoImg);
 var poweredText = el('span', 'avsd-footer__text');
 poweredText.textContent = 'Powered by ';

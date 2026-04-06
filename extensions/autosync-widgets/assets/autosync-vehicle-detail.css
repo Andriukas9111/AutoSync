@@ -469,3 +469,13 @@
     .avsd-products-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
     .avsd-hero__title { font-size: 22px; }
   }
+
+  /* ── Classes for JS-rendered elements ── */
+  .avsd-product-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    background: var(--avsd-card-bg, #f9fafb);
+    border-radius: var(--avsd-radius, 8px);
+  }

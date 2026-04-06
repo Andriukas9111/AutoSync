@@ -29,9 +29,20 @@
     --awf-muted: {{ block.settings.muted_color | default: '#6b7280' }};
     --awf-border: {{ block.settings.border_color | default: '#e5e7eb' }};
     --awf-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
-    --awf-radius: {{ block.settings.border_radius | default: 10 }}px;
+    --awf-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
+    --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
+    padding-left: {{ block.settings.container_padding | default: 24 }}px;
+    padding-right: {{ block.settings.container_padding | default: 24 }}px;
     max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
     margin: 0 auto;
   "
@@ -172,14 +183,16 @@
 "default": "#f9fafb"
 },
 {
-"type": "range",
-"id": "border_radius",
-"label": "Border Radius",
-"min": 0,
-"max": 24,
-"step": 2,
-"default": 10,
-"unit": "px"
+"type": "color",
+"id": "button_color",
+"label": "Button Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "button_text_color",
+"label": "Button Text Color",
+"default": "#ffffff"
 },
 {
 "type": "header",
@@ -192,9 +205,31 @@
 "default": "1200",
 "options": [
 { "value": "full", "label": "Full Width" },
-{ "value": "1200", "label": "1200px" },
-{ "value": "800", "label": "800px (Narrow)" }
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Standard (1200px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "800", "label": "Narrow (800px)" }
 ]
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
 },
 {
 "type": "range",

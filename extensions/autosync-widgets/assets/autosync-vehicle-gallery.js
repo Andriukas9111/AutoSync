@@ -82,10 +82,10 @@
       if (vehicles.length > PER_PAGE) {
         var wrap = document.createElement('div');
         wrap.setAttribute('data-avs-load-more', '');
-        wrap.style.cssText = 'text-align:center;padding:24px 0;grid-column:1/-1;';
+        wrap.classList.add('avs-load-more-wrap');
         var btn = document.createElement('button');
         btn.textContent = 'Show More (' + (vehicles.length - PER_PAGE) + ' remaining)';
-        btn.style.cssText = 'background:var(--avs-primary,#2563eb);color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;';
+        btn.classList.add('avs-load-more-btn');
         btn.onclick = function() {
           currentPage++;
           var s = (currentPage - 1) * PER_PAGE;

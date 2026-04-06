@@ -1770,4 +1770,174 @@
   } else {
     init();
   }
+
+  // ── Expose YMME population for cross-widget use (VIN, Plate) ──
+  // Resolves make/model names to YMME IDs via the proxy, stores the vehicle,
+  // and populates the YMME widget dropdowns.
+  window.__autosyncPopulateYMME = async function(proxyUrl, makeName, modelName, year) {
+    var ymmeEl = document.querySelector('[data-autosync-ymme]');
+    if (!ymmeEl || !proxyUrl) return;
+
+    try {
+      // 1. Fetch makes and find the matching one
+      var makesData = await proxyFetch(proxyUrl, 'makes', {});
+      var makes = makesData.makes || makesData || [];
+      if (!Array.isArray(makes)) makes = [];
+      var matchedMake = makes.find(function(m) {
+        return m.name && m.name.toLowerCase() === (makeName || '').toLowerCase();
+      });
+      if (!matchedMake) return;
+
+      // 2. Fetch models for this make and find the matching one
+      var modelsData = await proxyFetch(proxyUrl, 'models', { make_id: matchedMake.id });
+      var models = modelsData.models || [];
+      var matchedModel = models.find(function(m) {
+        return m.name && m.name.toLowerCase() === (modelName || '').toLowerCase();
+      });
+      if (!matchedModel) return;
+
+      // 3. Build a resolved vehicle object and store it
+      var resolved = {
+        makeId: matchedMake.id,
+        makeName: matchedMake.name,
+        modelId: matchedModel.id,
+        modelName: matchedModel.name,
+        year: String(year || ''),
+        source: 'vin'
+      };
+      storeVehicle(resolved);
+
+      // 4. Save to garage
+      try {
+        var garage = getGarage();
+        var isDup = garage.some(function(g) {
+          return g.makeName === resolved.makeName && g.modelName === resolved.modelName && g.year === resolved.year;
+        });
+        if (!isDup) {
+          garage.unshift(resolved);
+          if (garage.length > GARAGE_MAX) garage = garage.slice(0, GARAGE_MAX);
+          saveGarage(garage);
+        }
+      } catch(e) {}
+
+      // 5. Populate the YMME widget using the same DOM manipulation as plate lookup
+      var makeSelect = ymmeEl.querySelector('[data-autosync-level="make"]');
+      var modelSelect = ymmeEl.querySelector('[data-autosync-level="model"]');
+      var yearSelect = ymmeEl.querySelector('[data-autosync-level="year"]');
+      var engineSelect = ymmeEl.querySelector('[data-autosync-level="engine"]');
+      var searchBtn = ymmeEl.querySelector('[data-autosync-search]');
+
+      // Set make — update custom dropdown display if present
+      var selectDisplay = ymmeEl.querySelector('[data-autosync-select-display]');
+      if (selectDisplay) {
+        selectDisplay.innerHTML = '';
+        var logoUrl = null;
+        var selOpts = ymmeEl.querySelectorAll('[data-autosync-select-options] li');
+        for (var i = 0; i < selOpts.length; i++) {
+          var lid = selOpts[i].getAttribute('data-value');
+          if (String(lid) === String(matchedMake.id)) {
+            selOpts[i].setAttribute('aria-selected', 'true');
+            selOpts[i].classList.add('autosync-ymme__select-option--selected');
+            var lImg = selOpts[i].querySelector('img');
+            if (lImg) logoUrl = lImg.src;
+          } else {
+            selOpts[i].removeAttribute('aria-selected');
+            selOpts[i].classList.remove('autosync-ymme__select-option--selected');
+          }
+        }
+        if (logoUrl) {
+          var lEl = document.createElement('img');
+          lEl.src = logoUrl;
+          lEl.alt = matchedMake.name || '';
+          lEl.width = 20;
+          lEl.height = 20;
+          lEl.style.marginRight = '6px';
+          selectDisplay.appendChild(lEl);
+        }
+        selectDisplay.appendChild(document.createTextNode(matchedMake.name || ''));
+        var trigger = ymmeEl.querySelector('[data-autosync-select-trigger]');
+        if (trigger) trigger.disabled = false;
+      }
+
+      // Set hidden make select
+      if (makeSelect) {
+        var mOpts = makeSelect.querySelectorAll('option');
+        var mFound = false;
+        for (var j = 0; j < mOpts.length; j++) {
+          if (String(mOpts[j].value) === String(matchedMake.id)) { makeSelect.value = String(matchedMake.id); mFound = true; break; }
+        }
+        if (!mFound) {
+          var nOpt = document.createElement('option');
+          nOpt.value = matchedMake.id;
+          nOpt.textContent = matchedMake.name || '';
+          makeSelect.appendChild(nOpt);
+          makeSelect.value = String(matchedMake.id);
+        }
+      }
+
+      // Populate model select
+      if (modelSelect) {
+        while (modelSelect.firstChild) modelSelect.removeChild(modelSelect.firstChild);
+        var defOpt = document.createElement('option');
+        defOpt.value = '';
+        defOpt.textContent = 'Select Model';
+        modelSelect.appendChild(defOpt);
+        models.forEach(function(m) {
+          var o = document.createElement('option');
+          o.value = m.id;
+          var lb = m.name;
+          if (m.generation && m.generation.indexOf(' | ') === -1 && !m.generation.startsWith(m.name)) lb += ' (' + m.generation + ')';
+          if (m.year_from) lb += ' ' + m.year_from + '-' + (m.year_to || 'present');
+          o.textContent = lb;
+          o.dataset.name = m.name;
+          modelSelect.appendChild(o);
+        });
+        modelSelect.disabled = false;
+        modelSelect.value = String(matchedModel.id);
+      }
+
+      // Populate year select
+      if (yearSelect && year) {
+        var yearsData = await proxyFetch(proxyUrl, 'years', { model_id: matchedModel.id });
+        var years = yearsData.years || [];
+        while (yearSelect.firstChild) yearSelect.removeChild(yearSelect.firstChild);
+        var defY = document.createElement('option');
+        defY.value = '';
+        defY.textContent = 'Select Year';
+        yearSelect.appendChild(defY);
+        years.forEach(function(y) {
+          var o = document.createElement('option');
+          o.value = y;
+          o.textContent = String(y);
+          yearSelect.appendChild(o);
+        });
+        yearSelect.disabled = false;
+        yearSelect.value = String(year);
+        if (searchBtn) searchBtn.disabled = false;
+
+        // Populate engine select
+        if (engineSelect) {
+          var enginesData = await proxyFetch(proxyUrl, 'engines', { model_id: matchedModel.id, year: year });
+          var engines = enginesData.engines || [];
+          while (engineSelect.firstChild) engineSelect.removeChild(engineSelect.firstChild);
+          var defE = document.createElement('option');
+          defE.value = '';
+          defE.textContent = 'Select Engine (optional)';
+          engineSelect.appendChild(defE);
+          engines.forEach(function(e2) {
+            var o = document.createElement('option');
+            o.value = e2.id;
+            var lb = (e2.name || '').replace(/\s*\[[0-9a-f]{8}\]$/, '');
+            if (e2.displacement_cc) lb += ' ' + e2.displacement_cc + 'cc';
+            if (e2.fuel_type) lb += ' ' + e2.fuel_type;
+            o.textContent = lb;
+            engineSelect.appendChild(o);
+          });
+          engineSelect.disabled = false;
+        }
+      }
+    } catch (err) {
+      console.warn('[autosync] __autosyncPopulateYMME error:', err);
+    }
+  };
 })();

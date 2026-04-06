@@ -29,6 +29,18 @@
     --autosync-badge-bg: {{ block.settings.background_color | default: '#ffffff' }};
     --autosync-badge-text: {{ block.settings.text_color | default: '#1a1a2e' }};
     --autosync-badge-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-btn-bg: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-btn-text: #ffffff;
+    max-width: {% case block.settings.container_width %}{% when 'full' %}100%{% when '1400' %}1400px{% when '1200' %}1200px{% when '1000' %}1000px{% when '800' %}800px{% else %}1200px{% endcase %};
+    margin: 0 auto;
+    padding: {{ block.settings.container_padding | default: 24 }}px;
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
   "
@@ -65,6 +77,16 @@
 "target": "section",
 "settings": [
 {
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
 "type": "color",
 "id": "success_color",
 "label": "Success Color",
@@ -89,6 +111,51 @@
 "default": "#1a1a2e"
 },
 {
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Card Background",
+"default": "#f9fafb"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Contained (1200px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "800", "label": "Narrow (800px)" }
+],
+"default": "1200"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
 "type": "range",
 "id": "border_radius",
 "label": "Border Radius",
@@ -97,12 +164,6 @@
 "step": 2,
 "default": 8,
 "unit": "px"
-},
-{
-"type": "checkbox",
-"id": "show_vehicle_name",
-"label": "Show Vehicle Name",
-"default": true
 },
 {
 "type": "range",
@@ -123,6 +184,16 @@
 "step": 4,
 "default": 40,
 "unit": "px"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
+"type": "checkbox",
+"id": "show_vehicle_name",
+"label": "Show Vehicle Name",
+"default": true
 }
 ]
 }

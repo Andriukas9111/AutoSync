@@ -18,7 +18,7 @@
 .apl-plate-badge__text { font-size: 9px; font-weight: 700; color: #fff; letter-spacing: 0.06em; line-height: 1; }
 .apl-plate-input { flex: 1; border: none; outline: none; background: #FFD700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 20px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 12px; color: #1a1a1a; text-align: center; min-width: 0; }
 .apl-plate-input::placeholder { color: rgba(0,0,0,0.25); font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; }
-.apl-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--apl-primary); color: #fff; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
+.apl-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--apl-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
 .apl-submit-btn:hover { background: color-mix(in srgb, var(--apl-primary) 85%, #000); transform: translateY(-1px); }
 .apl-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
@@ -79,7 +79,7 @@
 
 /* Find Parts */
 .apl-find-wrap { max-width: 560px; margin: 14px auto 0; animation: apl-fadeIn 0.35s ease 0.05s both; }
-.apl-find-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border: none; border-radius: 8px; background: var(--apl-primary); color: #fff; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; }
+.apl-find-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--apl-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; }
 .apl-find-btn:hover { background: color-mix(in srgb, var(--apl-primary) 85%, #000); transform: translateY(-1px); }
 .apl-find-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .apl-find-btn svg { flex-shrink: 0; }
