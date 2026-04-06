@@ -573,7 +573,7 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
     .eq("shop_id", shop)
     .maybeSingle();
   // Default app ID — will be overridden per-tenant when we store it
-  const appId = tenant?.shopify_app_id ?? "334692253697";
+  const appId = tenant?.shopify_app_id ?? process.env.SHOPIFY_APP_ID ?? "334692253697";
   const mfNs = `app--${appId}--vehicle_fitment`;
 
   const found = (row: { handle: string; title: string; type: string }) => {
@@ -1265,7 +1265,7 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
     .select("shopify_app_id")
     .eq("shop_id", shop)
     .maybeSingle();
-  const appId = tenant?.shopify_app_id ?? "334692253697";
+  const appId = tenant?.shopify_app_id ?? process.env.SHOPIFY_APP_ID ?? "334692253697";
   const mfNs = `app--${appId}--wheel_spec`;
 
   // Build collection URL — use per-PCD collection (same pattern as YMME per-make collections)

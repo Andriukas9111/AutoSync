@@ -30,8 +30,8 @@ export function AdminSettings({ ymmeCounts, totalProducts, totalFitments, onRefr
           <div style={statGridStyle(2)}>
             {[
               { label: "Shopify API", value: "2026-01" },
-              { label: "App URL", value: "autosync-v3.vercel.app" },
-              { label: "Supabase", value: "yljgamqudcvvbvidzxqc" },
+              { label: "App URL", value: typeof window !== "undefined" ? window.location.host : "autosync-v3.vercel.app" },
+              { label: "Supabase", value: "Connected" },
               { label: "Framework", value: "React Router 7" },
               { label: "Deployment", value: "Vercel (Serverless)" },
               { label: "Edge Functions", value: "Supabase (pg_cron)" },
