@@ -212,7 +212,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Is there a free trial?",
-    a: "The Free plan lets you explore AutoSync with up to 50 products at no cost. All paid plans are billed monthly through Shopify with no long-term commitment.",
+    a: "The Free plan lets you explore AutoSync with up to 50 products at no cost. All paid plans include a 14-day free trial and are billed monthly through Shopify with no long-term commitment.",
   },
 ];
 

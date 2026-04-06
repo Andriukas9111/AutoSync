@@ -598,7 +598,7 @@ const FAQS = [
   { q: "How is AutoSync different from Convermax?", a: "Convermax starts at $250/month with complex setup. AutoSync offers more features including plate lookup, VIN decode, smart collections, auto-extraction, and 7 widgets, starting free with self-service setup." },
   { q: "Can I import products from supplier feeds?", a: "Yes. AutoSync supports CSV, XML, JSON, REST API, and FTP imports with smart column mapping that auto-detects fields and remembers your mappings for future imports." },
   { q: "What happens if I exceed plan limits?", a: "You\u2019ll be notified before reaching limits. Upgrade anytime with no data loss. Your data is never deleted \u2014 you just can\u2019t add more until you upgrade." },
-  { q: "Is there a free trial?", a: "The Free plan lets you try AutoSync with 50 products at no cost, forever. All paid plans include a 30-day free trial." },
+  { q: "Is there a free trial?", a: "The Free plan lets you try AutoSync with 50 products at no cost, forever. All paid plans include a 14-day free trial." },
 ];
 
 const SYSTEMS = [

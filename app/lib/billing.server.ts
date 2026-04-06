@@ -652,13 +652,14 @@ export async function createBillingSubscription(
 
   const response = await admin.graphql(
     `#graphql
-      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $replacementBehavior: AppSubscriptionReplacementBehavior) {
+      mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean, $replacementBehavior: AppSubscriptionReplacementBehavior, $trialDays: Int) {
         appSubscriptionCreate(
           name: $name
           returnUrl: $returnUrl
           lineItems: $lineItems
           test: $test
           replacementBehavior: $replacementBehavior
+          trialDays: $trialDays
         ) {
           appSubscription {
             id
@@ -685,6 +686,9 @@ export async function createBillingSubscription(
           }
           return testMode;
         })(),
+        // 14-day free trial for new subscriptions (Shopify requires minimum 3 days)
+        // Only on initial subscription, not on plan changes (upgrades/downgrades)
+        trialDays: isDowngrade ? undefined : 14,
         lineItems: [
           {
             plan: {
