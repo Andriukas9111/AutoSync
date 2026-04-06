@@ -570,6 +570,23 @@ Deno.serve(async (req) => {
     const staleLockCutoff = new Date(Date.now() - 5 * 60000).toISOString();
     const lockTime = new Date().toISOString();
 
+    // ── Stale job recovery — detect jobs stuck "running" for >30 min with broken self-chain ──
+    // This catches jobs where the self-chain fetch() failed (DB crash, Edge Function down, etc.)
+    // and pg_cron didn't pick them up because other jobs were queued ahead.
+    if (!targetJobId) {
+      const staleRunningCutoff = new Date(Date.now() - 30 * 60000).toISOString(); // 30 min
+      const { data: staleJobs } = await db.from("sync_jobs")
+        .select("id, type")
+        .eq("status", "running")
+        .is("locked_at", null) // Not currently locked
+        .lt("started_at", staleRunningCutoff)
+        .limit(1);
+      if (staleJobs && staleJobs.length > 0) {
+        console.log(`[process-jobs] Recovering stale job: ${staleJobs[0].id} (${staleJobs[0].type}) — running >30min with no lock`);
+        targetJobId = staleJobs[0].id;
+      }
+    }
+
     let candidate: { id: string } | null = null;
 
     if (targetJobId) {
