@@ -3,11 +3,12 @@
  * Consistent styling across all pages that use this pattern.
  */
 
+import type { IconSource } from "@shopify/polaris";
 import { BlockStack, InlineStack, Text, Badge } from "@shopify/polaris";
 import { IconBadge } from "./IconBadge";
 
 interface QuickActionCardProps {
-  icon: any;
+  icon: IconSource;
   label: string;
   description: string;
   onClick: () => void;

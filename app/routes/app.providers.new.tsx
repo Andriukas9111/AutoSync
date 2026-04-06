@@ -210,7 +210,7 @@ const SOURCE_TYPES: Array<{
   value: ProviderType;
   label: string;
   description: string;
-  icon: any;
+  icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   formats: string[];
   features: string[];
   planFeature?: keyof PlanLimits["features"];

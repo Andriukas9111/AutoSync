@@ -214,7 +214,7 @@ function QuickActionCard({
   primary = false,
   badge,
 }: {
-  icon: any;
+  icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   label: string;
   description: string;
   onClick: () => void;
@@ -289,7 +289,7 @@ function StatusChip({
   color,
   onClick,
 }: {
-  icon: any;
+  icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   label: string;
   count: number;
   bg: string;
