@@ -39,6 +39,7 @@
     --as-radius: {{ block.settings.border_radius | default: 8 }}px;
     --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
     --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
     padding-left: {{ block.settings.container_padding | default: 24 }}px;
@@ -141,6 +142,17 @@
 { "value": "left", "label": "Left" },
 { "value": "center", "label": "Center" }
 ]
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
 },
 {
 "type": "header",

@@ -33,6 +33,8 @@
   id="avsd-{{ block.id }}"
   style="
     --avsd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --avsd-hero-start: {{ block.settings.hero_bg_color | default: '#0a0f1e' }};
+    --avsd-hero-text: {{ block.settings.hero_text_color | default: '#ffffff' }};
     --avsd-bg: {{ block.settings.background_color | default: '#ffffff' }};
     --avsd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
     --avsd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
@@ -48,6 +50,7 @@
     --as-radius: {{ block.settings.border_radius | default: 8 }}px;
     --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
     --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};
     padding-top: {{ block.settings.padding_top | default: 0 }}px;
     padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
     max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
@@ -95,6 +98,17 @@
 { "value": "minimal", "label": "Minimal" }
 ],
 "default": "dark"
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
 },
 {
 "type": "header",
@@ -155,6 +169,18 @@
 {
 "type": "header",
 "content": "Colors"
+},
+{
+"type": "color",
+"id": "hero_bg_color",
+"label": "Hero Background",
+"default": "#0a0f1e"
+},
+{
+"type": "color",
+"id": "hero_text_color",
+"label": "Hero Text Color",
+"default": "#ffffff"
 },
 {
 "type": "color",
