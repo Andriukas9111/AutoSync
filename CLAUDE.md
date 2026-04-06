@@ -36,11 +36,12 @@ This project uses **React Router 7** (formerly Remix). NOT Next.js. NOT standard
 - Vercel API routes return INSTANTLY after creating a job — they NEVER do long-running work
 
 ### Shopify API tokens:
-- **Tokens NEVER expire** — Shopify's new token exchange system provides permanent offline access tokens
-- The `shpat_` token stored in `tenants.shopify_access_token` is valid indefinitely
-- If an API call returns "Invalid API key", the issue is NOT token expiration — investigate the actual cause
+- **Tokens do NOT expire** — `expiringOfflineAccessTokens` is set to `false` in `shopify.server.ts`
+- The `shpat_` token stored in `tenants.shopify_access_token` is permanent (non-expiring offline token)
 - Token is saved when merchant opens the app (in `app.tsx` layout wrapper)
-- NEVER assume a token has expired — ALWAYS investigate
+- If API returns 401, the token was likely overwritten — check app.tsx token saving logic
+- **DO NOT enable `expiringOfflineAccessTokens: true`** without implementing token refresh in the Edge Function
+- Shopify mandates expiring tokens for new apps created after April 2026 — migration plan in shopify.server.ts comments
 
 ### Architecture rules:
 - ALL styles → `app/lib/design.ts` (statMiniStyle, statGridStyle, cardRowStyle, barChartRowStyle, etc.)
