@@ -53,10 +53,7 @@ padding-right: {{ block.settings.container_padding | default: 16 }}px;
   "
 >
   {% if block.settings.heading != blank %}
-<div class="avs-heading-wrap" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">
-<div class="avs-heading-accent" {% if block.settings.heading_alignment == 'left' %}style="margin-left: 0;"{% endif %}></div>
-<h2 class="avs-heading">{{ block.settings.heading }}</h2>
-</div>
+<h2 class="avs-heading" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.heading }}</h2>
   {% endif %}
 
   {% if block.settings.subheading != blank %}

@@ -13,11 +13,7 @@
     position: relative;
   }
   .avs-heading-accent {
-    width: 48px;
-    height: 4px;
-    border-radius: 2px;
-    background: linear-gradient(135deg, var(--avs-primary), color-mix(in srgb, var(--avs-primary) 60%, var(--avs-accent, #a855f7)));
-    margin: 0 auto 14px;
+    display: none; /* removed for consistency with YMME/Wheel/Compat */
   }
   .avs-heading {
     font-family: inherit;
