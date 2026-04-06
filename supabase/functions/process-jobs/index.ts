@@ -179,7 +179,7 @@ async function getPublicationIds(
 
   // Fallback: query Shopify API
   try {
-    const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
       body: JSON.stringify({ query: "{ publications(first: 10) { nodes { id name } } }" }),
@@ -1352,7 +1352,7 @@ async function processPushChunk(
     try {
       // Push tags
       if (pushTags && tags.length > 0) {
-        const tagRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        const tagRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -1452,7 +1452,7 @@ async function processPushChunk(
           if (offsetSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", value: JSON.stringify([...offsetSet].sort()), ownerId: gid });
         }
 
-        const mfRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        const mfRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -1775,7 +1775,7 @@ async function processCollectionsChunk(
 <li><strong>Expert Knowledge</strong> — Specialist ${make} modification experience and support</li>
 </ul>`;
 
-      const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
         body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -1785,7 +1785,7 @@ async function processCollectionsChunk(
 
       if (collection) {
         // Publish to Online Store
-        await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({
@@ -1876,7 +1876,7 @@ async function processCollectionsChunk(
 <li>Styling accessories and body parts</li>
 </ul>`;
 
-        const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -1886,7 +1886,7 @@ async function processCollectionsChunk(
 
         if (collection) {
           // Publish to Online Store + Shop
-          await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
             body: JSON.stringify({
@@ -1996,7 +1996,7 @@ async function processCollectionsChunk(
           input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} ${yearRange} parts` };
         }
 
-        const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
           body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
@@ -2005,7 +2005,7 @@ async function processCollectionsChunk(
         const collection = json?.data?.collectionCreate?.collection;
 
         if (collection) {
-          await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
             body: JSON.stringify({
@@ -2207,7 +2207,7 @@ async function processVehiclePagesChunk(
     }
   }`;
 
-  const defRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+  const defRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
     body: JSON.stringify({ query: DEFINITION_QUERY }),
@@ -2255,7 +2255,7 @@ async function processVehiclePagesChunk(
         userErrors { field message }
       }
     }`;
-    const createDefRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+    const createDefRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
       body: JSON.stringify({ query: CREATE_DEF }),
@@ -2322,7 +2322,7 @@ async function processVehiclePagesChunk(
     ].filter(f => f.value);
 
     try {
-      const createRes = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      const createRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
         body: JSON.stringify({
@@ -3658,13 +3658,16 @@ async function processCleanupTags(
   const accessToken = tenant.shopify_access_token;
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata as string) : (job.metadata ?? {});
 
+  // Batch limit: process max 500 products per invocation to stay under 400s wall clock
+  const MAX_PRODUCTS_PER_INVOCATION = 500;
   let totalProcessed = 0;
   let totalRemoved = 0;
-  let cursor: string | null = null;
+  let cursor: string | null = meta.cleanupCursor ?? null;
   let hasNext = true;
 
-  while (hasNext) {
+  while (hasNext && totalProcessed < MAX_PRODUCTS_PER_INVOCATION) {
     const listRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id tags } } pageInfo { hasNextPage endCursor } } }`,
       variables: { cursor },
@@ -3683,20 +3686,26 @@ async function processCleanupTags(
         variables: { id: edge.node.id, tags: autoTags },
       })});
       totalRemoved += autoTags.length;
-      totalProcessed++;
     }
+    totalProcessed += edges.length;
 
     hasNext = pageInfo?.hasNextPage ?? false;
     cursor = pageInfo?.endCursor ?? null;
 
     await db.from("sync_jobs").update({
-      processed_items: totalProcessed,
-      progress: hasNext ? Math.min(90, totalProcessed) : 100,
+      processed_items: (job.processed_items as number || 0) + totalProcessed,
     }).eq("id", job.id);
   }
 
-  console.log(`[cleanup_tags] Removed ${totalRemoved} tags from ${totalProcessed} products`);
-  return { processed: totalProcessed, hasMore: false };
+  // Save cursor for next invocation if more pages remain
+  if (hasNext) {
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, cleanupCursor: cursor }),
+    }).eq("id", job.id);
+  }
+
+  console.log(`[cleanup_tags] Removed ${totalRemoved} tags from ${totalProcessed} products (hasMore: ${hasNext})`);
+  return { processed: totalProcessed, hasMore: hasNext };
 }
 
 // ── Cleanup Metafields processor ──────────────────────────────
@@ -3713,14 +3722,17 @@ async function processCleanupMetafields(
   const accessToken = tenant.shopify_access_token;
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
-  const NAMESPACES = ["$app:vehicle_fitment", "custom.vehicle_fitment"];
+  const NAMESPACES = ["$app:vehicle_fitment", "custom.vehicle_fitment", "$app:wheel_spec"];
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata as string) : (job.metadata ?? {});
 
+  // Batch limit: process max 300 products per invocation (each may have multiple metafield deletes)
+  const MAX_PRODUCTS_PER_INVOCATION = 300;
   let totalProcessed = 0;
   let totalRemoved = 0;
-  let cursor: string | null = null;
+  let cursor: string | null = meta.cleanupCursor ?? null;
   let hasNext = true;
 
-  while (hasNext) {
+  while (hasNext && totalProcessed < MAX_PRODUCTS_PER_INVOCATION) {
     const listRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
       query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id metafields(first: 20) { edges { node { id namespace key } } } } } pageInfo { hasNextPage endCursor } } }`,
       variables: { cursor },
@@ -3742,18 +3754,24 @@ async function processCleanupMetafields(
       }
       if (toDelete.length > 0) totalProcessed++;
     }
+    totalProcessed += edges.length;
 
     hasNext = pageInfo?.hasNextPage ?? false;
     cursor = pageInfo?.endCursor ?? null;
 
     await db.from("sync_jobs").update({
-      processed_items: totalProcessed,
-      progress: hasNext ? Math.min(90, totalProcessed) : 100,
+      processed_items: (job.processed_items as number || 0) + totalProcessed,
     }).eq("id", job.id);
   }
 
-  console.log(`[cleanup_metafields] Removed ${totalRemoved} metafields from ${totalProcessed} products`);
-  return { processed: totalProcessed, hasMore: false };
+  if (hasNext) {
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, cleanupCursor: cursor }),
+    }).eq("id", job.id);
+  }
+
+  console.log(`[cleanup_metafields] Removed ${totalRemoved} metafields from ${totalProcessed} products (hasMore: ${hasNext})`);
+  return { processed: totalProcessed, hasMore: hasNext };
 }
 
 // ── Cleanup Collections processor ─────────────────────────────
