@@ -4,8 +4,8 @@
 
 /* Two-column container layout (70/30) */
 .avd-container { display: flex !important; gap: 24px !important; align-items: center !important; }
-.avd-content { flex: 7 !important; min-width: 0 !important; }
-.avd-form-side { flex: 3 !important; min-width: 280px !important; }
+.avd-content { flex: 65 !important; min-width: 0 !important; }
+.avd-form-side { flex: 35 !important; min-width: 280px !important; }
 
 /* Reverse when content is on the right */
 .avd-root[data-content-position="right"] .avd-container { flex-direction: row-reverse; }

@@ -26,15 +26,15 @@
   flex-direction: row-reverse !important;
 }
 
-/* Content side — 70% */
+/* Content side — 65% */
 .apl-content {
-  flex: 7 !important;
+  flex: 65 !important;
   min-width: 0 !important;
 }
 
-/* Form side — 30% */
+/* Form side — 35% */
 .apl-form-side {
-  flex: 3 !important;
+  flex: 35 !important;
   min-width: 280px !important;
 }
 
@@ -239,10 +239,13 @@
   align-items: center;
 }
 .apl-history__label { font-size: 10px; color: var(--apl-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 2px; }
-.apl-history__item { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--apl-border); border-radius: 6px; background: var(--apl-bg); cursor: pointer; font-family: inherit; font-size: 12px; transition: border-color 0.2s, background 0.15s; }
-.apl-history__item:hover { border-color: var(--apl-primary); background: color-mix(in srgb, var(--apl-primary) 4%, var(--apl-bg)); }
-.apl-history__reg { font-weight: 700; color: var(--apl-text); letter-spacing: 0.03em; }
-.apl-history__vehicle { font-weight: 400; color: var(--apl-muted); font-size: 11px; }
+.apl-history__item { display: inline-flex !important; align-items: center !important; gap: 0 !important; border: 1px solid var(--apl-border, #d1d5db) !important; border-radius: 6px !important; background: var(--apl-bg, #fff) !important; font-size: 12px !important; overflow: hidden !important; transition: border-color 0.2s; }
+.apl-history__item:hover { border-color: var(--apl-primary, #005bd2) !important; }
+.apl-history__btn { display: inline-flex !important; align-items: center !important; gap: 6px !important; padding: 4px 8px !important; border: none !important; background: transparent !important; cursor: pointer !important; font-family: inherit !important; font-size: 12px !important; height: auto !important; }
+.apl-history__reg { font-weight: 700 !important; color: var(--apl-text, #1a1a2e) !important; letter-spacing: 0.03em !important; }
+.apl-history__vehicle { font-weight: 400 !important; color: var(--apl-muted, #6b7280) !important; font-size: 11px !important; }
+.apl-history__remove { display: flex !important; align-items: center !important; justify-content: center !important; width: 22px !important; height: 100% !important; border: none !important; border-left: 1px solid var(--apl-border, #e5e7eb) !important; background: transparent !important; color: var(--apl-muted, #9ca3af) !important; cursor: pointer !important; padding: 0 !important; opacity: 0.5 !important; transition: opacity 0.15s, background 0.15s; border-radius: 0 !important; }
+.apl-history__remove:hover { opacity: 1 !important; background: rgba(239, 68, 68, 0.06) !important; color: #ef4444 !important; }
 
 /* Plan Gate */
 .apl-plan-gate { text-align: center; padding: 40px 24px; max-width: 400px; margin: 0 auto; }
