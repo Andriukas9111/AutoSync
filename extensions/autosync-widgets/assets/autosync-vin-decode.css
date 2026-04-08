@@ -23,9 +23,9 @@
 .avd-vin-input::placeholder { color: var(--avd-muted); font-family: inherit; font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.4; }
 .avd-vin-counter { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; color: var(--avd-muted); pointer-events: none; font-variant-numeric: tabular-nums; transition: color 0.2s, background 0.2s; background: color-mix(in srgb, var(--avd-muted) 10%, transparent); padding: 3px 8px; border-radius: 4px; }
 .avd-vin-counter--valid { color: var(--as-success, #10b981); background: color-mix(in srgb, var(--as-success, #10b981) 12%, transparent); }
-.avd-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
-.avd-submit-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); transform: translateY(-1px); }
-.avd-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.avd-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px !important; border: none !important; border-radius: 8px !important; background-color: #005bd2 !important; background-color: var(--as-btn-bg, #005bd2) !important; color: #fff !important; color: var(--as-btn-text, #fff) !important; cursor: pointer !important; font-family: inherit; font-size: 14px !important; font-weight: 600 !important; transition: background-color 0.2s, transform 0.15s; white-space: nowrap; min-height: 38px !important; }
+.avd-submit-btn:hover:not(:disabled) { background-color: #0047a8 !important; transform: translateY(-1px); }
+.avd-submit-btn:disabled { opacity: 0.5 !important; cursor: not-allowed !important; transform: none; }
 
 /* Legacy classes — kept for backward compat, hidden */
 .avd-heading-wrap { margin-bottom: 6px; }

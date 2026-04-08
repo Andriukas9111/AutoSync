@@ -461,21 +461,23 @@
   justify-content: center;
   gap: 0.4rem;
   width: 100%;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--as-btn-text, #fff);
-  background: var(--as-btn-bg, var(--autosync-primary, #2c6ecb));
-  border: none;
-  border-radius: calc(var(--autosync-radius, 8px) / 2);
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  padding: 0.5rem 1.25rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+  color: var(--as-btn-text, #fff) !important;
+  background-color: #005bd2 !important;
+  background-color: var(--as-btn-bg, #005bd2) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   white-space: nowrap;
-  min-height: 38px;
+  min-height: 38px !important;
 }
 
 .autosync-ymme__search-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 85%, #000);
+  background-color: #0047a8 !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
@@ -484,9 +486,10 @@
 }
 
 .autosync-ymme__search-btn:disabled {
-  background: color-mix(in srgb, var(--autosync-text, #1a1a1a) 20%, transparent);
-  cursor: not-allowed;
-  color: color-mix(in srgb, var(--autosync-text, #1a1a1a) 40%, transparent);
+  background-color: #c9cccf !important;
+  cursor: not-allowed !important;
+  color: rgba(0, 0, 0, 0.4) !important;
+  opacity: 0.6 !important;
 }
 
 .autosync-ymme__btn-icon {
@@ -1018,25 +1021,30 @@
 
 .autosync-wheel-finder__field--button button {
   width: 100%;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--as-btn-text, #fff);
-  background: var(--as-btn-bg, var(--awf-primary, #2c6ecb));
-  border: none;
-  border-radius: calc(var(--awf-radius, 8px) / 2);
-  cursor: pointer;
-  transition: background 0.15s ease;
+  padding: 0.5rem 1.25rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+  color: var(--as-btn-text, #fff) !important;
+  background-color: #005bd2 !important;
+  background-color: var(--as-btn-bg, #005bd2) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s ease;
   white-space: nowrap;
+  min-height: 38px !important;
 }
 
-.autosync-wheel-finder__field--button button:hover {
-  filter: brightness(0.85);
+.autosync-wheel-finder__field--button button:hover:not(:disabled) {
+  background-color: #0047a8 !important;
 }
 
 .autosync-wheel-finder__field--button button:disabled {
-  background: var(--as-disabled-bg, #c9cccf);
-  cursor: not-allowed;
+  background-color: #c9cccf !important;
+  cursor: not-allowed !important;
+  color: rgba(0, 0, 0, 0.4) !important;
+  opacity: 0.6 !important;
 }
 
 .autosync-wheel-finder--hidden {
