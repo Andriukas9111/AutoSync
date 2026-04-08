@@ -25,17 +25,17 @@ cl:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentC
 /* Compact result: two-column layout inside container */
 function rRC(v,mH,rv,rg){
 while(RE.firstChild)RE.removeChild(RE.firstChild);
-/* Replace left column (content) with rich vehicle details */
+/* Replace left column (content) with compact vehicle details */
 if(contentEl){
 contentEl.innerHTML='';
-/* Plate badge */
-var pb=el('div','apl-result-bar__plate');pb.appendChild(el('span','apl-result-bar__plate-flag','GB'));pb.appendChild(el('span','apl-result-bar__plate-text',fR(rg)));contentEl.appendChild(pb);
-/* Make/Model heading */
-var h2=el('h2','');h2.style.cssText='font-size:18px;font-weight:700;margin:8px 0 2px;letter-spacing:-0.01em;color:var(--apl-text,#1a1a2e);';h2.textContent=(v.make||'')+' '+(v.model||'');contentEl.appendChild(h2);
-/* Key specs line */
+/* Compact header: plate + make/model + specs ALL ON ONE LINE */
+var hdr=el('div','apl-result-header');
+var pb=el('div','apl-result-bar__plate');pb.appendChild(el('span','apl-result-bar__plate-flag','GB'));pb.appendChild(el('span','apl-result-bar__plate-text',fR(rg)));hdr.appendChild(pb);
+var mk=el('strong','apl-result-header__make');mk.textContent=(v.make||'')+' '+(v.model||'');hdr.appendChild(mk);
 var sb=[];if(v.yearOfManufacture)sb.push(String(v.yearOfManufacture));if(v.engineCapacity)sb.push(v.engineCapacity+'cc');if(v.fuelType&&v.fuelType!=='Unknown')sb.push(v.fuelType);
-if(sb.length){var sp=el('p','');sp.style.cssText='font-size:13px;color:var(--apl-muted,#6b7280);margin:0 0 4px;';sp.textContent=sb.join(' \u00B7 ');contentEl.appendChild(sp);}
-/* Rich details grid — ALL DVLA fields */
+if(sb.length){var sp=el('span','apl-result-header__specs');sp.textContent=sb.join(' \u00B7 ');hdr.appendChild(sp);}
+contentEl.appendChild(hdr);
+/* Details grid — ALL DVLA fields, tight layout */
 var grid=el('div','apl-result-details');
 function aR(lb,val){if(!val||val==='Unknown')return;grid.appendChild(el('span','apl-result-details__label',lb));grid.appendChild(el('span','apl-result-details__value',val));}
 function aRS(lb,status,date,dl){grid.appendChild(el('span','apl-result-details__label',lb));var val=el('span','apl-result-details__value');var st=el('span','apl-result-details__status');var isG=(lb==='MOT'?status==='Valid':status==='Taxed');var dot=el('span','apl-result-details__dot apl-result-details__dot--'+(isG?'valid':'invalid'));st.appendChild(dot);st.appendChild(document.createTextNode(' '+(status||'Unknown')));if(date)st.appendChild(el('span','apl-result-details__expiry','('+dl+': '+fD(date)+')'));val.appendChild(st);grid.appendChild(val);}

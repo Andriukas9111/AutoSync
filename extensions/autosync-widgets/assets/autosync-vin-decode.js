@@ -354,18 +354,18 @@ if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', 
 function renderCompact(vehicle, products, vin) {
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
 
-// Replace content side with rich vehicle details
+// Replace content side with compact vehicle details
 if (contentEl) {
 while (contentEl.firstChild) contentEl.removeChild(contentEl.firstChild);
-/* VIN tag */
-var vt=el('div','avd-vehicle-card__vin-tag');vt.appendChild(svgIcon(ICONS.code));vt.appendChild(document.createTextNode(' '+vin));contentEl.appendChild(vt);
-/* Make + Model heading */
+/* Compact header: VIN tag + make/model + specs ALL ON ONE LINE */
+var hdr=el('div','avd-result-header');
+var vt=el('span','avd-vehicle-card__vin-tag');vt.appendChild(svgIcon(ICONS.code));vt.appendChild(document.createTextNode(' '+vin));hdr.appendChild(vt);
 var makeModel=((vehicle.make||'')+(vehicle.model?' '+vehicle.model:'')).trim()||'Unknown Vehicle';
-var h2=el('h2','');h2.style.cssText='font-size:18px;font-weight:700;margin:8px 0 2px;letter-spacing:-0.01em;color:var(--avd-text,#1a1a2e);';h2.textContent=makeModel;contentEl.appendChild(h2);
-/* Key specs line */
+var mk=el('strong','avd-result-header__make');mk.textContent=makeModel;hdr.appendChild(mk);
 var sp=[];if(vehicle.modelYear)sp.push(String(vehicle.modelYear));if(vehicle.fuelType)sp.push(vehicle.fuelType);if(vehicle.driveType)sp.push(vehicle.driveType);
-if(sp.length){var sub=el('p','');sub.style.cssText='font-size:13px;color:var(--avd-muted,#6b7280);margin:0 0 4px;';sub.textContent=sp.join(' \u00B7 ');contentEl.appendChild(sub);}
-/* Rich details grid */
+if(sp.length){var sub=el('span','avd-result-header__specs');sub.textContent=sp.join(' \u00B7 ');hdr.appendChild(sub);}
+contentEl.appendChild(hdr);
+/* Details grid — tight layout */
 var grid=el('div','avd-result-details');
 function addR(lb,val){if(!val)return;grid.appendChild(el('span','avd-result-details__label',lb));grid.appendChild(el('span','avd-result-details__value',val));}
 addR('Year',vehicle.modelYear?String(vehicle.modelYear):null);

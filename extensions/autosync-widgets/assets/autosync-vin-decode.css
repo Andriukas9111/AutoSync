@@ -134,8 +134,13 @@
 /* Classes for JS-rendered elements */
 .avd-spec-item--spacer { background: transparent !important; border-right: none !important; }
 
+/* ── Compact Result Header ── */
+.avd-result-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.avd-result-header__make { font-size: 15px; font-weight: 700; color: var(--avd-text, #1a1a2e); letter-spacing: -0.01em; }
+.avd-result-header__specs { font-size: 12px; color: var(--avd-muted, #6b7280); }
+
 /* ── Rich Vehicle Details Grid ── */
-.avd-result-details { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 12px; margin-top: 10px; font-size: 12px; padding-top: 10px; border-top: 1px solid var(--avd-border, #e5e7eb); }
+.avd-result-details { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1px 10px; font-size: 12px; padding-top: 6px; border-top: 1px solid var(--avd-border, #e5e7eb); }
 .avd-result-details__label { color: var(--avd-muted, #6b7280); font-weight: 400; white-space: nowrap; padding: 3px 0; }
 .avd-result-details__value { color: var(--avd-text, #1a1a2e); font-weight: 600; text-align: right; padding: 3px 0; }
 .avd-result-actions { display: flex; flex-direction: column; gap: 8px; justify-content: center; }

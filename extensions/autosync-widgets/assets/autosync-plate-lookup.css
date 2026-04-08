@@ -538,8 +538,13 @@
   background: color-mix(in srgb, var(--apl-text, #1a1a2e) 8%, transparent);
 }
 
+/* ── Compact Result Header ── */
+.apl-result-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.apl-result-header__make { font-size: 15px; font-weight: 700; color: var(--apl-text, #1a1a2e); letter-spacing: -0.01em; }
+.apl-result-header__specs { font-size: 12px; color: var(--apl-muted, #6b7280); }
+
 /* ── Rich Vehicle Details Grid ── */
-.apl-result-details { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 12px; margin-top: 10px; font-size: 12px; padding-top: 10px; border-top: 1px solid var(--apl-border, #e5e7eb); }
+.apl-result-details { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1px 10px; font-size: 12px; padding-top: 6px; border-top: 1px solid var(--apl-border, #e5e7eb); }
 .apl-result-details__label { color: var(--apl-muted, #6b7280); font-weight: 400; white-space: nowrap; padding: 3px 0; }
 .apl-result-details__value { color: var(--apl-text, #1a1a2e); font-weight: 600; text-align: right; padding: 3px 0; }
 .apl-result-details__status { display: inline-flex; align-items: center; gap: 4px; }
