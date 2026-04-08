@@ -1,138 +1,16 @@
 /* ===== AutoSync Widgets — Shared Styles ===== */
 
-/* --------------- CSS Isolation Layer --------------- */
-/* CRITICAL: Full isolation from ANY Shopify theme (Dawn, Minimog, Nexvo, etc.)
-   Every widget must look identical regardless of theme base styles.
-   We use !important on ALL critical properties to override theme resets. */
-
-/* Root widget containers — full style reset */
-.autosync-ymme-search,
-.autosync-fitment-badge,
-.autosync-compat-table,
-.autosync-wheel-finder,
-.autosync-plate-lookup,
-.autosync-vin-decode,
-.autosync-vehicle-showcase,
-.avsd-root,
-.avd-root,
-.apl-root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-  font-size: 14px !important;
-  line-height: 1.5 !important;
-  color: #1a1a2e !important;
-  -webkit-font-smoothing: antialiased !important;
-  -moz-osx-font-smoothing: grayscale !important;
-  text-rendering: optimizeLegibility !important;
+/* --------------- Reset & Base --------------- */
+/* CRITICAL: Prevent theme CSS from overriding our widget styles */
+[class^="autosync-"],
+[class^="apl-"],
+[class^="avs-"],
+[class^="avd-"],
+[class^="avsd-"] {
   box-sizing: border-box !important;
-  word-wrap: break-word !important;
+  font-family: inherit;
 }
-
-/* All descendants — box-sizing + reset margins from theme */
-[class^="autosync-"] *,
-[class^="autosync-"] *::before,
-[class^="autosync-"] *::after,
-[class^="apl-"] *,
-[class^="apl-"] *::before,
-[class^="apl-"] *::after,
-[class^="avs-"] *,
-[class^="avs-"] *::before,
-[class^="avs-"] *::after,
-[class^="avd-"] *,
-[class^="avd-"] *::before,
-[class^="avd-"] *::after,
-[class^="avsd-"] *,
-[class^="avsd-"] *::before,
-[class^="avsd-"] *::after {
-  box-sizing: border-box !important;
-  margin: 0;
-  padding: 0;
-}
-
-/* Headings inside widgets — override theme heading styles */
-[class^="autosync-"] h1,
-[class^="autosync-"] h2,
-[class^="autosync-"] h3,
-[class^="autosync-"] h4,
-[class^="apl-"] h1, [class^="apl-"] h2, [class^="apl-"] h3,
-[class^="avd-"] h1, [class^="avd-"] h2, [class^="avd-"] h3,
-[class^="avs-"] h1, [class^="avs-"] h2, [class^="avs-"] h3,
-[class^="avsd-"] h1, [class^="avsd-"] h2, [class^="avsd-"] h3 {
-  font-family: inherit !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  text-transform: none !important;
-}
-
-/* Paragraphs inside widgets */
-[class^="autosync-"] p,
-[class^="apl-"] p,
-[class^="avd-"] p,
-[class^="avs-"] p,
-[class^="avsd-"] p {
-  margin: 0 !important;
-  padding: 0 !important;
-  font-family: inherit !important;
-}
-
-/* Buttons inside widgets — full reset from theme button styles */
-[class^="autosync-"] button,
-[class^="apl-"] button,
-[class^="avd-"] button,
-[class^="avs-"] button,
-[class^="avsd-"] button {
-  font-family: inherit !important;
-  cursor: pointer !important;
-  border: none;
-  background: none;
-  padding: 0;
-  margin: 0;
-  text-decoration: none !important;
-  text-transform: none !important;
-  letter-spacing: normal !important;
-}
-
-/* Select elements — reset from theme form styles */
-[class^="autosync-"] select,
-[class^="autosync-"] input,
-[class^="apl-"] select,
-[class^="apl-"] input,
-[class^="avd-"] select,
-[class^="avd-"] input,
-[class^="avs-"] select,
-[class^="avs-"] input {
-  font-family: inherit !important;
-  font-size: inherit !important;
-  line-height: inherit !important;
-  color: inherit !important;
-  -webkit-appearance: none !important;
-  border-radius: 0 !important;
-}
-
-/* Labels inside widgets */
-[class^="autosync-"] label,
-[class^="apl-"] label,
-[class^="avd-"] label,
-[class^="avs-"] label {
-  font-family: inherit !important;
-  font-weight: 500 !important;
-  text-transform: none !important;
-  letter-spacing: normal !important;
-}
-
-/* Links inside widgets */
-[class^="autosync-"] a,
-[class^="apl-"] a,
-[class^="avd-"] a,
-[class^="avs-"] a,
-[class^="avsd-"] a {
-  text-decoration: none !important;
-  color: inherit !important;
-}
-
-/* Images & SVG — prevent theme from overriding dimensions */
+/* Prevent theme from blowing up our SVG/img elements */
 [class^="autosync-"] img,
 [class^="autosync-"] svg,
 [class^="apl-"] img,
@@ -145,8 +23,6 @@
 [class^="avsd-"] svg {
   max-width: 100% !important;
   height: auto !important;
-  display: inline-block !important;
-  vertical-align: middle !important;
 }
 /* Icons inside our widgets — never bigger than their container */
 [class^="autosync-"] img[width],

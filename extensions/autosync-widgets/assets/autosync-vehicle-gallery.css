@@ -1,9 +1,7 @@
   /* ── Base ────────────────────────────────────────── */
   .autosync-vehicle-showcase {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-    font-size: 14px !important;
-    line-height: 1.5 !important;
-    color: var(--avs-text, #1a1a2e) !important;
+    font-family: inherit;
+    color: var(--avs-text);
     background: var(--avs-bg);
     margin: 0 auto;
     margin-top: var(--as-section-gap-top, 0px);
