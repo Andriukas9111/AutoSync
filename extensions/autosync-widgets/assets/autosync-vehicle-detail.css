@@ -4,6 +4,8 @@
     color: var(--avsd-text);
     background: var(--avsd-bg);
     margin: 0 auto;
+    margin-top: var(--as-section-gap-top, 0px);
+    margin-bottom: var(--as-section-gap, 0px);
     padding: 0;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;

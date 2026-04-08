@@ -45,6 +45,7 @@
 --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
 --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
     --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
+    --as-section-gap-top: {{ block.settings.section_gap_top | default: 0 }}px;
 --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};
 padding-top: {{ block.settings.padding_top | default: 40 }}px;
 padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
@@ -223,6 +224,16 @@ padding-right: {{ block.settings.container_padding | default: 16 }}px;
 "max": 60,
 "step": 4,
 "default": 16,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap_top",
+"label": "Top Margin (Gap Above Section)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 0,
 "unit": "px"
 },
 {
