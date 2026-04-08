@@ -18,13 +18,14 @@
     display: none; /* removed for consistency with YMME/Wheel/Compat */
   }
   .avs-heading {
-    font-family: inherit;
-    font-size: var(--as-heading-size, 1.375rem);
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.01em;
-    line-height: 1.25;
-    color: var(--avs-text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 22px !important;
+    font-size: var(--as-heading-size, 22px) !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+    letter-spacing: -0.01em !important;
+    line-height: 1.25 !important;
+    color: var(--avs-text, #1a1a2e) !important;
   }
   .avs-subheading {
     font-family: inherit;

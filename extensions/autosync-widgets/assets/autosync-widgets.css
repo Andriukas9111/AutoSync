@@ -128,21 +128,23 @@
 }
 
 .autosync-ymme__heading {
-  margin: 0 0 0.25rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  margin: 0 0 4px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  color: inherit !important;
 }
 
 .autosync-ymme__subheading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: inherit;
-  opacity: 0.65;
-  line-height: 1.4;
+  margin: 0 0 16px !important;
+  font-family: inherit !important;
+  font-size: 15px !important;
+  color: inherit !important;
+  opacity: 0.65 !important;
+  line-height: 1.4 !important;
 }
 
 .autosync-ymme__heading + .autosync-ymme__fields {
@@ -171,12 +173,16 @@
 }
 
 .autosync-ymme__field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-  color: var(--autosync-muted, inherit);
-  opacity: 0.8;
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin-bottom: 4px !important;
+  color: var(--autosync-muted, #6b7280) !important;
+  opacity: 0.8 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  line-height: 1.4 !important;
 }
 
 /* Select wrap for spinner overlay */
@@ -186,21 +192,27 @@
 
 .autosync-ymme__field select,
 .autosync-ymme__field input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--autosync-border, #c9cccf);
-  border-radius: calc(var(--autosync-radius, 8px) / 2);
-  background: var(--autosync-bg, #fff);
-  color: var(--autosync-text, #1a1a1a);
-  appearance: auto;
+  width: 100% !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  border: 1px solid var(--autosync-border, #c9cccf) !important;
+  border-radius: 4px !important;
+  background-color: #fff !important;
+  background-color: var(--autosync-bg, #fff) !important;
+  color: #1a1a2e !important;
+  color: var(--autosync-text, #1a1a2e) !important;
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
+  min-height: 38px !important;
+  line-height: 1.4 !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .autosync-ymme__field select:disabled {
-  background: color-mix(in srgb, var(--autosync-bg, #fff) 95%, #000);
-  opacity: 0.6;
-  cursor: not-allowed;
+  background-color: #f5f5f5 !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
 }
 
 .autosync-ymme__field select:focus,
@@ -770,11 +782,12 @@
 }
 
 .autosync-compat-table__heading {
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  margin: 0 0 0.75rem;
-  line-height: 1.25;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  margin: 0 0 12px !important;
+  line-height: 1.25 !important;
   letter-spacing: -0.01em;
   color: var(--act-text, inherit);
 }
@@ -824,12 +837,14 @@
 }
 
 .autosync-plate-lookup__heading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  margin: 0 0 16px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  color: inherit !important;
 }
 
 .autosync-plate-lookup__form {
@@ -966,20 +981,21 @@
 }
 
 .autosync-wheel-finder__heading {
-  margin: 0 0 0.25rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  color: var(--awf-text, inherit);
+  margin: 0 0 4px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--awf-text, #1a1a2e) !important;
 }
 .autosync-wheel-finder__subheading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: var(--awf-muted, #6b7280);
-  line-height: 1.5;
+  margin: 0 0 16px !important;
+  font-family: inherit !important;
+  font-size: 15px !important;
+  color: var(--awf-muted, #6b7280) !important;
+  line-height: 1.5 !important;
 }
 
 .autosync-wheel-finder__fields {
@@ -995,22 +1011,33 @@
 }
 
 .autosync-wheel-finder__field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-  color: var(--awf-muted, inherit);
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin-bottom: 4px !important;
+  color: var(--awf-muted, #6b7280) !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  line-height: 1.4 !important;
 }
 
 .autosync-wheel-finder__field select,
 .autosync-wheel-finder__field input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--awf-border, #c9cccf);
-  border-radius: calc(var(--awf-radius, 8px) / 2);
-  background: var(--awf-card-bg, #fff);
-  color: var(--awf-text, inherit);
+  width: 100% !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  border: 1px solid var(--awf-border, #c9cccf) !important;
+  border-radius: 4px !important;
+  background-color: #fff !important;
+  background-color: var(--awf-card-bg, #fff) !important;
+  color: #1a1a2e !important;
+  color: var(--awf-text, #1a1a2e) !important;
+  min-height: 38px !important;
+  line-height: 1.4 !important;
+  appearance: auto !important;
+  -webkit-appearance: auto !important;
 }
 
 .autosync-wheel-finder__field select:focus,
