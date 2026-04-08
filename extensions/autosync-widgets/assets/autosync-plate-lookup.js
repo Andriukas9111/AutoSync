@@ -18,7 +18,81 @@ var IC={cd:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="
 cs:'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
 ar:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
 cl:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'};
+function rRC(v,mH,rv,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
+/* Hide form elements */
+var headingEl=R.querySelector('h2.apl-heading');var subEl=R.querySelector('.apl-subheading');var formEl=R.querySelector('.apl-plate-form');var histEl=R.querySelector('[data-apl-history]');
+if(headingEl)headingEl.style.display='none';if(subEl)subEl.style.display='none';if(formEl)formEl.style.display='none';if(histEl)histEl.style.display='none';
+/* Compact bar */
+var bar=el('div','apl-result-bar');
+var plateBadge=el('div','apl-result-bar__plate');plateBadge.appendChild(el('span','apl-result-bar__plate-flag','GB'));plateBadge.appendChild(el('span','apl-result-bar__plate-text',fR(rg)));bar.appendChild(plateBadge);
+var info=el('div','apl-result-bar__info');info.appendChild(el('span','apl-result-bar__make',(v.make||'')+' '+(v.model||'')));
+var specs=[];if(v.yearOfManufacture)specs.push(v.yearOfManufacture);if(v.engineCapacity)specs.push(v.engineCapacity+'cc');if(v.fuelType&&v.fuelType!=='Unknown')specs.push(v.fuelType);
+info.appendChild(el('span','apl-result-bar__specs',specs.join(' \u00B7 ')));bar.appendChild(info);
+var acts=el('div','apl-result-bar__actions');
+/* Find Parts button */
+var findBtn=el('button','apl-result-bar__find');findBtn.type='button';findBtn.textContent='Find Parts \u2192';
+var useMd=(rv&&rv.modelName)?rv.modelName:(v.model||'');
+findBtn.addEventListener('click',function(){findBtn.disabled=true;findBtn.textContent='Finding...';var mk=v.make;
+fetch(P+'?path=collection-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({make:mk,model:useMd})})
+.then(function(r){return r.json();}).then(function(d){if(d.data&&d.data.found&&d.data.url)window.location.href=d.data.url;else window.location.href='/collections/'+mk.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';})
+.catch(function(){window.location.href='/collections/'+v.make.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';});});
+acts.appendChild(findBtn);
+/* Details toggle button */
+var detailsBtn=el('button','apl-result-bar__details');detailsBtn.type='button';detailsBtn.textContent='Details \u25BC';
+/* Close button */
+var closeBtn2=el('button','apl-result-bar__close');closeBtn2.type='button';closeBtn2.title='Close';closeBtn2.textContent='\u2715';
+closeBtn2.addEventListener('click',function(){RE.style.display='none';if(headingEl)headingEl.style.display='';if(subEl)subEl.style.display='';if(formEl)formEl.style.display='';if(histEl)histEl.style.display='';I.value='';I.focus();sHist();});
+acts.appendChild(detailsBtn);acts.appendChild(closeBtn2);bar.appendChild(acts);RE.appendChild(bar);
+/* Details panel — reuse card content */
+var panel=el('div','apl-details-panel');
+var card=el('div','apl-card');card.style.border='none';card.style.animation='none';card.style.margin='0';card.style.maxWidth='100%';
+/* Full vehicle details grid */
+var dt=el('div','apl-details'),dg=el('div','apl-details__grid'),di=[];
+if(v.yearOfManufacture)di.push(['Year',String(v.yearOfManufacture)]);
+if(v.colour&&v.colour!=='Unknown')di.push(['Colour',v.colour]);
+if(v.fuelType&&v.fuelType!=='Unknown')di.push(['Fuel Type',v.fuelType]);
+if(v.engineCapacity)di.push(['Engine',v.engineCapacity+'cc']);
+if(v.co2Emissions)di.push(['CO\u2082 Emissions',v.co2Emissions+' g/km']);
+if(v.typeApproval)di.push(['Type Approval',v.typeApproval]);
+if(v.wheelplan)di.push(['Wheelplan',v.wheelplan]);
+if(v.revenueWeight)di.push(['Weight',v.revenueWeight+' kg']);
+if(mH&&mH.firstUsedDate)di.push(['First Registered',fD(mH.firstUsedDate)]);
+if(v.markedForExport)di.push(['Export','Marked for export']);
+if(di.length%2!==0)di.push(['','']);
+for(var i=0;i<di.length;i++){if(!di[i][0]){dg.appendChild(el('div','apl-details__item'));continue;}
+var it=el('div','apl-details__item');it.appendChild(el('span','apl-details__label',di[i][0]));it.appendChild(el('span','apl-details__value',di[i][1]));dg.appendChild(it);}
+dt.appendChild(dg);card.appendChild(dt);
+/* MOT & Tax statuses */
+if(R.dataset.showTax!=='false'){var st=el('div','apl-statuses');st.appendChild(mS('MOT',v.motStatus,v.motExpiryDate,'Expires'));st.appendChild(mS('Tax',v.taxStatus,v.taxDueDate,'Due'));card.appendChild(st);}
+panel.appendChild(card);
+/* MOT History inside panel */
+var ts=(mH&&mH.motTests)?mH.motTests:[];
+if(R.dataset.showMot!=='false'&&ts.length>0){var ms=el('div','apl-mot');ms.style.maxWidth='100%';ms.style.margin='0';ms.style.animation='none';
+var tg=el('button','apl-mot__toggle');tg.appendChild(si(IC.cl));tg.appendChild(el('span','apl-mot__title','MOT History'));tg.appendChild(el('span','apl-mot__count',ts.length+' test'+(ts.length!==1?'s':'')));
+var cv=el('span','apl-mot__chev');cv.appendChild(si(IC.cd));tg.appendChild(cv);ms.appendChild(tg);
+var ls=el('ul','apl-mot__list'),s5=ts.length>5,vis=s5?5:ts.length;
+for(var ti=0;ti<ts.length;ti++){var t=ts[ti],ps=t.testResult==='PASSED',li=el('li','');if(ti>=vis)li.style.display='none';li.dataset.motIdx=ti;
+var hd=t.defects&&t.defects.length>0,rw=el('div','apl-mot__row'+(hd?' apl-mot__row--click':''));
+rw.appendChild(el('span','apl-mot__date',fD(t.completedDate)));
+var bg=el('span','apl-mot__badge '+(ps?'apl-mot__badge--pass':'apl-mot__badge--fail'));bg.appendChild(el('span','apl-st__dot'));bg.appendChild(document.createTextNode(ps?'Pass':'Fail'));rw.appendChild(bg);
+if(t.odometerValue&&t.odometerValue!=='0')rw.appendChild(el('span','apl-mot__miles',Number(t.odometerValue).toLocaleString()+' '+(t.odometerUnit||'mi')));
+if(hd){var rc=el('span','apl-mot__rchev');rc.appendChild(si(IC.cs));rw.appendChild(rc);}li.appendChild(rw);
+if(hd){var dd=el('div','apl-mot__defects');for(var di2=0;di2<t.defects.length;di2++){var df=t.defects[di2],dty=(df.type||'advisory').toLowerCase(),de=el('div','apl-defect apl-defect--'+dty);de.appendChild(el('span','apl-defect__type',df.type||'Advisory'));de.appendChild(document.createTextNode(df.text||''));dd.appendChild(de);}
+li.appendChild(dd);(function(r2,d2){r2.addEventListener('click',function(){d2.classList.toggle('apl-mot__defects--open');var c2=r2.querySelector('.apl-mot__rchev');if(c2)c2.classList.toggle('apl-mot__rchev--open');});})(rw,dd);}
+ls.appendChild(li);}
+if(s5){var sa=el('button','apl-mot__showall','Show all '+ts.length+' tests');sa.addEventListener('click',function(){var its=ls.querySelectorAll('li');for(var j=0;j<its.length;j++)its[j].style.display='';this.style.display='none';});var sl=el('li','');sl.appendChild(sa);ls.appendChild(sl);}
+ms.appendChild(ls);tg.addEventListener('click',function(){tg.classList.toggle('apl-mot__toggle--open');ls.classList.toggle('apl-mot__list--open');});panel.appendChild(ms);}
+RE.appendChild(panel);
+/* Details toggle handler */
+detailsBtn.addEventListener('click',function(){panel.classList.toggle('apl-details-panel--open');detailsBtn.textContent=panel.classList.contains('apl-details-panel--open')?'Details \u25B2':'Details \u25BC';});
+/* Garage, history, YMME population */
+sG(v,rv,rg);
+/* Footer watermark */
+if(R.dataset.hideWatermark!=='true'){var ft=el('div','apl-footer');ft.style.cssText='display:flex!important;align-items:center!important;justify-content:center!important;gap:5px!important;padding:12px 0 0!important;margin-top:16px!important;font-size:11px!important;color:#9ca3af!important;opacity:0.5!important;';var lo=document.createElement('img');lo.src=L;lo.alt='AutoSync';lo.width=14;lo.height=14;lo.style.cssText='width:14px!important;height:14px!important;max-width:14px!important;max-height:14px!important;display:inline-block!important;flex-shrink:0!important;';ft.appendChild(lo);
+var pw=el('span');pw.textContent='Powered by ';pw.appendChild(el('strong','','AutoSync'));ft.appendChild(pw);RE.appendChild(ft);}
+RE.style.display='block';}
 function rR(v,mH,rv,rg){while(RE.firstChild)RE.removeChild(RE.firstChild);
+var resultStyle=R.dataset.resultStyle||'compact';if(resultStyle==='compact'){rRC(v,mH,rv,rg);return;}
 var card=el('div','apl-card');
 /* Close/dismiss button */
 var closeBtn=el('button','apl-card__close');closeBtn.type='button';closeBtn.title='Close';closeBtn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';

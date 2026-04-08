@@ -20,6 +20,7 @@
   data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
   data-show-products="{{ block.settings.show_products | default: true }}"
   data-show-raw="{{ block.settings.show_raw_data | default: false }}"
+  data-result-style="{{ block.settings.result_style | default: 'compact' }}"
   id="avd-{{ block.id }}"
   style="
     --avd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
@@ -162,6 +163,16 @@
 "id": "show_raw_data",
 "label": "Show raw decoded data",
 "default": false
+},
+{
+"type": "select",
+"id": "result_style",
+"label": "Result Display",
+"options": [
+{ "value": "compact", "label": "Compact Bar (Recommended)" },
+{ "value": "expanded", "label": "Full Card (Classic)" }
+],
+"default": "compact"
 },
 {
 "type": "header",

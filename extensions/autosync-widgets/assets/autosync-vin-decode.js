@@ -93,7 +93,226 @@ products: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="c
 arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
 };
 
+function renderCompact(vehicle, products, vin) {
+while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+
+// Hide form elements
+var heading = root.querySelector('h2.avd-heading');
+var subheading = root.querySelector('.avd-subheading');
+var form = root.querySelector('.avd-vin-form');
+if (heading) heading.style.display = 'none';
+if (subheading) subheading.style.display = 'none';
+if (form) form.style.display = 'none';
+
+// Build compact bar
+var bar = el('div', 'avd-result-bar');
+
+// VIN tag
+bar.appendChild(el('span', 'avd-result-bar__vin', vin));
+
+// Vehicle info
+var info = el('div', 'avd-result-bar__info');
+var makeModel = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim() || 'Unknown Vehicle';
+info.appendChild(el('span', 'avd-result-bar__make', makeModel));
+var specParts = [];
+if (vehicle.modelYear) specParts.push(vehicle.modelYear);
+if (vehicle.bodyClass) specParts.push(vehicle.bodyClass);
+if (vehicle.fuelType) specParts.push(vehicle.fuelType);
+info.appendChild(el('span', 'avd-result-bar__specs', specParts.join(' \u00b7 ')));
+bar.appendChild(info);
+
+// Actions
+var actions = el('div', 'avd-result-bar__actions');
+
+// Find Parts button
+if (vehicle.make) {
+var findBtn = el('button', 'avd-result-bar__find', 'Find Parts \u2192');
+findBtn.type = 'button';
+findBtn.addEventListener('click', function() {
+var mk = vehicle.make;
+var md = vehicle.model || '';
+fetch(proxyUrl + '?path=collection-lookup', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ make: mk, model: md }),
+})
+.then(function(r) { return r.json(); })
+.then(function(res) {
+if (res.data && res.data.found && res.data.url) {
+window.location.href = res.data.url;
+} else {
+var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
+window.location.href = '/collections/' + slug;
+}
+})
+.catch(function() {
+var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
+window.location.href = '/collections/' + slug;
+});
+});
+actions.appendChild(findBtn);
+}
+
+// Details toggle button
+var detailsBtn = el('button', 'avd-result-bar__details', 'Details \u25bc');
+detailsBtn.type = 'button';
+
+// Close button
+var closeBtn = el('button', 'avd-result-bar__close', '\u2715');
+closeBtn.type = 'button';
+
+actions.appendChild(detailsBtn);
+actions.appendChild(closeBtn);
+bar.appendChild(actions);
+
+resultsEl.appendChild(bar);
+
+// Build details panel
+var panel = el('div', 'avd-details-panel');
+
+// Spec grid inside panel
+var specSection = el('div', 'avd-spec-section');
+var specTitle = el('div', 'avd-spec-section__title');
+specTitle.appendChild(svgIcon(ICONS.specs));
+specTitle.appendChild(document.createTextNode('Vehicle Specifications'));
+specSection.appendChild(specTitle);
+
+var grid = el('div', 'avd-spec-grid');
+var specs = [
+['Model Year', vehicle.modelYear],
+['Body Style', vehicle.bodyClass],
+['Drive Type', vehicle.driveType],
+['Fuel Type', vehicle.fuelType],
+['Cylinders', vehicle.engineCylinders],
+['Displacement', vehicle.engineDisplacement ? vehicle.engineDisplacement + ' L' : null],
+['Transmission', vehicle.transmissionStyle],
+['Manufacturer', vehicle.manufacturer],
+['Country', vehicle.plantCountry],
+['Trim', vehicle.trim]
+];
+
+var addedCount = 0;
+for (var i = 0; i < specs.length; i++) {
+if (specs[i][1]) {
+var item = el('div', 'avd-spec-item');
+item.appendChild(el('div', 'avd-spec-item__label', specs[i][0]));
+item.appendChild(el('div', 'avd-spec-item__value', String(specs[i][1])));
+grid.appendChild(item);
+addedCount++;
+}
+}
+if (addedCount % 2 !== 0) {
+grid.appendChild(el('div', 'avd-spec-item avd-spec-item--spacer'));
+}
+specSection.appendChild(grid);
+panel.appendChild(specSection);
+
+// Compatible products inside panel
+if (showProducts && products.length > 0) {
+panel.appendChild(el('div', 'avd-divider'));
+var prodsSection = el('div', 'avd-products-section');
+var prodsTitle = el('div', 'avd-products-section__title');
+prodsTitle.appendChild(svgIcon(ICONS.products));
+prodsTitle.appendChild(document.createTextNode('Compatible Products (' + products.length + ')'));
+prodsSection.appendChild(prodsTitle);
+
+var prodsGrid = el('div', 'avd-products-grid');
+var maxProds = Math.min(products.length, 6);
+for (var j = 0; j < maxProds; j++) {
+var p = products[j];
+var a = document.createElement('a');
+a.className = 'avd-product-card';
+a.href = p.url || '#';
+if (p.image) {
+var img = document.createElement('img');
+img.className = 'avd-product-card__img';
+img.src = p.image;
+img.alt = p.title || '';
+img.loading = 'lazy';
+a.appendChild(img);
+}
+a.appendChild(el('div', 'avd-product-card__name', p.title || 'Product'));
+if (p.price) a.appendChild(el('div', 'avd-product-card__price', p.price));
+prodsGrid.appendChild(a);
+}
+prodsSection.appendChild(prodsGrid);
+panel.appendChild(prodsSection);
+}
+
+// Raw data inside panel
+if (showRaw && vehicle) {
+panel.appendChild(el('div', 'avd-divider'));
+var rawSection = el('div', 'avd-raw-section');
+var rawToggle = el('button', 'avd-raw-toggle', 'Show Raw VIN Data');
+rawToggle.type = 'button';
+var rawContent = el('pre', 'avd-raw-content');
+rawContent.textContent = JSON.stringify(vehicle, null, 2);
+rawContent.style.display = 'none';
+rawToggle.addEventListener('click', function() {
+var isOpen = rawContent.style.display !== 'none';
+rawContent.style.display = isOpen ? 'none' : 'block';
+rawToggle.textContent = isOpen ? 'Show Raw VIN Data' : 'Hide Raw VIN Data';
+});
+rawSection.appendChild(rawToggle);
+rawSection.appendChild(rawContent);
+panel.appendChild(rawSection);
+}
+
+resultsEl.appendChild(panel);
+
+// Details toggle handler
+detailsBtn.addEventListener('click', function() {
+var isOpen = panel.classList.contains('avd-details-panel--open');
+if (isOpen) {
+panel.classList.remove('avd-details-panel--open');
+detailsBtn.textContent = 'Details \u25bc';
+} else {
+panel.classList.add('avd-details-panel--open');
+detailsBtn.textContent = 'Details \u25b2';
+}
+});
+
+// Close handler — remove results, show form again
+closeBtn.addEventListener('click', function() {
+while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+resultsEl.style.display = 'none';
+if (heading) heading.style.display = '';
+if (subheading) subheading.style.display = '';
+if (form) form.style.display = '';
+if (input) { input.value = ''; input.focus(); }
+if (counter) { counter.textContent = '0/17'; counter.className = 'avd-vin-counter'; }
+if (submitBtn) submitBtn.disabled = true;
+});
+
+resultsEl.style.display = 'block';
+
+// Store vehicle for badge/compat widgets
+try {
+var stored = {
+makeName: vehicle.make || '',
+modelName: vehicle.model || '',
+year: String(vehicle.modelYear || ''),
+fuelType: vehicle.fuelType || '',
+bodyClass: vehicle.bodyClass || '',
+source: 'vin'
+};
+localStorage.setItem('autosync_vehicle', JSON.stringify(stored));
+window.dispatchEvent(new CustomEvent('autosync:vehicle-changed', { detail: stored }));
+} catch(e) {}
+
+// Auto-populate YMME widget if present on the page
+if (window.__autosyncPopulateYMME && vehicle.make && vehicle.model) {
+try {
+window.__autosyncPopulateYMME(proxyUrl, vehicle.make, vehicle.model, vehicle.modelYear || '');
+} catch(e) { /* non-critical */ }
+}
+}
+
 function renderResults(vehicle, products, vin) {
+// Check result style — compact bar vs full card
+var resultStyle = root.dataset.resultStyle || 'compact';
+if (resultStyle === 'compact') { renderCompact(vehicle, products, vin); return; }
+
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
 
 var card = el('div', 'avd-vehicle-card');
