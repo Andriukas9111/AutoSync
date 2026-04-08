@@ -1,14 +1,194 @@
 /* ===== AutoSync Widgets — Shared Styles ===== */
+/* Theme-independent CSS: works on Minimog, Nexvo, Dawn, ANY Shopify theme.
+   Uses px (not rem), !important on theme-vulnerable properties.
+   DO NOT use: rem/em units, appearance:auto, nested var(), blanket resets. */
 
-/* --------------- Reset & Base --------------- */
-/* CRITICAL: Prevent theme CSS from overriding our widget styles */
+/* --------------- Theme Isolation Layer --------------- */
+/* Box-sizing + font on ALL widget elements */
 [class^="autosync-"],
 [class^="apl-"],
 [class^="avs-"],
 [class^="avd-"],
 [class^="avsd-"] {
   box-sizing: border-box !important;
-  font-family: inherit;
+}
+
+/* Widget root containers — set base font so children inherit correctly */
+.autosync-ymme-search,
+.autosync-fitment-badge,
+.autosync-compat-table,
+.autosync-wheel-finder,
+.apl-root,
+.avd-root,
+.autosync-vehicle-showcase,
+.avsd-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+/* ── Buttons: themes set background:none — force our styles ── */
+.autosync-ymme__search-btn,
+.autosync-wheel-finder__field--button button,
+.apl-submit-btn,
+.apl-find-btn,
+.apl-result-actions__find,
+.apl-result-actions__mot,
+.avd-submit-btn,
+.avd-find-parts,
+.avd-result-actions__find,
+.avd-result-actions__details,
+.avs-load-more-btn {
+  font-family: inherit !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 24px !important;
+  height: 48px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  background-color: #005bd2 !important;
+  background-color: var(--as-btn-bg, #005bd2) !important;
+  color: #fff !important;
+  color: var(--as-btn-text, #fff) !important;
+  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.autosync-ymme__search-btn:hover:not(:disabled),
+.autosync-wheel-finder__field--button button:hover:not(:disabled),
+.apl-submit-btn:hover:not(:disabled),
+.apl-find-btn:hover:not(:disabled),
+.avd-submit-btn:hover:not(:disabled),
+.avs-load-more-btn:hover:not(:disabled) {
+  background-color: #0047a8 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+.autosync-ymme__search-btn:disabled,
+.autosync-wheel-finder__field--button button:disabled,
+.apl-submit-btn:disabled,
+.avd-submit-btn:disabled {
+  background-color: #d1d5db !important;
+  color: #6b7280 !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Secondary/outline buttons */
+.apl-result-actions__mot,
+.apl-result-actions__details,
+.avd-result-actions__details,
+.apl-error__retry,
+.avd-error__retry {
+  background-color: #fff !important;
+  color: #1a1a2e !important;
+  border: 1px solid #d1d5db !important;
+}
+.apl-result-actions__mot:hover,
+.avd-result-actions__details:hover,
+.apl-error__retry:hover,
+.avd-error__retry:hover {
+  border-color: #005bd2 !important;
+  background-color: #f8fafc !important;
+  transform: translateY(-1px);
+}
+
+/* Ghost buttons (New Search, etc.) */
+.apl-result-actions__new,
+.avd-result-actions__new {
+  background-color: transparent !important;
+  color: #6b7280 !important;
+  border: none !important;
+  height: auto !important;
+  padding: 8px !important;
+  font-size: 12px !important;
+}
+.apl-result-actions__new:hover,
+.avd-result-actions__new:hover {
+  color: #1a1a2e !important;
+  background-color: transparent !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Selects: themes remove borders, change appearance ── */
+.autosync-ymme__field select,
+.autosync-wheel-finder__field select {
+  width: 100% !important;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  font-weight: 400 !important;
+  border: 1px solid #d1d5db !important;
+  border: 1px solid var(--autosync-border, #d1d5db) !important;
+  border-radius: 8px !important;
+  background-color: #fff !important;
+  color: #1a1a2e !important;
+  color: var(--autosync-text, #1a1a2e) !important;
+  min-height: 42px !important;
+  line-height: 1.4 !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.autosync-ymme__field select:focus,
+.autosync-wheel-finder__field select:focus {
+  border-color: #005bd2 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+.autosync-ymme__field select:disabled,
+.autosync-wheel-finder__field select:disabled {
+  background-color: #f9fafb !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* ── Labels: themes override font/size/transform ── */
+.autosync-ymme__field label,
+.autosync-wheel-finder__field label {
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+  color: #6b7280 !important;
+  color: var(--autosync-muted, #6b7280) !important;
+  margin-bottom: 4px !important;
+  line-height: 1.4 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* ── Headings: themes override size/weight/color ── */
+.autosync-ymme__heading,
+.autosync-wheel-finder__heading,
+.autosync-compat-table__heading,
+.autosync-plate-lookup__heading {
+  font-family: inherit !important;
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  color: inherit !important;
+}
+
+/* ── Subheadings ── */
+.autosync-ymme__subheading,
+.autosync-wheel-finder__subheading {
+  font-size: 15px !important;
+  font-family: inherit !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+  opacity: 0.65 !important;
 }
 /* Prevent theme from blowing up our SVG/img elements */
 [class^="autosync-"] img,
@@ -127,26 +307,17 @@
   border-radius: calc(var(--autosync-radius) * 1.5);
 }
 
+/* Heading/subheading styles controlled by isolation layer above */
 .autosync-ymme__heading {
-  margin: 0 0 0.25rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  margin: 0 0 4px !important;
 }
 
 .autosync-ymme__subheading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: inherit;
-  opacity: 0.65;
-  line-height: 1.4;
+  margin: 0 0 16px !important;
 }
 
 .autosync-ymme__heading + .autosync-ymme__fields {
-  margin-top: 1rem;
+  margin-top: 16px;
 }
 
 .autosync-ymme__subheading + .autosync-ymme__fields {
@@ -170,37 +341,11 @@
   min-width: 150px;
 }
 
-.autosync-ymme__field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-  color: var(--autosync-muted, inherit);
-  opacity: 0.8;
-}
+/* Label, select, input styles controlled by isolation layer above */
 
 /* Select wrap for spinner overlay */
 .autosync-ymme__select-wrap {
   position: relative;
-}
-
-.autosync-ymme__field select,
-.autosync-ymme__field input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--autosync-border, #c9cccf);
-  border-radius: calc(var(--autosync-radius, 8px) / 2);
-  background: var(--autosync-bg, #fff);
-  color: var(--autosync-text, #1a1a1a);
-  appearance: auto;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.autosync-ymme__field select:disabled {
-  background: color-mix(in srgb, var(--autosync-bg, #fff) 95%, #000);
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .autosync-ymme__field select:focus,
@@ -269,21 +414,26 @@
 }
 
 .autosync-ymme__select-trigger {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--autosync-border, #c9cccf);
-  border-radius: calc(var(--autosync-radius, 8px) / 2);
-  background: var(--autosync-bg, #fff);
-  color: var(--autosync-text, #1a1a1a);
-  cursor: pointer;
-  text-align: left;
-  gap: 0.5rem;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  border: 1px solid #d1d5db !important;
+  border: 1px solid var(--autosync-border, #d1d5db) !important;
+  border-radius: 8px !important;
+  background-color: #fff !important;
+  background-color: var(--autosync-bg, #fff) !important;
+  color: #1a1a2e !important;
+  color: var(--autosync-text, #1a1a2e) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  gap: 8px !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  min-height: 38px;
+  min-height: 42px !important;
+  line-height: 1.4 !important;
 }
 
 .autosync-ymme__select-trigger:hover:not(:disabled) {
@@ -766,14 +916,9 @@
   color: var(--act-text, inherit);
 }
 
+/* Heading styles controlled by isolation layer */
 .autosync-compat-table__heading {
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  margin: 0 0 0.75rem;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  color: var(--act-text, inherit);
+  margin: 0 0 12px !important;
 }
 
 .autosync-compat-table__wrapper {
@@ -820,13 +965,9 @@
   background: var(--as-bg, #fff);
 }
 
+/* Heading styles controlled by isolation layer */
 .autosync-plate-lookup__heading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  margin: 0 0 16px !important;
 }
 
 .autosync-plate-lookup__form {
@@ -962,26 +1103,17 @@
   margin-bottom: var(--as-section-gap, 0px);
 }
 
+/* Heading, subheading, label, select, input styles controlled by isolation layer */
 .autosync-wheel-finder__heading {
-  margin: 0 0 0.25rem;
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  color: var(--awf-text, inherit);
+  margin: 0 0 4px !important;
 }
 .autosync-wheel-finder__subheading {
-  margin: 0 0 1rem;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: var(--awf-muted, #6b7280);
-  line-height: 1.5;
+  margin: 0 0 16px !important;
 }
 
 .autosync-wheel-finder__fields {
   display: flex;
-  gap: 0.75rem;
+  gap: 12px;
   flex-wrap: wrap;
   align-items: flex-end;
 }
@@ -991,53 +1123,14 @@
   min-width: 140px;
 }
 
-.autosync-wheel-finder__field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  margin-bottom: 0.25rem;
-  color: var(--awf-muted, inherit);
+/* Focus state for selects */
+.autosync-wheel-finder__field select:focus {
+  border-color: #005bd2 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
 }
 
-.autosync-wheel-finder__field select,
-.autosync-wheel-finder__field input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--awf-border, #c9cccf);
-  border-radius: calc(var(--awf-radius, 8px) / 2);
-  background: var(--awf-card-bg, #fff);
-  color: var(--awf-text, inherit);
-}
-
-.autosync-wheel-finder__field select:focus,
-.autosync-wheel-finder__field input:focus {
-  outline: 2px solid var(--awf-primary, #2c6ecb);
-  outline-offset: 1px;
-}
-
-.autosync-wheel-finder__field--button button {
-  width: 100%;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--as-btn-text, #fff);
-  background: var(--as-btn-bg, var(--awf-primary, #2c6ecb));
-  border: none;
-  border-radius: calc(var(--awf-radius, 8px) / 2);
-  cursor: pointer;
-  transition: background 0.15s ease;
-  white-space: nowrap;
-}
-
-.autosync-wheel-finder__field--button button:hover {
-  filter: brightness(0.85);
-}
-
-.autosync-wheel-finder__field--button button:disabled {
-  background: var(--as-disabled-bg, #c9cccf);
-  cursor: not-allowed;
-}
+/* Button styles controlled by isolation layer */
 
 .autosync-wheel-finder--hidden {
   display: none;

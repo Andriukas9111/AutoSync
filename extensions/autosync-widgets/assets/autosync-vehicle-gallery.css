@@ -18,22 +18,23 @@
     display: none; /* removed for consistency with YMME/Wheel/Compat */
   }
   .avs-heading {
-    font-family: inherit;
-    font-size: var(--as-heading-size, 1.375rem);
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.01em;
-    line-height: 1.25;
-    color: var(--avs-text);
+    font-family: inherit !important;
+    font-size: 22px !important;
+    font-size: var(--as-heading-size, 22px) !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+    letter-spacing: -0.01em !important;
+    line-height: 1.25 !important;
+    color: var(--avs-text, #1a1a2e) !important;
   }
   .avs-subheading {
-    font-family: inherit;
-    font-size: 0.9375rem;
-    color: var(--avs-muted);
-    margin: 0 0 28px;
-    text-align: center;
-    font-weight: 400;
-    line-height: 1.5;
+    font-family: inherit !important;
+    font-size: 15px !important;
+    color: var(--avs-muted, #6b7280) !important;
+    margin: 0 0 24px !important;
+    text-align: center !important;
+    font-weight: 400 !important;
+    line-height: 1.5 !important;
   }
 
   /* ── Search / Filter ────────────────────────────── */
