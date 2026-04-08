@@ -51,11 +51,229 @@
   max-height: 32px !important;
 }
 
-/* ===== Unified CSS variable bridges ===== */
-/* These map the global --as-* overrides into each widget's own namespace.
-   Liquid sets --as-* on the root; widgets consume their own --awf-*, --autosync-* etc.
-   The --as-btn-bg / --as-btn-text / --as-muted / --as-primary variables let merchants
-   override all widget buttons & footer text from a single place. */
+/* ============================================
+   UNIFIED COMPONENT SYSTEM
+   Define each component ONCE. Applied everywhere.
+   Individual widget sections ONLY contain structural rules.
+   ============================================ */
+
+/* ── PRIMARY BUTTONS (blue, 42px, all widgets) ── */
+.autosync-ymme__search-btn,
+.autosync-wheel-finder__field--button button,
+.autosync-plate-lookup__btn,
+.autosync-plate-lookup__find-parts,
+.autosync-vin-decode__btn,
+.autosync-vin-decode__find-parts,
+.apl-submit-btn,
+.apl-find-btn,
+.avd-submit-btn,
+.avd-find-parts {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 0 24px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  font-family: inherit !important;
+  color: #fff !important;
+  color: var(--as-btn-text, #fff) !important;
+  background-color: #005bd2 !important;
+  background-color: var(--as-btn-bg, #005bd2) !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  height: 42px !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  transition: background-color 0.2s, transform 0.15s, box-shadow 0.15s;
+}
+.autosync-ymme__search-btn:hover:not(:disabled),
+.autosync-wheel-finder__field--button button:hover:not(:disabled),
+.autosync-plate-lookup__btn:hover:not(:disabled),
+.autosync-plate-lookup__find-parts:hover:not(:disabled),
+.autosync-vin-decode__btn:hover:not(:disabled),
+.autosync-vin-decode__find-parts:hover:not(:disabled),
+.apl-submit-btn:hover:not(:disabled),
+.apl-find-btn:hover:not(:disabled),
+.avd-submit-btn:hover:not(:disabled),
+.avd-find-parts:hover:not(:disabled) {
+  background-color: #0047a8 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+}
+.autosync-ymme__search-btn:disabled,
+.autosync-wheel-finder__field--button button:disabled,
+.autosync-plate-lookup__btn:disabled,
+.autosync-vin-decode__btn:disabled,
+.apl-submit-btn:disabled,
+.avd-submit-btn:disabled {
+  background-color: #d1d5db !important;
+  color: #6b7280 !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ── SECONDARY BUTTONS (outline, all widgets) ── */
+.apl-result-actions__mot,
+.apl-result-actions__details,
+.avd-result-actions__details,
+.apl-error__retry,
+.avd-error__retry {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  padding: 0 20px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  height: 42px !important;
+  background-color: #fff !important;
+  color: #1a1a2e !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.apl-result-actions__mot:hover,
+.avd-result-actions__details:hover,
+.apl-error__retry:hover,
+.avd-error__retry:hover {
+  border-color: #005bd2 !important;
+  background-color: #f8fafc !important;
+}
+
+/* ── GHOST BUTTONS (text-only, all widgets) ── */
+.apl-result-actions__new,
+.avd-result-actions__new {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background-color: transparent !important;
+  color: #6b7280 !important;
+  border: none !important;
+  height: auto !important;
+  padding: 8px !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+}
+.apl-result-actions__new:hover,
+.avd-result-actions__new:hover {
+  color: #1a1a2e !important;
+}
+
+/* ── NATIVE SELECTS (42px, custom arrow, all widgets) ── */
+.autosync-ymme__field select,
+.autosync-wheel-finder__field select {
+  width: 100% !important;
+  padding: 0 32px 0 14px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  font-weight: 400 !important;
+  border: 1px solid #d1d5db !important;
+  border: 1px solid var(--autosync-border, #d1d5db) !important;
+  border-radius: 8px !important;
+  background-color: #fff !important;
+  color: #1a1a2e !important;
+  color: var(--autosync-text, #1a1a2e) !important;
+  height: 42px !important;
+  line-height: 42px !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.autosync-ymme__field select:focus,
+.autosync-wheel-finder__field select:focus {
+  border-color: #005bd2 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(0, 91, 210, 0.12) !important;
+}
+.autosync-ymme__field select:disabled,
+.autosync-wheel-finder__field select:disabled {
+  background-color: #f9fafb !important;
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* ── CUSTOM DROPDOWN TRIGGER (Make dropdown, 42px, matches selects) ── */
+.autosync-ymme__select-trigger {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+  font-family: inherit !important;
+  border: 1px solid var(--autosync-border, #d1d5db) !important;
+  border-radius: 8px !important;
+  background-color: var(--autosync-bg, #fff) !important;
+  color: var(--autosync-text, #1a1a2e) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  gap: 8px !important;
+  height: 42px !important;
+  line-height: 42px !important;
+  transition: border-color 0.15s;
+}
+.autosync-ymme__select-trigger:hover:not(:disabled) {
+  border-color: #005bd2 !important;
+}
+.autosync-ymme__select-trigger:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+  background-color: #f9fafb !important;
+}
+
+/* ── LABELS (13px, all widgets) ── */
+.autosync-ymme__field label,
+.autosync-wheel-finder__field label {
+  display: block !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+  color: #6b7280 !important;
+  color: var(--autosync-muted, #6b7280) !important;
+  margin-bottom: 4px !important;
+  line-height: 1.4 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+/* ── HEADINGS (22px, all widgets) ── */
+.autosync-ymme__heading,
+.autosync-wheel-finder__heading,
+.autosync-compat-table__heading,
+.autosync-plate-lookup__heading,
+.autosync-vin-decode__heading {
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em !important;
+  color: inherit !important;
+}
+
+/* ── SUBHEADINGS (15px, all widgets) ── */
+.autosync-ymme__subheading,
+.autosync-wheel-finder__subheading {
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+  color: inherit !important;
+  opacity: 0.65 !important;
+}
+
+/* ===== Widget-specific structural rules below ===== */
+/* Each section ONLY contains layout (flex, grid, position, margin)
+   Visual styles (colors, fonts, borders) are defined ONCE above. */
 
 /* --------------- YMME Search --------------- */
 .autosync-ymme-search {
@@ -466,47 +684,12 @@
   flex-shrink: 0 !important;
 }
 
-/* --------------- Search Button --------------- */
+/* Search button — visual styles defined in isolation layer above */
 .autosync-ymme__field--button {
   display: flex !important;
   align-items: flex-end !important;
   gap: 8px !important;
 }
-
-.autosync-ymme__search-btn {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 7px !important;
-  width: 100% !important;
-  padding: 12px 24px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-  color: var(--as-btn-text, #fff) !important;
-  background-color: #005bd2 !important;
-  background-color: var(--as-btn-bg, #005bd2) !important;
-  border: none !important;
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-  white-space: nowrap !important;
-  height: 42px !important;
-}
-
-.autosync-ymme__search-btn:hover:not(:disabled) {
-  background-color: #0047a8 !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
-}
-
-.autosync-ymme__search-btn:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.autosync-ymme__search-btn:disabled {
-  background-color: #d1d5db !important;
-  cursor: not-allowed !important;
-  color: #6b7280 !important;
   opacity: 0.7 !important;
 }
 
@@ -787,14 +970,9 @@
   color: var(--act-text, #1a1a2e) !important;
 }
 
+/* Compat heading — visual styles defined in unified component system above */
 .autosync-compat-table__heading {
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
   margin: 0 0 12px !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
-  color: var(--act-text, #1a1a2e) !important;
 }
 
 .autosync-compat-table__wrapper {
@@ -842,13 +1020,9 @@
   background-color: var(--as-bg, #fff) !important;
 }
 
+/* Plate heading — visual styles defined in unified component system above */
 .autosync-plate-lookup__heading {
   margin: 0 0 16px !important;
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
 }
 
 .autosync-plate-lookup__form {
@@ -899,31 +1073,7 @@
   letter-spacing: normal !important;
 }
 
-.autosync-plate-lookup__btn,
-.autosync-plate-lookup__find-parts {
-  width: auto !important;
-  padding: 12px 24px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-  background-color: #005bd2 !important;
-  border: none !important;
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 42px !important;
-  transition: background-color 0.15s ease;
-  white-space: nowrap !important;
-}
-
-.autosync-plate-lookup__btn:hover,
-.autosync-plate-lookup__find-parts:hover {
-  background-color: #0047a8 !important;
-}
-
-.autosync-plate-lookup__btn:disabled {
-  background-color: #d1d5db !important;
-  color: #6b7280 !important;
-  cursor: not-allowed !important;
+/* Plate buttons — visual styles defined in unified component system above */
   opacity: 0.7 !important;
 }
 
@@ -989,21 +1139,9 @@
   margin-bottom: var(--as-section-gap, 0px);
 }
 
-.autosync-wheel-finder__heading {
-  margin: 0 0 4px !important;
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
-  color: var(--awf-text, #1a1a2e) !important;
-}
-.autosync-wheel-finder__subheading {
-  margin: 0 0 16px !important;
-  font-size: 15px !important;
-  color: var(--awf-muted, #6b7280) !important;
-  line-height: 1.5 !important;
-}
+/* Wheel Finder heading/subheading — visual styles defined in unified component system above */
+.autosync-wheel-finder__heading { margin: 0 0 4px !important; }
+.autosync-wheel-finder__subheading { margin: 0 0 16px !important; }
 
 .autosync-wheel-finder__fields {
   display: flex !important;
@@ -1017,62 +1155,14 @@
   min-width: 140px !important;
 }
 
-.autosync-wheel-finder__field label {
-  display: block !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  margin-bottom: 4px !important;
-  color: var(--awf-muted, #6b7280) !important;
-  line-height: 1.4 !important;
-  text-transform: none !important;
-  letter-spacing: normal !important;
-}
+/* Wheel Finder labels — visual styles defined in unified component system above */
 
-.autosync-wheel-finder__field select,
-.autosync-wheel-finder__field input {
-  width: 100% !important;
-  padding: 10px 14px !important;
-  font-size: 14px !important;
-  border: 1px solid var(--awf-border, #d1d5db) !important;
-  border-radius: 8px !important;
-  background-color: var(--awf-card-bg, #fff) !important;
-  color: var(--awf-text, #1a1a2e) !important;
-  min-height: 42px !important;
-  line-height: 1.4 !important;
-}
+/* Wheel Finder selects — visual styles defined in unified component system above */
 
-.autosync-wheel-finder__field select:focus,
-.autosync-wheel-finder__field input:focus {
-  outline: none !important;
-  border-color: #005bd2 !important;
-  box-shadow: 0 0 0 3px rgba(0, 91, 210, 0.12) !important;
-}
-
+/* Wheel Finder button — visual styles defined in unified component system above */
 .autosync-wheel-finder__field--button button {
   width: 100% !important;
-  padding: 12px 24px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-  color: var(--as-btn-text, #fff) !important;
-  background-color: #005bd2 !important;
-  background-color: var(--as-btn-bg, #005bd2) !important;
-  border: none !important;
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 42px !important;
-  transition: background-color 0.15s ease;
-  white-space: nowrap !important;
 }
-
-.autosync-wheel-finder__field--button button:hover:not(:disabled) {
-  background-color: #0047a8 !important;
-}
-
-.autosync-wheel-finder__field--button button:disabled {
-  background-color: #d1d5db !important;
-  color: #6b7280 !important;
-  cursor: not-allowed !important;
   opacity: 0.7 !important;
 }
 
@@ -1160,13 +1250,9 @@
   background-color: var(--as-bg, #fff) !important;
 }
 
+/* VIN heading — visual styles defined in unified component system above */
 .autosync-vin-decode__heading {
   margin: 0 0 16px !important;
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
 }
 
 .autosync-vin-decode__form {
@@ -1208,30 +1294,7 @@
   text-transform: none !important;
 }
 
-.autosync-vin-decode__btn {
-  padding: 12px 24px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-  background-color: #005bd2 !important;
-  border: none !important;
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 42px !important;
-  transition: background-color 0.15s;
-  white-space: nowrap !important;
-}
-
-.autosync-vin-decode__btn:hover {
-  background-color: #0047a8 !important;
-}
-
-.autosync-vin-decode__btn:disabled {
-  background-color: #d1d5db !important;
-  color: #6b7280 !important;
-  cursor: not-allowed !important;
-  opacity: 0.7 !important;
-}
+/* VIN button — visual styles defined in unified component system above */
 
 .autosync-vin-decode--hidden {
   display: none !important;
@@ -1268,18 +1331,7 @@
   margin: 0 !important;
 }
 
-.autosync-vin-decode__find-parts {
-  padding: 12px 24px !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-  background-color: #005bd2 !important;
-  border: none !important;
-  border-radius: 8px !important;
-  cursor: pointer !important;
-  height: 42px !important;
-  transition: background-color 0.15s;
-}
+/* VIN find-parts button — visual styles defined in unified component system above */
 
 .autosync-vin-decode__find-parts:hover {
   background-color: #0047a8 !important;
