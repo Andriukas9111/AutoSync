@@ -85,12 +85,12 @@ function useIOReveal() {
 
 function IOReveal({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
   const { ref, vis } = useIOReveal();
-  return <div ref={ref} className={`lp-io-reveal ${vis ? "visible" : ""} ${className}`} style={{ transitionDelay: `${delay}s` }}>{children}</div>;
+  return <div ref={ref} className={`lp-reveal ${vis ? "visible" : ""} ${className}`} style={{ transitionDelay: `${delay}s` }}>{children}</div>;
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
   const c = useCounter(value);
-  return <div ref={c.ref} className="lp-stat"><div className="lp-stat-val">{c.v.toLocaleString()}+</div><div className="lp-stat-label">{label}</div></div>;
+  return <div ref={c.ref} className="lp-stat"><div className="lp-stat__val">{c.v.toLocaleString()}+</div><div className="lp-stat__label">{label}</div></div>;
 }
 
 /* ═══════════════════════════════════════════════
@@ -141,38 +141,38 @@ function YMMEDemo() {
     : [{ year: "2022", make: "BMW", model: "3 Series", engine: "M340i (382 Hp)" }];
   return (
     <div ref={containerRef}>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark" style={{ padding: 28 }}>
-        <div className="demo-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find Parts for Your Vehicle</div>
-        <div className="demo-grid-ymme">
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo" style={{ padding: 28 }}>
+        <div className="dm-title" style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Find Parts for Your Vehicle</div>
+        <div className="dm-grid-4">
           {["Make", "Model", "Year", "Engine"].map((label, idx) => (
             <div key={label}>
-              <div className="demo-label">{label}</div>
+              <div className="dm-label">{label}</div>
               {step >= idx + 1 ? (
-                <div className="demo-sel ymme-anim-fill">
+                <div className="dm-sel dm-anim">
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     {idx === 0 && <img src={MAKES[0].logo} alt="" width="22" height="22" style={{ objectFit: "contain" }} />}
                     {idx === 0 ? "BMW" : idx === 1 ? "3 Series" : idx === 2 ? "2022" : "M340i (382 Hp)"}
                   </span>{I.chev}
                 </div>
               ) : (
-                <div className="demo-sel"><span style={{ color: "rgba(255,255,255,0.25)" }}>Select...</span>{I.chev}</div>
+                <div className="dm-sel"><span style={{ color: "rgba(255,255,255,0.25)" }}>Select...</span>{I.chev}</div>
               )}
             </div>
           ))}
         </div>
-        <div className="demo-ymme-bottom-row">
-          <button className="ymme-find-btn" style={step < 5 ? { opacity: 0.4 } : { animation: "ymme-fade-in 0.4s ease" }}>{SearchIcon} Find Parts</button>
-          <button className="demo-garage-btn" style={{ width: 42, height: 42 }}>
+        <div className="dm-bottom-row">
+          <button className="dm-find-btn" style={step < 5 ? { opacity: 0.4 } : { animation: "ymme-fade-in 0.4s ease" }}>{SearchIcon} Find Parts</button>
+          <button className="dm-garage-btn" style={{ width: 42, height: 42 }}>
             {GarageIcon}
-            {garageCount > 0 && <span className="demo-garage-badge">{garageCount}</span>}
+            {garageCount > 0 && <span className="dm-garage-badge">{garageCount}</span>}
           </button>
         </div>
         {showGarage && (
-          <div className="demo-garage-dark" style={{ animation: "ymme-fade-in 0.3s ease" }}>
-            <div className="demo-garage-hdr"><span>My Garage</span><span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>{garageVehicles.length} vehicle{garageVehicles.length !== 1 ? "s" : ""}</span></div>
+          <div className="dm-garage" style={{ animation: "ymme-fade-in 0.3s ease" }}>
+            <div className="dm-garage__hdr"><span>My Garage</span><span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>{garageVehicles.length} vehicle{garageVehicles.length !== 1 ? "s" : ""}</span></div>
             {garageVehicles.map((v, i) => (
-              <div key={i} className="demo-garage-item" style={i > 0 && step >= 8 ? { animation: "ymme-fade-in 0.4s ease" } : undefined}>
+              <div key={i} className="dm-garage__item" style={i > 0 && step >= 8 ? { animation: "ymme-fade-in 0.4s ease" } : undefined}>
                 <div><div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{v.year} {v.make} {v.model}</div><div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{v.engine}</div></div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <button style={{ padding: "4px 12px", borderRadius: 6, background: "var(--accent)", color: "#fff", fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer" }}>Select</button>
@@ -184,7 +184,7 @@ function YMMEDemo() {
             ))}
           </div>
         )}
-        <div className="demo-footer-dark" style={{ marginTop: 18 }}>{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer" style={{ marginTop: 18 }}>{I.logo(12)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -194,53 +194,53 @@ function PlateDemo() {
   const [motOpen, setMotOpen] = useState(true);
   return (
     <div>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark demo-plate-dark">
-        <div className="demo-title" style={{ textAlign: "center" }}>Find Parts by Registration</div>
-        <div className="demo-subtitle" style={{ textAlign: "center" }}>Enter your UK registration number</div>
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo lp-demo">
+        <div className="dm-title" style={{ textAlign: "center" }}>Find Parts by Registration</div>
+        <div className="dm-sub" style={{ textAlign: "center" }}>Enter your UK registration number</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <div className="demo-plate-wrap" style={{ flex: 1 }}>
-            <div className="demo-plate-gb"><UKFlag /></div>
-            <input className="demo-plate-input" value="AL61 EAJ" readOnly />
+          <div className="dm-plate-wrap" style={{ flex: 1 }}>
+            <div className="dm-plate-gb"><UKFlag /></div>
+            <input className="dm-plate-input" value="AL61 EAJ" readOnly />
           </div>
-          <button className="demo-plate-btn">
+          <button className="dm-plate-btn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
             Look Up
           </button>
         </div>
         <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text-quaternary)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Recent</div>
-        <div className="demo-recent-row">
-          <div className="demo-recent-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>S777 MNH</span> Porsche Panamera</div>
-          <div className="demo-recent-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>AL61 EAJ</span> BMW 3 Series</div>
+        <div className="dm-chips">
+          <div className="dm-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>S777 MNH</span> Porsche Panamera</div>
+          <div className="dm-chip"><span style={{ background: "#facc15", color: "#000", padding: "1px 6px", borderRadius: 3, fontSize: 10, fontWeight: 700, fontFamily: "monospace" }}>AL61 EAJ</span> BMW 3 Series</div>
         </div>
-        <div className="demo-plate-result-wrap show">
-          <div className="demo-plate-result">
-            <div className="demo-plate-badges"><span className="demo-plate-gb-badge">GB</span><span className="demo-plate-yellow-badge">AL61 EAJ</span></div>
-            <div className="demo-plate-vehicle">BMW M340I XDRIVE MHEV AUTO</div>
-            <div className="demo-plate-meta">2022 &middot; ORANGE &middot; HYBRID ELECTRIC</div>
-            <div className="demo-specs-dark">
+        <div className="dm-result-wrap show">
+          <div className="dm-result">
+            <div className="dm-plate-badges"><span className="dm-plate-gb-badge">GB</span><span className="dm-yellow-badge">AL61 EAJ</span></div>
+            <div className="dm-vehicle">BMW M340I XDRIVE MHEV AUTO</div>
+            <div className="dm-meta">2022 &middot; ORANGE &middot; HYBRID ELECTRIC</div>
+            <div className="dm-specs">
               {[["Year", "2022"], ["Colour", "ORANGE"], ["Fuel Type", "HYBRID ELECTRIC"], ["Engine", "2998cc"], ["CO\u2082 Emissions", "176 g/km"], ["Type Approval", "M1"], ["Wheelplan", "2 AXLE RIGID BODY"], ["First Registered", "30 Mar 2022"]].map(([k, v], i) =>
-                <div key={i} className="demo-spec-dark"><span>{k}</span><span>{v}</span></div>
+                <div key={i} className="dm-spec-row"><span>{k}</span><span>{v}</span></div>
               )}
             </div>
-            <div className="demo-status-row">
-              <div><label>MOT</label><div className="demo-status-val"><span className="demo-status-dot green" />Valid</div><div className="demo-status-sub">Expires 11 Nov 2026</div></div>
-              <div><label>TAX</label><div className="demo-status-val"><span className="demo-status-dot green" />Taxed</div><div className="demo-status-sub">Due 1 Nov 2026</div></div>
+            <div className="dm-status-grid">
+              <div><label>MOT</label><div className="dm-status-val"><span className="dm-dot dm-dot-- green" />Valid</div><div className="dm-status-sub">Expires 11 Nov 2026</div></div>
+              <div><label>TAX</label><div className="dm-status-val"><span className="dm-dot dm-dot-- green" />Taxed</div><div className="dm-status-sub">Due 1 Nov 2026</div></div>
             </div>
-            <button className="demo-btn-blue" style={{ width: "100%", height: 44, fontSize: 15, marginBottom: 8 }}>Find Parts for This Vehicle &rarr;</button>
-            <div className="demo-mot-history">
-              <button className="demo-mot-toggle" onClick={() => setMotOpen(!motOpen)}>
-                <span>MOT History <span className="demo-mot-count">2 tests</span></span>
+            <button className="dm-btn-accent" style={{ width: "100%", height: 44, fontSize: 15, marginBottom: 8 }}>Find Parts for This Vehicle &rarr;</button>
+            <div className="dm-mot">
+              <button className="dm-mot-toggle" onClick={() => setMotOpen(!motOpen)}>
+                <span>MOT History <span className="dm-mot-count">2 tests</span></span>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ transform: motOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}><path d="M4 6l4 4 4-4" /></svg>
               </button>
               {motOpen && <div>
-                <div className="demo-mot-item"><span className="demo-mot-date">12 Nov 2025</span><span className="demo-mot-pass">PASS</span><span className="demo-mot-miles">87,329 Mi</span></div>
-                <div className="demo-mot-item"><span className="demo-mot-date">4 Apr 2025</span><span className="demo-mot-pass">PASS</span><span className="demo-mot-miles">72,485 Mi</span></div>
+                <div className="dm-mot-item"><span className="dm-mot-date">12 Nov 2025</span><span className="dm-mot-pass">PASS</span><span className="dm-mot-miles">87,329 Mi</span></div>
+                <div className="dm-mot-item"><span className="dm-mot-date">4 Apr 2025</span><span className="dm-mot-pass">PASS</span><span className="dm-mot-miles">72,485 Mi</span></div>
               </div>}
             </div>
           </div>
         </div>
-        <div className="demo-footer-dark">{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -249,10 +249,10 @@ function PlateDemo() {
 function CompatDemo() {
   return (
     <>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark">
-        <div className="demo-title">Vehicle Compatibility</div>
-        <div className="demo-subtitle">All compatible vehicles for this product</div>
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo">
+        <div className="dm-title">Vehicle Compatibility</div>
+        <div className="dm-sub">All compatible vehicles for this product</div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr>{["Make", "Model", "Years", "Engine"].map(h => <th key={h} style={{ textAlign: "left", padding: "8px 10px", borderBottom: "1px solid var(--border)", color: "var(--text-quaternary)", fontWeight: 600, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</th>)}</tr></thead>
@@ -261,7 +261,7 @@ function CompatDemo() {
             )}</tbody>
           </table>
         </div>
-        <div className="demo-footer-dark">{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -271,16 +271,16 @@ function BadgeDemo() {
   const [s, setS] = useState<0 | 1 | 2>(0);
   return (
     <>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark" style={{ textAlign: "center" }}>
-        <div className="demo-title">Fitment Badge</div>
-        <div className="demo-subtitle">Real-time compatibility on every product page</div>
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo" style={{ textAlign: "center" }}>
+        <div className="dm-title">Fitment Badge</div>
+        <div className="dm-sub">Real-time compatibility on every product page</div>
         <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 }}>
           {["Fits", "Doesn't Fit", "No Vehicle"].map((t, i) =>
             <button key={i} style={{ padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "1px solid", background: s === i ? "var(--accent)" : "transparent", color: s === i ? "#fff" : "var(--text-secondary)", borderColor: s === i ? "var(--accent)" : "var(--border)" }} onClick={() => setS(i as 0 | 1 | 2)}>{t}</button>
           )}
         </div>
-        <div className={`demo-badge-dark ${s === 0 ? "fits" : s === 1 ? "nofit" : "none"}`}>
+        <div className={`dm-badge ${s === 0 ? "fits" : s === 1 ? "nofit" : "none"}`}>
           {s === 0 && <><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg> Fits your 2022 BMW 3 Series</>}
           {s === 1 && <><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#f87171" strokeWidth="1.5" strokeLinecap="round" /></svg> May not fit your 2022 BMW 3 Series</>}
           {s === 2 && <>Select a vehicle to check compatibility</>}
@@ -302,31 +302,31 @@ const SPEC_VEHICLES = [
 function VehicleSpecsDemo() {
   return (
     <>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark">
-        <div className="demo-title" style={{ fontSize: 18 }}>Vehicle Specifications</div>
-        <div className="demo-subtitle">Browse detailed specs for all vehicles</div>
-        <div className="demo-specs-search">
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo">
+        <div className="dm-title" style={{ fontSize: 18 }}>Vehicle Specifications</div>
+        <div className="dm-sub">Browse detailed specs for all vehicles</div>
+        <div className="dm-search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
           <input placeholder="Search vehicles..." readOnly />
-          <span className="demo-specs-count-big">353 vehicles</span>
+          <span className="dm-search-count">353 vehicles</span>
         </div>
-        <div className="demo-vehicle-grid">
+        <div className="dm-vgrid">
           {SPEC_VEHICLES.map((v, i) => (
-            <div key={i} className="demo-vehicle-card">
-              <div className="demo-vehicle-card-make"><img src={v.logo} alt="" /><span>{v.make}</span></div>
+            <div key={i} className="dm-vcard">
+              <div className="dm-vcard-make"><img src={v.logo} alt="" /><span>{v.make}</span></div>
               <h4>{v.model}</h4>
               <div className="desc">{v.engine}</div>
-              <div className="demo-vehicle-card-pills">
-                <span className="demo-vehicle-card-pill green">{v.hp} HP</span>
-                <span className="demo-vehicle-card-pill">{v.disp}</span>
-                <span className="demo-vehicle-card-pill">{v.fuel}</span>
+              <div className="dm-vcard-pills">
+                <span className="dm-vcard-pill green">{v.hp} HP</span>
+                <span className="dm-vcard-pill">{v.disp}</span>
+                <span className="dm-vcard-pill">{v.fuel}</span>
               </div>
-              <span className="demo-vehicle-card-link">View Specs &rarr;</span>
+              <span className="dm-vcard-link">View Specs &rarr;</span>
             </div>
           ))}
         </div>
-        <div className="demo-footer-dark">{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -343,33 +343,33 @@ function VehicleSpecDetailDemo() {
   };
   return (
     <>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="demo-spec-hero">
-        <div className="demo-spec-hero-make"><img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" /><span>BMW</span></div>
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="dm-hero-dark">
+        <div className="dm-hero-dark-make"><img src="https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png" alt="" /><span>BMW</span></div>
         <h2>3 Series</h2>
         <div className="sub">316i (102 Hp)</div>
-        <div className="demo-spec-hero-tags">
-          <span className="demo-spec-hero-tag">1987</span><span className="demo-spec-hero-tag">M10B18</span><span className="demo-spec-hero-tag">Petrol</span><span className="demo-spec-hero-tag">Sedan</span><span className="demo-spec-hero-tag">RWD</span>
+        <div className="dm-hero-dark-tags">
+          <span className="dm-hero-dark-tag">1987</span><span className="dm-hero-dark-tag">M10B18</span><span className="dm-hero-dark-tag">Petrol</span><span className="dm-hero-dark-tag">Sedan</span><span className="dm-hero-dark-tag">RWD</span>
         </div>
         <p>The BMW 316i is a compact executive sedan powered by the naturally aspirated M10B18 inline-4 engine, producing 102 horsepower.</p>
       </div>
-      <div className="demo-quick-stats">
+      <div className="dm-qstats">
         {[["hp", "102", "HP"], ["torque", "140", "Nm"], ["displacement", "1.6L", "Displ."], ["speed", "182", "km/h"], ["stopwatch", "12.1s", "0-100"], ["fuel", "Petrol", "Fuel"]].map(([icon, val, label], i) => (
-          <div key={i} className="demo-quick-stat"><div className="stat-icon">{StatIcon[icon as keyof typeof StatIcon]}</div><div className="val">{val}</div><div className="label">{label}</div></div>
+          <div key={i} className="dm-qstat"><div className="stat-icon">{StatIcon[icon as keyof typeof StatIcon]}</div><div className="val">{val}</div><div className="label">{label}</div></div>
         ))}
       </div>
-      <div className="demo-tab-bar">
-        <button className="demo-tab active">Engine</button><button className="demo-tab">Performance</button><button className="demo-tab">Drivetrain</button><button className="demo-tab">Dimensions</button>
+      <div className="dm-tabs">
+        <button className="dm-tabactive">Engine</button><button className="demo-tab">Performance</button><button className="demo-tab">Drivetrain</button><button className="demo-tab">Dimensions</button>
       </div>
       <div style={{ background: "var(--bg-elevated)" }}>
-        <table className="demo-spec-table"><tbody>
+        <table className="dm-spec-table"><tbody>
           {[["Engine Code", "M10B18"], ["Displacement", "1.6L (1,573 cc)"], ["Cylinders", "4"], ["Configuration", "Inline"], ["Power", "102 HP @ 5,800 rpm"], ["Torque", "140 Nm @ 4,500 rpm"], ["Compression", "9.5:1"], ["Fuel System", "Bosch L-Jetronic"]].map(([k, v], i) =>
             <tr key={i}><td>{k}</td><td>{v}</td></tr>
           )}
         </tbody></table>
       </div>
       <div style={{ background: "var(--bg-elevated)", padding: "12px 24px" }}>
-        <div className="demo-footer-dark">{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -378,33 +378,33 @@ function VehicleSpecDetailDemo() {
 function VINDecodeDemo() {
   return (
     <>
-      <div className="lp-chrome"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /></div>
-      <div className="lp-demo-dark" style={{ textAlign: "center" }}>
-        <div className="demo-title">Decode Your VIN</div>
-        <div className="demo-subtitle">Enter your 17-character Vehicle Identification Number</div>
-        <div className="demo-vin-input-row">
-          <span className="demo-vin-badge">VIN</span>
-          <div className="demo-vin-field"><input value="WBAPH5C55BA123456" readOnly style={{ letterSpacing: 1.5 }} /><span className="demo-vin-counter">17/17</span></div>
-          <button className="demo-btn-blue">Decode VIN</button>
+      <div className="lp-chrome"><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /><span className="lp-chrome__dot" /></div>
+      <div className="lp-demo" style={{ textAlign: "center" }}>
+        <div className="dm-title">Decode Your VIN</div>
+        <div className="dm-sub">Enter your 17-character Vehicle Identification Number</div>
+        <div className="dm-vin-row">
+          <span className="dm-vin-badge">VIN</span>
+          <div className="dm-vin-field"><input value="WBAPH5C55BA123456" readOnly style={{ letterSpacing: 1.5 }} /><span className="dm-vin-counter">17/17</span></div>
+          <button className="dm-btn-accent">Decode VIN</button>
         </div>
-        <div className="demo-vin-result">
+        <div className="dm-result">
           <div style={{ fontSize: 11, fontWeight: 700, color: "var(--green)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ verticalAlign: "middle", marginRight: 4 }}><path d="M3 8l3 3 7-7" stroke="#4ade80" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             VIN Decoded Successfully
           </div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>2011 BMW 5 Series 528i</div>
           <div style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 14, fontFamily: "var(--font-mono)" }}>WBAPH5C55BA123456</div>
-          <div className="demo-vin-specs-grid">
+          <div className="dm-vin-specs">
             {[["Year", "2011"], ["Make", "BMW"], ["Model", "5 Series"], ["Trim", "528i"], ["Body", "Sedan"], ["Drive", "RWD"], ["Engine", "3.0L I6"], ["Fuel", "Gasoline"], ["Transmission", "Automatic"], ["Country", "Germany"]].map(([k, v], i) =>
-              <div key={i} className="demo-vin-spec-cell"><div className="demo-vin-spec-key">{k}</div><div className="demo-vin-spec-val">{v}</div></div>
+              <div key={i} className="dm-vin-cell"><div className="dm-vin-key">{k}</div><div className="dm-vin-val">{v}</div></div>
             )}
           </div>
-          <button className="demo-btn-blue" style={{ width: "100%", marginTop: 12 }}>
+          <button className="dm-btn-accent" style={{ width: "100%", marginTop: 12 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
             Find Compatible Parts
           </button>
         </div>
-        <div className="demo-footer-dark">{I.logo(12)} Powered by AutoSync</div>
+        <div className="dm-footer">{I.logo(12)} Powered by AutoSync</div>
       </div>
     </>
   );
@@ -424,28 +424,28 @@ const NAV_ICONS: Record<IDashPage, JSX.Element> = {
 
 function IDashDashboard() {
   return <>
-    <div className="idash-title">Dashboard</div>
-    <div className="idash-label">Quick Actions</div>
-    <div className="idash-actions">
-      <div className="idash-action"><span className="idash-dot" style={{ background: "var(--accent)" }} /> Fetch Products</div>
-      <div className="idash-action"><span className="idash-dot" style={{ background: "var(--orange)" }} /> Auto Extract <span className="idash-badge-orange">1,593 pending</span></div>
-      <div className="idash-action"><span className="idash-dot" style={{ background: "var(--green)" }} /> Manual Map</div>
-      <div className="idash-action idash-action-blue"><span className="idash-dot" style={{ background: "rgba(255,255,255,0.4)" }} /> Push to Shopify</div>
+    <div className="id-title">Dashboard</div>
+    <div className="id-label">Quick Actions</div>
+    <div className="id-actions">
+      <div className="id-action"><span className="id-dot" style={{ background: "var(--accent)" }} /> Fetch Products</div>
+      <div className="id-action"><span className="id-dot" style={{ background: "var(--orange)" }} /> Auto Extract <span className="id-badge">1,593 pending</span></div>
+      <div className="id-action"><span className="id-dot" style={{ background: "var(--green)" }} /> Manual Map</div>
+      <div className="id-action id-action-blue"><span className="id-dot" style={{ background: "rgba(255,255,255,0.4)" }} /> Push to Shopify</div>
     </div>
-    <div className="idash-stats-row">
-      <div className="idash-stat-card"><div className="idash-stat-num">2,844</div><div className="idash-stat-lbl">Total Products</div></div>
-      <div className="idash-stat-card"><div className="idash-stat-num">5,827</div><div className="idash-stat-lbl">Vehicle Links</div></div>
-      <div className="idash-stat-card"><div className="idash-stat-num">1,251</div><div className="idash-stat-lbl">Mapped</div></div>
-      <div className="idash-stat-card"><div className="idash-stat-num">44%</div><div className="idash-stat-lbl">Coverage</div></div>
+    <div className="id-stats">
+      <div className="id-stat-card"><div className="id-stat-num">2,844</div><div className="id-stat-lbl">Total Products</div></div>
+      <div className="id-stat-card"><div className="id-stat-num">5,827</div><div className="id-stat-lbl">Vehicle Links</div></div>
+      <div className="id-stat-card"><div className="id-stat-num">1,251</div><div className="id-stat-lbl">Mapped</div></div>
+      <div className="id-stat-card"><div className="id-stat-num">44%</div><div className="id-stat-lbl">Coverage</div></div>
     </div>
-    <div className="idash-label">Fitment Coverage</div>
-    <div className="idash-progress-wrap">
-      <div className="idash-progress-bar"><div className="idash-progress-fill" style={{ width: "44%" }} /></div>
-      <div className="idash-progress-labels"><span>1,593 Needs Review</span><span>1,251 Mapped</span></div>
+    <div className="id-label">Fitment Coverage</div>
+    <div className="id-progress">
+      <div className="id-pbar"><div className="id-pfill" style={{ width: "44%" }} /></div>
+      <div className="id-plabels"><span>1,593 Needs Review</span><span>1,251 Mapped</span></div>
     </div>
-    <div className="idash-bottom-row">
-      <div className="idash-bottom-card"><div className="idash-label">Top Makes</div><div className="idash-kv"><span>Audi</span><strong>584</strong></div><div className="idash-kv"><span>Aria</span><strong>308</strong></div><div className="idash-kv"><span>Alfa Romeo</span><strong>103</strong></div></div>
-      <div className="idash-bottom-card"><div className="idash-label">YMME Database</div><div className="idash-kv"><span>Makes</span><strong>374</strong></div><div className="idash-kv"><span>Models</span><strong>3,888</strong></div><div className="idash-kv"><span>Engines</span><strong>29,515</strong></div></div>
+    <div className="id-bottom">
+      <div className="id-bcard"><div className="id-label">Top Makes</div><div className="id-kv"><span>Audi</span><strong>584</strong></div><div className="id-kv"><span>Aria</span><strong>308</strong></div><div className="id-kv"><span>Alfa Romeo</span><strong>103</strong></div></div>
+      <div className="id-bcard"><div className="id-label">YMME Database</div><div className="id-kv"><span>Makes</span><strong>374</strong></div><div className="id-kv"><span>Models</span><strong>3,888</strong></div><div className="id-kv"><span>Engines</span><strong>29,515</strong></div></div>
     </div>
   </>;
 }
@@ -459,24 +459,24 @@ function IDashProducts() {
     { name: "K&N Air Filter BMW E90", status: "auto_mapped", tone: "green", fitments: 15 },
   ];
   return <>
-    <div className="idash-title">Products <span className="idash-title-sub">2,844 products</span></div>
-    <table className="idash-table">
+    <div className="id-title">Products <span className="id-title-sub">2,844 products</span></div>
+    <table className="id-table">
       <thead><tr><th>Product</th><th>Status</th><th>Fitments</th></tr></thead>
-      <tbody>{rows.map((r, i) => <tr key={i}><td className="idash-td-name">{r.name}</td><td><span className={`idash-status-badge idash-status-${r.tone}`}>{r.status}</span></td><td className="idash-td-num">{r.fitments}</td></tr>)}</tbody>
+      <tbody>{rows.map((r, i) => <tr key={i}><td className="id-td-name">{r.name}</td><td><span className={`id-badge-pill id-badge-${r.tone}`}>{r.status}</span></td><td className="id-td-num">{r.fitments}</td></tr>)}</tbody>
     </table>
   </>;
 }
 
 function IDashPush() {
   return <>
-    <div className="idash-title">Push to Shopify</div>
-    <button className="idash-push-btn">Push All Mapped Products</button>
-    <div className="idash-push-checks">
-      <label className="idash-check"><input type="checkbox" defaultChecked readOnly /> Push Tags</label>
-      <label className="idash-check"><input type="checkbox" defaultChecked readOnly /> Push Metafields</label>
-      <label className="idash-check"><input type="checkbox" defaultChecked readOnly /> Create Collections</label>
+    <div className="id-title">Push to Shopify</div>
+    <button className="id-push-btn">Push All Mapped Products</button>
+    <div className="id-checks">
+      <label className="id-check"><input type="checkbox" defaultChecked readOnly /> Push Tags</label>
+      <label className="id-check"><input type="checkbox" defaultChecked readOnly /> Push Metafields</label>
+      <label className="id-check"><input type="checkbox" defaultChecked readOnly /> Create Collections</label>
     </div>
-    <div className="idash-push-last">2,844 products pushed &middot; 1h ago</div>
+    <div className="id-push-meta">2,844 products pushed &middot; 1h ago</div>
   </>;
 }
 
@@ -488,9 +488,9 @@ function IDashCollections() {
     { name: "Volkswagen Parts", count: 156, logo: MAKES[3].logo },
   ];
   return <>
-    <div className="idash-title">Collections <span className="idash-title-sub">1,125 collections</span></div>
-    <div className="idash-col-grid">
-      {cols.map((c, i) => <div key={i} className="idash-col-card"><img src={c.logo} alt="" className="idash-col-logo" /><div><div className="idash-col-name">{c.name}</div><div className="idash-col-count">{c.count} products</div></div></div>)}
+    <div className="id-title">Collections <span className="id-title-sub">1,125 collections</span></div>
+    <div className="id-col-grid">
+      {cols.map((c, i) => <div key={i} className="id-col-card"><img src={c.logo} alt="" className="id-col-logo" /><div><div className="id-col-name">{c.name}</div><div className="id-col-count">{c.count} products</div></div></div>)}
     </div>
   </>;
 }
@@ -498,14 +498,14 @@ function IDashCollections() {
 function InteractiveDashboard() {
   const [page, setPage] = useState<IDashPage>("Dashboard");
   return (
-    <div className="lp-interactive-dash">
-      <div className="lp-idash-sidebar">
-        <div className="lp-idash-logo">{I.logo(16)} AutoSync</div>
+    <div className="lp-idash">
+      <div className="lp-idash__sidebar">
+        <div className="lp-idash__logo">{I.logo(16)} AutoSync</div>
         {IDASH_NAV.map(n => (
-          <div key={n} className={`lp-idash-nav-item ${page === n ? "active" : ""}`} onClick={() => setPage(n)}>{NAV_ICONS[n]} {n}</div>
+          <div key={n} className={`lp-idash__nav-item ${page === n ? "active" : ""}`} onClick={() => setPage(n)}>{NAV_ICONS[n]} {n}</div>
         ))}
       </div>
-      <div className="lp-idash-main">
+      <div className="lp-idash__main">
         {page === "Dashboard" && <IDashDashboard />}
         {page === "Products" && <IDashProducts />}
         {page === "Push to Shopify" && <IDashPush />}
@@ -534,16 +534,16 @@ function FeatureWall() {
   const [active, setActive] = useState<FeatureId>("ymme");
   const Demo = FEATURE_DEMOS[active];
   return (
-    <div className="lp-feature-wall">
-      <div className="lp-fw-nav">
+    <div className="lp-fw">
+      <div className="lp-fw__nav">
         {FEATURE_WALL_ITEMS.map(f => (
-          <div key={f.id} className={`lp-fw-item ${active === f.id ? "active" : ""}`} onClick={() => setActive(f.id)}>
-            <div className="lp-fw-item-title">{f.title}</div>
-            <div className="lp-fw-item-desc">{f.desc}</div>
+          <div key={f.id} className={`lp-fw__item ${active === f.id ? "active" : ""}`} onClick={() => setActive(f.id)}>
+            <div className="lp-fw__item-title">{f.title}</div>
+            <div className="lp-fw__item-desc">{f.desc}</div>
           </div>
         ))}
       </div>
-      <div className="lp-fw-demo"><div key={active} className="lp-fw-demo-inner"><Demo /></div></div>
+      <div className="lp-fw__demo"><div key={active} className="lp-fw__demo-inner"><Demo /></div></div>
     </div>
   );
 }
@@ -634,8 +634,8 @@ export default function LandingPage() {
   // Hero word animation
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const words = document.querySelectorAll(".lp-hero-word");
-    words.forEach((w, i) => { setTimeout(() => w.classList.add("visible"), 200 + i * 80); });
+    const words = document.querySelectorAll(".lp-hero__word");
+    words.forEach((w, i) => { setTimeout(() => w.classList.add("visible"), 300 + i * 120); });
   }, []);
 
   // GSAP: steps line
@@ -685,16 +685,16 @@ export default function LandingPage() {
     <div className="lp">
       {/* ── 1. Nav ── */}
       <nav className={`lp-nav ${scrolled ? "scrolled" : ""}`}>
-        <div className="lp-w lp-nav-inner">
+        <div className="lp-w lp-nav__inner">
           <a href="#" className="lp-logo">{I.logo()} AutoSync</a>
-          <div className="lp-nav-links">
+          <div className="lp-nav__links">
             <a href="#features">Features</a>
             <a href="#how-it-works">How It Works</a>
             <a href="#pricing">Pricing</a>
             <a href="#compare">Compare</a>
             <a href="#faq">FAQ</a>
           </div>
-          <a href="#login" className="lp-btn lp-btn-accent">Get Started</a>
+          <a href="#login" className="lp-btn lp-btn--accent">Get Started</a>
         </div>
       </nav>
 
@@ -702,17 +702,17 @@ export default function LandingPage() {
       <section className="lp-hero">
         <div className="lp-w" style={{ position: "relative", zIndex: 1 }}>
           <div className="lp-pill" style={{ marginBottom: 20 }}>Vehicle Fitment Intelligence</div>
-          <h1 className="lp-hero-title">
-            {["Vehicle", "fitment"].map((w, i) => <span key={i} className="lp-hero-word">{w}</span>)}
-            <span className="lp-hero-word accent">intelligence</span>
-            {["for", "Shopify"].map((w, i) => <span key={i + 3} className="lp-hero-word">{w}</span>)}
+          <h1 className="lp-hero__title">
+            {["Vehicle", "fitment"].map((w, i) => <span key={i} className="lp-hero__word">{w}</span>)}
+            <span className="lp-hero__word accent">intelligence</span>
+            {["for", "Shopify"].map((w, i) => <span key={i + 3} className="lp-hero__word">{w}</span>)}
           </h1>
-          <p className="lp-hero-sub">The only Shopify app that automatically maps vehicle fitments to your products, creates smart collections, and adds Search & Discovery filters — so customers find exact-fit parts instantly.</p>
-          <div className="lp-hero-ctas">
-            <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial</a>
-            <a href="#features" className="lp-btn lp-btn-outline lp-btn-lg">See How It Works</a>
+          <p className="lp-hero__sub">The only Shopify app that automatically maps vehicle fitments to your products, creates smart collections, and adds Search & Discovery filters — so customers find exact-fit parts instantly.</p>
+          <div className="lp-hero__ctas">
+            <a href="#login" className="lp-btn lp-btn--accent lp-btn--lg">Start Free Trial</a>
+            <a href="#features" className="lp-btn lp-btn--ghost lp-btn--lg">See How It Works</a>
           </div>
-          <div className="lp-stats">
+          <div className="lp-hero__stats">
             <Stat value={stats.makes} label="Vehicle Makes" />
             <Stat value={stats.models} label="Models" />
             <Stat value={stats.engines} label="Engines" />
@@ -724,37 +724,41 @@ export default function LandingPage() {
       {/* ── 3. Trust Logos ── */}
       <section className="lp-trust">
         <div className="lp-w">
-          <p className="lp-trust-label">Trusted by parts retailers using these vehicle brands</p>
-          <div className="lp-trust-logos">
-            {MAKES.map(m => <img key={m.name} src={m.logo} alt={m.name} title={m.name} className="lp-trust-logo" loading="lazy" />)}
+          <p className="lp-trust__label">Trusted by parts retailers using these vehicle brands</p>
+        </div>
+        <div style={{ overflow: "hidden" }}>
+          <div className="lp-marquee">
+            {[...MAKES, ...MAKES].map((m, i) => <img key={i} src={m.logo} alt={m.name} title={m.name} loading="lazy" />)}
           </div>
         </div>
       </section>
 
       {/* ── 4. Interactive Dashboard ── */}
-      <section className="lp-dash-section">
+      <section className="lp-product">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Product</span>
               <div className="lp-h2">The complete fitment platform</div>
-              <p className="lp-sub">Everything you need to manage vehicle compatibility data, push to Shopify, and help customers find parts that fit.</p>
+              <p className="lp-p">Everything you need to manage vehicle compatibility data, push to Shopify, and help customers find parts that fit.</p>
             </div>
           </IOReveal>
           <IOReveal delay={0.15}>
-            <InteractiveDashboard />
+            <div className="lp-product__frame">
+              <InteractiveDashboard />
+            </div>
           </IOReveal>
         </div>
       </section>
 
       {/* ── 5. Feature Wall (7 Widgets) ── */}
-      <section id="features" className="lp-section lp-section-alt">
+      <section id="features" className="lp-section lp-section--alt">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Storefront Widgets</span>
               <div className="lp-h2">7 widgets. One platform.</div>
-              <p className="lp-sub">Every widget your automotive store needs, built as native Shopify Theme App Extension blocks.</p>
+              <p className="lp-p">Every widget your automotive store needs, built as native Shopify Theme App Extension blocks.</p>
             </div>
           </IOReveal>
           <IOReveal delay={0.1}>
@@ -767,17 +771,17 @@ export default function LandingPage() {
       <section id="how-it-works" className="lp-section">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">How It Works</span>
               <div className="lp-h2">From install to sales in 4 steps</div>
             </div>
           </IOReveal>
           <div className="lp-steps">
-            <div className="lp-steps-line"><div ref={stepsLineRef} className="lp-steps-line-fill" /></div>
+            <div className="lp-steps__line"><div ref={stepsLineRef} className="lp-steps__line-fill" /></div>
             {STEPS.map((s, i) => (
               <IOReveal key={i} delay={i * 0.1}>
                 <div className="lp-step">
-                  <div className="lp-step-num">{s.n}</div>
+                  <div className="lp-step__num">{s.n}</div>
                   <h3>{s.t}</h3>
                   <p>{s.d}</p>
                 </div>
@@ -788,22 +792,22 @@ export default function LandingPage() {
       </section>
 
       {/* ── 7. Systems Grid ── */}
-      <section id="systems" className="lp-section lp-section-alt">
+      <section id="systems" className="lp-section lp-section--alt">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Platform</span>
               <div className="lp-h2">8 integrated systems</div>
-              <p className="lp-sub">A complete platform where every system works together seamlessly.</p>
+              <p className="lp-p">A complete platform where every system works together seamlessly.</p>
             </div>
           </IOReveal>
-          <div className="lp-systems" ref={systemsRef}>
+          <div className="lp-bento" ref={systemsRef}>
             {SYSTEMS.map((sys, i) => (
-              <div key={i} className="lp-sys">
-                <div className="lp-sys-icon">{SYSTEM_ICONS[i]}</div>
+              <div key={i} className="lp-bento__card">
+                <div className="lp-bento__icon">{SYSTEM_ICONS[i]}</div>
                 <h3>{sys.t}</h3>
                 <p>{sys.d}</p>
-                <span className="lp-sys-stat">{sys.s}</span>
+                <span className="lp-bento__stat">{sys.s}</span>
               </div>
             ))}
           </div>
@@ -814,10 +818,10 @@ export default function LandingPage() {
       <section className="lp-section">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Data Import</span>
               <div className="lp-h2">Connect any parts supplier</div>
-              <p className="lp-sub">Import product data from any source with smart column mapping and scheduled auto-imports.</p>
+              <p className="lp-p">Import product data from any source with smart column mapping and scheduled auto-imports.</p>
             </div>
           </IOReveal>
           <div className="lp-providers">
@@ -835,31 +839,31 @@ export default function LandingPage() {
       </section>
 
       {/* ── 9. Pricing ── */}
-      <section id="pricing" className="lp-section lp-section-alt">
+      <section id="pricing" className="lp-section lp-section--alt">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Pricing</span>
               <div className="lp-h2">Simple, transparent pricing</div>
-              <p className="lp-sub">Start free. Scale as you grow. Cancel anytime. All paid plans include a 14-day free trial.</p>
+              <p className="lp-p">Start free. Scale as you grow. Cancel anytime. All paid plans include a 14-day free trial.</p>
             </div>
           </IOReveal>
           <div className="lp-pricing">
             {visiblePlans.map((p, i) => (
               <IOReveal key={p.name} delay={i * 0.05}>
-                <div className={`lp-price ${p.pop ? "pop" : ""}`}>
-                  {p.pop && <div className="lp-price-badge">Most Popular</div>}
-                  <div className="lp-price-name">{p.name}</div>
+                <div className={`lp-price-card ${p.pop ? "lp-price-card--pop" : ""}`}>
+                  {p.pop && <div className="lp-price-card__badge">Most Popular</div>}
+                  <div className="lp-price-card__name">{p.name}</div>
                   <div style={{ marginBottom: 14 }}>
-                    {p.price === 0 ? <span className="lp-price-amt">Free</span> : <><span className="lp-price-amt">${p.price}</span><span className="lp-price-per">/mo</span></>}
+                    {p.price === 0 ? <span className="lp-price-card__amt">Free</span> : <><span className="lp-price-card__amt">${p.price}</span><span className="lp-price-card__per">/mo</span></>}
                   </div>
-                  <div className="lp-price-limits">
+                  <div className="lp-price-card__limits">
                     <div><strong>{p.products}</strong> products</div>
                     <div><strong>{p.fitments}</strong> fitments</div>
                     <div><strong>{p.providers}</strong> providers</div>
                     <div><strong>{p.makes}</strong> active makes</div>
                   </div>
-                  <ul className="lp-price-feat">
+                  <ul className="lp-price-card__feat">
                     {p.features.map((f, j) => <li key={j}>{I.chk} {f}</li>)}
                   </ul>
                   <a href="#login" className={`lp-btn ${p.pop ? "lp-btn-accent" : "lp-btn-outline"}`} style={{ width: "100%" }}>
@@ -876,7 +880,7 @@ export default function LandingPage() {
       <section id="compare" className="lp-section">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Comparison</span>
               <div className="lp-h2">AutoSync vs the competition</div>
             </div>
@@ -902,10 +906,10 @@ export default function LandingPage() {
       </section>
 
       {/* ── 11. Testimonials ── */}
-      <section className="lp-section lp-section-alt">
+      <section className="lp-section lp-section--alt">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">Testimonials</span>
               <div className="lp-h2">What parts retailers say</div>
             </div>
@@ -929,7 +933,7 @@ export default function LandingPage() {
       <section id="faq" className="lp-section">
         <div className="lp-w">
           <IOReveal>
-            <div className="lp-section-header center">
+            <div className="lp-shdr c">
               <span className="lp-tag">FAQ</span>
               <div className="lp-h2">Frequently asked questions</div>
             </div>
@@ -938,8 +942,8 @@ export default function LandingPage() {
             {FAQS.map((item, i) => (
               <IOReveal key={i} delay={i * 0.03}>
                 <div className={`lp-faq ${faq === i ? "open" : ""}`}>
-                  <button className="lp-faq-q" onClick={() => setFaq(faq === i ? null : i)}>{item.q}<span className="lp-faq-ico">+</span></button>
-                  {faq === i && <div className="lp-faq-a">{item.a}</div>}
+                  <button className="lp-faq__q" onClick={() => setFaq(faq === i ? null : i)}>{item.q}<span className="lp-faq__ico">+</span></button>
+                  {faq === i && <div className="lp-faq__a">{item.a}</div>}
                 </div>
               </IOReveal>
             ))}
@@ -948,12 +952,12 @@ export default function LandingPage() {
       </section>
 
       {/* ── 13. CTA ── */}
-      <section className="lp-cta-section">
+      <section className="lp-cta">
         <div className="lp-w" style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
           <IOReveal>
             <div className="lp-h2">Ready to sell more parts?</div>
             <p style={{ fontSize: 16, color: "var(--text-secondary)", marginBottom: 28, maxWidth: 440, marginLeft: "auto", marginRight: "auto" }}>Join automotive stores using AutoSync to help customers find parts that fit.</p>
-            <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Your Free Trial {I.arr}</a>
+            <a href="#login" className="lp-btn lp-btn--accent lp-btn--lg">Start Your Free Trial {I.arr}</a>
           </IOReveal>
         </div>
       </section>
@@ -967,7 +971,7 @@ export default function LandingPage() {
           {showForm && <Form method="post" action="/auth/login">
             <div style={{ display: "flex", gap: 6 }}>
               <input name="shop" className="lp-login-input" placeholder="your-store.myshopify.com" value={shop} onChange={e => setShop(e.target.value)} />
-              <button type="submit" className="lp-btn lp-btn-accent">Install</button>
+              <button type="submit" className="lp-btn lp-btn--accent">Install</button>
             </div>
           </Form>}
         </div>
@@ -975,7 +979,7 @@ export default function LandingPage() {
 
       {/* ── Back to Top ── */}
       {showBackToTop && (
-        <button className="lp-back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top">
+        <button className="lp-btt" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6" /></svg>
         </button>
       )}
@@ -983,16 +987,16 @@ export default function LandingPage() {
       {/* ── 15. Footer ── */}
       <footer className="lp-footer">
         <div className="lp-w">
-          <div className="lp-footer-grid">
+          <div className="lp-footer__grid">
             <div>
-              <div className="lp-footer-brand">{I.logo(18)} AutoSync</div>
-              <p className="lp-footer-desc">Vehicle fitment intelligence for Shopify. Help customers find parts that fit their vehicle.</p>
+              <div className="lp-footer__brand">{I.logo(18)} AutoSync</div>
+              <p className="lp-footer__desc">Vehicle fitment intelligence for Shopify. Help customers find parts that fit their vehicle.</p>
             </div>
-            <div><h4>Product</h4><div className="lp-footer-links"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a><a href="#faq">FAQ</a></div></div>
-            <div><h4>Company</h4><div className="lp-footer-links"><a href="#">About</a><a href="#">Blog</a><a href="#">Changelog</a></div></div>
-            <div><h4>Legal</h4><div className="lp-footer-links"><a href="/legal/privacy">Privacy</a><a href="/legal/terms">Terms</a><a href="mailto:support@autosync.app">Contact</a></div></div>
+            <div><h4>Product</h4><div className="lp-footer__links"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a><a href="#faq">FAQ</a></div></div>
+            <div><h4>Company</h4><div className="lp-footer__links"><a href="#">About</a><a href="#">Blog</a><a href="#">Changelog</a></div></div>
+            <div><h4>Legal</h4><div className="lp-footer__links"><a href="/legal/privacy">Privacy</a><a href="/legal/terms">Terms</a><a href="mailto:support@autosync.app">Contact</a></div></div>
           </div>
-          <div className="lp-footer-bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
+          <div className="lp-footer__bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
         </div>
       </footer>
     </div>
