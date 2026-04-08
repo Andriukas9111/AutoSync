@@ -737,22 +737,33 @@ export default function LandingPage() {
       <section className="lp-hero">
         <div className="lp-w" style={{ position: "relative", zIndex: 1 }}>
           <div ref={heroRef}>
+            <div className="lp-pill" style={{ marginBottom: 20 }}>🚀 Vehicle Fitment Intelligence</div>
             <h1 className="lp-hero-title">
               {["Vehicle", "fitment"].map((w, i) => <span key={i} className="lp-hero-word">{w}</span>)}
               <span className="lp-hero-word accent">intelligence</span>
               {["for", "Shopify"].map((w, i) => <span key={i + 3} className="lp-hero-word">{w}</span>)}
             </h1>
-            <p className="lp-hero-sub">Help customers find parts that fit. YMME search, auto-extraction, smart collections, and 7 storefront widgets for automotive e-commerce.</p>
+            <p className="lp-hero-sub">The only Shopify app that automatically maps vehicle fitments to your products, creates smart collections, and adds Search & Discovery filters — so customers find exact-fit parts instantly.</p>
             <div className="lp-hero-ctas">
-              <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial {I.arr}</a>
-              <a href="#features" className="lp-btn lp-btn-outline lp-btn-lg">See Features</a>
+              <a href="#login" className="lp-btn lp-btn-accent lp-btn-lg">Start Free Trial</a>
+              <a href="#features" className="lp-btn lp-btn-outline lp-btn-lg">See How It Works</a>
             </div>
           </div>
           <div className="lp-stats">
-            <Stat value={stats.makes} label="Makes" />
+            <Stat value={stats.makes} label="Vehicle Makes" />
             <Stat value={stats.models} label="Models" />
             <Stat value={stats.engines} label="Engines" />
             <Stat value={stats.specs} label="Vehicle Specs" />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Trust Logos ── */}
+      <section className="lp-trust">
+        <div className="lp-w">
+          <p className="lp-trust-label">Trusted by parts retailers using these vehicle brands</p>
+          <div className="lp-trust-logos">
+            {MAKES.map(m => <img key={m.name} src={m.logo} alt={m.name} title={m.name} className="lp-trust-logo" loading="lazy" />)}
           </div>
         </div>
       </section>
