@@ -97,7 +97,7 @@
   text-align: center;
   min-width: 0;
 }
-.apl-plate-input::placeholder { color: rgba(0,0,0,0.25); font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.apl-plate-input::placeholder { color: rgba(0,0,0,0.3) !important; font-size: 18px !important; font-weight: 600 !important; letter-spacing: 0.02em !important; text-transform: none !important; }
 .apl-submit-btn {
   display: inline-flex;
   align-items: center;
