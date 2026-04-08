@@ -1,13 +1,22 @@
-/* AutoSync VIN Decode — Clean Light Design (matches plate-lookup) */
-.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; }
+/* AutoSync VIN Decode — Container Card Layout (matches YMME/Wheel Finder) */
+.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .avd-root *, .avd-root *::before, .avd-root *::after { box-sizing: border-box; }
 
-/* Heading — matches all other widgets (no accent line) */
-.avd-heading { font-family: inherit; font-size: var(--as-heading-size, 1.375rem); font-weight: 700; margin: 0 0 0.25rem; letter-spacing: -0.01em; line-height: 1.25; color: var(--avd-text); }
-.avd-subheading { font-family: inherit; font-size: 0.9375rem; color: var(--avd-muted); margin: 4px 0 24px; font-weight: 400; line-height: 1.5; }
+/* Two-column container layout */
+.avd-container { display: flex; gap: 32px; align-items: center; }
+.avd-content { flex: 1; min-width: 0; }
+.avd-form-side { flex: 1; min-width: 0; }
 
-/* VIN Input — matches plate lookup visual weight */
-.avd-vin-form { display: flex; gap: 10px; max-width: 560px; margin: 0 auto 28px; align-items: stretch; }
+/* Reverse when content is on the right */
+.avd-root[data-content-position="right"] .avd-container { flex-direction: row-reverse; }
+
+/* Heading — left-aligned inside container */
+.avd-heading { font-family: inherit; font-size: var(--as-heading-size, 1.375rem); font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; line-height: 1.25; color: var(--avd-text); }
+.avd-subheading { font-family: inherit; font-size: 0.9375rem; color: var(--avd-muted); margin: 0 0 8px; font-weight: 500; line-height: 1.4; }
+.avd-description { font-family: inherit; font-size: 0.8125rem; color: var(--avd-muted); margin: 0; font-weight: 400; line-height: 1.55; opacity: 0.85; }
+
+/* VIN Input — inside container, no max-width constraint */
+.avd-vin-form { display: flex; gap: 10px; align-items: stretch; }
 .avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 2px solid var(--avd-text, #1a1a2e); border-radius: 5px; background: var(--avd-card-bg, #f4f5f7); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
 .avd-vin-input-wrap:focus-within { border-color: var(--avd-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary) 12%, transparent); }
 .avd-vin-input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 17px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 52px 8px 14px; color: var(--avd-text); min-width: 0; }
@@ -34,9 +43,38 @@
 .avd-error__retry { padding: 8px 20px; border: 1px solid var(--avd-border); border-radius: 8px; background: var(--avd-bg); color: var(--avd-text); cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; transition: border-color 0.2s; }
 .avd-error__retry:hover { border-color: var(--avd-primary); }
 
-/* Vehicle Card — Clean Light */
-.avd-vehicle-card { background: var(--avd-bg); border: 1px solid var(--avd-border); border-radius: var(--avd-radius); overflow: hidden; max-width: 560px; margin: 0 auto; animation: avd-slideUp 0.3s ease both; }
+/* ── Result State: Vehicle Summary (replaces text content) ── */
+.avd-vehicle-summary { animation: avd-slideUp 0.3s ease both; }
+.avd-vehicle-summary__make { font-size: 20px; font-weight: 700; color: var(--avd-text); margin: 0 0 4px; letter-spacing: -0.01em; }
+.avd-vehicle-summary__specs { font-size: 13px; color: var(--avd-muted); margin: 0 0 10px; }
+.avd-vehicle-summary__vin-tag { display: inline-flex; align-items: center; gap: 5px; background: color-mix(in srgb, var(--avd-primary) 8%, transparent); border: 1px solid color-mix(in srgb, var(--avd-primary) 15%, transparent); border-radius: 5px; padding: 4px 10px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; color: var(--avd-primary); }
+.avd-vehicle-summary__vin-tag svg { opacity: 0.6; color: var(--avd-primary); }
+
+/* Result State: Action Buttons (replaces form) */
+.avd-action-buttons { display: flex; flex-direction: column; gap: 8px; }
+.avd-action-buttons__row { display: flex; gap: 8px; }
+.avd-action-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: 8px; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s, transform 0.15s, border-color 0.2s; white-space: nowrap; flex: 1; }
+.avd-action-btn:hover { transform: translateY(-1px); }
+.avd-action-btn--primary { border: none; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); }
+.avd-action-btn--primary:hover { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); }
+.avd-action-btn--secondary { border: 1px solid var(--avd-border, #e5e7eb); background: var(--avd-bg, #fff); color: var(--avd-text, #1a1a2e); }
+.avd-action-btn--secondary:hover { border-color: var(--avd-primary, #005bd2); }
+.avd-action-btn--ghost { border: 1px solid transparent; background: transparent; color: var(--avd-muted, #6b7280); font-weight: 500; }
+.avd-action-btn--ghost:hover { color: var(--avd-text); background: var(--avd-card-bg); }
+
+/* ── Modal Overlay ── */
+.avd-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; animation: avd-fadeIn 0.2s ease; }
+@keyframes avd-fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes avd-slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.avd-modal { background: var(--avd-bg, #fff); border-radius: 12px; max-width: 640px; width: 100%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: avd-slideUp 0.3s ease; }
+.avd-modal__header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid var(--avd-border); position: sticky; top: 0; background: var(--avd-bg, #fff); border-radius: 12px 12px 0 0; z-index: 1; }
+.avd-modal__header h3 { font-size: 16px; font-weight: 700; margin: 0; color: var(--avd-text); }
+.avd-modal__close { width: 32px; height: 32px; border: none; background: none; cursor: pointer; font-size: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--avd-muted); transition: background 0.15s; }
+.avd-modal__close:hover { background: var(--avd-card-bg); }
+.avd-modal__body { padding: 0; }
+
+/* Vehicle Card — used inside modal for expanded view */
+.avd-vehicle-card { background: var(--avd-bg); overflow: hidden; }
 
 /* Card Header — Light */
 .avd-vehicle-card__header { padding: 20px 24px 16px; border-bottom: 1px solid var(--avd-border); }
@@ -62,13 +100,13 @@
 .avd-spec-item__label { font-size: 12px; font-weight: 400; color: var(--avd-muted); white-space: nowrap; }
 .avd-spec-item__value { font-size: 12px; font-weight: 600; color: var(--avd-text); text-align: right; }
 
-/* Find Parts Button */
-.avd-find-parts { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border: none; border-radius: 8px; background: var(--avd-primary); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; max-width: 560px; margin: 14px auto 0; }
+/* Find Parts Button (inside modal) */
+.avd-find-parts { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px 20px; border: none; border-radius: 8px; background: var(--avd-primary); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; margin: 14px auto 0; }
 .avd-find-parts:hover { background: color-mix(in srgb, var(--avd-primary) 85%, #000); transform: translateY(-1px); }
 .avd-find-parts:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
-/* Products Grid */
-.avd-products-section { padding: 0 24px 20px; }
+/* Products Grid (inside modal) */
+.avd-products-section { padding: 16px 24px 20px; }
 .avd-products-section__title { font-size: 12px; font-weight: 600; color: var(--avd-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
 .avd-products-section__title svg { color: var(--avd-primary); opacity: 0.5; }
 .avd-products-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -79,7 +117,7 @@
 .avd-product-card__price { font-size: 13px; font-weight: 700; color: var(--avd-primary); margin: 0; padding: 0 10px 8px; }
 
 /* Footer */
-.avd-footer { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 16px 0 0; margin-top: 24px; max-width: 560px; margin-left: auto; margin-right: auto; border-top: 1px solid var(--avd-border); font-size: 10px; color: var(--avd-muted); opacity: 0.4; }
+.avd-footer { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 16px 24px; border-top: 1px solid var(--avd-border); font-size: 10px; color: var(--avd-muted); opacity: 0.4; }
 .avd-footer__logo { opacity: 0.5; display: block; }
 .avd-footer__text { font-size: 10px; font-weight: 500; color: var(--avd-muted); }
 .avd-footer__text strong { font-weight: 700; color: var(--avd-primary); }
@@ -87,152 +125,25 @@
 /* Divider */
 .avd-divider { height: 1px; background: var(--avd-border); margin: 0; }
 
-/* ── Compact Result Bar ── */
-.avd-result-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: var(--avd-card-bg, #f9fafb);
-  border: 1px solid var(--avd-border, #e5e7eb);
-  border-radius: var(--avd-radius, 8px);
-  max-width: 560px;
-  margin: 0 auto;
-  animation: avd-slideUp 0.3s ease both;
-  flex-wrap: wrap;
-}
-.avd-result-bar__vin {
-  padding: 3px 8px;
-  background: color-mix(in srgb, var(--avd-primary) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--avd-primary) 15%, transparent);
-  border-radius: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--avd-primary);
-  font-family: inherit;
-  flex-shrink: 0;
-}
-.avd-result-bar__info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.avd-result-bar__make {
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--avd-text, #1a1a2e);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.avd-result-bar__specs {
-  font-size: 12px;
-  color: var(--avd-muted, #6b7280);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.avd-result-bar__actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.avd-result-bar__find {
-  padding: 6px 14px;
-  border: none;
-  border-radius: 6px;
-  background: var(--as-btn-bg, var(--avd-primary, #005bd2));
-  color: var(--as-btn-text, #fff);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: background 0.2s;
-}
-.avd-result-bar__find:hover {
-  background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary, #005bd2)) 85%, #000);
-}
-.avd-result-bar__details {
-  padding: 6px 10px;
-  border: 1px solid var(--avd-border, #e5e7eb);
-  border-radius: 6px;
-  background: var(--avd-bg, #fff);
-  color: var(--avd-text, #1a1a2e);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: border-color 0.2s;
-}
-.avd-result-bar__details:hover {
-  border-color: var(--avd-primary, #005bd2);
-}
-.avd-result-bar__close {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--avd-muted, #6b7280);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background 0.15s;
-  font-size: 16px;
-}
-.avd-result-bar__close:hover {
-  background: color-mix(in srgb, var(--avd-text, #1a1a2e) 8%, transparent);
-}
+/* Raw Data */
+.avd-raw-section { padding: 0 24px 16px; }
+.avd-raw-toggle { background: none; border: 1px solid var(--avd-border, #e5e7eb); color: var(--avd-muted, #6b7280); font-size: 12px; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
+.avd-raw-toggle:hover { background: var(--avd-card-bg, #f9fafb); }
+.avd-raw-content { background: var(--avd-card-bg, #f3f4f6); border: 1px solid var(--avd-border, #e5e7eb); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 11px; line-height: 1.4; overflow-x: auto; color: var(--avd-text, #1a1a2e); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
 
-/* Expandable Details Panel */
-.avd-details-panel {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease;
-  max-width: 560px;
-  margin: 0 auto;
-}
-.avd-details-panel--open {
-  max-height: 500px;
-  overflow-y: auto;
-  margin-top: 8px;
-  border: 1px solid var(--avd-border, #e5e7eb);
-  border-radius: var(--avd-radius, 8px);
-}
+/* Classes for JS-rendered elements */
+.avd-spec-item--spacer { background: transparent !important; border-right: none !important; }
 
-/* Mobile bottom sheet for details */
+/* ── Responsive ── */
 @media (max-width: 768px) {
-  .avd-result-bar { gap: 8px; padding: 8px 12px; }
-  .avd-result-bar__actions { width: 100%; justify-content: stretch; }
-  .avd-result-bar__find { flex: 1; text-align: center; }
-
-  .avd-details-panel--open {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    max-height: 60vh;
-    z-index: 50;
-    border-radius: 12px 12px 0 0;
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
-    background: var(--avd-bg, #fff);
-    margin: 0;
-    border: none;
-    border-top: 1px solid var(--avd-border, #e5e7eb);
-  }
+  .avd-container { flex-direction: column !important; gap: 16px; }
+  .avd-content { text-align: center; }
+  .avd-vin-form { flex-direction: column; }
+  .avd-action-buttons__row { flex-direction: column; }
 }
 
-/* Responsive */
 @media (max-width: 600px) {
   .avd-heading { font-size: var(--as-heading-size, 1.25rem); }
-  .avd-vin-form { flex-direction: column; }
   .avd-vin-input { font-size: 14px; letter-spacing: 0.08em; }
   .avd-vehicle-card__title { font-size: 18px; }
   .avd-vehicle-card__header { padding: 16px; }
@@ -240,18 +151,9 @@
   .avd-spec-grid { grid-template-columns: 1fr; }
   .avd-spec-item { border-right: none !important; padding-left: 0 !important; padding-right: 0 !important; }
   .avd-spec-item:last-child { border-bottom: none; }
-  .avd-products-section { padding: 0 16px 16px; }
+  .avd-products-section { padding: 12px 16px 16px; }
   .avd-products-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-}
-
-/* Raw Data */
-.avd-raw-section { padding: 0 24px 16px; }
-.avd-raw-toggle { background: none; border: 1px solid var(--avd-border, #e5e7eb); color: var(--avd-muted, #6b7280); font-size: 12px; padding: 6px 14px; border-radius: 6px; cursor: pointer; transition: background 0.15s; }
-.avd-raw-toggle:hover { background: var(--avd-card-bg, #f9fafb); }
-.avd-raw-content { background: var(--avd-card-bg, #f3f4f6); border: 1px solid var(--avd-border, #e5e7eb); border-radius: 8px; padding: 12px; margin-top: 8px; font-size: 11px; line-height: 1.4; overflow-x: auto; color: var(--avd-text, #1a1a2e); white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
-
-/* ── Classes for JS-rendered elements ── */
-.avd-spec-item--spacer {
-  background: transparent !important;
-  border-right: none !important;
+  .avd-vehicle-summary__make { font-size: 17px; }
+  .avd-modal { max-width: 100%; margin: 10px; max-height: 90vh; }
+  .avd-modal__header { padding: 12px 16px; }
 }

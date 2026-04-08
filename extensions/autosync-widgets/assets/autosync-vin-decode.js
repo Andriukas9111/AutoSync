@@ -9,12 +9,18 @@ var showRaw = root.dataset.showRaw === 'true';
 var loadingEl = root.querySelector('[data-avd-loading]');
 var errorEl = root.querySelector('[data-avd-error]');
 var resultsEl = root.querySelector('[data-avd-results]');
+var contentEl = root.querySelector('[data-avd-content]');
+var formSideEl = root.querySelector('[data-avd-form-side]');
 var input = root.querySelector('[data-avd-input]');
 var counter = root.querySelector('[data-avd-counter]');
 var submitBtn = root.querySelector('[data-avd-submit]');
 var retryBtn = root.querySelector('[data-avd-retry]');
 var btnLabel = submitBtn ? submitBtn.querySelector('span') : null;
 var lastVin = '';
+
+// Clone original DOM nodes for safe restoration (no innerHTML)
+var originalContentClone = contentEl ? contentEl.cloneNode(true) : null;
+var originalFormSideClone = formSideEl ? formSideEl.cloneNode(true) : null;
 
 if (!input || !submitBtn) return;
 
@@ -90,45 +96,69 @@ var ICONS = {
 code: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
 specs: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
 products: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
-arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>'
+arrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>',
+search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+refresh: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
 };
 
-function renderCompact(vehicle, products, vin) {
+function restoreInitialState() {
+// Restore original content and form via cloned DOM nodes (safe, no innerHTML)
+if (contentEl && originalContentClone) {
+while (contentEl.firstChild) contentEl.removeChild(contentEl.firstChild);
+var freshContent = originalContentClone.cloneNode(true);
+while (freshContent.firstChild) contentEl.appendChild(freshContent.firstChild);
+}
+if (formSideEl && originalFormSideClone) {
+while (formSideEl.firstChild) formSideEl.removeChild(formSideEl.firstChild);
+var freshForm = originalFormSideClone.cloneNode(true);
+while (freshForm.firstChild) formSideEl.appendChild(freshForm.firstChild);
+}
+
+// Re-bind input/counter/submit
+var newInput = root.querySelector('[data-avd-input]');
+var newCounter = root.querySelector('[data-avd-counter]');
+var newSubmit = root.querySelector('[data-avd-submit]');
+if (newInput && newSubmit) {
+input = newInput;
+counter = newCounter;
+submitBtn = newSubmit;
+btnLabel = newSubmit.querySelector('span');
+
+input.value = '';
+if (counter) { counter.textContent = '0/17'; counter.className = 'avd-vin-counter'; }
+submitBtn.disabled = true;
+
+input.addEventListener('input', function() {
+this.value = this.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+var len = this.value.length;
+if (counter) {
+counter.textContent = len + '/17';
+counter.className = 'avd-vin-counter' + (len === 17 ? ' avd-vin-counter--valid' : '');
+}
+submitBtn.disabled = len !== 17;
+});
+input.addEventListener('keydown', function(e) { if (e.key === 'Enter' && !submitBtn.disabled) submitBtn.click(); });
+submitBtn.addEventListener('click', function() {
+var vin = input.value.trim();
+if (vin.length !== 17) return;
+lastVin = vin;
+doDecode(vin);
+});
+
+input.focus();
+}
+
+// Ensure content/form sides are visible
+if (contentEl) contentEl.style.display = '';
+if (formSideEl) formSideEl.style.display = '';
+
+// Clear results
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
+resultsEl.style.display = 'none';
+}
 
-// Hide form elements
-var heading = root.querySelector('h2.avd-heading');
-var subheading = root.querySelector('.avd-subheading');
-var form = root.querySelector('.avd-vin-form');
-if (heading) heading.style.display = 'none';
-if (subheading) subheading.style.display = 'none';
-if (form) form.style.display = 'none';
-
-// Build compact bar
-var bar = el('div', 'avd-result-bar');
-
-// VIN tag
-bar.appendChild(el('span', 'avd-result-bar__vin', vin));
-
-// Vehicle info
-var info = el('div', 'avd-result-bar__info');
-var makeModel = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim() || 'Unknown Vehicle';
-info.appendChild(el('span', 'avd-result-bar__make', makeModel));
-var specParts = [];
-if (vehicle.modelYear) specParts.push(vehicle.modelYear);
-if (vehicle.bodyClass) specParts.push(vehicle.bodyClass);
-if (vehicle.fuelType) specParts.push(vehicle.fuelType);
-info.appendChild(el('span', 'avd-result-bar__specs', specParts.join(' \u00b7 ')));
-bar.appendChild(info);
-
-// Actions
-var actions = el('div', 'avd-result-bar__actions');
-
-// Find Parts button
-if (vehicle.make) {
-var findBtn = el('button', 'avd-result-bar__find', 'Find Parts \u2192');
-findBtn.type = 'button';
-findBtn.addEventListener('click', function() {
+function doFindParts(vehicle) {
 var mk = vehicle.make;
 var md = vehicle.model || '';
 fetch(proxyUrl + '?path=collection-lookup', {
@@ -149,28 +179,9 @@ window.location.href = '/collections/' + slug;
 var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
 window.location.href = '/collections/' + slug;
 });
-});
-actions.appendChild(findBtn);
 }
 
-// Details toggle button
-var detailsBtn = el('button', 'avd-result-bar__details', 'Details \u25bc');
-detailsBtn.type = 'button';
-
-// Close button
-var closeBtn = el('button', 'avd-result-bar__close', '\u2715');
-closeBtn.type = 'button';
-
-actions.appendChild(detailsBtn);
-actions.appendChild(closeBtn);
-bar.appendChild(actions);
-
-resultsEl.appendChild(bar);
-
-// Build details panel
-var panel = el('div', 'avd-details-panel');
-
-// Spec grid inside panel
+function buildSpecGrid(vehicle) {
 var specSection = el('div', 'avd-spec-section');
 var specTitle = el('div', 'avd-spec-section__title');
 specTitle.appendChild(svgIcon(ICONS.specs));
@@ -205,11 +216,10 @@ if (addedCount % 2 !== 0) {
 grid.appendChild(el('div', 'avd-spec-item avd-spec-item--spacer'));
 }
 specSection.appendChild(grid);
-panel.appendChild(specSection);
+return specSection;
+}
 
-// Compatible products inside panel
-if (showProducts && products.length > 0) {
-panel.appendChild(el('div', 'avd-divider'));
+function buildProductsSection(products) {
 var prodsSection = el('div', 'avd-products-section');
 var prodsTitle = el('div', 'avd-products-section__title');
 prodsTitle.appendChild(svgIcon(ICONS.products));
@@ -236,12 +246,75 @@ if (p.price) a.appendChild(el('div', 'avd-product-card__price', p.price));
 prodsGrid.appendChild(a);
 }
 prodsSection.appendChild(prodsGrid);
-panel.appendChild(prodsSection);
+return prodsSection;
 }
 
-// Raw data inside panel
+function openModal(vehicle, products, vin) {
+// Create backdrop
+var backdrop = el('div', 'avd-modal-backdrop');
+var modal = el('div', 'avd-modal');
+
+// Header
+var header = el('div', 'avd-modal__header');
+var headerTitle = document.createElement('h3');
+headerTitle.textContent = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim() || 'Vehicle Details';
+header.appendChild(headerTitle);
+var closeBtn = el('button', 'avd-modal__close', '\u2715');
+closeBtn.type = 'button';
+header.appendChild(closeBtn);
+modal.appendChild(header);
+
+// Body
+var body = el('div', 'avd-modal__body');
+var card = el('div', 'avd-vehicle-card');
+
+// Card header with VIN tag and badges
+var cardHeader = el('div', 'avd-vehicle-card__header');
+var vinTag = el('div', 'avd-vehicle-card__vin-tag');
+vinTag.appendChild(svgIcon(ICONS.code));
+vinTag.appendChild(document.createTextNode(vin));
+cardHeader.appendChild(vinTag);
+
+var title = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim();
+cardHeader.appendChild(el('h2', 'avd-vehicle-card__title', title || 'Unknown Vehicle'));
+
+var subtitleParts = [];
+if (vehicle.modelYear) subtitleParts.push(vehicle.modelYear);
+if (vehicle.trim) subtitleParts.push(vehicle.trim);
+if (vehicle.plantCountry) subtitleParts.push(vehicle.plantCountry);
+if (subtitleParts.length) cardHeader.appendChild(el('p', 'avd-vehicle-card__subtitle', subtitleParts.join(' \u2022 ')));
+
+var badges = el('div', 'avd-vehicle-card__badges');
+if (vehicle.fuelType) badges.appendChild(el('span', 'avd-badge avd-badge--accent', vehicle.fuelType));
+if (vehicle.bodyClass) badges.appendChild(el('span', 'avd-badge avd-badge--primary', vehicle.bodyClass));
+if (vehicle.driveType) badges.appendChild(el('span', 'avd-badge avd-badge--muted', vehicle.driveType));
+if (vehicle.transmissionStyle) badges.appendChild(el('span', 'avd-badge avd-badge--muted', vehicle.transmissionStyle));
+if (badges.childNodes.length) cardHeader.appendChild(badges);
+
+card.appendChild(cardHeader);
+
+// Spec grid
+card.appendChild(buildSpecGrid(vehicle));
+
+// Find Parts button inside modal
+if (vehicle.make) {
+var findBtn = el('button', 'avd-find-parts', 'Find Parts for This Vehicle \u2192');
+findBtn.type = 'button';
+findBtn.style.margin = '14px 24px';
+findBtn.style.width = 'calc(100% - 48px)';
+findBtn.addEventListener('click', function() { doFindParts(vehicle); });
+card.appendChild(findBtn);
+}
+
+// Compatible products inside modal
+if (showProducts && products.length > 0) {
+card.appendChild(el('div', 'avd-divider'));
+card.appendChild(buildProductsSection(products));
+}
+
+// Raw data inside modal
 if (showRaw && vehicle) {
-panel.appendChild(el('div', 'avd-divider'));
+card.appendChild(el('div', 'avd-divider'));
 var rawSection = el('div', 'avd-raw-section');
 var rawToggle = el('button', 'avd-raw-toggle', 'Show Raw VIN Data');
 rawToggle.type = 'button';
@@ -255,38 +328,99 @@ rawToggle.textContent = isOpen ? 'Show Raw VIN Data' : 'Hide Raw VIN Data';
 });
 rawSection.appendChild(rawToggle);
 rawSection.appendChild(rawContent);
-panel.appendChild(rawSection);
+card.appendChild(rawSection);
 }
 
-resultsEl.appendChild(panel);
+body.appendChild(card);
+modal.appendChild(body);
+backdrop.appendChild(modal);
 
-// Details toggle handler
-detailsBtn.addEventListener('click', function() {
-var isOpen = panel.classList.contains('avd-details-panel--open');
-if (isOpen) {
-panel.classList.remove('avd-details-panel--open');
-detailsBtn.textContent = 'Details \u25bc';
-} else {
-panel.classList.add('avd-details-panel--open');
-detailsBtn.textContent = 'Details \u25b2';
+// Append to document body (not root) so it overlays everything
+document.body.appendChild(backdrop);
+
+// Close handlers
+function closeModal() {
+if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
 }
+closeBtn.addEventListener('click', closeModal);
+backdrop.addEventListener('click', function(e) {
+if (e.target === backdrop) closeModal();
 });
+document.addEventListener('keydown', function onEsc(e) {
+if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', onEsc); }
+});
+}
 
-// Close handler — remove results, show form again
-closeBtn.addEventListener('click', function() {
+function renderCompact(vehicle, products, vin) {
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
-resultsEl.style.display = 'none';
-if (heading) heading.style.display = '';
-if (subheading) subheading.style.display = '';
-if (form) form.style.display = '';
-if (input) { input.value = ''; input.focus(); }
-if (counter) { counter.textContent = '0/17'; counter.className = 'avd-vin-counter'; }
-if (submitBtn) submitBtn.disabled = true;
+
+// Replace content side with vehicle summary
+if (contentEl) {
+while (contentEl.firstChild) contentEl.removeChild(contentEl.firstChild);
+var summary = el('div', 'avd-vehicle-summary');
+var makeModel = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim() || 'Unknown Vehicle';
+summary.appendChild(el('h2', 'avd-vehicle-summary__make', makeModel));
+var specParts = [];
+if (vehicle.modelYear) specParts.push(vehicle.modelYear);
+if (vehicle.bodyClass) specParts.push(vehicle.bodyClass);
+if (vehicle.fuelType) specParts.push(vehicle.fuelType);
+if (specParts.length) summary.appendChild(el('p', 'avd-vehicle-summary__specs', specParts.join(' \u00b7 ')));
+var vinTag = el('div', 'avd-vehicle-summary__vin-tag');
+vinTag.appendChild(svgIcon(ICONS.code));
+vinTag.appendChild(document.createTextNode(vin));
+summary.appendChild(vinTag);
+contentEl.appendChild(summary);
+}
+
+// Replace form side with action buttons
+if (formSideEl) {
+while (formSideEl.firstChild) formSideEl.removeChild(formSideEl.firstChild);
+var actions = el('div', 'avd-action-buttons');
+var row1 = el('div', 'avd-action-buttons__row');
+
+// Find Parts button
+if (vehicle.make) {
+var findBtn = el('button', 'avd-action-btn avd-action-btn--primary');
+findBtn.type = 'button';
+findBtn.appendChild(svgIcon(ICONS.arrow));
+findBtn.appendChild(document.createTextNode(' Find Parts'));
+findBtn.addEventListener('click', function() { doFindParts(vehicle); });
+row1.appendChild(findBtn);
+}
+
+// View Details button — opens modal
+var detailsBtn = el('button', 'avd-action-btn avd-action-btn--secondary');
+detailsBtn.type = 'button';
+detailsBtn.appendChild(svgIcon(ICONS.info));
+detailsBtn.appendChild(document.createTextNode(' View Details'));
+detailsBtn.addEventListener('click', function() {
+openModal(vehicle, products, vin);
 });
+row1.appendChild(detailsBtn);
+actions.appendChild(row1);
+
+// New Search button
+var row2 = el('div', 'avd-action-buttons__row');
+var newSearchBtn = el('button', 'avd-action-btn avd-action-btn--ghost');
+newSearchBtn.type = 'button';
+newSearchBtn.appendChild(svgIcon(ICONS.refresh));
+newSearchBtn.appendChild(document.createTextNode(' New Search'));
+newSearchBtn.addEventListener('click', function() {
+restoreInitialState();
+});
+row2.appendChild(newSearchBtn);
+actions.appendChild(row2);
+
+formSideEl.appendChild(actions);
+}
 
 resultsEl.style.display = 'block';
 
 // Store vehicle for badge/compat widgets
+storeVehicle(vehicle);
+}
+
+function storeVehicle(vehicle) {
 try {
 var stored = {
 makeName: vehicle.make || '',
@@ -313,16 +447,25 @@ function renderResults(vehicle, products, vin) {
 var resultStyle = root.dataset.resultStyle || 'compact';
 if (resultStyle === 'compact') { renderCompact(vehicle, products, vin); return; }
 
+// Expanded / full card style — renders inside results container
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
 
+// Hide content and form sides for expanded view
+if (contentEl) contentEl.style.display = 'none';
+if (formSideEl) formSideEl.style.display = 'none';
+
 var card = el('div', 'avd-vehicle-card');
+card.style.border = '1px solid var(--avd-border)';
+card.style.borderRadius = 'var(--avd-radius)';
+card.style.maxWidth = '560px';
+card.style.margin = '0 auto';
 
 /* Header */
 var header = el('div', 'avd-vehicle-card__header');
-var vinTag = el('div', 'avd-vehicle-card__vin-tag');
-vinTag.appendChild(svgIcon(ICONS.code));
-vinTag.appendChild(document.createTextNode(vin));
-header.appendChild(vinTag);
+var vinTagEl = el('div', 'avd-vehicle-card__vin-tag');
+vinTagEl.appendChild(svgIcon(ICONS.code));
+vinTagEl.appendChild(document.createTextNode(vin));
+header.appendChild(vinTagEl);
 
 var title = (vehicle.make || '') + ' ' + (vehicle.model || '');
 header.appendChild(el('h2', 'avd-vehicle-card__title', title.trim() || 'Unknown Vehicle'));
@@ -343,105 +486,20 @@ if (badges.childNodes.length) header.appendChild(badges);
 card.appendChild(header);
 
 /* Spec Grid */
-var specSection = el('div', 'avd-spec-section');
-var specTitle = el('div', 'avd-spec-section__title');
-specTitle.appendChild(svgIcon(ICONS.specs));
-specTitle.appendChild(document.createTextNode('Vehicle Specifications'));
-specSection.appendChild(specTitle);
-
-var grid = el('div', 'avd-spec-grid');
-var specs = [
-['Model Year', vehicle.modelYear],
-['Body Style', vehicle.bodyClass],
-['Drive Type', vehicle.driveType],
-['Fuel Type', vehicle.fuelType],
-['Cylinders', vehicle.engineCylinders],
-['Displacement', vehicle.engineDisplacement ? vehicle.engineDisplacement + ' L' : null],
-['Transmission', vehicle.transmissionStyle],
-['Manufacturer', vehicle.manufacturer],
-['Country', vehicle.plantCountry],
-['Trim', vehicle.trim]
-];
-
-var addedCount = 0;
-for (var i = 0; i < specs.length; i++) {
-if (specs[i][1]) {
-var item = el('div', 'avd-spec-item');
-item.appendChild(el('div', 'avd-spec-item__label', specs[i][0]));
-item.appendChild(el('div', 'avd-spec-item__value', String(specs[i][1])));
-grid.appendChild(item);
-addedCount++;
-}
-}
-
-if (addedCount % 2 !== 0) {
-var spacer = el('div', 'avd-spec-item avd-spec-item--spacer');
-grid.appendChild(spacer);
-}
-
-specSection.appendChild(grid);
-card.appendChild(specSection);
+card.appendChild(buildSpecGrid(vehicle));
 
 /* Find Parts Button */
 if (vehicle.make) {
 var findBtn = el('button', 'avd-find-parts', 'Find Parts for This Vehicle \u2192');
 findBtn.type = 'button';
-findBtn.addEventListener('click', function() {
-var mk = vehicle.make;
-var md = vehicle.model || '';
-fetch(proxyUrl + '?path=collection-lookup', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ make: mk, model: md }),
-})
-.then(function(r) { return r.json(); })
-.then(function(res) {
-if (res.data && res.data.found && res.data.url) {
-window.location.href = res.data.url;
-} else {
-var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
-window.location.href = '/collections/' + slug;
-}
-})
-.catch(function() {
-var slug = mk.toLowerCase().replace(/\s+/g, '-') + '-' + md.toLowerCase().replace(/\s+/g, '-') + '-parts';
-window.location.href = '/collections/' + slug;
-});
-});
+findBtn.addEventListener('click', function() { doFindParts(vehicle); });
 card.appendChild(findBtn);
 }
 
 /* Compatible Products */
 if (showProducts && products.length > 0) {
 card.appendChild(el('div', 'avd-divider'));
-
-var prodsSection = el('div', 'avd-products-section');
-var prodsTitle = el('div', 'avd-products-section__title');
-prodsTitle.appendChild(svgIcon(ICONS.products));
-prodsTitle.appendChild(document.createTextNode('Compatible Products (' + products.length + ')'));
-prodsSection.appendChild(prodsTitle);
-
-var prodsGrid = el('div', 'avd-products-grid');
-var maxProds = Math.min(products.length, 6);
-for (var j = 0; j < maxProds; j++) {
-var p = products[j];
-var a = document.createElement('a');
-a.className = 'avd-product-card';
-a.href = p.url || '#';
-if (p.image) {
-var img = document.createElement('img');
-img.className = 'avd-product-card__img';
-img.src = p.image;
-img.alt = p.title || '';
-img.loading = 'lazy';
-a.appendChild(img);
-}
-a.appendChild(el('div', 'avd-product-card__name', p.title || 'Product'));
-if (p.price) a.appendChild(el('div', 'avd-product-card__price', p.price));
-prodsGrid.appendChild(a);
-}
-prodsSection.appendChild(prodsGrid);
-card.appendChild(prodsSection);
+card.appendChild(buildProductsSection(products));
 }
 
 /* Raw VIN Data (togglable) */
@@ -462,6 +520,21 @@ rawSection.appendChild(rawToggle);
 rawSection.appendChild(rawContent);
 card.appendChild(rawSection);
 }
+
+/* New Search link for expanded view */
+var newSearchWrap = el('div', '');
+newSearchWrap.style.cssText = 'text-align: center; padding: 12px 24px 16px;';
+var newSearchLink = el('button', 'avd-action-btn avd-action-btn--ghost');
+newSearchLink.type = 'button';
+newSearchLink.appendChild(svgIcon(ICONS.refresh));
+newSearchLink.appendChild(document.createTextNode(' New Search'));
+newSearchLink.addEventListener('click', function() {
+if (contentEl) contentEl.style.display = '';
+if (formSideEl) formSideEl.style.display = '';
+restoreInitialState();
+});
+newSearchWrap.appendChild(newSearchLink);
+card.appendChild(newSearchWrap);
 
 /* Footer — only show if merchant hasn't hidden watermark */
 if (root.dataset.hideWatermark !== 'true') {
@@ -484,25 +557,7 @@ resultsEl.appendChild(card);
 resultsEl.style.display = 'block';
 
 // Store vehicle for badge/compat widgets
-try {
-var stored = {
-makeName: vehicle.make || '',
-modelName: vehicle.model || '',
-year: String(vehicle.modelYear || ''),
-fuelType: vehicle.fuelType || '',
-bodyClass: vehicle.bodyClass || '',
-source: 'vin'
-};
-localStorage.setItem('autosync_vehicle', JSON.stringify(stored));
-window.dispatchEvent(new CustomEvent('autosync:vehicle-changed', { detail: stored }));
-} catch(e) {}
-
-// Auto-populate YMME widget if present on the page
-if (window.__autosyncPopulateYMME && vehicle.make && vehicle.model) {
-try {
-window.__autosyncPopulateYMME(proxyUrl, vehicle.make, vehicle.model, vehicle.modelYear || '');
-} catch(e) { /* non-critical */ }
-}
+storeVehicle(vehicle);
 }
 });
 })();

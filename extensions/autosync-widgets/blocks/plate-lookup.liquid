@@ -12,32 +12,43 @@ endif
 {% if plate_allowed == false %}
 <!-- widget not available on current plan -->
 {% else %}
-<div class="apl-root" data-apl-root data-proxy-url="{{ proxy_url }}" data-logo-url="{{ logo_url }}" data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}" data-show-mot="{{ block.settings.show_mot_history | default: true }}" data-show-tax="{{ block.settings.show_tax_status | default: true }}" data-result-style="{{ block.settings.result_style | default: 'compact' }}" id="apl-{{ block.id }}" style="--apl-primary:{{ block.settings.primary_color | default: '#005bd2' }};--apl-bg:{{ block.settings.background_color | default: '#ffffff' }};--apl-text:{{ block.settings.text_color | default: '#1a1a2e' }};--apl-muted:{{ block.settings.muted_color | default: '#6b7280' }};--apl-border:{{ block.settings.border_color | default: '#e5e7eb' }};--apl-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--apl-radius:{{ block.settings.border_radius | default: 8 }}px;--as-primary:{{ block.settings.primary_color | default: '#005bd2' }};--as-bg:{{ block.settings.background_color | default: '#ffffff' }};--as-text:{{ block.settings.text_color | default: '#1a1a2e' }};--as-muted:{{ block.settings.muted_color | default: '#6b7280' }};--as-border:{{ block.settings.border_color | default: '#e5e7eb' }};--as-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--as-radius:{{ block.settings.border_radius | default: 8 }}px;--as-btn-bg:{{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};--as-btn-text:{{ block.settings.button_text_color | default: '#ffffff' }};--as-heading-size:{% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};padding-top:{{ block.settings.padding_top | default: 40 }}px;padding-bottom:{{ block.settings.padding_bottom | default: 40 }}px;max-width:{% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};padding-left:{{ block.settings.container_padding | default: 24 }}px;padding-right:{{ block.settings.container_padding | default: 24 }}px;">
-  {% if block.settings.heading != blank %}
-  <h2 class="apl-heading" style="text-align:{{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.heading }}</h2>
-  {% endif %}
-  {% if block.settings.subheading != blank %}
-  <p class="apl-subheading" style="text-align:{{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.subheading }}</p>
-  {% endif %}
-  <div class="apl-plate-form">
-<div class="apl-plate-input-wrap">
-<div class="apl-plate-badge"><div class="apl-plate-badge__flag">
-<svg class="apl-plate-badge__stars" width="14" height="10" viewBox="0 0 14 10" fill="none"><circle cx="7" cy="5" r="4.5" stroke="#FFD700" stroke-width="0.5" fill="none"/><circle cx="7" cy="0.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="1.5" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="7" cy="9.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="3" cy="5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="1.5" r="0.5" fill="#FFD700"/></svg>
-<span class="apl-plate-badge__text">GB</span>
-</div></div>
-<input type="text" class="apl-plate-input" data-apl-input placeholder="{{ block.settings.placeholder_text | default: 'Enter reg (e.g. AB12 CDE)' }}" maxlength="8" autocomplete="off" spellcheck="false"/>
-</div>
-<button type="button" class="apl-submit-btn" data-apl-submit>
-<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-<span>{{ block.settings.button_text | default: "Look Up" }}</span>
-</button>
+<div class="apl-root" data-apl-root data-proxy-url="{{ proxy_url }}" data-logo-url="{{ logo_url }}" data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}" data-show-mot="{{ block.settings.show_mot_history | default: true }}" data-show-tax="{{ block.settings.show_tax_status | default: true }}" data-result-style="{{ block.settings.result_style | default: 'compact' }}" data-content-position="{{ block.settings.content_position | default: 'left' }}" id="apl-{{ block.id }}" style="--apl-primary:{{ block.settings.primary_color | default: '#005bd2' }};--apl-bg:{{ block.settings.background_color | default: '#ffffff' }};--apl-text:{{ block.settings.text_color | default: '#1a1a2e' }};--apl-muted:{{ block.settings.muted_color | default: '#6b7280' }};--apl-border:{{ block.settings.border_color | default: '#e5e7eb' }};--apl-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--apl-radius:{{ block.settings.border_radius | default: 8 }}px;--as-primary:{{ block.settings.primary_color | default: '#005bd2' }};--as-bg:{{ block.settings.background_color | default: '#ffffff' }};--as-text:{{ block.settings.text_color | default: '#1a1a2e' }};--as-muted:{{ block.settings.muted_color | default: '#6b7280' }};--as-border:{{ block.settings.border_color | default: '#e5e7eb' }};--as-card-bg:{{ block.settings.card_bg | default: '#f8f9fa' }};--as-radius:{{ block.settings.border_radius | default: 8 }}px;--as-btn-bg:{{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};--as-btn-text:{{ block.settings.button_text_color | default: '#ffffff' }};--as-heading-size:{% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};padding-top:{{ block.settings.padding_top | default: 40 }}px;padding-bottom:{{ block.settings.padding_bottom | default: 40 }}px;max-width:{% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};padding-left:{{ block.settings.container_padding | default: 24 }}px;padding-right:{{ block.settings.container_padding | default: 24 }}px;">
+  <div class="apl-container">
+    <!-- Left: Text content (shown initially, replaced by vehicle result on lookup) -->
+    <div class="apl-content" data-apl-content>
+      {% if block.settings.heading != blank %}
+      <h2 class="apl-heading">{{ block.settings.heading }}</h2>
+      {% endif %}
+      {% if block.settings.subheading != blank %}
+      <p class="apl-subheading">{{ block.settings.subheading }}</p>
+      {% endif %}
+      {% if block.settings.description_text != blank %}
+      <p class="apl-description">{{ block.settings.description_text }}</p>
+      {% endif %}
+    </div>
+    <!-- Right: Form + History -->
+    <div class="apl-form-side" data-apl-form-side>
+      <div class="apl-plate-form">
+        <div class="apl-plate-input-wrap">
+          <div class="apl-plate-badge"><div class="apl-plate-badge__flag">
+            <svg class="apl-plate-badge__stars" width="14" height="10" viewBox="0 0 14 10" fill="none"><circle cx="7" cy="5" r="4.5" stroke="#FFD700" stroke-width="0.5" fill="none"/><circle cx="7" cy="0.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="1.5" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="7" cy="9.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="3" cy="5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="1.5" r="0.5" fill="#FFD700"/></svg>
+            <span class="apl-plate-badge__text">GB</span>
+          </div></div>
+          <input type="text" class="apl-plate-input" data-apl-input placeholder="{{ block.settings.placeholder_text | default: 'Enter reg (e.g. AB12 CDE)' }}" maxlength="8" autocomplete="off" spellcheck="false"/>
+        </div>
+        <button type="button" class="apl-submit-btn" data-apl-submit>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <span>{{ block.settings.button_text | default: "Look Up" }}</span>
+        </button>
+      </div>
+      <div class="apl-history" data-apl-history style="display:none;"></div>
+    </div>
   </div>
-  <div class="apl-history" data-apl-history style="display:none;"></div>
   <div class="apl-loading" data-apl-loading style="display:none;"><div class="apl-spinner"></div><p class="apl-loading__text">Looking up vehicle...</p></div>
   <div class="apl-error" data-apl-error style="display:none;">
-<svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
-<p class="apl-error__msg" data-apl-error-msg>Something went wrong.</p>
-<button type="button" class="apl-error__retry" data-apl-retry>Try Again</button>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <p class="apl-error__msg" data-apl-error-msg>Something went wrong.</p>
+    <button type="button" class="apl-error__retry" data-apl-retry>Try Again</button>
   </div>
   <div class="apl-results" data-apl-results style="display:none;"></div>
 </div>
@@ -52,10 +63,12 @@ endif
 { "type": "header", "content": "Content" },
 { "type": "text", "id": "heading", "label": "Heading", "default": "Find Parts by Registration" },
 { "type": "text", "id": "subheading", "label": "Subheading", "default": "Enter your UK registration number to find compatible parts" },
+{ "type": "textarea", "id": "description_text", "label": "Description Text", "default": "Simply enter your UK registration number and we'll instantly identify your vehicle. Find the exact parts that fit, check MOT history, and browse compatible products." },
 { "type": "text", "id": "placeholder_text", "label": "Placeholder Text", "default": "Enter reg (e.g. AB12 CDE)" },
 { "type": "text", "id": "button_text", "label": "Button Text", "default": "Look Up" },
-{ "type": "select", "id": "heading_alignment", "label": "Heading Alignment", "options": [{ "value": "left", "label": "Left" }, { "value": "center", "label": "Center" }], "default": "center" },
+{ "type": "select", "id": "heading_alignment", "label": "Heading Alignment", "options": [{ "value": "left", "label": "Left" }, { "value": "center", "label": "Center" }], "default": "left" },
 { "type": "select", "id": "heading_size", "label": "Heading Size", "options": [{ "value": "small", "label": "Small" }, { "value": "medium", "label": "Medium" }, { "value": "large", "label": "Large" }], "default": "medium" },
+{ "type": "select", "id": "content_position", "label": "Text Position", "options": [{ "value": "left", "label": "Left" }, { "value": "right", "label": "Right" }], "default": "left" },
 { "type": "header", "content": "Features" },
 { "type": "checkbox", "id": "show_mot_history", "label": "Show MOT History", "default": true },
 { "type": "checkbox", "id": "show_tax_status", "label": "Show MOT & Tax Status", "default": true },
