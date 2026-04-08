@@ -65,9 +65,10 @@
 
 /* ── Plate Input — Authentic UK number plate ── */
 .apl-plate-form {
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
+  display: flex !important;
+  gap: 10px !important;
+  align-items: stretch !important;
+  max-width: 420px !important;
 }
 .apl-plate-input-wrap {
   flex: 1 !important;
