@@ -54,6 +54,131 @@
     return opt;
   }
 
+  // ── Generic Custom Dropdown ──
+  // Converts ANY native <select> into a styled custom dropdown matching the Make dropdown
+  function convertToCustomDropdown(selectEl) {
+    if (!selectEl || selectEl.dataset.customized) return;
+    selectEl.dataset.customized = 'true';
+
+    var parent = selectEl.parentNode;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'autosync-ymme__custom-select';
+    wrapper.style.position = 'relative';
+
+    // Create trigger button
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'autosync-ymme__select-trigger';
+    trigger.disabled = selectEl.disabled;
+
+    var display = document.createElement('span');
+    display.className = 'autosync-ymme__select-value';
+    display.textContent = selectEl.options[selectEl.selectedIndex]?.text || selectEl.options[0]?.text || 'Select...';
+    trigger.appendChild(display);
+
+    var arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrow.setAttribute('class', 'autosync-ymme__select-arrow');
+    arrow.setAttribute('width', '12');
+    arrow.setAttribute('height', '12');
+    arrow.setAttribute('viewBox', '0 0 12 12');
+    arrow.setAttribute('fill', 'none');
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M2.5 4.5L6 8L9.5 4.5');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    arrow.appendChild(path);
+    trigger.appendChild(arrow);
+
+    // Create dropdown panel
+    var dropdown = document.createElement('div');
+    dropdown.className = 'autosync-ymme__select-dropdown';
+    dropdown.style.cssText = 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:280px;overflow-y:auto;animation:autosync-dropdown-in 0.15s ease;';
+
+    var optionsList = document.createElement('ul');
+    optionsList.style.cssText = 'list-style:none;margin:0;padding:4px 0;';
+
+    var isOpen = false;
+
+    function renderOptions() {
+      while (optionsList.firstChild) optionsList.removeChild(optionsList.firstChild);
+      for (var i = 0; i < selectEl.options.length; i++) {
+        var opt = selectEl.options[i];
+        var li = document.createElement('li');
+        li.className = 'autosync-ymme__select-option';
+        li.setAttribute('role', 'option');
+        li.dataset.value = opt.value;
+        li.textContent = opt.text;
+        if (opt.selected && opt.value) li.classList.add('autosync-ymme__select-option--selected');
+        (function(option, listItem) {
+          listItem.addEventListener('click', function() {
+            selectEl.value = option.value;
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            display.textContent = option.text;
+            closeDD();
+            // Update selected state
+            var items = optionsList.querySelectorAll('.autosync-ymme__select-option');
+            items.forEach(function(it) { it.classList.remove('autosync-ymme__select-option--selected'); });
+            listItem.classList.add('autosync-ymme__select-option--selected');
+          });
+        })(opt, li);
+        optionsList.appendChild(li);
+      }
+    }
+
+    function openDD() {
+      if (trigger.disabled) return;
+      isOpen = true;
+      dropdown.style.display = 'block';
+      wrapper.classList.add('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'true');
+      renderOptions();
+    }
+
+    function closeDD() {
+      isOpen = false;
+      dropdown.style.display = 'none';
+      wrapper.classList.remove('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    trigger.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      isOpen ? closeDD() : openDD();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (isOpen && !wrapper.contains(e.target)) closeDD();
+    });
+
+    dropdown.appendChild(optionsList);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(dropdown);
+
+    // Hide original select
+    selectEl.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important;padding:0!important;margin:-1px!important;';
+
+    // Insert wrapper before select, move select inside wrapper
+    parent.insertBefore(wrapper, selectEl);
+    wrapper.appendChild(selectEl);
+
+    // Watch for external changes to the select (JS updates)
+    var observer = new MutationObserver(function() {
+      display.textContent = selectEl.options[selectEl.selectedIndex]?.text || 'Select...';
+      trigger.disabled = selectEl.disabled;
+    });
+    observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
+
+    // Also listen for change events from JS
+    selectEl.addEventListener('change', function() {
+      display.textContent = selectEl.options[selectEl.selectedIndex]?.text || 'Select...';
+    });
+
+    return wrapper;
+  }
+
   async function proxyFetch(proxyUrl, path, params) {
     var url = new URL(proxyUrl);
     url.searchParams.set('path', path);
@@ -632,6 +757,11 @@
     var searchBtn = container.querySelector('[data-autosync-search]');
 
     if (!makeSelect) return;
+
+    // Convert native selects to custom dropdowns (matching Make dropdown design)
+    if (modelSelect) convertToCustomDropdown(modelSelect);
+    if (yearSelect) convertToCustomDropdown(yearSelect);
+    if (engineSelect) convertToCustomDropdown(engineSelect);
 
     // State
     var state = { make: null, makeName: '', model: null, modelName: '', year: null, engine: null, engineName: '' };
@@ -1391,6 +1521,12 @@
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
     if (!pcdEl || !searchBtn) return;
+
+    // Convert native selects to custom dropdowns
+    if (pcdEl) convertToCustomDropdown(pcdEl);
+    if (diameterEl) convertToCustomDropdown(diameterEl);
+    if (widthEl) convertToCustomDropdown(widthEl);
+    if (offsetEl) convertToCustomDropdown(offsetEl);
 
     var state = { pcd: '', diameter: '', width: '', offset: '' };
     var btnText = searchBtn.textContent || 'Search Wheels';
