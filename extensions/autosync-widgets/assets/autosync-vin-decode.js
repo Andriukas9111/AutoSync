@@ -354,63 +354,46 @@ if (e.key === 'Escape') { closeModal(); document.removeEventListener('keydown', 
 function renderCompact(vehicle, products, vin) {
 while (resultsEl.firstChild) resultsEl.removeChild(resultsEl.firstChild);
 
-// Replace content side with vehicle summary
+// Replace content side with rich vehicle details
 if (contentEl) {
 while (contentEl.firstChild) contentEl.removeChild(contentEl.firstChild);
-var summary = el('div', 'avd-vehicle-summary');
-var makeModel = ((vehicle.make || '') + ' ' + (vehicle.model || '')).trim() || 'Unknown Vehicle';
-summary.appendChild(el('h2', 'avd-vehicle-summary__make', makeModel));
-var specParts = [];
-if (vehicle.modelYear) specParts.push(vehicle.modelYear);
-if (vehicle.bodyClass) specParts.push(vehicle.bodyClass);
-if (vehicle.fuelType) specParts.push(vehicle.fuelType);
-if (specParts.length) summary.appendChild(el('p', 'avd-vehicle-summary__specs', specParts.join(' \u00b7 ')));
-var vinTag = el('div', 'avd-vehicle-summary__vin-tag');
-vinTag.appendChild(svgIcon(ICONS.code));
-vinTag.appendChild(document.createTextNode(vin));
-summary.appendChild(vinTag);
-contentEl.appendChild(summary);
+/* VIN tag */
+var vt=el('div','avd-vehicle-card__vin-tag');vt.appendChild(svgIcon(ICONS.code));vt.appendChild(document.createTextNode(' '+vin));contentEl.appendChild(vt);
+/* Make + Model heading */
+var makeModel=((vehicle.make||'')+(vehicle.model?' '+vehicle.model:'')).trim()||'Unknown Vehicle';
+var h2=el('h2','');h2.style.cssText='font-size:18px;font-weight:700;margin:8px 0 2px;letter-spacing:-0.01em;color:var(--avd-text,#1a1a2e);';h2.textContent=makeModel;contentEl.appendChild(h2);
+/* Key specs line */
+var sp=[];if(vehicle.modelYear)sp.push(String(vehicle.modelYear));if(vehicle.fuelType)sp.push(vehicle.fuelType);if(vehicle.driveType)sp.push(vehicle.driveType);
+if(sp.length){var sub=el('p','');sub.style.cssText='font-size:13px;color:var(--avd-muted,#6b7280);margin:0 0 4px;';sub.textContent=sp.join(' \u00B7 ');contentEl.appendChild(sub);}
+/* Rich details grid */
+var grid=el('div','avd-result-details');
+function addR(lb,val){if(!val)return;grid.appendChild(el('span','avd-result-details__label',lb));grid.appendChild(el('span','avd-result-details__value',val));}
+addR('Year',vehicle.modelYear?String(vehicle.modelYear):null);
+addR('Body Style',vehicle.bodyClass);
+addR('Drive Type',vehicle.driveType);
+addR('Fuel Type',vehicle.fuelType);
+addR('Cylinders',vehicle.engineCylinders);
+addR('Displacement',vehicle.engineDisplacement?vehicle.engineDisplacement+'L':null);
+addR('Transmission',vehicle.transmissionStyle);
+addR('Manufacturer',vehicle.manufacturer);
+addR('Country',vehicle.plantCountry);
+addR('Trim',vehicle.trim);
+addR('Series',vehicle.series);
+addR('Doors',vehicle.doors);
+addR('Type',vehicle.vehicleType);
+contentEl.appendChild(grid);
 }
 
-// Replace form side with action buttons
+// Replace form side with stacked action buttons
 if (formSideEl) {
 while (formSideEl.firstChild) formSideEl.removeChild(formSideEl.firstChild);
-var actions = el('div', 'avd-action-buttons');
-var row1 = el('div', 'avd-action-buttons__row');
-
-// Find Parts button
-if (vehicle.make) {
-var findBtn = el('button', 'avd-action-btn avd-action-btn--primary');
-findBtn.type = 'button';
-findBtn.appendChild(svgIcon(ICONS.arrow));
-findBtn.appendChild(document.createTextNode(' Find Parts'));
-findBtn.addEventListener('click', function() { doFindParts(vehicle); });
-row1.appendChild(findBtn);
-}
-
-// View Details button — opens modal
-var detailsBtn = el('button', 'avd-action-btn avd-action-btn--secondary');
-detailsBtn.type = 'button';
-detailsBtn.appendChild(svgIcon(ICONS.info));
-detailsBtn.appendChild(document.createTextNode(' View Details'));
-detailsBtn.addEventListener('click', function() {
-openModal(vehicle, products, vin);
-});
-row1.appendChild(detailsBtn);
-actions.appendChild(row1);
-
-// New Search button
-var row2 = el('div', 'avd-action-buttons__row');
-var newSearchBtn = el('button', 'avd-action-btn avd-action-btn--ghost');
-newSearchBtn.type = 'button';
-newSearchBtn.appendChild(svgIcon(ICONS.refresh));
-newSearchBtn.appendChild(document.createTextNode(' New Search'));
-newSearchBtn.addEventListener('click', function() {
-restoreInitialState();
-});
-row2.appendChild(newSearchBtn);
-actions.appendChild(row2);
-
+var actions=el('div','avd-result-actions');
+/* Find Parts */
+if(vehicle.make){var findBtn=el('button','avd-result-actions__find');findBtn.type='button';findBtn.textContent='Find Parts \u2192';findBtn.addEventListener('click',function(){doFindParts(vehicle);});actions.appendChild(findBtn);}
+/* View Full Specs */
+var detBtn=el('button','avd-result-actions__details');detBtn.type='button';detBtn.textContent='\u24D8 View Full Specs';detBtn.addEventListener('click',function(){openModal(vehicle,products,vin);});actions.appendChild(detBtn);
+/* New Search */
+var newBtn=el('button','avd-result-actions__new');newBtn.type='button';newBtn.textContent='\u21BB New Search';newBtn.addEventListener('click',function(){restoreInitialState();});actions.appendChild(newBtn);
 formSideEl.appendChild(actions);
 }
 

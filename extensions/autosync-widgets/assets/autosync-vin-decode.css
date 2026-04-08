@@ -1,5 +1,5 @@
 /* AutoSync VIN Decode — Container Card Layout (matches YMME/Wheel Finder) */
-.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 24px; }
 .avd-root *, .avd-root *::before, .avd-root *::after { box-sizing: border-box; }
 
 /* Two-column container layout */
@@ -133,6 +133,18 @@
 
 /* Classes for JS-rendered elements */
 .avd-spec-item--spacer { background: transparent !important; border-right: none !important; }
+
+/* ── Rich Vehicle Details Grid ── */
+.avd-result-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin-top: 12px; font-size: 13px; padding-top: 12px; border-top: 1px solid var(--avd-border, #e5e7eb); }
+.avd-result-details__label { color: var(--avd-muted, #6b7280); font-weight: 400; white-space: nowrap; padding: 3px 0; }
+.avd-result-details__value { color: var(--avd-text, #1a1a2e); font-weight: 600; text-align: right; padding: 3px 0; }
+.avd-result-actions { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
+.avd-result-actions__find { padding: 12px 20px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; text-align: center; transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.avd-result-actions__find:hover { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); }
+.avd-result-actions__details { padding: 10px 16px; border: 1px solid var(--avd-border, #e5e7eb); border-radius: 8px; background: var(--avd-bg, #fff); color: var(--avd-text, #1a1a2e); font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; text-align: center; transition: border-color 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.avd-result-actions__details:hover { border-color: var(--avd-primary, #005bd2); }
+.avd-result-actions__new { padding: 8px; border: none; background: none; color: var(--avd-muted, #6b7280); font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; text-align: center; display: flex; align-items: center; justify-content: center; gap: 4px; }
+.avd-result-actions__new:hover { color: var(--avd-text, #1a1a2e); }
 
 /* ── Responsive ── */
 @media (max-width: 768px) {

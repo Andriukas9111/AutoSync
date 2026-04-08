@@ -25,30 +25,40 @@ cl:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentC
 /* Compact result: two-column layout inside container */
 function rRC(v,mH,rv,rg){
 while(RE.firstChild)RE.removeChild(RE.firstChild);
-/* Replace left column (content) with vehicle info */
+/* Replace left column (content) with rich vehicle details */
 if(contentEl){
 contentEl.innerHTML='';
-var vInfo=el('div','apl-result-vehicle');
 /* Plate badge */
-var plateBadge=el('div','apl-result-vehicle__plate');plateBadge.appendChild(el('span','apl-result-vehicle__plate-flag','GB'));plateBadge.appendChild(el('span','apl-result-vehicle__plate-text',fR(rg)));vInfo.appendChild(plateBadge);
-/* Make/Model */
-vInfo.appendChild(el('h3','apl-result-vehicle__make',(v.make||'')+' '+(v.model||'')));
-/* Specs line */
-var specs=[];if(v.yearOfManufacture)specs.push(v.yearOfManufacture);if(v.engineCapacity)specs.push(v.engineCapacity+'cc');if(v.fuelType&&v.fuelType!=='Unknown')specs.push(v.fuelType);
-if(specs.length)vInfo.appendChild(el('p','apl-result-vehicle__specs',specs.join(' \u00B7 ')));
-/* MOT/Tax status dots */
-if(R.dataset.showTax!=='false'){
-var sts=el('div','apl-result-vehicle__statuses');
-sts.appendChild(mSInline('MOT',v.motStatus));
-sts.appendChild(mSInline('Tax',v.taxStatus));
-vInfo.appendChild(sts);}
-contentEl.appendChild(vInfo);
+var pb=el('div','apl-result-bar__plate');pb.appendChild(el('span','apl-result-bar__plate-flag','GB'));pb.appendChild(el('span','apl-result-bar__plate-text',fR(rg)));contentEl.appendChild(pb);
+/* Make/Model heading */
+var h2=el('h2','');h2.style.cssText='font-size:18px;font-weight:700;margin:8px 0 2px;letter-spacing:-0.01em;color:var(--apl-text,#1a1a2e);';h2.textContent=(v.make||'')+' '+(v.model||'');contentEl.appendChild(h2);
+/* Key specs line */
+var sb=[];if(v.yearOfManufacture)sb.push(String(v.yearOfManufacture));if(v.engineCapacity)sb.push(v.engineCapacity+'cc');if(v.fuelType&&v.fuelType!=='Unknown')sb.push(v.fuelType);
+if(sb.length){var sp=el('p','');sp.style.cssText='font-size:13px;color:var(--apl-muted,#6b7280);margin:0 0 4px;';sp.textContent=sb.join(' \u00B7 ');contentEl.appendChild(sp);}
+/* Rich details grid — ALL DVLA fields */
+var grid=el('div','apl-result-details');
+function aR(lb,val){if(!val||val==='Unknown')return;grid.appendChild(el('span','apl-result-details__label',lb));grid.appendChild(el('span','apl-result-details__value',val));}
+function aRS(lb,status,date,dl){grid.appendChild(el('span','apl-result-details__label',lb));var val=el('span','apl-result-details__value');var st=el('span','apl-result-details__status');var isG=(lb==='MOT'?status==='Valid':status==='Taxed');var dot=el('span','apl-result-details__dot apl-result-details__dot--'+(isG?'valid':'invalid'));st.appendChild(dot);st.appendChild(document.createTextNode(' '+(status||'Unknown')));if(date)st.appendChild(el('span','apl-result-details__expiry','('+dl+': '+fD(date)+')'));val.appendChild(st);grid.appendChild(val);}
+aR('Colour',v.colour);
+aR('Engine',v.engineCapacity?v.engineCapacity+'cc':null);
+aR('Fuel Type',v.fuelType);
+if(R.dataset.showCo2!=='false'&&v.co2Emissions)aR('CO\u2082',v.co2Emissions+' g/km');
+if(v.typeApproval)aR('Type Approval',v.typeApproval);
+if(v.wheelplan)aR('Wheelplan',v.wheelplan);
+if(R.dataset.showWeight!=='false'&&v.revenueWeight)aR('Weight',Number(v.revenueWeight).toLocaleString()+' kg');
+if(mH&&mH.firstUsedDate)aR('First Reg',fD(mH.firstUsedDate));
+var ts3=(mH&&mH.motTests)?mH.motTests:[];
+if(R.dataset.showMileage!=='false'&&ts3.length>0&&ts3[0].odometerValue&&ts3[0].odometerValue!=='0')aR('Mileage',Number(ts3[0].odometerValue).toLocaleString()+' '+(ts3[0].odometerUnit||'mi'));
+if(v.markedForExport)aR('Export','Marked for export');
+aRS('MOT',v.motStatus,v.motExpiryDate,'exp');
+aRS('Tax',v.taxStatus,v.taxDueDate,'due');
+contentEl.appendChild(grid);
 }
-/* Replace right column (form side) with action buttons */
+/* Replace right column with stacked action buttons */
 if(formSideEl){
 formSideEl.innerHTML='';
 var acts=el('div','apl-result-actions');
-/* Find Parts button */
+/* Find Parts */
 var findBtn=el('button','apl-result-actions__find');findBtn.type='button';findBtn.textContent='Find Parts \u2192';
 var useMd=(rv&&rv.modelName)?rv.modelName:(v.model||'');
 findBtn.addEventListener('click',function(){findBtn.disabled=true;findBtn.textContent='Finding...';var mk=v.make;
@@ -56,15 +66,13 @@ fetch(P+'?path=collection-lookup',{method:'POST',headers:{'Content-Type':'applic
 .then(function(r){return r.json();}).then(function(d){if(d.data&&d.data.found&&d.data.url)window.location.href=d.data.url;else window.location.href='/collections/'+mk.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';})
 .catch(function(){window.location.href='/collections/'+v.make.toLowerCase().replace(/\s+/g,'-')+'-'+useMd.toLowerCase().replace(/\s+/g,'-')+'-parts';});});
 acts.appendChild(findBtn);
-/* Button row: View Details + New Search */
-var row=el('div','apl-result-actions__row');
-var detailsBtn=el('button','apl-result-actions__details');detailsBtn.type='button';detailsBtn.textContent='View Details';
-detailsBtn.addEventListener('click',function(){openModal(v,mH,rv,rg);});
-row.appendChild(detailsBtn);
-var newBtn=el('button','apl-result-actions__new');newBtn.type='button';newBtn.textContent='New Search';
+/* MOT History button */
+var tc=(mH&&mH.motTests)?mH.motTests.length:0;
+if(R.dataset.showMot!=='false'&&tc>0){var motBtn=el('button','apl-result-actions__mot');motBtn.type='button';motBtn.textContent='MOT History ('+tc+' test'+(tc!==1?'s':'')+')';motBtn.addEventListener('click',function(){openModal(v,mH,rv,rg);});acts.appendChild(motBtn);}
+/* New Search */
+var newBtn=el('button','apl-result-actions__new');newBtn.type='button';newBtn.textContent='\u21BB New Search';
 newBtn.addEventListener('click',function(){restoreInitial();});
-row.appendChild(newBtn);
-acts.appendChild(row);
+acts.appendChild(newBtn);
 formSideEl.appendChild(acts);
 }
 /* Garage, history, YMME population */
