@@ -26,6 +26,8 @@
   data-show-logos="{{ block.settings.show_brand_logos | default: true }}"
   data-show-specs="{{ block.settings.show_spec_pills | default: true }}"
   data-per-page="{{ block.settings.vehicles_per_page | default: 18 }}"
+  data-max-vehicles="{{ block.settings.max_vehicles | default: 0 }}"
+  data-grid-rows="{{ block.settings.grid_rows | default: 0 }}"
   id="autosync-vehicle-showcase-{{ block.id }}"
   style="
 --avs-primary: {{ block.settings.primary_color | default: '#005bd2' }};
@@ -190,11 +192,32 @@ padding-right: {{ block.settings.container_padding | default: 16 }}px;
 {
 "type": "range",
 "id": "vehicles_per_page",
-"label": "Vehicles Per Page",
+"label": "Vehicles Per Batch (Infinite Scroll)",
 "min": 6,
 "max": 48,
 "step": 6,
-"default": 18
+"default": 18,
+"info": "How many vehicles load at once as user scrolls"
+},
+{
+"type": "range",
+"id": "max_vehicles",
+"label": "Maximum Vehicles to Show",
+"min": 0,
+"max": 500,
+"step": 10,
+"default": 0,
+"info": "0 = show all vehicles (unlimited)"
+},
+{
+"type": "range",
+"id": "grid_rows",
+"label": "Visible Rows (Scroll Height)",
+"min": 0,
+"max": 10,
+"step": 1,
+"default": 0,
+"info": "0 = no scroll limit (full height). Set 3-5 for compact scrollable gallery."
 },
 {
 "type": "range",

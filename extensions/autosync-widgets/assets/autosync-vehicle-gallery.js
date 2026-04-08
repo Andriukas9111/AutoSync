@@ -10,11 +10,21 @@
     var countEl = container.querySelector('[data-avs-count]');
     var allVehicles = [];
 
-    if (!proxyUrl) {
-      showEmpty();
-      return;
-    }
+    /* ── Settings from data attributes ────────────── */
+    var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
+    var MAX_VEHICLES = parseInt(container.getAttribute('data-max-vehicles'), 10) || 0; // 0 = unlimited
+    var GRID_ROWS = parseInt(container.getAttribute('data-grid-rows'), 10) || 0; // 0 = unlimited height
+    var colsSetting = (gridEl && gridEl.getAttribute('data-columns')) || 'auto';
 
+    /* ── State ─────────────────────────────────────── */
+    var currentPage = 1;
+    var currentVehicles = [];
+    var isLoading = false;
+    var observer = null;
+    var sentinelEl = null;
+    var scrollWrap = null;
+
+    if (!proxyUrl) { showEmpty(); return; }
     fetchGallery();
 
     function fetchGallery() {
@@ -40,29 +50,58 @@
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'block';
       gridEl.style.display = 'none';
+      if (scrollWrap) scrollWrap.style.display = 'none';
     }
 
-    
-    // SVG parser for hardcoded icon markup only (never used with API data)
+    /* SVG parser for hardcoded icon markup only (never used with API data) */
     function svgEl(svgMarkup) {
       var parser = new DOMParser();
       var doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
       return doc.documentElement;
     }
 
-    var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
-    var currentPage = 1;
-    var currentVehicles = [];
+    /* ── Calculate scroll container height ──────────── */
+    function calcScrollHeight() {
+      if (GRID_ROWS <= 0) return 'none';
+      /* Estimate card height (~180px) + gap (18px) per row */
+      var cardH = 180;
+      var gap = 18;
+      return (GRID_ROWS * cardH + (GRID_ROWS - 1) * gap + 20) + 'px';
+    }
 
+    /* ── Render Grid with Infinite Scroll ──────────── */
     function renderGrid(vehicles) {
+      /* Apply max vehicle limit */
+      if (MAX_VEHICLES > 0 && vehicles.length > MAX_VEHICLES) {
+        vehicles = vehicles.slice(0, MAX_VEHICLES);
+      }
+
       currentVehicles = vehicles;
       currentPage = 1;
+      isLoading = false;
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'none';
+
+      /* Destroy old observer if exists */
+      if (observer) { observer.disconnect(); observer = null; }
+
+      /* Set up scroll wrapper */
+      if (!scrollWrap) {
+        scrollWrap = document.createElement('div');
+        scrollWrap.className = 'avs-scroll-wrap';
+        gridEl.parentNode.insertBefore(scrollWrap, gridEl);
+        scrollWrap.appendChild(gridEl);
+      }
+      scrollWrap.style.display = 'block';
+
+      var maxH = calcScrollHeight();
+      scrollWrap.style.maxHeight = maxH;
+      scrollWrap.style.overflowY = maxH === 'none' ? 'visible' : 'auto';
+
+      /* Grid setup */
       gridEl.style.display = 'grid';
       gridEl.textContent = '';
 
-      var colsSetting = gridEl.getAttribute('data-columns') || 'auto';
       if (colsSetting === 'auto') {
         gridEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
       } else {
@@ -74,40 +113,85 @@
 
       if (countEl) countEl.textContent = vehicles.length + ' vehicle' + (vehicles.length !== 1 ? 's' : '');
 
-      var oldBtn = container.querySelector('[data-avs-load-more]');
-      if (oldBtn) oldBtn.remove();
-
+      /* Render first batch */
       renderCards(vehicles.slice(0, PER_PAGE), showLogos, showSpecs);
 
+      /* Set up infinite scroll if more items exist */
       if (vehicles.length > PER_PAGE) {
-        var wrap = document.createElement('div');
-        wrap.setAttribute('data-avs-load-more', '');
-        wrap.classList.add('avs-load-more-wrap');
-        var btn = document.createElement('button');
-        btn.textContent = 'Show More (' + (vehicles.length - PER_PAGE) + ' remaining)';
-        btn.classList.add('avs-load-more-btn');
-        btn.onclick = function() {
-          currentPage++;
-          var s = (currentPage - 1) * PER_PAGE;
-          renderCards(currentVehicles.slice(s, s + PER_PAGE), showLogos, showSpecs);
-          var rem = currentVehicles.length - (currentPage * PER_PAGE);
-          if (rem <= 0) wrap.remove();
-          else btn.textContent = 'Show More (' + rem + ' remaining)';
-        };
-        wrap.appendChild(btn);
-        gridEl.appendChild(wrap);
+        createSentinel();
+        observeSentinel(showLogos, showSpecs);
       }
     }
 
+    /* ── Create sentinel element for IntersectionObserver ── */
+    function createSentinel() {
+      if (sentinelEl) sentinelEl.remove();
+      sentinelEl = document.createElement('div');
+      sentinelEl.className = 'avs-sentinel';
+      sentinelEl.setAttribute('data-avs-sentinel', '');
+      gridEl.appendChild(sentinelEl);
+    }
+
+    /* ── Observe sentinel to trigger loading ────────── */
+    function observeSentinel(showLogos, showSpecs) {
+      var scrollRoot = scrollWrap && scrollWrap.style.overflowY === 'auto' ? scrollWrap : null;
+
+      observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (!entry.isIntersecting || isLoading) return;
+
+          var totalShown = currentPage * PER_PAGE;
+          if (totalShown >= currentVehicles.length) {
+            /* All loaded — remove sentinel */
+            if (sentinelEl) sentinelEl.remove();
+            observer.disconnect();
+            return;
+          }
+
+          isLoading = true;
+          /* Show loading indicator at bottom */
+          if (sentinelEl) {
+            sentinelEl.innerHTML = '<div class="avs-loading-more"><div class="avs-spinner avs-spinner--sm"></div></div>';
+          }
+
+          /* Small delay for smooth feel */
+          setTimeout(function() {
+            currentPage++;
+            var s = (currentPage - 1) * PER_PAGE;
+            var batch = currentVehicles.slice(s, s + PER_PAGE);
+
+            /* Remove sentinel temporarily */
+            if (sentinelEl) sentinelEl.remove();
+
+            /* Render new cards */
+            renderCards(batch, showLogos, showSpecs);
+
+            /* Check if more to load */
+            var totalNow = currentPage * PER_PAGE;
+            if (totalNow < currentVehicles.length) {
+              createSentinel();
+            }
+
+            isLoading = false;
+          }, 200);
+        });
+      }, {
+        root: scrollRoot,
+        rootMargin: '200px',
+        threshold: 0
+      });
+
+      if (sentinelEl) observer.observe(sentinelEl);
+    }
+
+    /* ── Render batch of cards ──────────────────────── */
     function renderCards(vehicles, showLogos, showSpecs) {
-      var lm = container.querySelector('[data-avs-load-more]');
       vehicles.forEach(function(v, idx) {
         var card = document.createElement('a');
         card.href = v.url;
         card.className = 'avs-card';
         card.style.animationDelay = Math.min(idx * 0.04, 0.6) + 's';
 
-        
         var header = document.createElement('div');
         header.className = 'avs-card__header';
 
@@ -121,7 +205,6 @@
             img.alt = (v.make || '') + ' logo';
             img.loading = 'lazy';
             img.onerror = function() {
-              
               this.parentNode.removeChild(this);
               var fb = document.createElement('span');
               fb.className = 'avs-card__logo-fallback';
@@ -161,7 +244,6 @@
         header.appendChild(titles);
         card.appendChild(header);
 
-        
         if (showSpecs) {
           var specs = document.createElement('div');
           specs.className = 'avs-card__specs';
@@ -199,7 +281,6 @@
           }
         }
 
-        
         var footer = document.createElement('div');
         footer.className = 'avs-card__footer';
 
@@ -212,12 +293,11 @@
         footer.appendChild(link);
 
         card.appendChild(footer);
-        if (lm) gridEl.insertBefore(card, lm);
-        else gridEl.appendChild(card);
+        gridEl.appendChild(card);
       });
     }
 
-    
+    /* ── Search/Filter ─────────────────────────────── */
     if (searchInput) {
       var debounceTimer;
       searchInput.addEventListener('input', function() {
@@ -236,11 +316,12 @@
           if (filtered.length === 0) {
             gridEl.style.display = 'none';
             emptyEl.style.display = 'block';
+            if (scrollWrap) scrollWrap.style.display = 'none';
             var titleEl = emptyEl.querySelector('.avs-empty__title');
             if (titleEl) {
               titleEl.textContent = 'No vehicles match "' + searchInput.value + '"';
             }
-            countEl.textContent = '0 vehicles';
+            if (countEl) countEl.textContent = '0 vehicles';
           } else {
             emptyEl.style.display = 'none';
             renderGrid(filtered);
