@@ -83,10 +83,12 @@
 .apl-plate-badge { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 1px !important; width: 30px !important; min-width: 30px !important; flex-shrink: 0 !important; background-color: #003399 !important; padding: 3px 0 !important; }
 .apl-plate-badge__text { font-size: 7px !important; font-weight: 700 !important; color: #fff !important; letter-spacing: 0.08em !important; line-height: 1 !important; }
 .apl-plate-input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: #FFD700;
+  flex: 1 !important;
+  border: none !important;
+  border-width: 0 !important;
+  border-style: none !important;
+  outline: none !important;
+  background: #FFD700 !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 20px;
   font-weight: 600;
