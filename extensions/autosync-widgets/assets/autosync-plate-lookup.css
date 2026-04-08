@@ -40,29 +40,27 @@
 
 /* ── Heading & Text ── */
 .apl-heading {
-  font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
-  font-weight: 700;
-  margin: 0 0 4px;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  color: var(--apl-text);
+  font-size: 22px !important;
+  font-size: var(--as-heading-size, 22px) !important;
+  font-weight: 700 !important;
+  margin: 0 0 4px !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.25 !important;
+  color: var(--apl-text, #1a1a2e) !important;
 }
 .apl-subheading {
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: var(--apl-muted);
-  margin: 0 0 8px;
-  font-weight: 400;
-  line-height: 1.5;
+  font-size: 15px !important;
+  color: var(--apl-muted, #6b7280) !important;
+  margin: 0 0 8px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
 }
 .apl-description {
-  font-family: inherit;
-  font-size: 0.8125rem;
-  color: var(--apl-muted);
-  margin: 0;
-  font-weight: 400;
-  line-height: 1.6;
+  font-size: 13px !important;
+  color: var(--apl-muted, #6b7280) !important;
+  margin: 0 !important;
+  font-weight: 400 !important;
+  line-height: 1.6 !important;
 }
 
 /* ── Plate Input — Authentic UK number plate ── */
@@ -579,7 +577,7 @@
 }
 
 @media (max-width: 600px) {
-  .apl-heading { font-size: var(--as-heading-size, 1.25rem); }
+  .apl-heading { font-size: var(--as-heading-size, 20px) !important; }
   .apl-plate-form { flex-direction: column; }
   .apl-plate-input { font-size: 18px; padding: 8px 10px; }
   .apl-submit-btn { justify-content: center; }
