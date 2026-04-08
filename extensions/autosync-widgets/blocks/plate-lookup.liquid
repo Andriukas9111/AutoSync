@@ -30,10 +30,9 @@ endif
     <div class="apl-form-side" data-apl-form-side>
       <div class="apl-plate-form">
         <div class="apl-plate-input-wrap">
-          <div class="apl-plate-badge"><div class="apl-plate-badge__flag">
-            <svg class="apl-plate-badge__stars" width="14" height="10" viewBox="0 0 14 10" fill="none"><circle cx="7" cy="5" r="4.5" stroke="#FFD700" stroke-width="0.5" fill="none"/><circle cx="7" cy="0.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="1.5" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="10.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="9.1" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="7" cy="9.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="8.5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="6.8" r="0.5" fill="#FFD700"/><circle cx="3" cy="5" r="0.5" fill="#FFD700"/><circle cx="3.5" cy="3.2" r="0.5" fill="#FFD700"/><circle cx="4.9" cy="1.5" r="0.5" fill="#FFD700"/></svg>
-            <span class="apl-plate-badge__text">GB</span>
-          </div></div>
+          <div class="apl-plate-badge">
+            <svg width="20" height="14" viewBox="0 0 60 40" style="display:block;flex-shrink:0;"><rect width="60" height="40" fill="#012169"/><path d="M0 0L60 40M60 0L0 40" stroke="#fff" stroke-width="6"/><path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" stroke-width="3"/><path d="M30 0V40M0 20H60" stroke="#fff" stroke-width="10"/><path d="M30 0V40M0 20H60" stroke="#C8102E" stroke-width="6"/></svg>
+          </div>
           <input type="text" class="apl-plate-input" data-apl-input placeholder="{{ block.settings.placeholder_text | default: 'Enter reg (e.g. AB12 CDE)' }}" maxlength="8" autocomplete="off" spellcheck="false"/>
         </div>
         <button type="button" class="apl-submit-btn" data-apl-submit>
