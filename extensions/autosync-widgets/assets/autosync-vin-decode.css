@@ -8,7 +8,7 @@
 
 /* VIN Input — matches plate lookup visual weight */
 .avd-vin-form { display: flex; gap: 10px; max-width: 560px; margin: 0 auto 28px; align-items: stretch; }
-.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 2px solid var(--avd-border); border-radius: 5px; background: var(--avd-card-bg, #f9fafb); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
+.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 2px solid var(--avd-text, #1a1a2e); border-radius: 5px; background: var(--avd-card-bg, #f4f5f7); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
 .avd-vin-input-wrap:focus-within { border-color: var(--avd-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary) 12%, transparent); }
 .avd-vin-input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 17px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 52px 8px 14px; color: var(--avd-text); min-width: 0; }
 .avd-vin-input::placeholder { color: var(--avd-muted); font-family: inherit; font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.4; }
@@ -16,7 +16,7 @@
 .avd-vin-counter--valid { color: var(--as-success, #10b981); background: color-mix(in srgb, var(--as-success, #10b981) 12%, transparent); }
 .avd-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
 .avd-submit-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); transform: translateY(-1px); }
-.avd-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.avd-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* Legacy classes — kept for backward compat, hidden */
 .avd-heading-wrap { margin-bottom: 6px; }
