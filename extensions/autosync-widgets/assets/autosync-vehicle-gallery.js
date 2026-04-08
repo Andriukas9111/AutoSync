@@ -12,17 +12,15 @@
 
     /* ── Settings from data attributes ────────────── */
     var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
-    var MAX_VEHICLES = parseInt(container.getAttribute('data-max-vehicles'), 10) || 0; // 0 = unlimited
-    var GRID_ROWS = parseInt(container.getAttribute('data-grid-rows'), 10) || 0; // 0 = unlimited height
+    var MAX_VEHICLES = parseInt(container.getAttribute('data-max-vehicles'), 10) || 0;
+    var GRID_ROWS = parseInt(container.getAttribute('data-grid-rows'), 10) || 4;
     var colsSetting = (gridEl && gridEl.getAttribute('data-columns')) || 'auto';
 
     /* ── State ─────────────────────────────────────── */
     var currentPage = 1;
     var currentVehicles = [];
-    var isLoading = false;
-    var observer = null;
-    var sentinelEl = null;
     var scrollWrap = null;
+    var loadMoreWrap = null;
 
     if (!proxyUrl) { showEmpty(); return; }
     fetchGallery();
@@ -51,25 +49,24 @@
       emptyEl.style.display = 'block';
       gridEl.style.display = 'none';
       if (scrollWrap) scrollWrap.style.display = 'none';
+      if (loadMoreWrap) loadMoreWrap.style.display = 'none';
     }
 
-    /* SVG parser for hardcoded icon markup only (never used with API data) */
+    /* SVG parser for hardcoded icon markup only */
     function svgEl(svgMarkup) {
       var parser = new DOMParser();
       var doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
       return doc.documentElement;
     }
 
-    /* ── Calculate scroll container height ──────────── */
+    /* ── Calculate scroll container max-height ─────── */
     function calcScrollHeight() {
       if (GRID_ROWS <= 0) return 'none';
-      /* Estimate card height (~180px) + gap (18px) per row */
-      var cardH = 180;
-      var gap = 18;
-      return (GRID_ROWS * cardH + (GRID_ROWS - 1) * gap + 20) + 'px';
+      /* Card ~180px + 18px gap per row */
+      return (GRID_ROWS * 198 + 20) + 'px';
     }
 
-    /* ── Render Grid with Infinite Scroll ──────────── */
+    /* ── Render Grid ───────────────────────────────── */
     function renderGrid(vehicles) {
       /* Apply max vehicle limit */
       if (MAX_VEHICLES > 0 && vehicles.length > MAX_VEHICLES) {
@@ -78,14 +75,10 @@
 
       currentVehicles = vehicles;
       currentPage = 1;
-      isLoading = false;
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'none';
 
-      /* Destroy old observer if exists */
-      if (observer) { observer.disconnect(); observer = null; }
-
-      /* Set up scroll wrapper */
+      /* Create scroll wrapper if not exists */
       if (!scrollWrap) {
         scrollWrap = document.createElement('div');
         scrollWrap.className = 'avs-scroll-wrap';
@@ -95,8 +88,13 @@
       scrollWrap.style.display = 'block';
 
       var maxH = calcScrollHeight();
-      scrollWrap.style.maxHeight = maxH;
-      scrollWrap.style.overflowY = maxH === 'none' ? 'visible' : 'auto';
+      if (maxH !== 'none') {
+        scrollWrap.style.maxHeight = maxH;
+        scrollWrap.style.overflowY = 'auto';
+      } else {
+        scrollWrap.style.maxHeight = 'none';
+        scrollWrap.style.overflowY = 'visible';
+      }
 
       /* Grid setup */
       gridEl.style.display = 'grid';
@@ -113,75 +111,62 @@
 
       if (countEl) countEl.textContent = vehicles.length + ' vehicle' + (vehicles.length !== 1 ? 's' : '');
 
+      /* Remove old Load More */
+      if (loadMoreWrap) { loadMoreWrap.remove(); loadMoreWrap = null; }
+
       /* Render first batch */
       renderCards(vehicles.slice(0, PER_PAGE), showLogos, showSpecs);
 
-      /* Set up infinite scroll if more items exist */
+      /* Show Load More button if there are more */
       if (vehicles.length > PER_PAGE) {
-        createSentinel();
-        observeSentinel(showLogos, showSpecs);
+        showLoadMore(showLogos, showSpecs);
       }
     }
 
-    /* ── Create sentinel element for IntersectionObserver ── */
-    function createSentinel() {
-      if (sentinelEl) sentinelEl.remove();
-      sentinelEl = document.createElement('div');
-      sentinelEl.className = 'avs-sentinel';
-      sentinelEl.setAttribute('data-avs-sentinel', '');
-      gridEl.appendChild(sentinelEl);
-    }
+    /* ── Load More Button (inside scroll container) ── */
+    function showLoadMore(showLogos, showSpecs) {
+      if (loadMoreWrap) loadMoreWrap.remove();
 
-    /* ── Observe sentinel to trigger loading ────────── */
-    function observeSentinel(showLogos, showSpecs) {
-      var scrollRoot = scrollWrap && scrollWrap.style.overflowY === 'auto' ? scrollWrap : null;
+      loadMoreWrap = document.createElement('div');
+      loadMoreWrap.className = 'avs-load-more-wrap';
 
-      observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if (!entry.isIntersecting || isLoading) return;
+      var remaining = currentVehicles.length - (currentPage * PER_PAGE);
+      var btn = document.createElement('button');
+      btn.className = 'avs-load-more-btn';
+      btn.type = 'button';
+      btn.textContent = 'Load More (' + remaining + ' remaining)';
 
-          var totalShown = currentPage * PER_PAGE;
-          if (totalShown >= currentVehicles.length) {
-            /* All loaded — remove sentinel */
-            if (sentinelEl) sentinelEl.remove();
-            observer.disconnect();
-            return;
-          }
+      btn.addEventListener('click', function() {
+        currentPage++;
+        var s = (currentPage - 1) * PER_PAGE;
+        var batch = currentVehicles.slice(s, s + PER_PAGE);
 
-          isLoading = true;
-          /* Show loading indicator at bottom */
-          if (sentinelEl) {
-            sentinelEl.innerHTML = '<div class="avs-loading-more"><div class="avs-spinner avs-spinner--sm"></div></div>';
-          }
+        /* Remove the button wrap temporarily */
+        if (loadMoreWrap) loadMoreWrap.remove();
 
-          /* Small delay for smooth feel */
-          setTimeout(function() {
-            currentPage++;
-            var s = (currentPage - 1) * PER_PAGE;
-            var batch = currentVehicles.slice(s, s + PER_PAGE);
+        /* Render next batch into the grid */
+        renderCards(batch, showLogos, showSpecs);
 
-            /* Remove sentinel temporarily */
-            if (sentinelEl) sentinelEl.remove();
-
-            /* Render new cards */
-            renderCards(batch, showLogos, showSpecs);
-
-            /* Check if more to load */
-            var totalNow = currentPage * PER_PAGE;
-            if (totalNow < currentVehicles.length) {
-              createSentinel();
+        /* Check if more remain */
+        var newRemaining = currentVehicles.length - (currentPage * PER_PAGE);
+        if (newRemaining > 0) {
+          showLoadMore(showLogos, showSpecs);
+          /* Scroll to where new cards start */
+          var cards = gridEl.querySelectorAll('.avs-card');
+          if (cards.length > 0) {
+            var targetCard = cards[cards.length - batch.length];
+            if (targetCard && scrollWrap.style.overflowY === 'auto') {
+              setTimeout(function() {
+                targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, 100);
             }
-
-            isLoading = false;
-          }, 200);
-        });
-      }, {
-        root: scrollRoot,
-        rootMargin: '200px',
-        threshold: 0
+          }
+        }
       });
 
-      if (sentinelEl) observer.observe(sentinelEl);
+      loadMoreWrap.appendChild(btn);
+      /* Place Load More INSIDE the scroll wrapper, after the grid */
+      scrollWrap.appendChild(loadMoreWrap);
     }
 
     /* ── Render batch of cards ──────────────────────── */
@@ -317,6 +302,7 @@
             gridEl.style.display = 'none';
             emptyEl.style.display = 'block';
             if (scrollWrap) scrollWrap.style.display = 'none';
+            if (loadMoreWrap) { loadMoreWrap.remove(); loadMoreWrap = null; }
             var titleEl = emptyEl.querySelector('.avs-empty__title');
             if (titleEl) {
               titleEl.textContent = 'No vehicles match "' + searchInput.value + '"';
