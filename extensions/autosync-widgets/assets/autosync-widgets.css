@@ -327,7 +327,7 @@
 .autosync-ymme__fields {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .autosync-ymme--horizontal .autosync-ymme__fields {
@@ -448,7 +448,7 @@
 .autosync-ymme__select-value {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -498,15 +498,15 @@
 }
 
 .autosync-ymme__select-search-wrap {
-  padding: 0.5rem;
+  padding: 8px;
   border-bottom: 1px solid var(--autosync-border, #e3e3e3);
   flex-shrink: 0;
 }
 
 .autosync-ymme__select-search {
   width: 100%;
-  padding: 0.4rem 0.6rem;
-  font-size: 0.8125rem;
+  padding: 6px 10px;
+  font-size: 13px;
   border: 1px solid var(--autosync-border, #e3e3e3);
   border-radius: 4px;
   background: var(--autosync-bg, #fff);
@@ -527,7 +527,7 @@
 .autosync-ymme__select-options {
   list-style: none;
   margin: 0;
-  padding: 0.25rem 0;
+  padding: 4px 0;
   overflow-y: auto;
   flex: 1;
   overscroll-behavior: contain;
@@ -536,10 +536,10 @@
 .autosync-ymme__select-option {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.75rem;
+  gap: 8px;
+  padding: 7px 12px;
   cursor: pointer;
-  font-size: 0.8125rem;
+  font-size: 13px;
   transition: background 0.1s ease;
   min-height: 36px;
 }
@@ -554,11 +554,11 @@
 }
 
 .autosync-ymme__select-no-results {
-  padding: 1rem 0.75rem;
+  padding: 16px 12px;
   text-align: center;
   color: inherit;
   opacity: 0.5;
-  font-size: 0.8125rem;
+  font-size: 13px;
 }
 
 /* Brand logos */
@@ -579,7 +579,7 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 15%, transparent);
   color: var(--autosync-primary, #2c6ecb);
-  font-size: 0.625rem;
+  font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;
   letter-spacing: 0.02em;
@@ -593,7 +593,7 @@
 }
 
 .autosync-ymme__option-country {
-  font-size: 0.6875rem;
+  font-size: 11px;
   opacity: 0.45;
   flex-shrink: 0;
 }
@@ -602,17 +602,17 @@
 .autosync-ymme__field--button {
   display: flex;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .autosync-ymme__search-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 6px;
   width: 100%;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
+  padding: 8px 20px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--autosync-primary, #2c6ecb));
@@ -683,7 +683,7 @@
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  font-size: 0.625rem;
+  font-size: 10px;
   font-weight: 700;
   line-height: 16px;
   text-align: center;
@@ -717,14 +717,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.65rem 0.75rem;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--autosync-border, #e3e3e3);
   background: color-mix(in srgb, var(--autosync-bg, #fff) 97%, var(--autosync-text, #1a1a1a));
 }
 
 .autosync-ymme__garage-title {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 13px;
   font-weight: 600;
   color: inherit;
 }
@@ -754,19 +754,19 @@
   flex-direction: column;
   overflow-y: auto;
   max-height: 280px;
-  padding: 0.4rem;
-  gap: 0.3rem;
+  padding: 6px;
+  gap: 5px;
 }
 
 .autosync-ymme__garage-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.45rem 0.55rem;
+  padding: 7px 9px;
   background: var(--autosync-bg, #fff);
   border: 1px solid var(--autosync-border, #e3e3e3);
   border-radius: 6px;
-  gap: 0.4rem;
+  gap: 6px;
   transition: border-color 0.15s, box-shadow 0.15s;
   animation: autosync-chip-in 0.15s ease;
 }
@@ -784,13 +784,13 @@
 .autosync-ymme__garage-chip-info {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.16px;
   flex: 1;
   min-width: 0;
 }
 
 .autosync-ymme__garage-chip-name {
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -798,7 +798,7 @@
 }
 
 .autosync-ymme__garage-chip-engine {
-  font-size: 0.625rem;
+  font-size: 10px;
   opacity: 0.5;
   white-space: nowrap;
   overflow: hidden;
@@ -808,13 +808,13 @@
 .autosync-ymme__garage-chip-actions {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 4px;
   flex-shrink: 0;
 }
 
 .autosync-ymme__garage-select-btn {
-  padding: 0.2rem 0.55rem;
-  font-size: 0.625rem;
+  padding: 0.32px 9px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--autosync-primary, #2c6ecb);
@@ -851,10 +851,10 @@
 
 .autosync-ymme__garage-empty {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 12px;
   opacity: 0.45;
   text-align: center;
-  padding: 1rem 0.5rem;
+  padding: 16px 8px;
 }
 
 /* --------------- Fitment Badge --------------- */
@@ -866,10 +866,10 @@
 .autosync-fitment-badge__content {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
+  gap: 8px;
+  padding: 8px 12px;
   border-radius: var(--autosync-badge-radius, 6px);
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 500;
   color: var(--autosync-badge-text, inherit);
 }
@@ -880,12 +880,12 @@
 
 .autosync-fitment-badge__icon--success {
   color: var(--autosync-badge-success, #1a7f37);
-  font-size: 1.1rem;
+  font-size: 18px;
 }
 
 .autosync-fitment-badge__icon--warning {
   color: var(--autosync-badge-warning, #bf5700);
-  font-size: 1.1rem;
+  font-size: 18px;
 }
 
 [data-autosync-badge-fits] {
@@ -906,7 +906,7 @@
 .autosync-fitment-badge__link {
   color: var(--as-primary, #005bd2);
   text-decoration: underline;
-  font-size: 0.875rem;
+  font-size: 14px;
 }
 
 /* --------------- Compatibility Table --------------- */
@@ -931,24 +931,24 @@
 .autosync-compat-table__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 14px;
   background: var(--act-bg, #fff);
 }
 
 .autosync-compat-table__table th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
+  padding: 8px 12px;
   background: var(--act-card-bg, #f6f6f7);
   border-bottom: 2px solid var(--act-border, #e3e3e3);
   font-weight: 600;
   color: var(--act-text, #6d7175);
-  font-size: 0.8125rem;
+  font-size: 13px;
   text-transform: uppercase;
   letter-spacing: 0.025em;
 }
 
 .autosync-compat-table__table td {
-  padding: 0.5rem 0.75rem;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--act-border, #edeeef);
   color: var(--act-text, inherit);
 }
@@ -959,7 +959,7 @@
 
 /* --------------- Plate Lookup --------------- */
 .autosync-plate-lookup {
-  padding: 1.5rem;
+  padding: 24px;
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 8px;
   background: var(--as-bg, #fff);
@@ -972,7 +972,7 @@
 
 .autosync-plate-lookup__form {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   align-items: stretch;
 }
 
@@ -989,18 +989,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0.5rem;
+  padding: 8px;
   background: #003399;
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 700;
-  min-width: 2rem;
+  min-width: 32px;
 }
 
 .autosync-plate-lookup__input {
   flex: 1;
-  padding: 0.5rem 0.75rem;
-  font-size: 1.25rem;
+  padding: 8px 12px;
+  font-size: 20px;
   font-weight: 700;
   font-family: 'UKNumberPlate', 'Courier New', monospace;
   text-transform: uppercase;
@@ -1014,15 +1014,15 @@
 .autosync-plate-lookup__input::placeholder {
   color: #8c7a00;
   font-weight: 400;
-  font-size: 0.875rem;
+  font-size: 14px;
   letter-spacing: normal;
 }
 
 .autosync-plate-lookup__btn,
 .autosync-plate-lookup__find-parts {
   width: auto;
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
+  padding: 8px 20px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1048,25 +1048,25 @@
 }
 
 .autosync-plate-lookup__card {
-  margin-top: 1rem;
-  padding: 1rem;
+  margin-top: 16px;
+  padding: 16px;
   background: var(--as-card-bg, #f9fafb);
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 6px;
 }
 
 .autosync-plate-lookup__card h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1.125rem;
+  margin: 0 0 12px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .autosync-plate-lookup__details {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.25rem 1rem;
-  font-size: 0.875rem;
-  margin: 0 0 1rem;
+  gap: 4px 16px;
+  font-size: 14px;
+  margin: 0 0 16px;
 }
 
 .autosync-plate-lookup__details dt {
@@ -1079,22 +1079,22 @@
 }
 
 .autosync-plate-lookup__find-parts {
-  margin-top: 0.5rem;
+  margin-top: 8px;
 }
 
 .autosync-plate-lookup__error {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
+  margin-top: 12px;
+  padding: 12px;
   background: color-mix(in srgb, var(--as-error, #d72c0d) 8%, var(--as-bg, #fff));
   border: 1px solid color-mix(in srgb, var(--as-error, #d72c0d) 20%, var(--as-bg, #fff));
   border-radius: 6px;
   color: var(--as-error, #d72c0d);
-  font-size: 0.875rem;
+  font-size: 14px;
 }
 
 /* --------------- Wheel Finder --------------- */
 .autosync-wheel-finder {
-  padding: 1.5rem;
+  padding: 24px;
   border: 1px solid var(--awf-border, #e3e3e3);
   border-radius: var(--awf-radius, 8px);
   background: var(--awf-bg, #fff);
@@ -1137,34 +1137,34 @@
 }
 
 .autosync-wheel-finder__stub {
-  margin-top: 1rem;
-  padding: 0.75rem;
+  margin-top: 16px;
+  padding: 12px;
   background: var(--as-card-bg, #f9fafb);
   border-radius: 6px;
   color: var(--as-muted, #6b7280);
-  font-size: 0.875rem;
+  font-size: 14px;
   text-align: center;
 }
 
 .autosync-wheel-finder__results {
-  margin-top: 1rem;
+  margin-top: 16px;
 }
 
 .autosync-wheel-finder__count {
-  font-size: 0.875rem;
+  font-size: 14px;
   font-weight: 600;
-  margin-bottom: 0.75rem;
+  margin-bottom: 12px;
 }
 
 .autosync-wheel-finder__error {
   color: var(--as-error, #d72c0d);
-  font-size: 0.875rem;
+  font-size: 14px;
 }
 
 .autosync-wheel-finder__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
+  gap: 16px;
 }
 
 .autosync-wheel-finder__card {
@@ -1192,8 +1192,8 @@
 }
 
 .autosync-wheel-finder__title {
-  padding: 0.5rem 0.75rem 0;
-  font-size: 0.8125rem;
+  padding: 8px 12px 0;
+  font-size: 13px;
   font-weight: 500;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1202,24 +1202,24 @@
 }
 
 .autosync-wheel-finder__price {
-  padding: 0.25rem 0.75rem 0.75rem;
-  font-size: 0.875rem;
+  padding: 4px 12px 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--as-text, #1a1a2e);
 }
 
 /* --------------- VIN Decode --------------- */
 .autosync-vin-decode {
-  padding: 1.5rem;
+  padding: 24px;
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 8px;
   background: var(--as-bg, #fff);
 }
 
 .autosync-vin-decode__heading {
-  margin: 0 0 1rem;
+  margin: 0 0 16px;
   font-family: inherit;
-  font-size: var(--as-heading-size, 1.375rem);
+  font-size: var(--as-heading-size, 22px);
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.01em;
@@ -1227,7 +1227,7 @@
 
 .autosync-vin-decode__form {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
   align-items: stretch;
 }
 
@@ -1237,8 +1237,8 @@
 
 .autosync-vin-decode__input {
   width: 100%;
-  padding: 0.625rem 0.75rem;
-  font-size: 1rem;
+  padding: 10px 12px;
+  font-size: 16px;
   font-family: 'Courier New', monospace;
   font-weight: 600;
   letter-spacing: 0.15em;
@@ -1258,15 +1258,15 @@
 
 .autosync-vin-decode__input::placeholder {
   font-weight: 400;
-  font-size: 0.875rem;
+  font-size: 14px;
   letter-spacing: normal;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--as-muted, #6b7280);
 }
 
 .autosync-vin-decode__btn {
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
+  padding: 8px 20px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1291,25 +1291,25 @@
 }
 
 .autosync-vin-decode__card {
-  margin-top: 1rem;
-  padding: 1rem;
+  margin-top: 16px;
+  padding: 16px;
   background: var(--as-card-bg, #f9fafb);
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 6px;
 }
 
 .autosync-vin-decode__card h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1.125rem;
+  margin: 0 0 12px;
+  font-size: 18px;
   font-weight: 600;
 }
 
 .autosync-vin-decode__details {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 0.25rem 1rem;
-  font-size: 0.875rem;
-  margin: 0 0 1rem;
+  gap: 4px 16px;
+  font-size: 14px;
+  margin: 0 0 16px;
 }
 
 .autosync-vin-decode__details dt {
@@ -1322,8 +1322,8 @@
 }
 
 .autosync-vin-decode__find-parts {
-  padding: 0.5rem 1.25rem;
-  font-size: 0.875rem;
+  padding: 8px 20px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1338,13 +1338,13 @@
 }
 
 .autosync-vin-decode__error {
-  margin-top: 0.75rem;
-  padding: 0.75rem;
+  margin-top: 12px;
+  padding: 12px;
   background: color-mix(in srgb, var(--as-error, #d72c0d) 8%, var(--as-bg, #fff));
   border: 1px solid color-mix(in srgb, var(--as-error, #d72c0d) 20%, var(--as-bg, #fff));
   border-radius: 6px;
   color: var(--as-error, #d72c0d);
-  font-size: 0.875rem;
+  font-size: 14px;
 }
 
 /* --------------- Responsive: Tablet (768px) --------------- */
@@ -1448,7 +1448,7 @@
   .autosync-ymme--horizontal .autosync-ymme__fields,
   .autosync-ymme__fields {
     flex-direction: column !important;
-    gap: 0.5rem;
+    gap: 8px;
   }
 
   .autosync-ymme--horizontal .autosync-ymme__field,
@@ -1466,18 +1466,18 @@
 
   /* Smaller title on mobile */
   .autosync-ymme__title {
-    font-size: 1rem !important;
+    font-size: 16px !important;
   }
 
   /* YMME: field labels smaller */
   .autosync-ymme__field label {
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 
   /* YMME: select dropdowns full width */
   .autosync-ymme__field select {
-    font-size: 0.875rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 14px;
+    padding: 8px 12px;
   }
 
   /* Garage button smaller */
@@ -1506,14 +1506,14 @@
   /* Compatibility table: stack on mobile */
   .autosync-compat__table th,
   .autosync-compat__table td {
-    font-size: 0.75rem;
-    padding: 0.375rem 0.5rem;
+    font-size: 12px;
+    padding: 6px 8px;
   }
 
   /* Badge: smaller on mobile */
   .autosync-badge {
-    font-size: 0.75rem !important;
-    padding: 0.25rem 0.5rem !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
   }
 
   /* Wheel finder: single column on phones */
@@ -1539,16 +1539,16 @@
   }
 
   .autosync-ymme__title {
-    font-size: 0.875rem !important;
+    font-size: 14px !important;
   }
 
   .autosync-ymme__field select {
-    font-size: 0.8125rem;
-    padding: 0.4375rem 0.625rem;
+    font-size: 13px;
+    padding: 7px 10px;
   }
 
   .autosync-ymme__subtitle {
-    font-size: 0.75rem;
+    font-size: 12px;
   }
 }
 

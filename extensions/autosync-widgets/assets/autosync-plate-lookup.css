@@ -565,7 +565,7 @@
 }
 
 @media (max-width: 600px) {
-  .apl-heading { font-size: var(--as-heading-size, 1.25rem); }
+  .apl-heading { font-size: var(--as-heading-size, 20px); }
   .apl-plate-form { flex-direction: column; }
   .apl-plate-input { font-size: 18px; padding: 8px 10px; }
   .apl-submit-btn { justify-content: center; }
