@@ -193,14 +193,21 @@
 .autosync-ymme__field select,
 .autosync-ymme__field input {
   width: 100% !important;
-  padding: 10px 14px !important;
+  padding: 10px 32px 10px 14px !important;
   font-size: 14px !important;
   border: 1px solid var(--autosync-border, #d1d5db) !important;
   border-radius: 8px !important;
   background-color: var(--autosync-bg, #fff) !important;
   color: var(--autosync-text, #1a1a2e) !important;
-  min-height: 42px !important;
+  height: 42px !important;
   line-height: 1.4 !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2.5 4.5L6 8L9.5 4.5' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px !important;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -484,7 +491,7 @@
   cursor: pointer !important;
   transition: background-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   white-space: nowrap !important;
-  height: 48px !important;
+  height: 42px !important;
 }
 
 .autosync-ymme__search-btn:hover:not(:disabled) {
@@ -903,7 +910,7 @@
   border: none !important;
   border-radius: 8px !important;
   cursor: pointer !important;
-  height: 48px !important;
+  height: 42px !important;
   transition: background-color 0.15s ease;
   white-space: nowrap !important;
 }
@@ -1053,7 +1060,7 @@
   border: none !important;
   border-radius: 8px !important;
   cursor: pointer !important;
-  height: 48px !important;
+  height: 42px !important;
   transition: background-color 0.15s ease;
   white-space: nowrap !important;
 }
@@ -1210,7 +1217,7 @@
   border: none !important;
   border-radius: 8px !important;
   cursor: pointer !important;
-  height: 48px !important;
+  height: 42px !important;
   transition: background-color 0.15s;
   white-space: nowrap !important;
 }
@@ -1270,7 +1277,7 @@
   border: none !important;
   border-radius: 8px !important;
   cursor: pointer !important;
-  height: 48px !important;
+  height: 42px !important;
   transition: background-color 0.15s;
 }
 
