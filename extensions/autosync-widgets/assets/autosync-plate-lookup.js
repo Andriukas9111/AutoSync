@@ -10,10 +10,14 @@ I.addEventListener('input',function(){this.value=this.value.toUpperCase().replac
 I.addEventListener('keydown',function(e){if(e.key==='Enter')B.click();});
 if(RB)RB.addEventListener('click',function(){if(lr)doL(lr);});
 B.addEventListener('click',function(){var r=I.value.trim().replace(/\s+/g,'');if(r.length<2)return;lr=r;doL(r);});
-function doL(r){B.disabled=true;B.textContent='Looking up...';EE.style.display='none';RE.style.display='none';LE.style.display='flex';if(containerEl)containerEl.style.display='none';
+function doL(r){B.disabled=true;B.textContent='Looking up...';EE.style.display='none';RE.style.display='none';
+/* Show loading INSIDE the container — replace content+form with centered spinner */
+if(contentEl)contentEl.style.display='none';
+if(formSideEl)formSideEl.style.display='none';
+LE.style.display='flex';if(containerEl){containerEl.appendChild(LE);LE.style.cssText='display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;padding:40px 20px!important;gap:12px!important;flex:1!important;width:100%!important;';}
 fetch(P+'?path=plate-lookup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({registration:r})})
-.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(containerEl)containerEl.style.display='';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.resolved||null,r);})
-.catch(function(){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(containerEl)containerEl.style.display='';sE('Failed to look up registration. Please try again.');});}
+.then(function(x){return x.json();}).then(function(d){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(contentEl)contentEl.style.display='';if(formSideEl)formSideEl.style.display='';if(d.error){sE(d.error);return;}if(d.vehicle)rR(d.vehicle,d.motHistory,d.resolved||null,r);})
+.catch(function(){B.disabled=false;B.innerHTML=BH;LE.style.display='none';if(contentEl)contentEl.style.display='';if(formSideEl)formSideEl.style.display='';sE('Failed to look up registration. Please try again.');});}
 function sE(m){var x=EE.querySelector('[data-apl-error-msg]');if(x)x.textContent=m;EE.style.display='block';RE.style.display='none';}
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!==undefined&&x!==null)e.textContent=String(x);return e;}
 function si(m){var t=document.createElement('template');t.innerHTML=m.trim();return t.content.firstChild;}
