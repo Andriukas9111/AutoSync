@@ -72,13 +72,12 @@
 .apl-plate-input-wrap {
   flex: 1 !important;
   display: flex !important;
-  border: none !important;
-  border-radius: 8px !important;
+  border: 2px solid #1a1a2e !important;
+  border-radius: 10px !important;
   background: #FFD700 !important;
   overflow: hidden !important;
   transition: box-shadow 0.2s;
   height: 42px !important;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.15) !important;
 }
 .apl-plate-input-wrap:focus-within { box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.25) !important; }
 .apl-plate-badge { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 2px !important; width: 32px !important; min-width: 32px !important; flex-shrink: 0 !important; background: #003399 !important; padding: 4px 0 !important; }
