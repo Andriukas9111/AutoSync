@@ -103,21 +103,20 @@
 }
 .apl-plate-input::placeholder { color: rgba(0,0,0,0.25); font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; }
 .apl-submit-btn {
-  display: inline-flex !important;
-  align-items: center !important;
+  display: inline-flex;
+  align-items: center;
   gap: 7px;
-  padding: 12px 24px !important;
-  border: none !important;
-  border-radius: 8px !important;
-  background: var(--as-btn-bg, var(--apl-primary, #005bd2)) !important;
-  color: var(--as-btn-text, #fff) !important;
-  cursor: pointer !important;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: var(--as-btn-bg, var(--apl-primary, #005bd2));
+  color: var(--as-btn-text, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
   transition: background 0.2s, transform 0.15s;
   white-space: nowrap;
-  min-height: 38px !important;
 }
 .apl-submit-btn:hover { background: color-mix(in srgb, var(--apl-primary) 85%, #000); transform: translateY(-1px); }
 .apl-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
