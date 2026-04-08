@@ -1,194 +1,14 @@
 /* ===== AutoSync Widgets — Shared Styles ===== */
-/* Theme-independent CSS: works on Minimog, Nexvo, Dawn, ANY Shopify theme.
-   Uses px (not rem), !important on theme-vulnerable properties.
-   DO NOT use: rem/em units, appearance:auto, nested var(), blanket resets. */
 
-/* --------------- Theme Isolation Layer --------------- */
-/* Box-sizing + font on ALL widget elements */
+/* --------------- Reset & Base --------------- */
+/* CRITICAL: Prevent theme CSS from overriding our widget styles */
 [class^="autosync-"],
 [class^="apl-"],
 [class^="avs-"],
 [class^="avd-"],
 [class^="avsd-"] {
   box-sizing: border-box !important;
-}
-
-/* Widget root containers — set base font so children inherit correctly */
-.autosync-ymme-search,
-.autosync-fitment-badge,
-.autosync-compat-table,
-.autosync-wheel-finder,
-.apl-root,
-.avd-root,
-.autosync-vehicle-showcase,
-.avsd-root {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
-  font-size: 14px !important;
-  line-height: 1.5 !important;
-  -webkit-font-smoothing: antialiased !important;
-}
-
-/* ── Buttons: themes set background:none — force our styles ── */
-.autosync-ymme__search-btn,
-.autosync-wheel-finder__field--button button,
-.apl-submit-btn,
-.apl-find-btn,
-.apl-result-actions__find,
-.apl-result-actions__mot,
-.avd-submit-btn,
-.avd-find-parts,
-.avd-result-actions__find,
-.avd-result-actions__details,
-.avs-load-more-btn {
-  font-family: inherit !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  cursor: pointer !important;
-  border: none !important;
-  border-radius: 8px !important;
-  padding: 12px 24px !important;
-  height: 48px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 7px !important;
-  white-space: nowrap !important;
-  text-decoration: none !important;
-  text-transform: none !important;
-  letter-spacing: normal !important;
-  background-color: #005bd2 !important;
-  background-color: var(--as-btn-bg, #005bd2) !important;
-  color: #fff !important;
-  color: var(--as-btn-text, #fff) !important;
-  transition: background-color 0.2s ease, transform 0.15s ease, box-shadow 0.15s ease;
-}
-.autosync-ymme__search-btn:hover:not(:disabled),
-.autosync-wheel-finder__field--button button:hover:not(:disabled),
-.apl-submit-btn:hover:not(:disabled),
-.apl-find-btn:hover:not(:disabled),
-.avd-submit-btn:hover:not(:disabled),
-.avs-load-more-btn:hover:not(:disabled) {
-  background-color: #0047a8 !important;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
-}
-.autosync-ymme__search-btn:disabled,
-.autosync-wheel-finder__field--button button:disabled,
-.apl-submit-btn:disabled,
-.avd-submit-btn:disabled {
-  background-color: #d1d5db !important;
-  color: #6b7280 !important;
-  cursor: not-allowed !important;
-  opacity: 0.7 !important;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-/* Secondary/outline buttons */
-.apl-result-actions__mot,
-.apl-result-actions__details,
-.avd-result-actions__details,
-.apl-error__retry,
-.avd-error__retry {
-  background-color: #fff !important;
-  color: #1a1a2e !important;
-  border: 1px solid #d1d5db !important;
-}
-.apl-result-actions__mot:hover,
-.avd-result-actions__details:hover,
-.apl-error__retry:hover,
-.avd-error__retry:hover {
-  border-color: #005bd2 !important;
-  background-color: #f8fafc !important;
-  transform: translateY(-1px);
-}
-
-/* Ghost buttons (New Search, etc.) */
-.apl-result-actions__new,
-.avd-result-actions__new {
-  background-color: transparent !important;
-  color: #6b7280 !important;
-  border: none !important;
-  height: auto !important;
-  padding: 8px !important;
-  font-size: 12px !important;
-}
-.apl-result-actions__new:hover,
-.avd-result-actions__new:hover {
-  color: #1a1a2e !important;
-  background-color: transparent !important;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-/* ── Selects: themes remove borders, change appearance ── */
-.autosync-ymme__field select,
-.autosync-wheel-finder__field select {
-  width: 100% !important;
-  padding: 10px 14px !important;
-  font-size: 14px !important;
-  font-family: inherit !important;
-  font-weight: 400 !important;
-  border: 1px solid #d1d5db !important;
-  border: 1px solid var(--autosync-border, #d1d5db) !important;
-  border-radius: 8px !important;
-  background-color: #fff !important;
-  color: #1a1a2e !important;
-  color: var(--autosync-text, #1a1a2e) !important;
-  min-height: 42px !important;
-  line-height: 1.4 !important;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.autosync-ymme__field select:focus,
-.autosync-wheel-finder__field select:focus {
-  border-color: #005bd2 !important;
-  outline: none !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
-}
-.autosync-ymme__field select:disabled,
-.autosync-wheel-finder__field select:disabled {
-  background-color: #f9fafb !important;
-  opacity: 0.6 !important;
-  cursor: not-allowed !important;
-}
-
-/* ── Labels: themes override font/size/transform ── */
-.autosync-ymme__field label,
-.autosync-wheel-finder__field label {
-  display: block !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
-  font-family: inherit !important;
-  color: #6b7280 !important;
-  color: var(--autosync-muted, #6b7280) !important;
-  margin-bottom: 4px !important;
-  line-height: 1.4 !important;
-  text-transform: none !important;
-  letter-spacing: normal !important;
-}
-
-/* ── Headings: themes override size/weight/color ── */
-.autosync-ymme__heading,
-.autosync-wheel-finder__heading,
-.autosync-compat-table__heading,
-.autosync-plate-lookup__heading {
-  font-family: inherit !important;
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
-  line-height: 1.25 !important;
-  letter-spacing: -0.01em !important;
-  color: inherit !important;
-}
-
-/* ── Subheadings ── */
-.autosync-ymme__subheading,
-.autosync-wheel-finder__subheading {
-  font-size: 15px !important;
-  font-family: inherit !important;
-  line-height: 1.4 !important;
-  color: inherit !important;
-  opacity: 0.65 !important;
+  font-family: inherit;
 }
 /* Prevent theme from blowing up our SVG/img elements */
 [class^="autosync-"] img,
@@ -307,17 +127,26 @@
   border-radius: calc(var(--autosync-radius) * 1.5);
 }
 
-/* Heading/subheading styles controlled by isolation layer above */
 .autosync-ymme__heading {
-  margin: 0 0 4px !important;
+  margin: 0 0 0.25rem;
+  font-family: inherit;
+  font-size: var(--as-heading-size, 1.375rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .autosync-ymme__subheading {
-  margin: 0 0 16px !important;
+  margin: 0 0 1rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: inherit;
+  opacity: 0.65;
+  line-height: 1.4;
 }
 
 .autosync-ymme__heading + .autosync-ymme__fields {
-  margin-top: 16px;
+  margin-top: 1rem;
 }
 
 .autosync-ymme__subheading + .autosync-ymme__fields {
@@ -327,7 +156,7 @@
 .autosync-ymme__fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .autosync-ymme--horizontal .autosync-ymme__fields {
@@ -341,11 +170,37 @@
   min-width: 150px;
 }
 
-/* Label, select, input styles controlled by isolation layer above */
+.autosync-ymme__field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: var(--autosync-muted, inherit);
+  opacity: 0.8;
+}
 
 /* Select wrap for spinner overlay */
 .autosync-ymme__select-wrap {
   position: relative;
+}
+
+.autosync-ymme__field select,
+.autosync-ymme__field input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--autosync-border, #c9cccf);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
+  appearance: auto;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.autosync-ymme__field select:disabled {
+  background: color-mix(in srgb, var(--autosync-bg, #fff) 95%, #000);
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .autosync-ymme__field select:focus,
@@ -414,26 +269,21 @@
 }
 
 .autosync-ymme__select-trigger {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  width: 100% !important;
-  padding: 10px 14px !important;
-  font-size: 14px !important;
-  font-family: inherit !important;
-  border: 1px solid #d1d5db !important;
-  border: 1px solid var(--autosync-border, #d1d5db) !important;
-  border-radius: 8px !important;
-  background-color: #fff !important;
-  background-color: var(--autosync-bg, #fff) !important;
-  color: #1a1a2e !important;
-  color: var(--autosync-text, #1a1a2e) !important;
-  cursor: pointer !important;
-  text-align: left !important;
-  gap: 8px !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--autosync-border, #c9cccf);
+  border-radius: calc(var(--autosync-radius, 8px) / 2);
+  background: var(--autosync-bg, #fff);
+  color: var(--autosync-text, #1a1a1a);
+  cursor: pointer;
+  text-align: left;
+  gap: 0.5rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  min-height: 42px !important;
-  line-height: 1.4 !important;
+  min-height: 38px;
 }
 
 .autosync-ymme__select-trigger:hover:not(:disabled) {
@@ -448,7 +298,7 @@
 .autosync-ymme__select-value {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -498,15 +348,15 @@
 }
 
 .autosync-ymme__select-search-wrap {
-  padding: 8px;
+  padding: 0.5rem;
   border-bottom: 1px solid var(--autosync-border, #e3e3e3);
   flex-shrink: 0;
 }
 
 .autosync-ymme__select-search {
   width: 100%;
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8125rem;
   border: 1px solid var(--autosync-border, #e3e3e3);
   border-radius: 4px;
   background: var(--autosync-bg, #fff);
@@ -527,7 +377,7 @@
 .autosync-ymme__select-options {
   list-style: none;
   margin: 0;
-  padding: 4px 0;
+  padding: 0.25rem 0;
   overflow-y: auto;
   flex: 1;
   overscroll-behavior: contain;
@@ -536,10 +386,10 @@
 .autosync-ymme__select-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 0.8125rem;
   transition: background 0.1s ease;
   min-height: 36px;
 }
@@ -554,11 +404,11 @@
 }
 
 .autosync-ymme__select-no-results {
-  padding: 16px 12px;
+  padding: 1rem 0.75rem;
   text-align: center;
   color: inherit;
   opacity: 0.5;
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 /* Brand logos */
@@ -579,7 +429,7 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--autosync-primary, #2c6ecb) 15%, transparent);
   color: var(--autosync-primary, #2c6ecb);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   flex-shrink: 0;
   letter-spacing: 0.02em;
@@ -593,7 +443,7 @@
 }
 
 .autosync-ymme__option-country {
-  font-size: 11px;
+  font-size: 0.6875rem;
   opacity: 0.45;
   flex-shrink: 0;
 }
@@ -602,17 +452,17 @@
 .autosync-ymme__field--button {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .autosync-ymme__search-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 0.4rem;
   width: 100%;
-  padding: 8px 20px;
-  font-size: 14px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--autosync-primary, #2c6ecb));
@@ -683,7 +533,7 @@
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 700;
   line-height: 16px;
   text-align: center;
@@ -717,14 +567,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--autosync-border, #e3e3e3);
   background: color-mix(in srgb, var(--autosync-bg, #fff) 97%, var(--autosync-text, #1a1a1a));
 }
 
 .autosync-ymme__garage-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: inherit;
 }
@@ -754,19 +604,19 @@
   flex-direction: column;
   overflow-y: auto;
   max-height: 280px;
-  padding: 6px;
-  gap: 5px;
+  padding: 0.4rem;
+  gap: 0.3rem;
 }
 
 .autosync-ymme__garage-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 9px;
+  padding: 0.45rem 0.55rem;
   background: var(--autosync-bg, #fff);
   border: 1px solid var(--autosync-border, #e3e3e3);
   border-radius: 6px;
-  gap: 6px;
+  gap: 0.4rem;
   transition: border-color 0.15s, box-shadow 0.15s;
   animation: autosync-chip-in 0.15s ease;
 }
@@ -784,13 +634,13 @@
 .autosync-ymme__garage-chip-info {
   display: flex;
   flex-direction: column;
-  gap: 0.16px;
+  gap: 0.1rem;
   flex: 1;
   min-width: 0;
 }
 
 .autosync-ymme__garage-chip-name {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -798,7 +648,7 @@
 }
 
 .autosync-ymme__garage-chip-engine {
-  font-size: 10px;
+  font-size: 0.625rem;
   opacity: 0.5;
   white-space: nowrap;
   overflow: hidden;
@@ -808,13 +658,13 @@
 .autosync-ymme__garage-chip-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0.25rem;
   flex-shrink: 0;
 }
 
 .autosync-ymme__garage-select-btn {
-  padding: 0.32px 9px;
-  font-size: 10px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.625rem;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--autosync-primary, #2c6ecb);
@@ -851,10 +701,10 @@
 
 .autosync-ymme__garage-empty {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
   opacity: 0.45;
   text-align: center;
-  padding: 16px 8px;
+  padding: 1rem 0.5rem;
 }
 
 /* --------------- Fitment Badge --------------- */
@@ -866,10 +716,10 @@
 .autosync-fitment-badge__content {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
   border-radius: var(--autosync-badge-radius, 6px);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--autosync-badge-text, inherit);
 }
@@ -880,12 +730,12 @@
 
 .autosync-fitment-badge__icon--success {
   color: var(--autosync-badge-success, #1a7f37);
-  font-size: 18px;
+  font-size: 1.1rem;
 }
 
 .autosync-fitment-badge__icon--warning {
   color: var(--autosync-badge-warning, #bf5700);
-  font-size: 18px;
+  font-size: 1.1rem;
 }
 
 [data-autosync-badge-fits] {
@@ -906,7 +756,7 @@
 .autosync-fitment-badge__link {
   color: var(--as-primary, #005bd2);
   text-decoration: underline;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* --------------- Compatibility Table --------------- */
@@ -916,9 +766,14 @@
   color: var(--act-text, inherit);
 }
 
-/* Heading styles controlled by isolation layer */
 .autosync-compat-table__heading {
-  margin: 0 0 12px !important;
+  font-family: inherit;
+  font-size: var(--as-heading-size, 1.375rem);
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--act-text, inherit);
 }
 
 .autosync-compat-table__wrapper {
@@ -931,24 +786,24 @@
 .autosync-compat-table__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: 0.875rem;
   background: var(--act-bg, #fff);
 }
 
 .autosync-compat-table__table th {
   text-align: left;
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   background: var(--act-card-bg, #f6f6f7);
   border-bottom: 2px solid var(--act-border, #e3e3e3);
   font-weight: 600;
   color: var(--act-text, #6d7175);
-  font-size: 13px;
+  font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.025em;
 }
 
 .autosync-compat-table__table td {
-  padding: 8px 12px;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--act-border, #edeeef);
   color: var(--act-text, inherit);
 }
@@ -959,20 +814,24 @@
 
 /* --------------- Plate Lookup --------------- */
 .autosync-plate-lookup {
-  padding: 24px;
+  padding: 1.5rem;
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 8px;
   background: var(--as-bg, #fff);
 }
 
-/* Heading styles controlled by isolation layer */
 .autosync-plate-lookup__heading {
-  margin: 0 0 16px !important;
+  margin: 0 0 1rem;
+  font-family: inherit;
+  font-size: var(--as-heading-size, 1.375rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .autosync-plate-lookup__form {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: stretch;
 }
 
@@ -989,18 +848,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  padding: 0.5rem;
   background: #003399;
   color: #fff;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
-  min-width: 32px;
+  min-width: 2rem;
 }
 
 .autosync-plate-lookup__input {
   flex: 1;
-  padding: 8px 12px;
-  font-size: 20px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
   font-weight: 700;
   font-family: 'UKNumberPlate', 'Courier New', monospace;
   text-transform: uppercase;
@@ -1014,15 +873,15 @@
 .autosync-plate-lookup__input::placeholder {
   color: #8c7a00;
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   letter-spacing: normal;
 }
 
 .autosync-plate-lookup__btn,
 .autosync-plate-lookup__find-parts {
   width: auto;
-  padding: 8px 20px;
-  font-size: 14px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1048,25 +907,25 @@
 }
 
 .autosync-plate-lookup__card {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 1rem;
+  padding: 1rem;
   background: var(--as-card-bg, #f9fafb);
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 6px;
 }
 
 .autosync-plate-lookup__card h3 {
-  margin: 0 0 12px;
-  font-size: 18px;
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .autosync-plate-lookup__details {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 4px 16px;
-  font-size: 14px;
-  margin: 0 0 16px;
+  gap: 0.25rem 1rem;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
 }
 
 .autosync-plate-lookup__details dt {
@@ -1079,22 +938,22 @@
 }
 
 .autosync-plate-lookup__find-parts {
-  margin-top: 8px;
+  margin-top: 0.5rem;
 }
 
 .autosync-plate-lookup__error {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
   background: color-mix(in srgb, var(--as-error, #d72c0d) 8%, var(--as-bg, #fff));
   border: 1px solid color-mix(in srgb, var(--as-error, #d72c0d) 20%, var(--as-bg, #fff));
   border-radius: 6px;
   color: var(--as-error, #d72c0d);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* --------------- Wheel Finder --------------- */
 .autosync-wheel-finder {
-  padding: 24px;
+  padding: 1.5rem;
   border: 1px solid var(--awf-border, #e3e3e3);
   border-radius: var(--awf-radius, 8px);
   background: var(--awf-bg, #fff);
@@ -1103,17 +962,26 @@
   margin-bottom: var(--as-section-gap, 0px);
 }
 
-/* Heading, subheading, label, select, input styles controlled by isolation layer */
 .autosync-wheel-finder__heading {
-  margin: 0 0 4px !important;
+  margin: 0 0 0.25rem;
+  font-family: inherit;
+  font-size: var(--as-heading-size, 1.375rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--awf-text, inherit);
 }
 .autosync-wheel-finder__subheading {
-  margin: 0 0 16px !important;
+  margin: 0 0 1rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: var(--awf-muted, #6b7280);
+  line-height: 1.5;
 }
 
 .autosync-wheel-finder__fields {
   display: flex;
-  gap: 12px;
+  gap: 0.75rem;
   flex-wrap: wrap;
   align-items: flex-end;
 }
@@ -1123,48 +991,87 @@
   min-width: 140px;
 }
 
-/* Focus state for selects */
-.autosync-wheel-finder__field select:focus {
-  border-color: #005bd2 !important;
-  outline: none !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+.autosync-wheel-finder__field label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: var(--awf-muted, inherit);
 }
 
-/* Button styles controlled by isolation layer */
+.autosync-wheel-finder__field select,
+.autosync-wheel-finder__field input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--awf-border, #c9cccf);
+  border-radius: calc(var(--awf-radius, 8px) / 2);
+  background: var(--awf-card-bg, #fff);
+  color: var(--awf-text, inherit);
+}
+
+.autosync-wheel-finder__field select:focus,
+.autosync-wheel-finder__field input:focus {
+  outline: 2px solid var(--awf-primary, #2c6ecb);
+  outline-offset: 1px;
+}
+
+.autosync-wheel-finder__field--button button {
+  width: 100%;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--as-btn-text, #fff);
+  background: var(--as-btn-bg, var(--awf-primary, #2c6ecb));
+  border: none;
+  border-radius: calc(var(--awf-radius, 8px) / 2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.autosync-wheel-finder__field--button button:hover {
+  filter: brightness(0.85);
+}
+
+.autosync-wheel-finder__field--button button:disabled {
+  background: var(--as-disabled-bg, #c9cccf);
+  cursor: not-allowed;
+}
 
 .autosync-wheel-finder--hidden {
   display: none;
 }
 
 .autosync-wheel-finder__stub {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 1rem;
+  padding: 0.75rem;
   background: var(--as-card-bg, #f9fafb);
   border-radius: 6px;
   color: var(--as-muted, #6b7280);
-  font-size: 14px;
+  font-size: 0.875rem;
   text-align: center;
 }
 
 .autosync-wheel-finder__results {
-  margin-top: 16px;
+  margin-top: 1rem;
 }
 
 .autosync-wheel-finder__count {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
-  margin-bottom: 12px;
+  margin-bottom: 0.75rem;
 }
 
 .autosync-wheel-finder__error {
   color: var(--as-error, #d72c0d);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .autosync-wheel-finder__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
+  gap: 1rem;
 }
 
 .autosync-wheel-finder__card {
@@ -1192,8 +1099,8 @@
 }
 
 .autosync-wheel-finder__title {
-  padding: 8px 12px 0;
-  font-size: 13px;
+  padding: 0.5rem 0.75rem 0;
+  font-size: 0.8125rem;
   font-weight: 500;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1202,24 +1109,24 @@
 }
 
 .autosync-wheel-finder__price {
-  padding: 4px 12px 12px;
-  font-size: 14px;
+  padding: 0.25rem 0.75rem 0.75rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--as-text, #1a1a2e);
 }
 
 /* --------------- VIN Decode --------------- */
 .autosync-vin-decode {
-  padding: 24px;
+  padding: 1.5rem;
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 8px;
   background: var(--as-bg, #fff);
 }
 
 .autosync-vin-decode__heading {
-  margin: 0 0 16px;
+  margin: 0 0 1rem;
   font-family: inherit;
-  font-size: var(--as-heading-size, 22px);
+  font-size: var(--as-heading-size, 1.375rem);
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.01em;
@@ -1227,7 +1134,7 @@
 
 .autosync-vin-decode__form {
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
   align-items: stretch;
 }
 
@@ -1237,8 +1144,8 @@
 
 .autosync-vin-decode__input {
   width: 100%;
-  padding: 10px 12px;
-  font-size: 16px;
+  padding: 0.625rem 0.75rem;
+  font-size: 1rem;
   font-family: 'Courier New', monospace;
   font-weight: 600;
   letter-spacing: 0.15em;
@@ -1258,15 +1165,15 @@
 
 .autosync-vin-decode__input::placeholder {
   font-weight: 400;
-  font-size: 14px;
+  font-size: 0.875rem;
   letter-spacing: normal;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--as-muted, #6b7280);
 }
 
 .autosync-vin-decode__btn {
-  padding: 8px 20px;
-  font-size: 14px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1291,25 +1198,25 @@
 }
 
 .autosync-vin-decode__card {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 1rem;
+  padding: 1rem;
   background: var(--as-card-bg, #f9fafb);
   border: 1px solid var(--as-border, #e5e7eb);
   border-radius: 6px;
 }
 
 .autosync-vin-decode__card h3 {
-  margin: 0 0 12px;
-  font-size: 18px;
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .autosync-vin-decode__details {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 4px 16px;
-  font-size: 14px;
-  margin: 0 0 16px;
+  gap: 0.25rem 1rem;
+  font-size: 0.875rem;
+  margin: 0 0 1rem;
 }
 
 .autosync-vin-decode__details dt {
@@ -1322,8 +1229,8 @@
 }
 
 .autosync-vin-decode__find-parts {
-  padding: 8px 20px;
-  font-size: 14px;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--as-btn-text, #fff);
   background: var(--as-btn-bg, var(--as-primary, #005bd2));
@@ -1338,13 +1245,13 @@
 }
 
 .autosync-vin-decode__error {
-  margin-top: 12px;
-  padding: 12px;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
   background: color-mix(in srgb, var(--as-error, #d72c0d) 8%, var(--as-bg, #fff));
   border: 1px solid color-mix(in srgb, var(--as-error, #d72c0d) 20%, var(--as-bg, #fff));
   border-radius: 6px;
   color: var(--as-error, #d72c0d);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* --------------- Responsive: Tablet (768px) --------------- */
@@ -1448,7 +1355,7 @@
   .autosync-ymme--horizontal .autosync-ymme__fields,
   .autosync-ymme__fields {
     flex-direction: column !important;
-    gap: 8px;
+    gap: 0.5rem;
   }
 
   .autosync-ymme--horizontal .autosync-ymme__field,
@@ -1466,18 +1373,18 @@
 
   /* Smaller title on mobile */
   .autosync-ymme__title {
-    font-size: 16px !important;
+    font-size: 1rem !important;
   }
 
   /* YMME: field labels smaller */
   .autosync-ymme__field label {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 
   /* YMME: select dropdowns full width */
   .autosync-ymme__field select {
-    font-size: 14px;
-    padding: 8px 12px;
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
   }
 
   /* Garage button smaller */
@@ -1506,14 +1413,14 @@
   /* Compatibility table: stack on mobile */
   .autosync-compat__table th,
   .autosync-compat__table td {
-    font-size: 12px;
-    padding: 6px 8px;
+    font-size: 0.75rem;
+    padding: 0.375rem 0.5rem;
   }
 
   /* Badge: smaller on mobile */
   .autosync-badge {
-    font-size: 12px !important;
-    padding: 4px 8px !important;
+    font-size: 0.75rem !important;
+    padding: 0.25rem 0.5rem !important;
   }
 
   /* Wheel finder: single column on phones */
@@ -1539,16 +1446,16 @@
   }
 
   .autosync-ymme__title {
-    font-size: 14px !important;
+    font-size: 0.875rem !important;
   }
 
   .autosync-ymme__field select {
-    font-size: 13px;
-    padding: 7px 10px;
+    font-size: 0.8125rem;
+    padding: 0.4375rem 0.625rem;
   }
 
   .autosync-ymme__subtitle {
-    font-size: 12px;
+    font-size: 0.75rem;
   }
 }
 

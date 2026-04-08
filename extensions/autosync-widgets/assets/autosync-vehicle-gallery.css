@@ -18,23 +18,22 @@
     display: none; /* removed for consistency with YMME/Wheel/Compat */
   }
   .avs-heading {
-    font-family: inherit !important;
-    font-size: 22px !important;
-    font-size: var(--as-heading-size, 22px) !important;
-    font-weight: 700 !important;
-    margin: 0 !important;
-    letter-spacing: -0.01em !important;
-    line-height: 1.25 !important;
-    color: var(--avs-text, #1a1a2e) !important;
+    font-family: inherit;
+    font-size: var(--as-heading-size, 1.375rem);
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    color: var(--avs-text);
   }
   .avs-subheading {
-    font-family: inherit !important;
-    font-size: 15px !important;
-    color: var(--avs-muted, #6b7280) !important;
-    margin: 0 0 24px !important;
-    text-align: center !important;
-    font-weight: 400 !important;
-    line-height: 1.5 !important;
+    font-family: inherit;
+    font-size: 0.9375rem;
+    color: var(--avs-muted);
+    margin: 0 0 28px;
+    text-align: center;
+    font-weight: 400;
+    line-height: 1.5;
   }
 
   /* ── Search / Filter ────────────────────────────── */
@@ -329,7 +328,7 @@
       gap: 14px;
     }
     .avs-heading {
-      font-size: var(--as-heading-size, 20px);
+      font-size: var(--as-heading-size, 1.25rem);
     }
     .avs-card {
       padding: 18px;
@@ -365,7 +364,7 @@
       grid-template-columns: 1fr !important;
     }
     .avs-heading {
-      font-size: var(--as-heading-size, 20px);
+      font-size: var(--as-heading-size, 1.25rem);
     }
     .avs-filter {
       flex-direction: column;
@@ -389,7 +388,7 @@
     border: none;
     padding: 12px 32px;
     border-radius: var(--as-radius, 8px);
-    font-size: 15px;
+    font-size: 0.9375rem;
     font-weight: 600;
     cursor: pointer;
     transition: opacity 0.15s ease;

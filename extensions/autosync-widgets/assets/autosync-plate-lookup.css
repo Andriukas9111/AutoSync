@@ -40,26 +40,25 @@
 
 /* ── Heading & Text ── */
 .apl-heading {
-  font-family: inherit !important;
-  font-size: 22px !important;
-  font-size: var(--as-heading-size, 22px) !important;
-  font-weight: 700 !important;
-  margin: 0 0 4px !important;
-  letter-spacing: -0.01em !important;
-  line-height: 1.25 !important;
-  color: var(--apl-text, #1a1a2e) !important;
+  font-family: inherit;
+  font-size: var(--as-heading-size, 1.375rem);
+  font-weight: 700;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--apl-text);
 }
 .apl-subheading {
-  font-family: inherit !important;
-  font-size: 15px !important;
-  color: var(--apl-muted, #6b7280) !important;
-  margin: 0 0 8px !important;
-  font-weight: 400 !important;
-  line-height: 1.5 !important;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  color: var(--apl-muted);
+  margin: 0 0 8px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 .apl-description {
-  font-family: inherit !important;
-  font-size: 13px !important;
+  font-family: inherit;
+  font-size: 0.8125rem;
   color: var(--apl-muted);
   margin: 0;
   font-weight: 400;
@@ -103,8 +102,23 @@
   min-width: 0;
 }
 .apl-plate-input::placeholder { color: rgba(0,0,0,0.25); font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; }
-/* Button styles controlled by isolation layer in autosync-widgets.css */
-.apl-submit-btn:hover { transform: translateY(-1px); }
+.apl-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  background: var(--as-btn-bg, var(--apl-primary, #005bd2));
+  color: var(--as-btn-text, #fff);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+.apl-submit-btn:hover { background: color-mix(in srgb, var(--apl-primary) 85%, #000); transform: translateY(-1px); }
 .apl-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* ── Loading & Error ── */
@@ -565,7 +579,7 @@
 }
 
 @media (max-width: 600px) {
-  .apl-heading { font-size: var(--as-heading-size, 20px); }
+  .apl-heading { font-size: var(--as-heading-size, 1.25rem); }
   .apl-plate-form { flex-direction: column; }
   .apl-plate-input { font-size: 18px; padding: 8px 10px; }
   .apl-submit-btn { justify-content: center; }

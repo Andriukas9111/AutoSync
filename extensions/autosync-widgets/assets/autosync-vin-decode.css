@@ -11,19 +11,21 @@
 .avd-root[data-content-position="right"] .avd-container { flex-direction: row-reverse; }
 
 /* Heading — left-aligned inside container */
-.avd-heading { font-family: inherit !important; font-size: 22px !important; font-size: var(--as-heading-size, 22px) !important; font-weight: 700 !important; margin: 0 0 4px !important; letter-spacing: -0.01em !important; line-height: 1.25 !important; color: var(--avd-text, #1a1a2e) !important; }
-.avd-subheading { font-family: inherit !important; font-size: 15px !important; color: var(--avd-muted, #6b7280) !important; margin: 0 0 8px !important; font-weight: 400 !important; line-height: 1.5 !important; }
-.avd-description { font-family: inherit !important; font-size: 13px !important; color: var(--avd-muted, #6b7280) !important; margin: 0 !important; font-weight: 400 !important; line-height: 1.55 !important; opacity: 0.85 !important; }
+.avd-heading { font-family: inherit; font-size: var(--as-heading-size, 1.375rem); font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em; line-height: 1.25; color: var(--avd-text); }
+.avd-subheading { font-family: inherit; font-size: 0.9375rem; color: var(--avd-muted); margin: 0 0 8px; font-weight: 500; line-height: 1.4; }
+.avd-description { font-family: inherit; font-size: 0.8125rem; color: var(--avd-muted); margin: 0; font-weight: 400; line-height: 1.55; opacity: 0.85; }
 
 /* VIN Input — inside container, no max-width constraint */
 .avd-vin-form { display: flex; gap: 10px; align-items: stretch; }
-.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 1px solid var(--avd-border, #d1d5db); border-radius: 8px; background: var(--avd-bg, #fff); transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
-.avd-vin-input-wrap:focus-within { border-color: var(--avd-primary, #005bd2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary, #005bd2) 12%, transparent); }
-.avd-vin-input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 52px 8px 14px; color: var(--avd-text); min-width: 0; }
-.avd-vin-input::placeholder { color: var(--avd-muted); font-family: inherit; font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.5; }
+.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 2px solid var(--avd-text, #1a1a2e); border-radius: 5px; background: var(--avd-card-bg, #f4f5f7); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
+.avd-vin-input-wrap:focus-within { border-color: var(--avd-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary) 12%, transparent); }
+.avd-vin-input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 17px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 8px 52px 8px 14px; color: var(--avd-text); min-width: 0; }
+.avd-vin-input::placeholder { color: var(--avd-muted); font-family: inherit; font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.4; }
 .avd-vin-counter { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; color: var(--avd-muted); pointer-events: none; font-variant-numeric: tabular-nums; transition: color 0.2s, background 0.2s; background: color-mix(in srgb, var(--avd-muted) 10%, transparent); padding: 3px 8px; border-radius: 4px; }
 .avd-vin-counter--valid { color: var(--as-success, #10b981); background: color-mix(in srgb, var(--as-success, #10b981) 12%, transparent); }
-/* Button styles controlled by isolation layer in autosync-widgets.css */
+.avd-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
+.avd-submit-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); transform: translateY(-1px); }
+.avd-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 /* Legacy classes — kept for backward compat, hidden */
 .avd-heading-wrap { margin-bottom: 6px; }
@@ -158,7 +160,7 @@
 }
 
 @media (max-width: 600px) {
-  .avd-heading { font-size: var(--as-heading-size, 20px); }
+  .avd-heading { font-size: var(--as-heading-size, 1.25rem); }
   .avd-vin-input { font-size: 14px; letter-spacing: 0.08em; }
   .avd-vehicle-card__title { font-size: 18px; }
   .avd-vehicle-card__header { padding: 16px; }
