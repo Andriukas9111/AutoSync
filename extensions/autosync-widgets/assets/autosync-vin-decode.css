@@ -17,13 +17,13 @@
 
 /* VIN Input — inside container, no max-width constraint */
 .avd-vin-form { display: flex; gap: 10px; align-items: stretch; }
-.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 1px solid var(--avd-border, #e5e7eb); border-radius: 8px; background: var(--avd-bg, #fff); overflow: hidden; transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
-.avd-vin-input-wrap:focus-within { border-color: var(--avd-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary) 12%, transparent); }
+.avd-vin-input-wrap { flex: 1; display: flex; position: relative; border: 1px solid var(--avd-border, #d1d5db); border-radius: 8px; background: var(--avd-bg, #fff); transition: border-color 0.2s, box-shadow 0.2s; height: 48px; }
+.avd-vin-input-wrap:focus-within { border-color: var(--avd-primary, #005bd2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--avd-primary, #005bd2) 12%, transparent); }
 .avd-vin-input { flex: 1; border: none; outline: none; background: transparent; font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 52px 8px 14px; color: var(--avd-text); min-width: 0; }
 .avd-vin-input::placeholder { color: var(--avd-muted); font-family: inherit; font-size: 14px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.5; }
 .avd-vin-counter { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; font-weight: 700; color: var(--avd-muted); pointer-events: none; font-variant-numeric: tabular-nums; transition: color 0.2s, background 0.2s; background: color-mix(in srgb, var(--avd-muted) 10%, transparent); padding: 3px 8px; border-radius: 4px; }
 .avd-vin-counter--valid { color: var(--as-success, #10b981); background: color-mix(in srgb, var(--as-success, #10b981) 12%, transparent); }
-.avd-submit-btn { display: inline-flex; align-items: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; }
+.avd-submit-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 12px 24px; border: none; border-radius: 8px; background: var(--as-btn-bg, var(--avd-primary, #005bd2)); color: var(--as-btn-text, #fff); cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 600; transition: background 0.2s, transform 0.15s; white-space: nowrap; height: 48px; }
 .avd-submit-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--as-btn-bg, var(--avd-primary)) 85%, #000); transform: translateY(-1px); }
 .avd-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
