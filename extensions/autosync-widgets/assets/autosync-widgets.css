@@ -67,6 +67,7 @@
   border-radius: var(--autosync-radius);
   border: 1px solid var(--autosync-border);
   position: relative;
+  margin-bottom: var(--as-section-gap, 0px);
 }
 
 /* Container width variants */
@@ -954,6 +955,7 @@
   border-radius: var(--awf-radius, 8px);
   background: var(--awf-bg, #fff);
   color: var(--awf-text, inherit);
+  margin-bottom: var(--as-section-gap, 0px);
 }
 
 .autosync-wheel-finder__heading {

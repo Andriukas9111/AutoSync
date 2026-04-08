@@ -39,6 +39,7 @@
     --as-radius: {{ block.settings.border_radius | default: 8 }}px;
     --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
     --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
     --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
@@ -261,6 +262,16 @@
 "max": 100,
 "step": 4,
 "default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap",
+"label": "Bottom Margin (Gap Between Sections)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 16,
 "unit": "px"
 }
 ]

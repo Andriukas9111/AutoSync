@@ -1,5 +1,5 @@
 /* AutoSync VIN Decode — Container Card Layout (matches YMME/Wheel Finder) */
-.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 24px; }
+.avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 24px; margin-bottom: var(--as-section-gap, 0px); }
 .avd-root *, .avd-root *::before, .avd-root *::after { box-sizing: border-box; }
 
 /* Two-column container layout */
@@ -135,7 +135,7 @@
 .avd-spec-item--spacer { background: transparent !important; border-right: none !important; }
 
 /* ── Rich Vehicle Details Grid ── */
-.avd-result-details { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin-top: 12px; font-size: 13px; padding-top: 12px; border-top: 1px solid var(--avd-border, #e5e7eb); }
+.avd-result-details { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 2px 12px; margin-top: 10px; font-size: 12px; padding-top: 10px; border-top: 1px solid var(--avd-border, #e5e7eb); }
 .avd-result-details__label { color: var(--avd-muted, #6b7280); font-weight: 400; white-space: nowrap; padding: 3px 0; }
 .avd-result-details__value { color: var(--avd-text, #1a1a2e); font-weight: 600; text-align: right; padding: 3px 0; }
 .avd-result-actions { display: flex; flex-direction: column; gap: 8px; justify-content: center; }
