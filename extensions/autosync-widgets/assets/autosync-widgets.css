@@ -689,6 +689,8 @@
   display: flex !important;
   align-items: flex-end !important;
   gap: 8px !important;
+  flex: none !important;
+  min-width: auto !important;
 }
   opacity: 0.7 !important;
 }
