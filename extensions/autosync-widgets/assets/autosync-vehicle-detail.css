@@ -1,13 +1,13 @@
   /* ── Base Reset ── */
   .avsd-root {
-    font-family: inherit;
-    color: var(--avsd-text);
-    background: var(--avsd-bg);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    color: var(--avsd-text, #1a1a2e) !important;
+    background: var(--avsd-bg, #ffffff) !important;
     margin: 0 auto;
     margin-top: var(--as-section-gap-top, 0px);
     margin-bottom: var(--as-section-gap, 0px);
     padding: 0;
-    line-height: 1.5;
+    line-height: 1.5 !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -37,9 +37,9 @@
   .avsd-error svg { margin: 0 auto 16px; display: block; }
   .avsd-error p { margin: 0 0 20px; font-size: 15px; font-weight: 500; }
   .avsd-retry-btn {
-    padding: 10px 28px; border: 1px solid var(--avsd-border); border-radius: var(--avsd-radius);
-    background: var(--avsd-bg); color: var(--avsd-text); cursor: pointer; font-size: 14px;
-    font-weight: 600; font-family: inherit;
+    padding: 10px 28px !important; border: 1px solid var(--avsd-border, #e5e7eb) !important; border-radius: var(--avsd-radius, 8px) !important;
+    background: var(--avsd-bg, #ffffff) !important; color: var(--avsd-text, #1a1a2e) !important; cursor: pointer; font-size: 14px !important;
+    font-weight: 600 !important; font-family: inherit !important;
     transition: border-color 0.2s, background 0.2s, transform 0.15s;
   }
   .avsd-retry-btn:hover { border-color: var(--avsd-primary); background: var(--avsd-card-bg); transform: translateY(-1px); }
@@ -304,20 +304,20 @@
   }
   .avsd-tabs::-webkit-scrollbar { display: none; }
   .avsd-tab {
-    padding: 14px 24px; font-size: 13px; font-weight: 600;
-    color: var(--avsd-muted); cursor: pointer; border: none;
-    background: none; white-space: nowrap;
-    border-bottom: 2px solid transparent;
+    padding: 14px 24px !important; font-size: 13px !important; font-weight: 600 !important;
+    color: var(--avsd-muted, #6b7280) !important; cursor: pointer; border: none !important;
+    background: none !important; white-space: nowrap;
+    border-bottom: 2px solid transparent !important;
     margin-bottom: -2px;
     transition: color 0.2s, border-color 0.2s;
     text-transform: uppercase; letter-spacing: 0.05em;
-    font-family: inherit;
+    font-family: inherit !important;
     position: relative;
   }
-  .avsd-tab:hover { color: var(--avsd-text); }
+  .avsd-tab:hover { color: var(--avsd-text, #1a1a2e) !important; }
   .avsd-tab--active {
-    color: var(--avsd-primary);
-    border-bottom-color: var(--avsd-primary);
+    color: var(--avsd-primary, #005bd2) !important;
+    border-bottom-color: var(--avsd-primary, #005bd2) !important;
   }
 
   .avsd-tab-panels { margin-bottom: 0; }
