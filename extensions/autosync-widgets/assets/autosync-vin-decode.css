@@ -2,10 +2,10 @@
 .avd-root { font-family: inherit; color: var(--avd-text); background: var(--avd-bg); margin: 0 auto; -webkit-font-smoothing: antialiased; border: 1px solid var(--avd-border, #e5e7eb); border-radius: var(--avd-radius, 8px); box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 24px; margin-top: var(--as-section-gap-top, 0px); margin-bottom: var(--as-section-gap, 0px); }
 .avd-root *, .avd-root *::before, .avd-root *::after { box-sizing: border-box; }
 
-/* Two-column container layout */
-.avd-container { display: flex; gap: 32px; align-items: center; }
-.avd-content { flex: 1; min-width: 0; }
-.avd-form-side { flex: 1; min-width: 0; }
+/* Two-column container layout (70/30) */
+.avd-container { display: flex !important; gap: 24px !important; align-items: center !important; }
+.avd-content { flex: 7 !important; min-width: 0 !important; }
+.avd-form-side { flex: 3 !important; min-width: 280px !important; }
 
 /* Reverse when content is on the right */
 .avd-root[data-content-position="right"] .avd-container { flex-direction: row-reverse; }

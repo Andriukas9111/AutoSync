@@ -14,28 +14,28 @@
 }
 .apl-root *, .apl-root *::before, .apl-root *::after { box-sizing: border-box; }
 
-/* ── Two-column container layout ── */
+/* ── Two-column container layout (70/30) ── */
 .apl-container {
-  display: flex;
-  gap: 32px;
-  align-items: center;
+  display: flex !important;
+  gap: 24px !important;
+  align-items: center !important;
 }
 
 /* Reverse order when content_position is right */
 .apl-root[data-content-position="right"] .apl-container {
-  flex-direction: row-reverse;
+  flex-direction: row-reverse !important;
 }
 
-/* Content side (text / vehicle info) */
+/* Content side — 70% */
 .apl-content {
-  flex: 1;
-  min-width: 0;
+  flex: 7 !important;
+  min-width: 0 !important;
 }
 
-/* Form side */
+/* Form side — 30% */
 .apl-form-side {
-  flex: 1;
-  min-width: 0;
+  flex: 3 !important;
+  min-width: 280px !important;
 }
 
 /* ── Heading & Text ── */
@@ -66,9 +66,8 @@
 /* ── Plate Input — Authentic UK number plate ── */
 .apl-plate-form {
   display: flex !important;
-  gap: 10px !important;
+  gap: 8px !important;
   align-items: stretch !important;
-  max-width: 420px !important;
 }
 .apl-plate-input-wrap {
   flex: 1 !important;
