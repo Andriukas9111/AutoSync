@@ -43,7 +43,9 @@ import {
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { assertFitmentLimit, BillingGateError } from "../lib/billing.server";
 import type { FitmentStatus } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 import { formatPrice } from "../lib/types";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
@@ -71,7 +73,13 @@ interface Product {
   barcode: string | null;
   variants: any[] | null;
   fitment_status: FitmentStatus;
+  product_category: string | null;
   source: string | null;
+  provider_id: string | null;
+  status: string | null;
+  cost_price: number | null;
+  weight: string | null;
+  raw_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -101,6 +109,15 @@ interface Fitment {
   aspiration?: string | null;
 }
 
+interface WheelFitment {
+  pcd: string | null;
+  diameter: number | null;
+  width: number | null;
+  center_bore: number | null;
+  offset_min: number | null;
+  offset_max: number | null;
+}
+
 function formatFitmentEngine(fitment: Fitment): string | null {
   return fitment.engine || null;
 }
@@ -109,7 +126,7 @@ function formatFitmentEngine(fitment: Fitment): string | null {
 
 const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
@@ -147,29 +164,32 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const isQueueMode = url.searchParams.get("from") === "fitment";
 
   // Base queries
-  const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).single();
+  const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).maybeSingle();
   const fitmentsQuery = db.from("vehicle_fitments").select("*, ymme_engine_id")
     .eq("product_id", productId)
     .order("make", { ascending: true })
     .order("model", { ascending: true })
     .order("year_from", { ascending: true });
+  const wheelFitmentsQuery = db.from("wheel_fitments")
+    .select("pcd, diameter, width, center_bore, offset_min, offset_max")
+    .eq("product_id", productId)
+    .eq("shop_id", shopId);
 
-  // Queue mode: also fetch progress stats and next product
+  // Queue mode: also fetch progress stats and next product (exclude staged)
   const totalQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId)
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged")
     : null;
   const unmappedQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"])
     : null;
-  // Get next product needing review AFTER the current one (by ID sort order)
-  // Includes both unmapped and flagged products
   const nextQuery = isQueueMode
-    ? db.from("products").select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
     : null;
 
-  const [productResult, fitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
+  const [productResult, fitmentsResult, wheelFitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
     productQuery,
     fitmentsQuery,
+    wheelFitmentsQuery,
     totalQuery ?? Promise.resolve({ count: 0 }),
     unmappedQuery ?? Promise.resolve({ count: 0 }),
     nextQuery ?? Promise.resolve({ data: null }),
@@ -211,15 +231,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   let queueData: { totalProducts: number; unmappedCount: number; nextProductId: string | null } | null = null;
   if (isQueueMode) {
     queueData = {
-      totalProducts: (totalResult as any).count ?? 0,
-      unmappedCount: (unmappedResult as any).count ?? 0,
-      nextProductId: (nextResult as any).data?.id ?? null,
+      totalProducts: (totalResult as { count: number | null }).count ?? 0,
+      unmappedCount: (unmappedResult as { count: number | null }).count ?? 0,
+      nextProductId: (nextResult as { data: { id: string } | null }).data?.id ?? null,
     };
   }
 
   return {
     product: productResult.data as Product,
     fitments,
+    wheelFitments: (wheelFitmentsResult.data ?? []) as WheelFitment[],
     shopDomain: shopId,
     queueData,
   };
@@ -236,6 +257,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const intent = formData.get("_action") as string;
 
   if (intent === "add_fitment") {
+    // Plan gate: check fitment limit
+    try {
+      await assertFitmentLimit(shopId);
+    } catch (err: unknown) {
+      if (err instanceof BillingGateError) {
+        return { error: err.message };
+      }
+      throw err;
+    }
+
     const make = formData.get("make") as string;
     const model = formData.get("model") as string;
     const variant = (formData.get("variant") as string) || null;
@@ -256,7 +287,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       shop_id: shopId,
       make, model, variant,
       year_from: yearFrom, year_to: yearTo,
-      engine, engine_code: engineCode, fuel_type: fuelType,
+      engine: engine ? engine.replace(/\s*\[[0-9a-f]{8}\]$/, "") : engine,
+      engine_code: engineCode, fuel_type: fuelType,
       extraction_method: method,
       confidence_score: confidence,
     });
@@ -268,23 +300,48 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { data: currentProduct } = await db
       .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).single();
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
 
-    if (currentProduct?.fitment_status === "unmapped") {
+    // Update fitment_status: manual mapping always sets manual_mapped,
+    // other methods set auto_mapped if currently unmapped
+    const newStatus = method === "manual" ? "manual_mapped" :
+      (currentProduct?.fitment_status === "unmapped" ? "auto_mapped" : currentProduct?.fitment_status);
+
+    if (newStatus && newStatus !== currentProduct?.fitment_status) {
       await db.from("products")
-        .update({ fitment_status: method === "manual" ? "manual_mapped" : "auto_mapped", updated_at: new Date().toISOString() })
+        .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    // Find next unmapped product AFTER the current one
+    // Update tenant fitment count from actual DB count
+    const { count: fitmentCount } = await db
+      .from("vehicle_fitments")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId);
+    await db.from("tenants")
+      .update({ fitment_count: fitmentCount ?? 0, updated_at: new Date().toISOString() })
+      .eq("shop_id", shopId);
+
+    // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterAdd } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
   }
 
   if (intent === "add_suggestion") {
+    // Plan gate: check fitment limit
+    try {
+      await assertFitmentLimit(shopId);
+    } catch (err: unknown) {
+      if (err instanceof BillingGateError) {
+        return { error: err.message };
+      }
+      throw err;
+    }
+
     const make = formData.get("make") as string;
     const model = formData.get("model") as string;
     const engineName = (formData.get("engine_name") as string) || null;
@@ -305,7 +362,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       shop_id: shopId,
       make, model, variant,
       year_from: yearFrom, year_to: yearTo,
-      engine: engineName, engine_code: engineCode, fuel_type: fuelType,
+      engine: engineName ? engineName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : engineName,
+      engine_code: engineCode, fuel_type: fuelType,
       ymme_engine_id: ymmeEngineId,
       extraction_method: "smart",
       confidence_score: confidence,
@@ -318,7 +376,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     const { data: currentProduct } = await db
       .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).single();
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
 
     if (currentProduct?.fitment_status === "unmapped" || currentProduct?.fitment_status === "flagged") {
       await db.from("products")
@@ -326,9 +384,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         .eq("id", productId).eq("shop_id", shopId);
     }
 
-    // Find next unmapped product AFTER the current one
+    // Find next unmapped product AFTER the current one (exclude staged)
     const { data: nextAfterSuggest } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
@@ -364,7 +423,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .eq("id", productId).eq("shop_id", shopId);
 
     const { data: nextProduct } = await db.from("products")
-      .select("id").eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"])
+      .select("id").eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
 
     return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
@@ -381,14 +441,82 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return { success: true, message: "Status updated" };
   }
 
+  if (intent === "update_product") {
+    const updates: Record<string, unknown> = {};
+    const title = formData.get("title") as string | null;
+    const description = formData.get("description") as string | null;
+    const price = formData.get("price") as string | null;
+    const sku = formData.get("sku") as string | null;
+    const vendor = formData.get("vendor") as string | null;
+    const imageUrl = formData.get("image_url") as string | null;
+
+    if (title !== null) updates.title = title;
+    if (description !== null) updates.description = description;
+    if (price !== null) updates.price = price ? parseFloat(price) : null;
+    if (sku !== null) updates.sku = sku || null;
+    if (vendor !== null) updates.vendor = vendor || null;
+    if (imageUrl !== null) updates.image_url = imageUrl || null;
+
+    if (Object.keys(updates).length === 0) return { error: "No fields to update" };
+
+    updates.updated_at = new Date().toISOString();
+    // Also update handle if title changed
+    if (updates.title) {
+      updates.handle = String(updates.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    }
+
+    const { error: updateError } = await db
+      .from("products")
+      .update(updates)
+      .eq("id", productId).eq("shop_id", shopId);
+
+    if (updateError) return { error: `Failed to update: ${updateError.message}` };
+    return { success: true, message: "Product updated successfully" };
+  }
+
+  if (intent === "approve_to_catalog") {
+    // Clean up data before adding to catalog
+    const updates: Record<string, unknown> = {
+      status: "active",
+      updated_at: new Date().toISOString(),
+    };
+    // Fix vendor if it's a raw API path (e.g. /manufacturers/1.json)
+    const { data: currentProduct } = await db.from("products")
+      .select("vendor, product_type, description")
+      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
+    if (currentProduct?.vendor?.includes("/manufacturers/") || currentProduct?.vendor?.includes(".json")) {
+      updates.vendor = null;
+    }
+    // Fix product_type if it's a numeric ID
+    if (currentProduct?.product_type && /^\d+$/.test(currentProduct.product_type)) {
+      updates.product_type = null;
+    }
+    // Decode HTML entities in description
+    if (currentProduct?.description && /&[a-z]+;|&nbsp;/i.test(currentProduct.description)) {
+      updates.description = currentProduct.description
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+        .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    const { error: approveError } = await db
+      .from("products")
+      .update(updates)
+      .eq("id", productId).eq("shop_id", shopId);
+
+    if (approveError) return { error: "Failed to approve" };
+    return { success: true, message: "Product approved and added to catalog" };
+  }
+
   return { error: "Unknown action" };
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, shopDomain, queueData } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const { product, fitments, wheelFitments, shopDomain, queueData } = useLoaderData<typeof loader>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean; skipped?: boolean; nextProductId?: string } | undefined;
   const submit = useSubmit();
   const navigation = useNavigation();
   const navigate = useNavigate();
@@ -396,12 +524,23 @@ export default function ProductDetails() {
   const isSubmitting = navigation.state === "submitting";
 
   const isQueueMode = searchParams.get("from") === "fitment";
+  const isStaged = product.status === "staged"; // Provider imports — show data only, no fitment mapping
 
   // Suggestion system
-  const suggestionFetcher = useFetcher();
+  const suggestionFetcher = useFetcher<{ suggestions?: Array<Record<string, unknown>>; hints?: string[]; diagnostics?: string[] }>();
   const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [showAllSuggestions, setShowAllSuggestions] = useState(false);
-  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(new Set());
+  // Pre-populate accepted suggestions from existing fitments so we don't show duplicates
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(() => {
+    const existing = new Set<string>();
+    for (const f of fitments) {
+      // Build a key that matches the suggestion key format: makeId|modelId|engineId
+      // Since fitments store names not IDs, use name-based keys as fallback
+      const key = `${f.make}|${f.model || ""}|${f.engine_code || f.engine || ""}`;
+      existing.add(key);
+    }
+    return existing;
+  });
 
   // Add fitment form state
   const [vehicleSelection, setVehicleSelection] = useState<VehicleSelection | null>(null);
@@ -410,10 +549,12 @@ export default function ProductDetails() {
   const [statusValue, setStatusValue] = useState(product.fitment_status);
   const [showDescription, setShowDescription] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
+  const [showProviderExpanded, setShowProviderExpanded] = useState(false);
 
-  // Auto-fetch suggestions when product changes
+  // Auto-fetch suggestions when product changes (only for non-staged products, not wheels)
+  const isWheelProduct = product.product_category === "wheels";
   useEffect(() => {
-    if (product.title) {
+    if (product.title && !isStaged && !isWheelProduct) {
       suggestionFetcher.submit(
         JSON.stringify({
           title: product.title,
@@ -428,11 +569,11 @@ export default function ProductDetails() {
       setSuggestionsLoaded(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }, [product.id, isStaged, isWheelProduct]);
 
-  const suggestions = (suggestionFetcher.data as any)?.suggestions ?? [];
-  const hints = (suggestionFetcher.data as any)?.hints ?? [];
-  const diagnostics: string[] = (suggestionFetcher.data as any)?.diagnostics ?? [];
+  const suggestions = suggestionFetcher.data?.suggestions ?? [];
+  const hints = suggestionFetcher.data?.hints ?? [];
+  const diagnostics: string[] = suggestionFetcher.data?.diagnostics ?? [];
   const suggestionsLoading = suggestionFetcher.state === "submitting" || suggestionFetcher.state === "loading";
 
   const handleVehicleChange = useCallback(
@@ -519,10 +660,9 @@ export default function ProductDetails() {
   // Queue mode: navigate to next product after skip action
   useEffect(() => {
     if (!isQueueMode || !actionData) return;
-    const data = actionData as any;
-    if (data.skipped && data.nextProductId) {
-      navigate(`/app/products/${data.nextProductId}?from=fitment`);
-    } else if (data.skipped && !data.nextProductId) {
+    if (actionData?.skipped && actionData?.nextProductId) {
+      navigate(`/app/products/${actionData.nextProductId}?from=fitment`);
+    } else if (actionData?.skipped && !actionData?.nextProductId) {
       navigate("/app/fitment/manual");
     }
   }, [actionData, isQueueMode, navigate]);
@@ -533,15 +673,53 @@ export default function ProductDetails() {
   const statusBadge = STATUS_BADGES[product.fitment_status] ?? STATUS_BADGES.unmapped;
 
   const cleanDescription = product.description
-    ? product.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
+    ? product.description
+        // 1. Decode HTML entities first (&lt; → <, &nbsp; → space, etc.)
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&apos;/g, "'")
+        // 2. Then strip HTML tags
+        .replace(/<[^>]*>/g, " ")
+        // 3. Clean up whitespace
+        .replace(/\s+/g, " ").trim()
     : null;
 
   const variants = Array.isArray(product.variants) ? product.variants : [];
   const tags = Array.isArray(product.tags) ? product.tags : [];
 
+  // Editable fields for staged products — populated with imported data
+  const [editTitle, setEditTitle] = useState(product.title);
+  const [editSku, setEditSku] = useState(product.sku || "");
+  const [editPrice, setEditPrice] = useState(product.price?.toString() || "");
+  const [editVendor, setEditVendor] = useState(product.vendor || "");
+  const [editDescription, setEditDescription] = useState(cleanDescription || "");
+  const [editImageUrl, setEditImageUrl] = useState(product.image_url || "");
+
   const availableSuggestions = suggestions.filter((s: any) => {
-    const key = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
-    return !acceptedSuggestions.has(key);
+    // Check against client-side accepted set (uses IDs from suggestion)
+    const idKey = `${s.make.id}|${s.model?.id || ""}|${s.engine?.id || ""}`;
+    if (acceptedSuggestions.has(idKey)) return false;
+
+    // Check against existing fitments (uses names from DB)
+    const nameKey = `${s.make.name}|${s.model?.name || ""}|${s.engine?.code || s.engine?.name || ""}`;
+    if (acceptedSuggestions.has(nameKey)) return false;
+
+    // Also check if any existing fitment matches this suggestion by make+model+engine
+    const alreadyMapped = fitments.some((f: any) => {
+      // Exact match on ymme_engine_id if both exist
+      if (f.ymme_engine_id && s.engine?.id && f.ymme_engine_id === s.engine.id) return true;
+      // Name-based match: make + model
+      const makeMatch = f.make?.toLowerCase() === s.make.name?.toLowerCase();
+      const modelMatch = f.model?.toLowerCase() === (s.model?.name || "").toLowerCase();
+      if (!makeMatch || !modelMatch) return false;
+      // If suggestion has no engine, make+model match is enough
+      if (!s.engine?.name && !s.engine?.code) return true;
+      // If suggestion has engine, check engine match too
+      const engineMatch =
+        (f.engine_code && s.engine?.code && f.engine_code.toLowerCase() === s.engine.code.toLowerCase()) ||
+        (f.engine && s.engine?.name && f.engine.toLowerCase() === s.engine.name.toLowerCase());
+      return engineMatch;
+    });
+    return !alreadyMapped;
   });
 
   const displayedSuggestions = showAllSuggestions ? availableSuggestions : availableSuggestions.slice(0, 5);
@@ -551,14 +729,29 @@ export default function ProductDetails() {
   const queuePercentage = queueData && queueData.totalProducts > 0
     ? Math.round((queueMapped / queueData.totalProducts) * 100)
     : 0;
-  const nextProductId = queueData?.nextProductId ?? (actionData as any)?.nextProductId ?? null;
+  const nextProductId = queueData?.nextProductId ?? actionData?.nextProductId ?? null;
 
   return (
     <Page
       fullWidth
       title={product.title}
-      backAction={{ onAction: () => navigate(isQueueMode ? "/app/fitment" : "/app/products") }}
-      titleMetadata={<Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>}
+      backAction={{ onAction: () => navigate(
+        isQueueMode ? "/app/fitment"
+          : product.provider_id ? `/app/providers/${product.provider_id}/products`
+          : "/app/products"
+      ) }}
+      titleMetadata={
+        <InlineStack gap="200">
+          <Badge tone={statusBadge.tone}>{statusBadge.label}</Badge>
+          {product.status === "staged" && <Badge tone="attention">Staged</Badge>}
+          {product.product_category === "wheels" && <Badge tone="info">Wheels</Badge>}
+        </InlineStack>
+      }
+      primaryAction={product.status === "staged" ? {
+        content: "Approve to Catalog",
+        icon: CheckCircleIcon,
+        onAction: () => submit({ _action: "approve_to_catalog" }, { method: "POST" }),
+      } : undefined}
       secondaryActions={isQueueMode ? [
         {
           content: "Skip",
@@ -596,19 +789,19 @@ export default function ProductDetails() {
         {actionData && "error" in actionData && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
-        {actionData && "success" in actionData && actionData.message && !((actionData as any).skipped) && (
+        {actionData && "success" in actionData && actionData.message && !(actionData?.skipped) && (
           <Layout.Section>
             <Banner tone="success">
               <p>
-                {(actionData as any).message}
-                {isQueueMode && (actionData as any).nextProductId && (
+                {actionData?.message}
+                {isQueueMode && actionData?.nextProductId && (
                   <>
                     {" "}
-                    <Link to={`/app/products/${(actionData as any).nextProductId}?from=fitment`}>
+                    <Link to={`/app/products/${actionData?.nextProductId}?from=fitment`}>
                       Map next product
                     </Link>
                   </>
@@ -662,11 +855,11 @@ export default function ProductDetails() {
                 <Divider />
 
                 {/* Key product details — responsive grid */}
-                <InlineGrid columns={{ xs: 2, sm: 3, md: 4, lg: 6 }} gap="400">
+                <InlineGrid columns={{ xs: 2, sm: 3, md: 5 }} gap="400">
                   {product.vendor && (
                     <BlockStack gap="050">
                       <Text as="span" variant="bodySm" tone="subdued">Vendor</Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{product.vendor}</Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold" truncate>{product.vendor}</Text>
                     </BlockStack>
                   )}
                   {product.price && (
@@ -674,7 +867,7 @@ export default function ProductDetails() {
                       <Text as="span" variant="bodySm" tone="subdued">Price</Text>
                       <InlineStack gap="100" blockAlign="center">
                         <Text as="span" variant="bodyMd" fontWeight="semibold">{fmtPrice(product.price)}</Text>
-                        {product.compare_at_price && (
+                        {product.compare_at_price != null && product.compare_at_price > 0 && (
                           <Text as="span" variant="bodySm" tone="subdued" textDecorationLine="line-through">
                             {formatPrice(product.compare_at_price)}
                           </Text>
@@ -748,8 +941,165 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>
 
-            {/* ── Smart Suggestions Card ── */}
-            <Card>
+            {/* ── Imported Product Data — for staged provider products ── */}
+            {isStaged && (
+              <Card>
+                <form
+                  method="POST"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const fd = new FormData(e.currentTarget);
+                    fd.set("_action", "update_product");
+                    submit(fd, { method: "POST" });
+                  }}
+                >
+                  <BlockStack gap="400">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ProductIcon} />
+                      <Text as="h2" variant="headingMd" fontWeight="semibold">Imported Product Data</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">— review and edit before approving</Text>
+                    </InlineStack>
+
+                    {/* Image preview + Title */}
+                    <InlineStack gap="400" blockAlign="start" wrap={false}>
+                      {product.image_url && (
+                        <div style={{ flexShrink: 0 }}>
+                          <Thumbnail source={product.image_url} alt={product.title} size="large" />
+                        </div>
+                      )}
+                      <BlockStack gap="200" inlineAlign="stretch">
+                        <TextField label="Title" name="title" value={editTitle} onChange={setEditTitle} autoComplete="off" />
+                        <InlineGrid columns={3} gap="200">
+                          <TextField label="SKU" name="sku" value={editSku} onChange={setEditSku} autoComplete="off" />
+                          <TextField label="Price" name="price" value={editPrice} onChange={setEditPrice} type="number" autoComplete="off" />
+                          <TextField label="Vendor" name="vendor" value={editVendor} onChange={setEditVendor} autoComplete="off" />
+                        </InlineGrid>
+                      </BlockStack>
+                    </InlineStack>
+
+                    <Divider />
+
+                    {/* Full Description */}
+                    <TextField
+                      label="Description"
+                      name="description"
+                      value={editDescription}
+                      onChange={setEditDescription}
+                      multiline={6}
+                      autoComplete="off"
+                      helpText="The extraction engine scans this for vehicle makes, models, and years"
+                    />
+
+                    {/* Tags if present */}
+                    {product.tags && (typeof product.tags === "string" ? product.tags.trim() : (product.tags as string[]).length > 0) && (
+                      <>
+                        <Divider />
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Tags</Text>
+                          <InlineStack gap="200" wrap>
+                            {(Array.isArray(product.tags)
+                              ? product.tags
+                              : typeof product.tags === "string"
+                                ? product.tags.split(",").map((t: string) => t.trim()).filter(Boolean)
+                                : []
+                            ).map((t: string) => (
+                              <Tag key={t}>{t}</Tag>
+                            ))}
+                          </InlineStack>
+                        </BlockStack>
+                      </>
+                    )}
+
+                    {/* Image URL editable */}
+                    <TextField label="Image URL" name="image_url" value={editImageUrl} onChange={setEditImageUrl} autoComplete="off" />
+
+                    {/* Product type + weight */}
+                    <InlineGrid columns={2} gap="200">
+                      {product.product_type && (
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Product Type</Text>
+                          <Text as="span" variant="bodyMd">{product.product_type}</Text>
+                        </BlockStack>
+                      )}
+                      {product.cost_price && (
+                        <BlockStack gap="100">
+                          <Text as="span" variant="bodySm" tone="subdued">Cost Price</Text>
+                          <Text as="span" variant="bodyMd">${Number(product.cost_price).toFixed(2)}</Text>
+                        </BlockStack>
+                      )}
+                    </InlineGrid>
+
+                    <Divider />
+                    <InlineStack align="end" gap="200">
+                      <Button submit>Save Changes</Button>
+                      <Button
+                        variant="primary"
+                        icon={CheckCircleIcon}
+                        onClick={() => submit({ _action: "approve_to_catalog" }, { method: "POST" })}
+                      >
+                        Approve to Catalog
+                      </Button>
+                    </InlineStack>
+                  </BlockStack>
+                </form>
+              </Card>
+            )}
+
+            {/* ── Wheel Specifications Card — shown for wheel products with wheel fitments ── */}
+            {!isStaged && product.product_category === "wheels" && wheelFitments.length > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={ConnectIcon} color="var(--p-color-icon-info)" />
+                    <Text as="h2" variant="headingMd" fontWeight="semibold">Wheel Specifications</Text>
+                    <Badge tone="info">{`${wheelFitments.length} PCD${wheelFitments.length !== 1 ? "s" : ""}`}</Badge>
+                  </InlineStack>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid var(--p-color-border-secondary)" }}>
+                          {["PCD", "Diameter", "Width", "Center Bore", "Offset Range"].map((h) => (
+                            <th key={h} style={{ textAlign: "left", padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {wheelFitments.map((wf, i) => (
+                          <tr key={i} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">{wf.pcd || "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.diameter ? `${wf.diameter}"` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.width ? `${wf.width}J` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">{wf.center_bore ? `${wf.center_bore}mm` : "—"}</Text>
+                            </td>
+                            <td style={{ padding: "var(--p-space-200) var(--p-space-300)" }}>
+                              <Text as="span" variant="bodyMd">
+                                {wf.offset_min != null && wf.offset_max != null
+                                  ? wf.offset_min === wf.offset_max
+                                    ? `ET${wf.offset_min}`
+                                    : `ET${wf.offset_min}–${wf.offset_max}`
+                                  : "—"}
+                              </Text>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* ── Smart Suggestions Card — hidden for staged provider products and wheel products ── */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -849,10 +1199,10 @@ export default function ProductDetails() {
                   </BlockStack>
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
 
-            {/* Current Fitments Card */}
-            <Card>
+            {/* Current Fitments Card — hidden for staged provider products and wheel products */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -944,10 +1294,10 @@ export default function ProductDetails() {
                   />
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
 
-            {/* Manual Add Fitment Card — collapsible */}
-            <Card>
+            {/* Manual Add Fitment Card — hidden for staged provider products and wheel products */}
+            {!isStaged && product.product_category !== "wheels" && <Card>
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
@@ -1020,14 +1370,14 @@ export default function ProductDetails() {
                   </>
                 )}
               </BlockStack>
-            </Card>
+            </Card>}
           </BlockStack>
         </Layout.Section>
 
-        {/* ── Right Sidebar ── */}
+        {/* ── Right Sidebar — hidden entirely for staged provider products ── */}
+        {!isStaged && (
         <Layout.Section variant="oneThird">
           <BlockStack gap="400">
-            {/* Status Card */}
             <Card>
               <BlockStack gap="300">
                 <InlineStack gap="200" blockAlign="center">
@@ -1145,6 +1495,8 @@ export default function ProductDetails() {
               </BlockStack>
             </Card>
 
+            {/* Provider Data moved to main column (full-width, bottom of page) */}
+
             {/* Shopify Link Card */}
             {product.shopify_product_id && (
               <Card>
@@ -1155,7 +1507,7 @@ export default function ProductDetails() {
                   </InlineStack>
                   <Button
                     fullWidth
-                    onClick={() => window.open(`https://${shopDomain}/admin/products/${product.shopify_product_id}`, "_blank")}
+                    url={`shopify://admin/products/${product.shopify_product_id}`}
                   >
                     View on Shopify
                   </Button>
@@ -1164,7 +1516,70 @@ export default function ProductDetails() {
             )}
           </BlockStack>
         </Layout.Section>
+        )}
       </Layout>
+
+      {/* Provider Data — full-width at bottom for reference */}
+      {product.raw_data && typeof product.raw_data === "object" && Object.keys(product.raw_data as Record<string, unknown>).length > 0 && (
+        <Card>
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="center">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={ConnectIcon} />
+                <Text as="h2" variant="headingSm" fontWeight="semibold">
+                  {`Provider Data (${Object.keys(product.raw_data as Record<string, unknown>).length} fields)`}
+                </Text>
+              </InlineStack>
+              <Button variant="plain" onClick={() => setShowProviderExpanded(!showProviderExpanded)}>
+                {showProviderExpanded ? "Hide" : "Show"}
+              </Button>
+            </InlineStack>
+            {showProviderExpanded && (
+              <div style={{ borderRadius: "var(--p-border-radius-200)", border: "1px solid var(--p-color-border-secondary)", maxHeight: "500px", overflowY: "auto" }}>
+                <BlockStack gap="0">
+                  {Object.entries(product.raw_data as Record<string, unknown>)
+                    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+                    .filter(([, v]) => typeof v !== "object")
+                    .sort(([a], [b]) => {
+                      const priority = ["name", "code", "desc", "short_desc", "description", "image", "price", "price_normal", "cost_price", "status", "weight"];
+                      const ai = priority.indexOf(a);
+                      const bi = priority.indexOf(b);
+                      if (ai !== -1 && bi !== -1) return ai - bi;
+                      if (ai !== -1) return -1;
+                      if (bi !== -1) return 1;
+                      return a.localeCompare(b);
+                    })
+                    .map(([key, value], i) => {
+                      let display = String(value)
+                        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                        .replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+                        .replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+                      if (display.length > 300) display = display.slice(0, 300) + "…";
+                      return (
+                        <div key={key} style={{
+                          display: "grid",
+                          gridTemplateColumns: "180px 1fr",
+                          gap: "var(--p-space-200)",
+                          padding: "var(--p-space-150) var(--p-space-300)",
+                          borderBottom: "1px solid var(--p-color-border-secondary)",
+                          background: i % 2 === 0 ? undefined : "var(--p-color-bg-surface-secondary)",
+                        }}>
+                          <Text as="span" variant="bodySm" fontWeight="semibold" tone="subdued">{key}</Text>
+                          <Text as="span" variant="bodySm" breakWord>{display}</Text>
+                        </div>
+                      );
+                    })}
+                </BlockStack>
+              </div>
+            )}
+          </BlockStack>
+        </Card>
+      )}
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Product Details" />;
 }

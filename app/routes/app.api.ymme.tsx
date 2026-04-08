@@ -84,12 +84,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const modelYearTo = model?.year_to ?? new Date().getFullYear();
 
       // Get distinct year ranges from engines for this model
+      // Only select year_from and year_to (no other columns) to minimize data transfer
+      // Supabase doesn't support SQL DISTINCT on specific columns, but limiting to
+      // just 2 columns keeps the response small even for models with many engines
       const { data: engines, error } = await db
         .from("ymme_engines")
         .select("year_from, year_to")
         .eq("model_id", modelId)
         .eq("active", true)
-        .not("year_from", "is", null); // Skip engines with null year_from
+        .not("year_from", "is", null)
+        .limit(500); // Cap at 500 — no model has more distinct year ranges than this
 
       if (error) {
         return data({ error: error.message }, { status: 500 });
@@ -184,17 +188,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return data({ engines: dedupedEngines });
     }
 
+    case "engine_spec": {
+      const engineId = url.searchParams.get("engine_id");
+      if (!engineId) {
+        return data({ error: "Missing engine_id" }, { status: 400 });
+      }
+      const { data: spec, error: specError } = await db
+        .from("ymme_vehicle_specs")
+        .select("*")
+        .eq("engine_id", engineId)
+        .maybeSingle();
+      if (specError) {
+        return data({ error: specError.message }, { status: 500 });
+      }
+      return data({ spec });
+    }
+
     default:
       return data(
-        { error: `Unknown level: '${level}'. Use: makes, models, years, engines` },
+        { error: `Unknown level: '${level}'. Use: makes, models, years, engines, engine_spec` },
         { status: 400 },
       );
   }
 }
 
-// ── Action: backfill logos for makes with null logo_url ──
+// ── Action: backfill logos for makes with null logo_url (admin-only) ──
 export async function action({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
+
+  // Admin guard: only admin shops can modify global YMME data
+  const { isAdminShop } = await import("../lib/admin.server");
+  if (!isAdminShop(session.shop)) {
+    return data({ error: "Admin access required" }, { status: 403 });
+  }
+
   const formData = await request.formData();
   const intent = formData.get("intent");
 

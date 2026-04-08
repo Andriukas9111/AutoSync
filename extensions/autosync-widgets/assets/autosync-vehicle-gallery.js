@@ -43,13 +43,14 @@
     }
 
     
-    function svgEl(html) {
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      return tmp.firstChild;
+    // SVG parser for hardcoded icon markup only (never used with API data)
+    function svgEl(svgMarkup) {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+      return doc.documentElement;
     }
 
-    var PER_PAGE = 18;
+    var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
     var currentPage = 1;
     var currentVehicles = [];
 
@@ -81,10 +82,10 @@
       if (vehicles.length > PER_PAGE) {
         var wrap = document.createElement('div');
         wrap.setAttribute('data-avs-load-more', '');
-        wrap.style.cssText = 'text-align:center;padding:24px 0;grid-column:1/-1;';
+        wrap.classList.add('avs-load-more-wrap');
         var btn = document.createElement('button');
         btn.textContent = 'Show More (' + (vehicles.length - PER_PAGE) + ' remaining)';
-        btn.style.cssText = 'background:var(--avs-primary,#2563eb);color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;';
+        btn.classList.add('avs-load-more-btn');
         btn.onclick = function() {
           currentPage++;
           var s = (currentPage - 1) * PER_PAGE;

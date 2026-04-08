@@ -30,16 +30,16 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getPlanLimits, getTenant, PLAN_LIMITS } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getPlanLimits, getTenant, getSerializedPlanLimits, assertFeature, BillingGateError, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
 import { OperationProgress } from "../components/OperationProgress";
-import { SkeletonCard } from "../components/SkeletonCard";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -50,56 +50,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   // Run ALL queries in parallel — including tenant lookup
-  const [tenant, collectionsResult, appSettingsResult] = await Promise.all([
+  // ALL queries in single Promise.all for maximum parallelism
+  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult] = await Promise.all([
     getTenant(shopId),
-    db.from("collection_mappings")
-      .select("*")
-      .eq("shop_id", shopId)
-      .order("created_at", { ascending: false }),
-    db.from("app_settings")
-      .select("*")
-      .eq("shop_id", shopId)
-      .maybeSingle(),
+    paginatedSelect("collection_mappings", "*", (q) =>
+      q.eq("shop_id", shopId).order("created_at", { ascending: false })
+    ).then((rows) => ({ data: rows, error: null })),
+    db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
+    // Make/model counts — run in parallel instead of sequential
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000),
+    db.from("vehicle_fitments").select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
   ]);
 
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   if (collectionsResult.error) {
     console.error("Collection mappings query error:", collectionsResult.error);
   }
 
-  // Count unique combos by querying DB with pagination (avoids 1000-row limit)
-  const allFitments: Array<{ make: string; model: string; year_from: number | null; year_to: number | null }> = [];
-  let fitOffset = 0;
-  while (true) {
-    const { data: batch } = await db.from("vehicle_fitments")
-      .select("make, model, year_from, year_to")
-      .eq("shop_id", shopId)
-      .not("make", "is", null)
-      .not("model", "is", null)
-      .range(fitOffset, fitOffset + 999);
-    if (!batch || batch.length === 0) break;
-    allFitments.push(...(batch as typeof allFitments));
-    fitOffset += batch.length;
-    if (batch.length < 1000) break;
-  }
+  const makesData = (makesResult.data ?? []) as { make: string }[];
+  const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
 
-  const uniqueMakes = [...new Set(allFitments.map(f => f.make))];
-  const uniqueMakeModels = [...new Set(allFitments.map(f => `${f.make}|${f.model}`))];
+  const makeModelData = (makeModelResult.data ?? []) as { make: string; model: string }[];
+  const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
+  // For year combos, reuse the makeModel data (already paginated)
   const uniqueMakeModelYears = [...new Set(
-    allFitments
-      .filter(f => f.year_from)
-      .map(f => {
-        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
-        return `${f.make}|${f.model}|${yr}`;
-      })
+    makeModelData
+      .filter((f) => f.make && f.model)
+      .map((f) => `${f.make}|${f.model}`)
   )];
 
   return {
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     collections: collectionsResult.data ?? [],
     appSettings: appSettingsResult.data,
     uniqueMakes,
@@ -117,12 +102,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
+  // Plan gate: smartCollections feature required
+  try {
+    await assertFeature(shopId, "smartCollections");
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
+
   const formData = await request.formData();
   const _action = formData.get("_action");
 
   if (_action === "save_collection_settings") {
     const collectionStrategy = formData.get("collection_strategy") as string || "make";
     const autoCreateCollections = formData.get("auto_create_collections") === "true";
+
+    // Enforce collection strategy level based on plan
+    const tenant = await getTenant(shopId);
+    const limits = getPlanLimits(getEffectivePlan(tenant as any));
+    const allowedLevel = limits.features.smartCollections; // false | "make" | "make_model" | "full"
+    const strategyLevels: Record<string, number> = { make: 1, make_model: 2, make_model_year: 3 };
+    const allowedLevels: Record<string, number> = { make: 1, make_model: 2, full: 3 };
+    const requestedLevel = strategyLevels[collectionStrategy] ?? 1;
+    const maxLevel = typeof allowedLevel === "string" ? (allowedLevels[allowedLevel] ?? 0) : 0;
+    if (requestedLevel > maxLevel) {
+      return data({ error: `Your ${getEffectivePlan(tenant as any)} plan allows "${allowedLevel}" collection strategy. "${collectionStrategy}" requires a higher plan.` }, { status: 403 });
+    }
 
     // Upsert app_settings
     const { data: existing } = await db
@@ -197,16 +204,18 @@ export default function Collections() {
     loaderError,
   } = useLoaderData<typeof loader>();
 
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const pageLoading = navigation.state === "loading";
 
   const [strategy, setStrategy] = useState<string>(
     appSettings?.collection_strategy ?? "make"
   );
   const [autoCreate, setAutoCreate] = useState<boolean>(
-    appSettings?.auto_create_collections ?? false
+    limits.features.smartCollections
+      ? (appSettings?.auto_create_collections ?? false)
+      : false
   );
 
   // Live stats + active jobs polling
@@ -310,7 +319,7 @@ export default function Collections() {
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
@@ -325,7 +334,7 @@ export default function Collections() {
         {showSuccess && (
           <Layout.Section>
             <Banner tone="success">
-              <p>{(actionData as any).message}</p>
+              <p>{actionData?.message}</p>
             </Banner>
           </Layout.Section>
         )}
@@ -374,15 +383,12 @@ export default function Collections() {
                   limits={limits}
                   allLimits={allLimits}
                 >
-                  <BlockStack gap="200">
-                    <InlineStack gap="200" blockAlign="center">
-                      <Badge tone="info">Professional+</Badge>
-                      <Text as="span" variant="bodyMd">
-                        SEO titles, descriptions, and images are included with
-                        collections on your plan.
-                      </Text>
-                    </InlineStack>
-                  </BlockStack>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Badge tone="success" size="small">Included</Badge>
+                    <Text as="span" variant="bodySm" tone="subdued">
+                      SEO titles, descriptions, and images are included with collections on your plan.
+                    </Text>
+                  </InlineStack>
                 </PlanGate>
               </BlockStack>
             </Card>
@@ -391,11 +397,9 @@ export default function Collections() {
 
         {/* Collection Preview stat bar */}
         <Layout.Section>
-          {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
           <Card padding="0">
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              ...autoFitGridStyle("120px", "8px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[
@@ -422,7 +426,6 @@ export default function Collections() {
               ))}
             </div>
           </Card>
-          )}
         </Layout.Section>
 
 
@@ -444,14 +447,9 @@ export default function Collections() {
           </Layout.Section>
         )}
 
-        {/* Save Button */}
-        <Layout.Section>
-          <PlanGate
-            feature="smartCollections"
-            currentPlan={plan}
-            limits={limits}
-            allLimits={allLimits}
-          >
+        {/* Save Button — only shown when smartCollections is unlocked */}
+        {limits.features.smartCollections && (
+          <Layout.Section>
             <Form method="post">
               <input type="hidden" name="_action" value="save_collection_settings" />
               <input type="hidden" name="collection_strategy" value={strategy} />
@@ -464,8 +462,8 @@ export default function Collections() {
                 Save Collection Settings
               </Button>
             </Form>
-          </PlanGate>
-        </Layout.Section>
+          </Layout.Section>
+        )}
 
         {/* Existing Collections */}
         <Layout.Section>
@@ -559,4 +557,9 @@ export default function Collections() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Collections" />;
 }

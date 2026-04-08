@@ -32,20 +32,17 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getPlanLimits, getTenant, assertFeature, PLAN_LIMITS } from "../lib/billing.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
+import { getPlanLimits, getTenant, assertFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
-import { pushToShopify } from "../lib/pipeline/push.server";
-import { createSmartCollections } from "../lib/pipeline/collections.server";
 import { ensureMetafieldDefinitions } from "../lib/pipeline/metafield-definitions.server";
 import { OperationProgress } from "../components/OperationProgress";
-import { getJobProgressLabel, getJobCompletionMessage } from "../lib/design";
+import { getJobProgressLabel, getJobCompletionMessage, isBannerDismissed, dismissBanner, formatJobType, formatDate, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { SkeletonCard } from "../components/SkeletonCard";
-import { formatJobType, statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
 import type { PlanTier, CollectionStrategy } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -103,13 +100,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(10),
   ]);
 
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   return {
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     productsWithFitments: fitmentCountResult.count ?? 0,
     pushedCount: pushedCountResult.count ?? 0,
     collectionCount: collectionCountResult.count ?? 0,
@@ -195,16 +192,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
-    .not("fitment_status", "eq", "unmapped");
+    .in("fitment_status", ["smart_mapped", "auto_mapped", "manual_mapped"]);
 
-  // Create push job — Edge Function will process it
+  // Helper to fire Edge Function (fire-and-forget)
+  const fireEdgeFunction = (jobId: string) => triggerEdgeFunction(jobId, shopId);
+
+  // Create push job + fire Edge Function immediately
   if (pushTags || pushMetafields) {
-    const { error: jobError } = await db
+    const { data: pushJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "push",
-        status: "running",
+        status: "pending",
         progress: 0,
         total_items: mappedCount ?? 0,
         processed_items: 0,
@@ -214,30 +214,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           pushMetafields,
           autoActivateMakes,
         }),
-      });
+      })
+      .select("id")
+      .single();
 
     if (jobError) {
       return data({ error: "Failed to create push job" }, { status: 500 });
     }
+    if (pushJob) fireEdgeFunction(pushJob.id);
   }
 
-  // Create collections job — Edge Function will process it
+  // Create collections job + fire Edge Function immediately
   if (createCollections) {
     // Estimate total collections needed for the progress bar
     const { count: existingCollections } = await db
       .from("collection_mappings")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId);
-    // Use existing count as starting estimate — Edge Function will set accurate total on first tick
-    // NEVER use mappedCount here — that's product count, not collection count
-    const estimatedTotal = (existingCollections ?? 0) + 50; // +50 for expected new ones
+    const estimatedTotal = (existingCollections ?? 0) + 50;
 
-    const { error: jobError } = await db
+    const { data: colJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
         type: "collections",
-        status: "running",
+        status: "pending",
         progress: 0,
         total_items: estimatedTotal,
         processed_items: 0,
@@ -246,14 +247,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           strategy,
           seoEnabled,
         }),
-      });
+      })
+      .select("id")
+      .single();
 
     if (jobError) {
       return data({ error: "Failed to create collections job" }, { status: 500 });
     }
+    if (colJob) fireEdgeFunction(colJob.id);
   }
 
-  // Return immediately — Edge Function does the work
+  // Return immediately — Edge Function processes in background
   return data({
     success: true,
     jobCreated: true,
@@ -272,19 +276,6 @@ const JOB_STATUS_BADGES: Record<string, { tone: "success" | "info" | "warning" |
   cancelled: { tone: "warning", label: "Cancelled" },
 };
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "Never";
-  const d = new Date(dateStr);
-  return d.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-// formatJobType imported from ../lib/design
 
 
 // ---------------------------------------------------------------------------
@@ -305,19 +296,29 @@ export default function Push() {
     pushHistory,
   } = useLoaderData<typeof loader>();
 
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const pageLoading = navigation.state === "loading";
 
   // Form state — initialize ALL settings from saved app_settings
-  const [pushTags, setPushTags] = useState(appSettings?.push_tags ?? true);
-  const [pushMetafields, setPushMetafields] = useState(appSettings?.push_metafields ?? true);
+  // Premium features: only restore saved state if the plan supports the feature.
+  // If the plan doesn't include a feature, force it OFF — user can't toggle it.
+  const [pushTags, setPushTags] = useState(
+    limits.features.pushTags ? (appSettings?.push_tags ?? false) : false,
+  );
+  const [pushMetafields, setPushMetafields] = useState(
+    limits.features.pushMetafields ? (appSettings?.push_metafields ?? false) : false,
+  );
   const [createCollectionsChecked, setCreateCollectionsChecked] = useState(
-    appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false,
+    limits.features.smartCollections
+      ? (appSettings?.push_collections ?? appSettings?.auto_create_collections ?? false)
+      : false,
   );
   const [strategy, setStrategy] = useState<string>(appSettings?.collection_strategy ?? "make");
-  const [seoEnabled, setSeoEnabled] = useState(appSettings?.push_collections ?? false);
+  const [seoEnabled, setSeoEnabled] = useState(
+    limits.features.collectionSeoImages ? (appSettings?.push_collections ?? false) : false,
+  );
   const [autoActivateMakes, setAutoActivateMakes] = useState(true);
 
   const nothingSelected = !pushTags && !pushMetafields && !createCollectionsChecked;
@@ -328,14 +329,15 @@ export default function Push() {
 
   // Don't show "completed" banner when job was just created — the progress bar shows status
   const isJobCreated = actionData && "jobCreated" in actionData;
-  const showResults = actionData && "success" in actionData && actionData.success && !isJobCreated;
   const showError = actionData && "error" in actionData;
 
   // Unified data — ALL live stats from one source (useAppData)
   const { stats: liveStats, activeJobs, jobs: allJobs } = useAppData(undefined, 3000);
-  const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "collections") ?? null;
+  const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "bulk_push" || j.type === "collections") ?? null;
   const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
-  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(false);
+  // Use job-specific key so dismissing one push doesn't suppress future ones
+  const completedPushKey = completedPush ? `push_complete_${completedPush.id}` : "push_complete";
+  const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(() => isBannerDismissed(completedPushKey));
 
   const isJobRunning = !!activeJob;
 
@@ -364,7 +366,7 @@ export default function Push() {
         {(isSubmitting || isJobRunning) && (
           <Layout.Section>
             <OperationProgress
-              label={getJobProgressLabel({ type: activeJob?.type ?? "push", status: activeJob?.status ?? "running", processed: activeJob?.processed_items ?? 0, total: activeJob?.total_items ?? 0 })}
+              label={getJobProgressLabel({ type: activeJob?.type ?? "push", status: activeJob?.status ?? "running", processed: activeJob?.processed_items ?? 0, total: activeJob?.total_items ?? 0, metadata: activeJob?.metadata })}
               status={isSubmitting ? "running" : (activeJob?.status === "running" ? "running" : "idle")}
               processed={activeJob?.processed_items ?? 0}
               total={activeJob?.total_items ?? productsWithFitments}
@@ -379,7 +381,7 @@ export default function Push() {
         {/* Show completion when job just finished */}
         {completedPush && !isJobRunning && !isSubmitting && !dismissedCompletionBanner && (
           <Layout.Section>
-            <Banner tone="success" title="Push completed" onDismiss={() => setDismissedCompletionBanner(true)}>
+            <Banner tone="success" title="Push completed" onDismiss={() => { dismissBanner(completedPushKey); setDismissedCompletionBanner(true); }}>
               <p>{getJobCompletionMessage({ type: "push", status: "completed", processed: completedPush.processed_items, total: completedPush.total_items })}</p>
             </Banner>
           </Layout.Section>
@@ -389,41 +391,13 @@ export default function Push() {
         {showError && (
           <Layout.Section>
             <Banner tone="critical">
-              <p>{(actionData as any).error}</p>
-            </Banner>
-          </Layout.Section>
-        )}
-
-        {/* Success banner */}
-        {showResults && (
-          <Layout.Section>
-            <Banner tone="success" title="Push completed successfully">
-              <BlockStack gap="200">
-                {(actionData as any).pushResult && (
-                  <Text as="p" variant="bodyMd">
-                    {(actionData as any).pushResult.tagsPushed} tags pushed,{" "}
-                    {(actionData as any).pushResult.metafieldsPushed} metafields set,{" "}
-                    {(actionData as any).pushResult.processed} products processed
-                    {(actionData as any).pushResult.errors > 0 &&
-                      ` (${(actionData as any).pushResult.errors} errors)`}
-                  </Text>
-                )}
-                {(actionData as any).collectionsResult && (
-                  <Text as="p" variant="bodyMd">
-                    {(actionData as any).collectionsResult.created} collections created,{" "}
-                    {(actionData as any).collectionsResult.updated} updated
-                    {(actionData as any).collectionsResult.errors > 0 &&
-                      ` (${(actionData as any).collectionsResult.errors} errors)`}
-                  </Text>
-                )}
-              </BlockStack>
+              <p>{actionData?.error}</p>
             </Banner>
           </Layout.Section>
         )}
 
         {/* Summary stats — comprehensive push dashboard */}
         <Layout.Section>
-          {pageLoading ? <SkeletonCard variant="stat" count={6} cols={3} /> : (
           <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
             {/* Products Status */}
             <Card>
@@ -435,7 +409,7 @@ export default function Push() {
                 <div style={statGridStyle(2)}>
                   <div style={statMiniStyle}>
                     <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats ? (liveStats.autoMapped + liveStats.smartMapped + liveStats.manualMapped) : productsWithFitments)}</Text>
-                    <Text as="p" variant="bodySm" tone="subdued">With Fitments</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Ready to Push</Text>
                   </div>
                   <div style={statMiniStyle}>
                     <Text as="p" variant="headingMd" fontWeight="bold">{String(liveStats?.pushedProducts ?? pushedCount)}</Text>
@@ -481,7 +455,6 @@ export default function Push() {
               </BlockStack>
             </Card>
           </InlineGrid>
-          )}
         </Layout.Section>
 
         {/* Push Options card */}
@@ -540,8 +513,8 @@ export default function Push() {
                 />
               </PlanGate>
 
-              {/* Collection strategy (shown when collections is checked) */}
-              {createCollectionsChecked && (
+              {/* Collection strategy (shown only when collections feature is unlocked AND checked) */}
+              {createCollectionsChecked && limits.features.smartCollections && (
                 <Box paddingInlineStart="800">
                   <BlockStack gap="300">
                     <Select
@@ -571,35 +544,48 @@ export default function Push() {
 
               <Divider />
 
-              <Form method="post">
-                <input type="hidden" name="_action" value="push" />
-                <input type="hidden" name="pushTags" value={String(pushTags)} />
-                <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
-                <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
-                <input type="hidden" name="strategy" value={strategy} />
-                <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
+              {/* Push button — only show when at least one push feature is unlocked */}
+              {limits.features.pushTags || limits.features.pushMetafields ? (
+                <Form method="post">
+                  <input type="hidden" name="_action" value="push" />
+                  <input type="hidden" name="pushTags" value={String(pushTags)} />
+                  <input type="hidden" name="pushMetafields" value={String(pushMetafields)} />
+                  <input type="hidden" name="createCollections" value={String(createCollectionsChecked)} />
+                  <input type="hidden" name="strategy" value={strategy} />
+                  <input type="hidden" name="seoEnabled" value={String(seoEnabled)} />
+                  <input type="hidden" name="autoActivateMakes" value={autoActivateMakes ? "true" : "false"} />
 
-                <BlockStack gap="300">
-                  <InlineStack align="start" gap="300">
-                    <Button
-                      variant="primary"
-                      submit
-                      disabled={pushDisabled}
-                      loading={isSubmitting}
-                    >
-                      Push to Shopify
-                    </Button>
-                    {noProductsReady && (
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        No products with fitments to push. Map fitments first.
-                      </Text>
-                    )}
-                  </InlineStack>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    All processing happens in the background via our Edge Function. You can close this page — the push will continue automatically.
-                  </Text>
-                </BlockStack>
-              </Form>
+                  <BlockStack gap="300">
+                    <InlineStack align="start" gap="300">
+                      <Button
+                        variant="primary"
+                        submit
+                        disabled={pushDisabled}
+                        loading={isSubmitting}
+                      >
+                        Push to Shopify
+                      </Button>
+                      {noProductsReady && (
+                        <Text as="p" variant="bodySm" tone="subdued">
+                          No products with fitments to push. Map fitments first.
+                        </Text>
+                      )}
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      All processing happens in the background via our Edge Function. You can close this page — the push will continue automatically.
+                    </Text>
+                  </BlockStack>
+                </Form>
+              ) : (
+                <PlanGate
+                  feature="pushTags"
+                  currentPlan={plan}
+                  limits={limits}
+                  allLimits={allLimits}
+                >
+                  <div />
+                </PlanGate>
+              )}
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -666,4 +652,9 @@ export default function Push() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Push to Shopify" />;
 }

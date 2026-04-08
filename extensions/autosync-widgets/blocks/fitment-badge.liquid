@@ -2,18 +2,48 @@
   AutoSync Fitment Badge
   Shows "Fits your vehicle" or "May not fit" based on stored vehicle in localStorage
 {% endcomment %}
-
+{% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign badge_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.badge == true
+      assign badge_allowed = true
+    endif
+  endif
+%}
+{% if badge_allowed == false %}
+<!-- Fitment Badge: requires Starter plan -->
+{% else %}
 <div
   class="autosync-fitment-badge"
   data-autosync-fitment-badge
+  data-proxy-url="{{ shop.url }}/apps/autosync"
   data-product-id="{{ product.id }}"
-  data-product-tags="{{ product.tags | join: ',' }}"
+  data-product-tags="{{ product.tags | join: ',' | escape }}"
   data-product-metafield-make="{{ product.metafields.autosync_fitment.make_names.value | json }}"
   data-product-metafield-model="{{ product.metafields.autosync_fitment.model_names.value | json }}"
   id="autosync-fitment-badge-{{ block.id }}"
   style="
     --autosync-badge-success: {{ block.settings.success_color }};
     --autosync-badge-warning: {{ block.settings.warning_color }};
+    --autosync-badge-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --autosync-badge-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --autosync-badge-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-btn-bg: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-btn-text: #ffffff;
+    --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
+    --as-section-gap-top: {{ block.settings.section_gap_top | default: 0 }}px;
+    --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}1.125rem{% when 'large' %}1.75rem{% else %}1.375rem{% endcase %};
+    max-width: {% case block.settings.container_width %}{% when 'full' %}100%{% when '1400' %}1400px{% when '1200' %}1200px{% when '1000' %}1000px{% when '800' %}800px{% else %}1200px{% endcase %};
+    margin: 0 auto;
+    padding: {{ block.settings.container_padding | default: 24 }}px;
     padding-top: {{ block.settings.padding_top }}px;
     padding-bottom: {{ block.settings.padding_bottom }}px;
   "
@@ -42,50 +72,167 @@
 
 {{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
 
 {% schema %}
 {
-  "name": "Fitment Badge",
-  "target": "section",
-  "settings": [
-    {
-      "type": "color",
-      "id": "success_color",
-      "label": "Success Color",
-      "default": "#1a7f37"
-    },
-    {
-      "type": "color",
-      "id": "warning_color",
-      "label": "Warning Color",
-      "default": "#bf5700"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_vehicle_name",
-      "label": "Show Vehicle Name",
-      "default": true
-    },
-    {
-      "type": "range",
-      "id": "padding_top",
-      "label": "Top Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    },
-    {
-      "type": "range",
-      "id": "padding_bottom",
-      "label": "Bottom Padding",
-      "min": 0,
-      "max": 100,
-      "step": 4,
-      "default": 40,
-      "unit": "px"
-    }
-  ]
+"name": "Fitment Badge",
+"target": "section",
+"settings": [
+{
+"type": "header",
+"content": "Content"
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
+},
+{
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "success_color",
+"label": "Success Color",
+"default": "#1a7f37"
+},
+{
+"type": "color",
+"id": "warning_color",
+"label": "Warning Color",
+"default": "#bf5700"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Card Background",
+"default": "#f9fafb"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Contained (1200px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "800", "label": "Narrow (800px)" }
+],
+"default": "1200"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap",
+"label": "Bottom Margin (Gap Between Sections)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 16,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap_top",
+"label": "Top Margin (Gap Above Section)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
+"type": "checkbox",
+"id": "show_vehicle_name",
+"label": "Show Vehicle Name",
+"default": true
+}
+]
 }
 {% endschema %}

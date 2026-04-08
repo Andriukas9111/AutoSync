@@ -34,11 +34,12 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getPlanLimits, getTenant } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getPlanLimits, getTenant, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -60,18 +61,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getTenant(shopId),
     db
       .from("ymme_makes")
-      .select("id, name, slug, country, logo_url, nhtsa_make_id")
+      .select("id, name, slug, country, logo_url")
       .eq("active", true)
       .order("name", { ascending: true }),
     db
       .from("tenant_active_makes")
       .select("ymme_make_id")
       .eq("shop_id", shopId),
-    db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
+    db.from("vehicle_fitments").select("make")
+      .eq("shop_id", shopId).not("make", "is", null).limit(50000),
     db
       .from("ymme_models")
       .select("id", { count: "exact", head: true })
@@ -83,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult;
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant as any);
   const limits = getPlanLimits(plan);
 
   const allMakes = makesResult.data ?? [];
@@ -115,7 +113,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Build makes list with enriched data
-  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null; nhtsa_make_id: number | null }) => ({
+  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null }) => ({
     ...make,
     isActive: activeMakeIds.has(make.id),
     productCount: productCountByMake[make.name] || 0,
@@ -156,7 +154,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (enable) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = tenant?.plan ?? "free";
+      const plan: PlanTier = getEffectivePlan(tenant as any);
       const limits = getPlanLimits(plan);
 
       const { count: currentActive } = await db
@@ -206,11 +204,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (_action === "auto_activate") {
     // Auto-activate all makes that have mapped products
-    const { data: fitments } = await db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null);
+    const { data: fitments } = await db.from("vehicle_fitments")
+      .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
 
     const fitmentMakes = new Set(
       (fitments ?? []).map((f: { make: string }) => f.make),
@@ -281,7 +276,6 @@ interface MakeItem {
   slug: string | null;
   country: string | null;
   logo_url: string | null;
-  nhtsa_make_id: number | null;
   isActive: boolean;
   productCount: number;
 }
@@ -891,7 +885,7 @@ export default function Vehicles() {
                     }}
                     style={{
                       cursor: "pointer",
-                      padding: "12px 0",
+                      padding: "var(--p-space-300) 0",
                       transition: "background-color 0.15s",
                     }}
                   >
@@ -1331,4 +1325,9 @@ export default function Vehicles() {
       {renderEngineModal()}
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="YMME Browser" />;
 }

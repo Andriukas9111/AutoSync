@@ -6,7 +6,7 @@ import db from "../lib/db.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, session, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop}`);
+  console.log(`[webhook] ${topic}`);
 
   // Clean up Prisma sessions (Shopify session storage)
   if (session) {
@@ -25,12 +25,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.error(`[webhook] Vehicle page sync cleanup failed for ${shop}:`, err);
   }
 
+  // Cancel any active sync jobs (prevents Edge Function from making API calls with revoked token)
+  try {
+    await db
+      .from("sync_jobs")
+      .update({ status: "failed", error: "App uninstalled", completed_at: new Date().toISOString(), locked_at: null })
+      .eq("shop_id", shop)
+      .in("status", ["running", "pending"]);
+  } catch (err) {
+    console.error(`[webhook] Job cancellation failed for ${shop}:`, err);
+  }
+
   // Mark tenant as uninstalled in Supabase (preserve data — they might reinstall)
+  // Clear access token — it's revoked by Shopify on uninstall, no reason to keep it
   await db
     .from("tenants")
     .update({
       uninstalled_at: new Date().toISOString(),
       plan_status: "cancelled",
+      shopify_access_token: null,
     })
     .eq("shop_id", shop);
 

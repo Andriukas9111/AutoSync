@@ -38,6 +38,7 @@
     "@supabase/supabase-js": "^2.99.2",
     "@vercel/react-router": "^1.2.6",
     "basic-ftp": "^5.2.0",
+    "gsap": "^3.14.2",
     "isbot": "^5.1.31",
     "prisma": "^6.16.3",
     "react": "^18.3.1",

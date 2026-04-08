@@ -419,6 +419,14 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
     }
   }
 
+  // ─── 4b. Aspiration detection (separate from tech — used for filtering) ──
+  // "Turbo" is too generic for TECH_KEYWORDS but useful for aspiration filtering
+  if (!profile.technology) {
+    if (/\bturbo\s*charg/i.test(text) || /\bturbo\b/i.test(text) || /\bintercooler\b/i.test(text)) {
+      profile.technology = "Turbo";
+    }
+  }
+
   // ─── 5. Engine family codes (whitelist validated) ───────────
   ENGINE_FAMILY_REGEX.lastIndex = 0;
   let efMatch: RegExpExecArray | null;
@@ -794,6 +802,50 @@ export function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { sc
     } else {
       score -= 0.20; // Penalize engines outside the year range
     }
+  }
+
+  // ── Model name mismatch penalty ──
+  // When the product title contains a specific model name (e.g., "Yaris"),
+  // penalize suggestions for different models (e.g., "Avensis")
+  if (profile.modelNames.length > 0) {
+    const modelName = (engine.model?.name || "").toLowerCase();
+    const modelGen = (engine.model?.generation || "").toLowerCase();
+    const combined = `${modelName} ${modelGen}`;
+    const anyModelMatch = profile.modelNames.some((m) => {
+      const mLower = m.toLowerCase();
+      return combined.includes(mLower) || mLower.includes(modelName);
+    });
+    if (anyModelMatch) {
+      score += 0.20; // Strong boost for model name match
+      matchedHints.push("model:" + engine.model?.name);
+    } else {
+      score -= 0.25; // Penalize wrong model when title clearly says which model
+    }
+  }
+
+  // ── Aspiration mismatch penalty ──
+  // Performance parts (intake, exhaust, turbo) for turbo cars shouldn't match NA engines
+  if (engine.aspiration) {
+    const asp = engine.aspiration.toLowerCase();
+    const isEngineNA = asp.includes("naturally") || asp === "na" || asp === "aspirated";
+    const isEngineTurbo = asp.includes("turbo") || asp.includes("supercharg") || asp.includes("compressor");
+    // Check if the product itself is turbo-related (from title/description keywords or profile tech)
+    const hasTurboSignal = profile.technology
+      ? /turbo|tsi|tfsi|tdi|ecoboost/i.test(profile.technology)
+      : false;
+    if (isEngineNA && hasTurboSignal) {
+      score -= 0.30; // Hard penalty: turbo tech product matched to NA engine
+    }
+    if (isEngineTurbo && hasTurboSignal) {
+      score += 0.05; // Mild boost: turbo product matches turbo engine
+    }
+  }
+
+  // ── Year era penalty ──
+  // Products from 2020s era shouldn't match 1990s vehicles (different tech generations)
+  if (engine.year_to && engine.year_to < 2010 && !profile.yearFrom) {
+    // No year in profile but engine is very old — mild penalty
+    score -= 0.10;
   }
 
   // Negative fuel signal — hard penalize excluded fuel types

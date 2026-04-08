@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -39,6 +39,9 @@ import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
+import { getPlanLimits } from "../lib/billing.server";
+import { statMiniStyle, statGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -64,7 +67,7 @@ function capitalisePlan(plan: string): string {
 
 const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual" },
   partial: { tone: "warning", label: "Partial" },
@@ -107,7 +110,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Top makes used in fitments
     topMakesRes,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).single(),
+    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     db.from("products")
       .select("id, title, handle, vendor, product_type, price, image_url, fitment_status, source, synced_at, created_at, shopify_product_id")
       .eq("shop_id", shopId)
@@ -115,12 +118,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(50),
     db.from("vehicle_fitments").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("vehicle_fitments")
-      .select("id, make, model, year_from, year_to, engine, confidence, source, created_at, product_id")
+      .select("id, make, model, year_from, year_to, engine, confidence, extraction_method, created_at, product_id")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(30),
     db.from("sync_jobs")
-      .select("id, type, status, progress, total, errors, created_at, completed_at")
+      .select("id, type, status, progress, total_items, error, created_at, completed_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -181,6 +184,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 10)
     .map(([make, count]) => ({ make, count }));
 
+  // Get plan limits for this tenant
+  const planLimits = getPlanLimits(tenant.plan ?? "free");
+
   return {
     tenant,
     products,
@@ -195,6 +201,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     coveragePercent,
     topMakes,
     shopId,
+    planLimits,
   };
 };
 
@@ -324,7 +331,10 @@ export default function TenantDetail() {
   const fetcher = useFetcher<{ ok: boolean; message: string }>();
   const navigate = useNavigate();
   const isSubmitting = fetcher.state !== "idle";
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TENANT_TAB_IDS = ["overview", "products", "fitments", "sync-jobs", "settings", "actions"];
+  const selectedTab = Math.max(0, TENANT_TAB_IDS.indexOf(searchParams.get("tab") ?? "overview"));
+  const setSelectedTab = (idx: number) => { setSearchParams((prev) => { prev.set("tab", TENANT_TAB_IDS[idx] ?? "overview"); return prev; }); };
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(tenant.plan);
   const [confirmPurgeFitments, setConfirmPurgeFitments] = useState(false);
@@ -387,8 +397,7 @@ export default function TenantDetail() {
         {/* ── KPI Cards ── */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "8px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[
@@ -609,7 +618,7 @@ export default function TenantDetail() {
                   ) : (
                     <DataTable
                       columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Source"]}
+                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Method"]}
                       rows={recentFitments.map((f: any) => [
                         f.make || "—",
                         f.model || "—",
@@ -618,7 +627,7 @@ export default function TenantDetail() {
                           : f.year_from ? String(f.year_from) : "—",
                         f.engine || "—",
                         f.confidence ? `${Math.round(f.confidence * 100)}%` : "—",
-                        f.source || "—",
+                        f.extraction_method || "—",
                       ])}
                     />
                   )}
@@ -855,4 +864,9 @@ export default function TenantDetail() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin Tenant" />;
 }

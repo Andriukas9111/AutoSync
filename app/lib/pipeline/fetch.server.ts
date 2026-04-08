@@ -46,6 +46,8 @@ interface FetchProductsOptions {
   shopId: string;
   jobId: string;
   onProgress?: (processed: number, total: number) => void;
+  signal?: AbortSignal; // AbortController signal for timeout cancellation
+  maxProducts?: number; // Plan limit — stop fetching after this many products
 }
 
 export async function fetchProductsFromShopify({
@@ -53,7 +55,9 @@ export async function fetchProductsFromShopify({
   shopId,
   jobId,
   onProgress,
-}: FetchProductsOptions): Promise<{ fetched: number; errors: string[] }> {
+  signal,
+  maxProducts,
+}: FetchProductsOptions): Promise<{ fetched: number; errors: string[]; limitReached?: boolean }> {
   let cursor: string | null = null;
   let hasNextPage = true;
   let fetched = 0;
@@ -66,8 +70,18 @@ export async function fetchProductsFromShopify({
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", jobId);
 
+  let limitReached = false;
+
   try {
     while (hasNextPage) {
+      // Check if the operation was aborted (timeout)
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
+
+      // Check plan product limit
+      if (maxProducts && fetched >= maxProducts) {
+        limitReached = true;
+        break;
+      }
       const response: Response = await admin.graphql(PRODUCTS_QUERY, {
         variables: {
           first: pageSize,
@@ -84,17 +98,17 @@ export async function fetchProductsFromShopify({
 
       const { edges, pageInfo }: { edges: Array<{ node: Record<string, any> }>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } = gqlData.products;
 
-      // Upsert each product into our database
-      for (const { node: product } of edges) {
-        // Extract numeric Shopify ID from GID
-        const shopifyId = parseInt(
-          product.id.replace("gid://shopify/Product/", ""),
-          10,
-        );
-
-        const productData = {
+      // Batch upsert entire page at once (250 products per DB call instead of 3 per product)
+      // Trim batch to plan limit if needed
+      const remaining = maxProducts ? maxProducts - fetched : Infinity;
+      const trimmedEdges = remaining < edges.length ? edges.slice(0, remaining) : edges;
+      const now = new Date().toISOString();
+      const batchRows = trimmedEdges.map(({ node: product }: { node: Record<string, any> }) => {
+        const shopifyId = parseInt(product.id.replace("gid://shopify/Product/", ""), 10);
+        return {
           shop_id: shopId,
           shopify_product_id: shopifyId,
+          shopify_gid: product.id,
           title: product.title,
           description: product.descriptionHtml,
           handle: product.handle,
@@ -106,31 +120,34 @@ export async function fetchProductsFromShopify({
           product_type: product.productType,
           tags: product.tags ?? [],
           variants:
-            product.variants?.edges?.map((e: any) => ({
+            product.variants?.edges?.map((e: { node: Record<string, string> }) => ({
               id: e.node.id,
               title: e.node.title,
               price: e.node.price,
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          fitment_status: "unmapped",
-          synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          synced_at: now,
+          updated_at: now,
         };
+      });
 
-        // Upsert — update if product already exists
-        const { error } = await db.from("products").upsert(productData, {
+      // Single upsert for the entire page — ON CONFLICT preserves fitment_status
+      const { error: upsertError } = await db
+        .from("products")
+        .upsert(batchRows, {
           onConflict: "shop_id,shopify_product_id",
+          ignoreDuplicates: false,
         });
 
-        if (error) {
-          errors.push(
-            `Failed to upsert product ${shopifyId}: ${error.message}`,
-          );
-        } else {
-          fetched++;
-        }
+      if (upsertError) {
+        errors.push(`Batch upsert failed: ${upsertError.message}`);
+      } else {
+        fetched += batchRows.length;
       }
+
+      // Check abort before progress update
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
 
       // Update progress
       await db
@@ -173,7 +190,7 @@ export async function fetchProductsFromShopify({
       })
       .eq("id", jobId);
 
-    return { fetched, errors };
+    return { fetched, errors, limitReached };
   } catch (err: unknown) {
     // Mark job as failed
     await db

@@ -1,11 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import {
   useLoaderData,
   useSearchParams,
   useNavigate,
   useFetcher,
-  useNavigation,
 } from "react-router";
 import { data } from "react-router";
 import {
@@ -26,36 +25,30 @@ import {
   Thumbnail,
   Box,
   Button,
-  Filters,
-  ChoiceList,
-  Divider,
-  IndexFilters,
   Icon,
-  useSetIndexFiltersMode,
   useIndexResourceState,
-  type IndexFiltersProps,
 } from "@shopify/polaris";
 import {
   SearchIcon,
   ProductIcon,
   FilterIcon,
   ListBulletedIcon,
-  ChartVerticalFilledIcon,
   ImportIcon,
   WandIcon,
   TargetIcon,
-  AlertTriangleIcon,
   AlertCircleIcon,
-  FlagIcon,
+  MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import db from "../lib/db.server";
+import db, { syncFitmentCount } from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
-import { SkeletonCard } from "../components/SkeletonCard";
+import { RouteError } from "../components/RouteError";
+import { useAppData } from "../lib/use-app-data";
+import { autoFitGridStyle } from "../lib/design";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -66,7 +59,7 @@ const STATUS_CONFIG: Record<
   { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
@@ -81,6 +74,9 @@ const STATUS_OPTIONS = [
   { label: "Manual Mapped", value: "manual_mapped" },
   { label: "Partial", value: "partial" },
   { label: "Flagged", value: "flagged" },
+  { label: "No Match", value: "no_match" },
+  { label: "Wheels", value: "cat_wheels" },
+  { label: "Vehicle Parts", value: "cat_vehicle_parts" },
 ];
 
 const SOURCE_OPTIONS = [
@@ -104,6 +100,7 @@ interface Product {
   price: string | null;
   image_url: string | null;
   fitment_status: FitmentStatus;
+  product_category: string | null;
   source: string | null;
   created_at: string;
   synced_at: string | null;
@@ -115,11 +112,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // Fix products with NULL fitment_status → "unmapped"
-  await db.from("products")
+  // Fix products with NULL fitment_status → "unmapped" (fire-and-forget, non-blocking)
+  db.from("products")
     .update({ fitment_status: "unmapped" })
     .eq("shop_id", shopId)
-    .is("fitment_status", null);
+    .is("fitment_status", null)
+    .then(() => {}).catch(() => {});
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
@@ -132,13 +130,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let query = db
     .from("products")
     .select("*", { count: "exact" })
-    .eq("shop_id", shopId);
+    .eq("shop_id", shopId)
+    .neq("status", "staged"); // Exclude staged provider imports — they live in provider products view
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%,handle.ilike.%${search}%`);
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,handle.ilike.%${sanitized}%`);
+    }
   }
   if (status) {
-    query = query.eq("fitment_status", status);
+    if (status.startsWith("cat_")) {
+      query = query.eq("product_category", status.replace("cat_", ""));
+    } else {
+      query = query.eq("fitment_status", status);
+    }
   }
   if (source) {
     query = query.eq("source", source);
@@ -162,7 +168,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const statusResults = await Promise.all(
     statuses.map((s) =>
       db.from("products").select("id", { count: "exact", head: true })
-        .eq("shop_id", shopId).eq("fitment_status", s),
+        .eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", s),
     ),
   );
   const breakdown: Record<string, number> = {};
@@ -211,6 +217,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.from("vehicle_fitments").delete().in("product_id", ids).eq("shop_id", shopId);
     const { error } = await db.from("products").delete().in("id", ids).eq("shop_id", shopId);
     if (error) return data({ ok: false, message: error.message });
+    // Sync counters after delete
+    await syncFitmentCount(shopId);
+    const { count: prodCount } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged");
+    await db.from("tenants").update({ product_count: prodCount ?? 0 }).eq("shop_id", shopId);
     return data({ ok: true, message: `Deleted ${ids.length} products` });
   }
 
@@ -233,39 +243,19 @@ export default function Products() {
   const fetcher = useFetcher();
   const bulkFetcher = useFetcher<{ ok: boolean; message: string }>();
 
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
   const [searchValue, setSearchValue] = useState(filters.search);
   const [dismissed, setDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Live stats polling for status breakdown
-  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) {
-          const result = await res.json();
-          if (result.stats) {
-            setLiveBreakdown({
-              unmapped: result.stats.unmapped,
-              auto_mapped: result.stats.autoMapped,
-              smart_mapped: result.stats.smartMapped,
-              manual_mapped: result.stats.manualMapped,
-              flagged: result.stats.flagged,
-            });
-          }
-        }
-      } catch { /* non-fatal */ }
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  // Use live breakdown when available
-  const activeBreakdown = liveBreakdown ?? statusBreakdown;
+  // Live stats via unified polling hook
+  const { stats: polledStats } = useAppData();
+  const activeBreakdown: Record<string, number> = {
+    unmapped: polledStats?.unmapped ?? statusBreakdown.unmapped ?? 0,
+    auto_mapped: polledStats?.autoMapped ?? statusBreakdown.auto_mapped ?? 0,
+    smart_mapped: polledStats?.smartMapped ?? statusBreakdown.smart_mapped ?? 0,
+    manual_mapped: polledStats?.manualMapped ?? statusBreakdown.manual_mapped ?? 0,
+    flagged: polledStats?.flagged ?? statusBreakdown.flagged ?? 0,
+  };
 
   const isFetching = fetcher.state !== "idle";
   const isBulkAction = bulkFetcher.state !== "idle";
@@ -425,7 +415,15 @@ export default function Products() {
           <Text as="span" variant="bodyMd">{fmtPrice(product.price)}</Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Badge tone={badge.tone}>{badge.label}</Badge>
+          <InlineStack gap="100" wrap={false}>
+            <Badge tone={badge.tone}>{badge.label}</Badge>
+            {product.product_category === "wheels" && (
+              <Badge tone="info">Wheels</Badge>
+            )}
+            {product.product_category === "accessories" && (
+              <Badge tone="attention">Accessories</Badge>
+            )}
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text as="span" variant="bodyMd">{product.source || "—"}</Text>
@@ -592,18 +590,17 @@ export default function Products() {
         )}
 
         {/* ── Status Overview ── */}
-        {pageLoading ? <SkeletonCard variant="stat" count={5} cols={5} /> : (
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("120px", "var(--p-space-200)"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { key: "total", icon: ProductIcon, label: "Total", count: totalCount, critical: false },
-              { key: "unmapped", icon: AlertCircleIcon, label: "Needs Review", count: (activeBreakdown["unmapped"] ?? 0) + (activeBreakdown["flagged"] ?? 0) + (activeBreakdown["partial"] ?? 0), critical: true },
+              // ALWAYS use global stats from polling — NOT the filtered page count
+              { key: "total", icon: ProductIcon, label: "Total", count: polledStats?.total ?? totalCount, critical: false },
+              { key: "flagged", icon: AlertCircleIcon, label: "Flagged", count: activeBreakdown["flagged"] ?? 0, critical: true },
+              { key: "no_match", icon: MinusCircleIcon, label: "No Match", count: polledStats?.noMatch ?? 0, critical: false },
               { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
-              { key: "smart_mapped", icon: WandIcon, label: "Smart", count: activeBreakdown["smart_mapped"] ?? 0, critical: false },
               { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },
             ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
               const isFilter = item.key !== "total";
@@ -638,7 +635,6 @@ export default function Products() {
             })}
           </div>
         </Card>
-        )}
 
         {/* ── Filters Row ── */}
         <Card padding="400">
@@ -768,4 +764,9 @@ export default function Products() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Products" />;
 }

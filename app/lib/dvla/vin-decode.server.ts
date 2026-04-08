@@ -130,8 +130,9 @@ export async function decodeVin(
     );
   }
 
-  // Build URL — optionally include model year for better accuracy
-  let url = `${VPIC_BASE}/DecodeVin/${cleanVin}?format=json`;
+  // Build URL — use DecodeVinExtended for better international/European coverage
+  // DecodeVinExtended returns more fields than DecodeVin (includes plant info, NCSA data)
+  let url = `${VPIC_BASE}/DecodeVinExtended/${cleanVin}?format=json`;
   if (modelYear && modelYear > 1900 && modelYear < 2100) {
     url += `&modelyear=${modelYear}`;
   }
@@ -194,23 +195,110 @@ export async function decodeVin(
 
   // Check NHTSA error codes
   // 0 = no error, 1 = VIN decoded with possible errors, 5+ = VIN has errors
+  // NOTE: For international/European VINs, error code can be 5+ for some fields
+  // while still returning valid make/model/year. Only throw if we got NO useful data.
   const errorCode = parseInt(result.errorCode, 10);
-  if (errorCode >= 5) {
-    throw new VinDecodeError(
-      `VIN decode failed: ${result.errorText}`,
-      "DECODE_ERROR",
-      422,
-    );
+
+  // If NHTSA didn't return make, try WMI-based manufacturer lookup as fallback
+  if (!result.make) {
+    const wmi = cleanVin.substring(0, 3);
+    const wmiMake = WMI_MANUFACTURERS[wmi] || WMI_MANUFACTURERS[wmi.substring(0, 2)] || null;
+    if (wmiMake) {
+      result.make = wmiMake;
+      // Also try NHTSA's WMI endpoint for more detail
+      try {
+        const wmiRes = await fetch(`${VPIC_BASE}/DecodeWMI/${wmi}?format=json`);
+        if (wmiRes.ok) {
+          const wmiData = await wmiRes.json();
+          const wmiResults = wmiData?.Results;
+          if (wmiResults && wmiResults.length > 0) {
+            if (wmiResults[0]?.Make_Name) result.make = wmiResults[0].Make_Name;
+            if (wmiResults[0]?.Manufacturer_Name && !result.manufacturer) result.manufacturer = wmiResults[0].Manufacturer_Name;
+            if (wmiResults[0]?.Vehicle_Type && !result.vehicleType) result.vehicleType = wmiResults[0].Vehicle_Type;
+          }
+        }
+      } catch { /* non-critical fallback */ }
+    }
   }
 
-  // Ensure we got at least make and model
-  if (!result.make && !result.model) {
+  // Ensure we got at least make — model is nice but not strictly required
+  if (!result.make) {
+    if (errorCode >= 5) {
+      throw new VinDecodeError(
+        `VIN decode failed: ${result.errorText || "Vehicle not found in database"}`,
+        "DECODE_ERROR",
+        422,
+      );
+    }
     throw new VinDecodeError(
-      "Could not decode make or model from VIN — it may be invalid or not in the NHTSA database",
+      "Could not decode make from VIN — it may be invalid or not in the NHTSA database",
       "INCOMPLETE_DECODE",
       422,
     );
   }
 
+  // Extract model year from VIN position 10 if NHTSA didn't provide it
+  if (!result.modelYear || result.modelYear === 0) {
+    const yearChar = cleanVin.charAt(9);
+    const yearFromVin = VIN_YEAR_CODES[yearChar];
+    if (yearFromVin) result.modelYear = yearFromVin;
+  }
+
   return result;
 }
+
+// ── WMI Manufacturer Lookup ─────────────────────────────────
+// First 3 chars of VIN = World Manufacturer Identifier
+// This is a fallback when NHTSA doesn't return make data
+const WMI_MANUFACTURERS: Record<string, string> = {
+  // Japan
+  JA: "Isuzu", JF: "Fuji (Subaru)", JH: "Honda", JK: "Kawasaki",
+  JM: "Mazda", JN: "Nissan", JS: "Suzuki", JT: "Toyota", JY: "Yamaha",
+  // Germany
+  WAU: "Audi", WBA: "BMW", WBS: "BMW M", WDB: "Mercedes-Benz",
+  WDC: "Mercedes-Benz", WDD: "Mercedes-Benz", WF0: "Ford (Germany)",
+  WMW: "Mini", WP0: "Porsche", WP1: "Porsche", WUA: "Audi",
+  WVW: "Volkswagen", WV1: "Volkswagen Commercial", WV2: "Volkswagen",
+  // UK
+  SAJ: "Jaguar", SAL: "Land Rover", SAR: "Rover", SCA: "Rolls-Royce",
+  SCB: "Bentley", SCF: "Aston Martin", SCC: "Lotus", SDB: "Peugeot (UK)",
+  SFD: "Alexander Dennis",
+  // France
+  VF1: "Renault", VF3: "Peugeot", VF6: "Renault (Trucks)",
+  VF7: "Citroën", VF8: "Matra/Talbot", VNE: "Renault",
+  // Italy
+  ZAP: "Piaggio", ZAR: "Alfa Romeo", ZCF: "Iveco", ZDF: "Ferrari",
+  ZFA: "Fiat", ZFF: "Ferrari", ZHW: "Lamborghini", ZLA: "Lancia",
+  // Sweden
+  YK1: "Saab", YS2: "Scania", YV1: "Volvo", YV4: "Volvo",
+  // South Korea
+  KL: "Daewoo/GM Korea", KM: "Hyundai", KN: "Kia", KPT: "SsangYong",
+  // Czech Republic
+  TMB: "Skoda",
+  // Spain
+  VSS: "SEAT",
+  // USA
+  "1G": "General Motors", "1F": "Ford", "1C": "Chrysler",
+  "1H": "Honda (US)", "1N": "Nissan (US)", "2T": "Toyota (Canada)",
+  "3G": "GM (Mexico)", "3F": "Ford (Mexico)", "3N": "Nissan (Mexico)",
+  "4T": "Toyota (US)", "5T": "Toyota (US)", "5Y": "BMW (US)",
+  // India
+  MA: "Mahindra", MB: "Maruti Suzuki", MC: "Hyundai India",
+  // China
+  LF: "FAW", LS: "SAIC", LV: "Changan", LZ: "Dongfeng",
+  // Turkey
+  NM: "Otokar/Toyota Turkey",
+  // Romania
+  UU: "Dacia",
+  // Brazil
+  "9B": "Various Brazil",
+};
+
+// VIN position 10 year codes (2010-2039)
+const VIN_YEAR_CODES: Record<string, number> = {
+  A: 2010, B: 2011, C: 2012, D: 2013, E: 2014, F: 2015,
+  G: 2016, H: 2017, J: 2018, K: 2019, L: 2020, M: 2021,
+  N: 2022, P: 2023, R: 2024, S: 2025, T: 2026, V: 2027,
+  W: 2028, X: 2029, Y: 2030, "1": 2031, "2": 2032, "3": 2033,
+  "4": 2034, "5": 2035, "6": 2036, "7": 2037, "8": 2038, "9": 2039,
+};

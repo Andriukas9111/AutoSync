@@ -5,10 +5,10 @@
  * Same pattern as app.products._index.tsx but filtered by provider_id.
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 import {
   Page,
   Card,
@@ -31,10 +31,17 @@ import {
   SearchIcon,
   DeleteIcon,
   ImportIcon,
+  ProductIcon,
+  FilterIcon,
+  CheckCircleIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
+import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,7 +54,7 @@ const STATUS_CONFIG: Record<
   { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }
 > = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   review: { tone: "warning", label: "Review" },
@@ -79,6 +86,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Provider not found", { status: 404 });
   }
 
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  const tenant = await getTenant(shopId);
+  const planLimits = getPlanLimits(getEffectivePlan(tenant as any));
+  if (planLimits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
+  }
+
   // Parse URL params
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1", 10));
@@ -90,12 +104,23 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   // Build query
   let query = db
     .from("products")
-    .select("id, title, sku, provider_sku, price, cost_price, vendor, product_type, image_url, fitment_status, import_id, created_at", { count: "exact" })
+    .select("id, title, sku, provider_sku, price, cost_price, vendor, product_type, image_url, fitment_status, status, import_id, created_at", { count: "exact" })
     .eq("shop_id", shopId)
     .eq("provider_id", providerId);
 
   if (search) {
-    query = query.or(`title.ilike.%${search}%,sku.ilike.%${search}%,provider_sku.ilike.%${search}%`);
+    const sanitized = search.replace(/[%_,.*()\\]/g, '');
+    if (sanitized) {
+      query = query.or(`title.ilike.%${sanitized}%,sku.ilike.%${sanitized}%,provider_sku.ilike.%${sanitized}%`);
+    }
+  }
+
+  // Filter by catalog status (staged = new, active = in catalog)
+  const catalogFilter = url.searchParams.get("catalog") ?? "";
+  if (catalogFilter === "staged") {
+    query = query.eq("status", "staged");
+  } else if (catalogFilter === "active") {
+    query = query.eq("status", "active");
   }
 
   if (statusFilter) {
@@ -132,6 +157,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     if (c > 0) statusBreakdown[s] = c;
   });
 
+  // Catalog status counts (staged vs in-catalog)
+  const [stagedResult, activeResult] = await Promise.all([
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("provider_id", providerId).eq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("provider_id", providerId).eq("status", "active"),
+  ]);
+
   return {
     provider,
     products: products ?? [],
@@ -140,9 +173,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     currentPage: page,
     search,
     statusFilter,
+    catalogFilter,
     sortField,
     sortDir,
     statusBreakdown,
+    stagedCount: stagedResult.count ?? 0,
+    activeCount: activeResult.count ?? 0,
   };
 };
 
@@ -211,6 +247,97 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return data({ success: true, deletedAll: true });
   }
 
+  if (actionType === "bulk_archive") {
+    const ids = JSON.parse(String(formData.get("ids") || "[]")) as string[];
+    if (ids.length === 0) {
+      return data({ error: "No products selected" }, { status: 400 });
+    }
+
+    // Get product SKUs for archiving
+    const { data: productsToArchive } = await db
+      .from("products")
+      .select("sku, title")
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .in("id", ids)
+      .not("sku", "is", null);
+
+    if (productsToArchive && productsToArchive.length > 0) {
+      // Insert into archived products (upsert to avoid duplicates)
+      const archiveRows = productsToArchive
+        .filter((p) => p.sku)
+        .map((p) => ({
+          shop_id: shopId,
+          provider_id: providerId,
+          provider_sku: p.sku,
+          title: p.title,
+          reason: "user_excluded",
+        }));
+
+      if (archiveRows.length > 0) {
+        await db
+          .from("provider_archived_products")
+          .upsert(archiveRows, { onConflict: "provider_id,provider_sku" });
+      }
+    }
+
+    // Delete the products
+    await db
+      .from("products")
+      .delete()
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .in("id", ids);
+
+    // Update provider product count
+    const { count } = await db
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    await db
+      .from("providers")
+      .update({ product_count: count ?? 0, updated_at: new Date().toISOString() })
+      .eq("id", providerId)
+      .eq("shop_id", shopId);
+
+    return data({ success: true, archived: ids.length });
+  }
+
+  if (actionType === "bulk_approve") {
+    const ids: string[] = JSON.parse(String(formData.get("ids") || "[]"));
+    if (ids.length === 0) return data({ error: "No products selected" }, { status: 400 });
+
+    const { error: approveError } = await db
+      .from("products")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId);
+
+    if (approveError) {
+      return data({ error: `Failed to approve: ${approveError.message}` }, { status: 500 });
+    }
+
+    return data({ success: true, approved: ids.length });
+  }
+
+  if (actionType === "approve_all") {
+    const { error: approveError } = await db
+      .from("products")
+      .update({ status: "active", updated_at: new Date().toISOString() })
+      .eq("shop_id", shopId)
+      .eq("provider_id", providerId)
+      .eq("status", "staged");
+
+    if (approveError) {
+      return data({ error: `Failed to approve: ${approveError.message}` }, { status: 500 });
+    }
+
+    return data({ success: true, approvedAll: true });
+  }
+
   return data({ error: "Unknown action" }, { status: 400 });
 };
 
@@ -227,31 +354,24 @@ export default function ProviderProducts() {
     currentPage,
     search: initialSearch,
     statusFilter: initialStatus,
+    catalogFilter: initialCatalog,
     statusBreakdown,
+    stagedCount,
+    activeCount,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
   const fetcher = useFetcher();
 
   const [searchValue, setSearchValue] = useState(initialSearch);
+  const [catalogValue, setCatalogValue] = useState(initialCatalog || "");
   const [statusValue, setStatusValue] = useState(initialStatus);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  // Live stats polling
-  const [liveBreakdown, setLiveBreakdown] = useState<Record<string, number> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) { const r = await res.json(); if (r.stats) setLiveBreakdown({ unmapped: r.stats.unmapped, auto_mapped: r.stats.autoMapped, smart_mapped: r.stats.smartMapped, manual_mapped: r.stats.manualMapped, flagged: r.stats.flagged }); }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // Keep unified polling hook active for real-time updates
+  useAppData();
 
-  const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean } | undefined;
+  const fetcherData = fetcher.data as { success?: boolean; error?: string; deleted?: number; deletedAll?: boolean; approved?: number; approvedAll?: boolean } | undefined;
 
   const resourceName = { singular: "product", plural: "products" };
   const {
@@ -267,12 +387,14 @@ export default function ProviderProducts() {
       const params = new URLSearchParams();
       const s = overrides.search ?? searchValue;
       const st = overrides.status ?? statusValue;
+      const cat = overrides.catalog ?? catalogValue;
       if (s) params.set("search", s);
       if (st) params.set("status", st);
+      if (cat) params.set("catalog", cat);
       params.set("page", overrides.page ?? "1");
       navigate(`/app/providers/${provider.id}/products?${params.toString()}`);
     },
-    [searchValue, statusValue, provider.id, navigate],
+    [searchValue, statusValue, catalogValue, provider.id, navigate],
   );
 
   const handleSearch = useCallback(() => applyFilters(), [applyFilters]);
@@ -291,7 +413,37 @@ export default function ProviderProducts() {
     setDeleteModalOpen(false);
   }, [fetcher]);
 
+  const handleBulkArchive = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    fetcher.submit(
+      { _action: "bulk_archive", ids: JSON.stringify(selectedResources) },
+      { method: "POST" },
+    );
+    clearSelection();
+  }, [selectedResources, fetcher, clearSelection]);
+
+  const handleBulkApprove = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    fetcher.submit(
+      { _action: "bulk_approve", ids: JSON.stringify(selectedResources) },
+      { method: "POST" },
+    );
+    clearSelection();
+  }, [selectedResources, fetcher, clearSelection]);
+
+  const handleApproveAll = useCallback(() => {
+    fetcher.submit({ _action: "approve_all" }, { method: "POST" });
+  }, [fetcher]);
+
   const promotedBulkActions = [
+    {
+      content: `Approve ${selectedResources.length} to Catalog`,
+      onAction: handleBulkApprove,
+    },
+    {
+      content: `Archive ${selectedResources.length} selected`,
+      onAction: handleBulkArchive,
+    },
     {
       content: `Delete ${selectedResources.length} selected`,
       onAction: handleBulkDelete,
@@ -314,6 +466,11 @@ export default function ProviderProducts() {
       }}
       secondaryActions={[
         {
+          content: "Approve All to Catalog",
+          onAction: handleApproveAll,
+          icon: CheckCircleIcon,
+        },
+        {
           content: "Delete All Products",
           onAction: () => setDeleteModalOpen(true),
           icon: DeleteIcon,
@@ -333,15 +490,67 @@ export default function ProviderProducts() {
             <p>All products from this provider have been deleted.</p>
           </Banner>
         )}
+        {fetcherData?.success && fetcherData.approved && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>{`${fetcherData.approved} product${fetcherData.approved !== 1 ? "s" : ""} approved and added to your catalog.`}</p>
+          </Banner>
+        )}
+        {fetcherData?.success && fetcherData.approvedAll && (
+          <Banner tone="success" onDismiss={() => {}}>
+            <p>All staged products have been approved and added to your catalog.</p>
+          </Banner>
+        )}
         {fetcherData?.error && (
           <Banner tone="critical">
             <p>{fetcherData.error}</p>
           </Banner>
         )}
 
-        {/* Status Breakdown */}
-        {totalProducts > 0 && (
+        {/* Catalog Status Filter */}
+        {totalProducts > 0 && (stagedCount > 0 || activeCount > 0) && (
           <Card>
+            <BlockStack gap="300">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={CheckCircleIcon} />
+                <Text as="h2" variant="headingMd">Catalog Status</Text>
+              </InlineStack>
+              <InlineStack gap="300" wrap>
+                <Button
+                  size="slim"
+                  variant={catalogValue === "" ? "primary" : "tertiary"}
+                  onClick={() => { setCatalogValue(""); applyFilters({ catalog: "" }); }}
+                >
+                  {`All (${stagedCount + activeCount})`}
+                </Button>
+                <Button
+                  size="slim"
+                  variant={catalogValue === "staged" ? "primary" : "tertiary"}
+                  onClick={() => { setCatalogValue("staged"); applyFilters({ catalog: "staged" }); }}
+                >
+                  {`Staged — Not in Catalog (${stagedCount})`}
+                </Button>
+                {activeCount > 0 && (
+                  <Button
+                    size="slim"
+                    variant={catalogValue === "active" ? "primary" : "tertiary"}
+                    onClick={() => { setCatalogValue("active"); applyFilters({ catalog: "active" }); }}
+                  >
+                    {`In Catalog (${activeCount})`}
+                  </Button>
+                )}
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        )}
+
+        {/* Fitment Status Breakdown */}
+        {totalProducts > 0 && Object.keys(statusBreakdown).length > 0 && (
+          <Card>
+            <BlockStack gap="300">
+            <InlineStack gap="200" blockAlign="center">
+              <IconBadge icon={FilterIcon} />
+              <Text as="h2" variant="headingMd">Filter by Fitment Status</Text>
+            </InlineStack>
             <InlineStack gap="400" wrap>
               {Object.entries(statusBreakdown).map(([status, count]) => {
                 const config = STATUS_CONFIG[status] ?? { tone: undefined, label: status };
@@ -372,6 +581,7 @@ export default function ProviderProducts() {
                 </Button>
               )}
             </InlineStack>
+            </BlockStack>
           </Card>
         )}
 
@@ -400,6 +610,10 @@ export default function ProviderProducts() {
         </Card>
 
         {/* Products Table */}
+        <InlineStack gap="200" blockAlign="center">
+          <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
+          <Text as="h2" variant="headingMd">{`Products (${totalProducts.toLocaleString()})`}</Text>
+        </InlineStack>
         {products.length === 0 ? (
           <Card>
             <EmptyState
@@ -453,15 +667,24 @@ export default function ProviderProducts() {
                   >
                     <IndexTable.Cell>
                       <InlineStack gap="300" blockAlign="center">
-                        <Thumbnail
-                          source={(product.image_url as string) || ""}
-                          alt={(product.title as string) || ""}
-                          size="small"
-                        />
+                        {product.image_url ? (
+                          <Thumbnail
+                            source={product.image_url as string}
+                            alt={(product.title as string) || ""}
+                            size="small"
+                          />
+                        ) : (
+                          <div style={{ width: 40, height: 40, borderRadius: "var(--p-border-radius-200)", background: "var(--p-color-bg-surface-secondary)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--p-color-text-subdued)", fontSize: 11, fontWeight: 600 }}>
+                            {((product.title as string) || "?").slice(0, 3).toUpperCase()}
+                          </div>
+                        )}
                         <BlockStack gap="050">
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                          <Button
+                            variant="plain"
+                            onClick={() => navigate(`/app/products/${id}`)}
+                          >
                             {((product.title as string) || "Untitled").slice(0, 60)}
-                          </Text>
+                          </Button>
                           {typeof product.product_type === "string" && product.product_type && (
                             <Text as="span" variant="bodySm" tone="subdued">
                               {product.product_type}
@@ -486,7 +709,13 @@ export default function ProviderProducts() {
                       </Text>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <InlineStack gap="100">
+                        {(product as Record<string, unknown>).status === "staged" ? (
+                          <Badge tone="attention">Staged</Badge>
+                        ) : (
+                          <Badge tone="success">In Catalog</Badge>
+                        )}
+                      </InlineStack>
                     </IndexTable.Cell>
                     <IndexTable.Cell>
                       <Text as="span" variant="bodySm" tone="subdued">
@@ -542,4 +771,9 @@ export default function ProviderProducts() {
       </Modal>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Provider Products" />;
 }

@@ -74,20 +74,38 @@ export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  await assertFeature(shopId, "pricingEngine");
+  try {
+    await assertFeature(shopId, "pricingEngine");
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "BillingGateError") {
+      return data({ error: (err as any).message || "Pricing Engine requires a higher plan" }, { status: 403 });
+    }
+    throw err;
+  }
 
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
   switch (intent) {
     case "create_rule": {
+      // Validate required fields
+      const name = formData.get("name") as string;
+      const ruleType = formData.get("rule_type") as string;
+      const scopeType = formData.get("scope_type") as string;
+      const value = parseFloat(formData.get("value") as string) || 0;
+
+      if (!name?.trim()) return data({ error: "Rule name is required" }, { status: 400 });
+      if (!["markup", "margin", "fixed", "map"].includes(ruleType)) return data({ error: "Invalid rule type" }, { status: 400 });
+      if (!["global", "vendor", "product_type", "provider", "tag", "sku_prefix"].includes(scopeType)) return data({ error: "Invalid scope type" }, { status: 400 });
+      if (value < -100 || value > 10000) return data({ error: "Value must be between -100 and 10,000" }, { status: 400 });
+
       const rule = {
-        name: formData.get("name") as string,
+        name: name.trim(),
         priority: parseInt(formData.get("priority") as string) || 0,
-        rule_type: formData.get("rule_type") as "markup" | "margin" | "fixed" | "map",
-        scope_type: formData.get("scope_type") as "global" | "vendor" | "product_type" | "provider" | "tag" | "sku_prefix",
+        rule_type: ruleType as "markup" | "margin" | "fixed" | "map",
+        scope_type: scopeType as "global" | "vendor" | "product_type" | "provider" | "tag" | "sku_prefix",
         scope_value: (formData.get("scope_value") as string) || null,
-        value: parseFloat(formData.get("value") as string) || 0,
+        value,
         round_to: formData.get("round_to") ? parseFloat(formData.get("round_to") as string) : 0.99,
         min_price: formData.get("min_price") ? parseFloat(formData.get("min_price") as string) : null,
         max_price: formData.get("max_price") ? parseFloat(formData.get("max_price") as string) : null,

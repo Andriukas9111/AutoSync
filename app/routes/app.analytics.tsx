@@ -5,9 +5,9 @@
  * and inventory gap analysis. Gated by dashboardAnalytics plan feature.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigation } from "react-router";
+import { useLoaderData } from "react-router";
 import {
   Page,
   Layout,
@@ -37,13 +37,15 @@ import {
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getTenant, getPlanLimits, assertFeature, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { SkeletonCard } from "../components/SkeletonCard";
+import { PlanGate } from "../components/PlanGate";
 import { statGridStyle, statMiniStyle } from "../lib/design";
-import type { PlanTier } from "../lib/types";
+import type { PlanTier, PlanLimits } from "../lib/types";
+import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +126,7 @@ interface ConversionByVehicle {
 
 interface AnalyticsData {
   plan: PlanTier;
+  limits: PlanLimits;
   analyticsLevel: string;
   fitmentCoverage: FitmentCoverage;
   statusBreakdown: StatusBreakdown[];
@@ -141,6 +144,7 @@ interface AnalyticsData {
   recentPlateLookups: Array<{ plate: string; make: string | null; model: string | null; year: number | null; fuel_type: string | null; colour: string | null; created_at: string }>;
   totalPlateLookups: number;
   topPlateMakes: Array<{ make: string; count: number }>;
+  searchCount: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,14 +156,44 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant as any) as PlanTier;
   const limits = getPlanLimits(plan);
   const analyticsLevel = limits.features.dashboardAnalytics;
+
+  // Plan gate: dashboardAnalytics feature required
+  try {
+    await assertFeature(shopId, "dashboardAnalytics");
+  } catch {
+    return {
+      gated: true,
+      plan,
+      limits,
+      analyticsLevel,
+      fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
+      statusBreakdown: [],
+      popularMakes: [],
+      popularModels: [],
+      providerMetrics: [],
+      syncJobSummary: [],
+      inventoryGaps: { makesWithoutProducts: 0, productsPerMakeAvg: 0 },
+      totalMakes: 0,
+      totalModels: 0,
+      popularSearches: [],
+      conversionFunnel: { searches: 0, productViews: 0, addToCarts: 0, purchases: 0, searchToViewRate: 0, viewToCartRate: 0, cartToPurchaseRate: 0, overallRate: 0 },
+      conversionBySource: [],
+      conversionByVehicle: [],
+      recentPlateLookups: [],
+      totalPlateLookups: 0,
+      topPlateMakes: [],
+      searchCount: 0,
+    } satisfies AnalyticsData & { gated: boolean };
+  }
 
   // Gate: "none" means no analytics at all
   if (analyticsLevel === "none") {
     return {
       plan,
+      limits,
       analyticsLevel,
       fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
       statusBreakdown: [],
@@ -194,32 +228,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     searchEventsRes,
     conversionEventsRes,
   ] = await Promise.all([
-    // Total products for this tenant
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Total vehicle products for this tenant (exclude wheels — they use a different mapping system)
+    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).or("product_category.eq.vehicle_parts,product_category.is.null"),
 
-    // Products that have at least one fitment
-    db.from("vehicle_fitments")
-      .select("product_id")
-      .eq("shop_id", shopId),
+    // Products that have at least one fitment — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("product_id")
+      .eq("shop_id", shopId).limit(50000),
 
-    // Product fitment status breakdown — server-side counts (no row limit)
+    // Product fitment status breakdown — vehicle parts only (no row limit)
     Promise.all(
-      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"].map((s) =>
+      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "no_match", "partial"].map((s) =>
         db.from("products").select("id", { count: "exact", head: true })
           .eq("shop_id", shopId).eq("fitment_status", s)
+          .or("product_category.eq.vehicle_parts,product_category.is.null")
           .then((r) => ({ status: s, count: r.count ?? 0 })),
       ),
     ),
 
-    // Fitments grouped by make (top 15)
-    db.from("vehicle_fitments")
-      .select("make, product_id")
-      .eq("shop_id", shopId),
+    // Fitments grouped by make (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
-    // Fitments grouped by model (top 15)
-    db.from("vehicle_fitments")
-      .select("make, model, product_id")
-      .eq("shop_id", shopId),
+    // Fitments grouped by model (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, model, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
     // Provider metrics
     db.from("providers")
@@ -230,24 +262,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Sync jobs summary
     db.from("sync_jobs")
       .select("type, status")
-      .eq("shop_id", shopId),
+      .eq("shop_id", shopId)
+      .limit(1000),
 
-    // Global YMME counts
-    db.from("ymme_makes").select("id, name", { count: "exact" }),
+    // Global YMME counts (head-only for count)
+    db.from("ymme_makes").select("id, name", { count: "exact" }).limit(1000),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
 
-    // Search events (last 30 days — silently returns empty if table doesn't exist)
+    // Search events (last 30 days)
     db.from("search_events")
       .select("search_make, search_model")
       .eq("shop_id", shopId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .not("search_make", "is", null),
+      .not("search_make", "is", null)
+      .limit(5000),
 
     // Conversion events (last 30 days)
     db.from("conversion_events")
       .select("event_type, source, vehicle_make, vehicle_model")
       .eq("shop_id", shopId)
-      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(5000),
   ]);
 
   // ── Plate lookup analytics ──────────────────────────────────
@@ -466,6 +501,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
@@ -483,6 +519,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
+    searchCount: (searchEventsRes.data ?? []).length,
   } satisfies AnalyticsData;
 };
 
@@ -501,8 +538,10 @@ const STATUS_TONE: Record<string, "success" | "warning" | "critical" | "info" | 
 };
 
 export default function AnalyticsPage() {
+  const loaderData = useLoaderData<typeof loader>();
   const {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
@@ -520,45 +559,26 @@ export default function AnalyticsPage() {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
-  } = useLoaderData<typeof loader>();
+    searchCount,
+  } = loaderData;
+  const gated = "gated" in loaderData && (loaderData as Record<string, unknown>).gated === true;
 
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
   const [showExport, setShowExport] = useState(false);
 
-  // Live stats polling
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [liveCoverage, setLiveCoverage] = useState<{ total: number; mapped: number; fitments: number } | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) {
-          const r = await res.json();
-          if (r.stats) {
-            setLiveCoverage({
-              total: r.stats.total,
-              mapped: r.stats.autoMapped + r.stats.smartMapped + r.stats.manualMapped,
-              fitments: r.stats.fitments,
-            });
-          }
-        }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // Live stats polling via unified hook
+  const { stats: liveStats } = useAppData({
+    total: fitmentCoverage.total,
+    fitments: fitmentCoverage.withFitments,
+  });
 
   // ── Plan gate ──────────────────────────────────────────────
-  if (analyticsLevel === "none") {
+  if (gated || analyticsLevel === "none") {
     return (
       <Page title="Analytics" fullWidth>
-        <Banner title="Analytics requires the Starter plan or higher" tone="warning">
-          <p>
-            Upgrade your plan to access fitment coverage reports, popular vehicle
-            searches, supplier performance metrics, and inventory gap analysis.
-          </p>
-        </Banner>
+        <PlanGate feature="dashboardAnalytics" currentPlan={plan} limits={limits as PlanLimits}>
+          {/* Children never shown when gated */}
+          <></>
+        </PlanGate>
       </Page>
     );
   }
@@ -643,7 +663,6 @@ export default function AnalyticsPage() {
         {/* ── Fitment Coverage ──────────────────────────────── */}
         <Layout>
           <Layout.Section>
-            {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
             <Card>
               <BlockStack gap="400">
                 <InlineStack gap="200" blockAlign="center">
@@ -675,7 +694,6 @@ export default function AnalyticsPage() {
                 )}
               </BlockStack>
             </Card>
-            )}
           </Layout.Section>
 
           {/* ── Product Status Breakdown ───────────────────── */}
@@ -1140,19 +1158,33 @@ export default function AnalyticsPage() {
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
-                  <Text as="h2" variant="headingMd">
-                    YMME Search Analytics
-                  </Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
+                    <Text as="h2" variant="headingMd">
+                      YMME Search Analytics
+                    </Text>
+                  </InlineStack>
+                  <Badge>{`${searchCount} searches (30 days)`}</Badge>
                 </InlineStack>
-                <Banner tone="info">
-                  <p>
-                    Coming soon — widget search tracking will be available when search
-                    event tracking is enabled. This will show which Year/Make/Model/Engine
-                    combinations your customers search for most.
-                  </p>
-                </Banner>
+                {popularSearches.length === 0 ? (
+                  <Banner tone="info">
+                    <p>
+                      No YMME searches recorded yet. Search tracking is now active — as customers use
+                      the Year/Make/Model/Engine widget on your storefront, their search patterns will
+                      appear here showing which vehicles are most popular.
+                    </p>
+                  </Banner>
+                ) : (
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingSm" tone="subdued">Top Searched Vehicles (Last 30 Days)</Text>
+                    <DataTable
+                      columnContentTypes={["text", "text", "numeric"]}
+                      headings={["Make", "Model", "Searches"]}
+                      rows={popularSearches.slice(0, 15).map((s) => [s.make, s.model, String(s.count)])}
+                    />
+                  </BlockStack>
+                )}
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -1173,4 +1205,9 @@ export default function AnalyticsPage() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Analytics" />;
 }
