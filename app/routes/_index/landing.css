@@ -45,13 +45,13 @@ input{font-family:inherit}
   border-radius:10px;font-size:14px;font-weight:600;
   transition:all .2s;
 }
-.nav-cta:hover{background:#7c3aed;transform:translateY(-1px)}
+.nav-cta:hover{background:#005bd2;transform:translateY(-1px)}
 
 /* ═══ HERO — Opscale style: lavender bg, centered text, embedded product UI ═══ */
 .hero{
   text-align:center;
   padding:80px 40px 0;
-  background:linear-gradient(180deg,#f3f0ff 0%,#ede9fe 30%,#f9fafb 80%,#fff 100%);
+  background:linear-gradient(180deg,#e8f0fe 0%,#dbeafe 30%,#f9fafb 80%,#fff 100%);
   position:relative;overflow:hidden;
 }
 /* Subtle radial glow */
@@ -71,7 +71,7 @@ input{font-family:inherit}
 }
 .hero-pill-badge{
   padding:3px 10px;border-radius:999px;
-  background:#7c3aed;color:#fff;
+  background:#005bd2;color:#fff;
   font-size:11px;font-weight:700;letter-spacing:.02em;
 }
 
@@ -89,7 +89,7 @@ input{font-family:inherit}
   border-radius:12px;font-size:15px;font-weight:600;
   transition:all .2s;box-shadow:0 4px 14px rgba(0,0,0,.1);
 }
-.hero-cta:hover{background:#7c3aed;transform:translateY(-2px);box-shadow:0 8px 24px rgba(124,58,237,.2)}
+.hero-cta:hover{background:#005bd2;transform:translateY(-2px);box-shadow:0 8px 24px rgba(124,58,237,.2)}
 
 /* ═══ EMBEDDED DASHBOARD (Opscale style) ═══ */
 .dash-container{
@@ -130,7 +130,7 @@ input{font-family:inherit}
   margin-bottom:2px;
 }
 .dash-side-item:hover{background:#f3f4f6;color:#111827}
-.dash-side-item--on{background:rgba(124,58,237,.08);color:#7c3aed;font-weight:600}
+.dash-side-item--on{background:rgba(124,58,237,.08);color:#005bd2;font-weight:600}
 .dash-side-icon{width:16px;height:16px;opacity:.5}
 
 /* Main content */
@@ -149,7 +149,7 @@ input{font-family:inherit}
 /* Progress */
 .dash-progress-label{font-size:10px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .dash-bar{height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden;margin-bottom:4px}
-.dash-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#7c3aed,#3b82f6)}
+.dash-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#005bd2,#3b82f6)}
 .dash-bar-meta{display:flex;justify-content:space-between;font-size:11px;color:#9ca3af;margin-bottom:20px}
 
 /* Quick actions */
@@ -161,7 +161,7 @@ input{font-family:inherit}
   transition:all .15s;
 }
 .dash-action:hover{border-color:#d1d5db;background:#fafafa}
-.dash-action--primary{background:#7c3aed;color:#fff;border-color:transparent}
+.dash-action--primary{background:#005bd2;color:#fff;border-color:transparent}
 .dash-action--primary:hover{filter:brightness(1.1)}
 .dash-action-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 
@@ -196,7 +196,7 @@ input{font-family:inherit}
 .sec--gray{background:#f9fafb}
 .sec--dark{background:#111827;color:#fff}
 .sec-eyebrow{
-  font-size:13px;font-weight:600;color:#7c3aed;
+  font-size:13px;font-weight:600;color:#005bd2;
   text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;
 }
 .sec-h2{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:12px}
@@ -217,7 +217,7 @@ input{font-family:inherit}
 .bento-card p{font-size:14px;color:#6b7280;line-height:1.6;margin-bottom:12px}
 .bento-tag{
   display:inline-flex;padding:3px 10px;border-radius:6px;
-  background:rgba(124,58,237,.08);color:#7c3aed;
+  background:rgba(124,58,237,.08);color:#005bd2;
   font-size:11px;font-weight:600;
 }
 
@@ -230,7 +230,7 @@ input{font-family:inherit}
   position:absolute;left:-72px;top:0;width:48px;height:48px;
   border:2px solid #e5e7eb;border-radius:50%;background:#fff;
   display:flex;align-items:center;justify-content:center;
-  font-size:16px;font-weight:700;color:#7c3aed;z-index:1;
+  font-size:16px;font-weight:700;color:#005bd2;z-index:1;
 }
 .tl-step h3{font-size:18px;font-weight:700;margin-bottom:6px}
 .tl-step p{font-size:14px;color:#6b7280;line-height:1.6}
@@ -263,25 +263,25 @@ input{font-family:inherit}
   display:block;text-align:center;padding:12px;border-radius:10px;
   font-size:14px;font-weight:600;border:1px solid #e5e7eb;color:#111827;transition:all .15s;
 }
-.price-btn:hover{border-color:#7c3aed;color:#7c3aed}
-.price-col--hl .price-btn{border-color:#7c3aed;background:#7c3aed;color:#fff}
+.price-btn:hover{border-color:#005bd2;color:#005bd2}
+.price-col--hl .price-btn{border-color:#005bd2;background:#005bd2;color:#fff}
 .price-col--hl .price-btn:hover{filter:brightness(1.1)}
 .price-badge{
-  font-size:10px;font-weight:700;color:#7c3aed;background:rgba(124,58,237,.1);
+  font-size:10px;font-weight:700;color:#005bd2;background:rgba(124,58,237,.1);
   padding:4px 12px;border-radius:6px;display:inline-block;margin-bottom:12px;
 }
-.price-col--hl .price-badge{color:#c4b5fd;background:rgba(196,181,253,.15)}
+.price-col--hl .price-badge{color:#93c5fd;background:rgba(196,181,253,.15)}
 
 /* ═══ COMPARE — Side by side ═══ */
 .cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:880px;margin:0 auto}
 .cmp-card{padding:32px 28px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}
-.cmp-card--hl{border:2px solid #7c3aed;box-shadow:0 0 0 4px rgba(124,58,237,.08)}
+.cmp-card--hl{border:2px solid #005bd2;box-shadow:0 0 0 4px rgba(124,58,237,.08)}
 .cmp-title{font-size:20px;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:8px}
 .cmp-list{display:flex;flex-direction:column;gap:10px}
 .cmp-item{display:flex;align-items:center;gap:8px;font-size:13px}
 .cmp-item--dim{color:#9ca3af}
 .cmp-price{font-size:12px;color:#9ca3af;margin-top:16px;padding-top:16px;border-top:1px solid #f0f0f0}
-.chk{color:#7c3aed}.xk{color:#ef4444}
+.chk{color:#005bd2}.xk{color:#ef4444}
 
 /* ═══ TESTIMONIALS ═══ */
 .rev-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -300,14 +300,14 @@ input{font-family:inherit}
   padding:20px 0;font-size:15px;font-weight:600;
   cursor:pointer;text-align:left;gap:16px;transition:color .15s;
 }
-.faq-q:hover{color:#7c3aed}
+.faq-q:hover{color:#005bd2}
 .faq-icon{font-size:18px;color:#9ca3af;flex-shrink:0;transition:transform .2s}
-.faq-item--open .faq-icon{transform:rotate(45deg);color:#7c3aed}
+.faq-item--open .faq-icon{transform:rotate(45deg);color:#005bd2}
 .faq-a{font-size:14px;color:#6b7280;line-height:1.7;padding-bottom:20px}
 
 /* ═══ CTA BAND ═══ */
 .cta-band{
-  background:linear-gradient(135deg,#4c1d95,#7c3aed,#3b82f6);
+  background:linear-gradient(135deg,#003087,#005bd2,#3b82f6);
   padding:96px 40px;text-align:center;color:#fff;
 }
 .cta-band h2{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-.02em;margin-bottom:12px}
@@ -327,7 +327,7 @@ input{font-family:inherit}
   flex:1;padding:12px 20px;border:1px solid #e5e7eb;border-radius:10px;
   font-size:14px;outline:none;
 }
-.login-input:focus{border-color:#7c3aed}
+.login-input:focus{border-color:#005bd2}
 
 /* ═══ FOOTER ═══ */
 .foot{padding:64px 40px 32px;border-top:1px solid #f0f0f0;background:#fafafa}
@@ -340,6 +340,40 @@ input{font-family:inherit}
 .foot-links a{font-size:13px;color:#6b7280;transition:color .15s}
 .foot-links a:hover{color:#111827}
 .foot-copy{text-align:center;font-size:12px;color:#9ca3af;padding-top:20px;border-top:1px solid #f0f0f0}
+
+/* ═══ ANIMATIONS ═══ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+
+.hero-pill,.hero h1,.hero-sub,.hero-cta,.dash-container{animation:fadeUp .7s ease both}
+.hero-pill{animation-delay:.1s}
+.hero h1{animation-delay:.2s}
+.hero-sub{animation-delay:.3s}
+.hero-cta{animation-delay:.4s}
+.dash-container{animation-delay:.5s}
+
+.bento-card,.sys-card,.rev-card,.price-col,.cmp-card{animation:fadeUp .6s ease both}
+.bento-card:nth-child(1){animation-delay:.1s}
+.bento-card:nth-child(2){animation-delay:.15s}
+.bento-card:nth-child(3){animation-delay:.2s}
+.bento-card:nth-child(4){animation-delay:.25s}
+.bento-card:nth-child(5){animation-delay:.3s}
+.bento-card:nth-child(6){animation-delay:.35s}
+
+.tl-step{animation:fadeUp .5s ease both}
+.tl-step:nth-child(1){animation-delay:.1s}
+.tl-step:nth-child(2){animation-delay:.2s}
+.tl-step:nth-child(3){animation-delay:.3s}
+.tl-step:nth-child(4){animation-delay:.4s}
+
+/* Hover lift for dashboard */
+.dash{transition:transform .4s ease,box-shadow .4s ease}
+.dash:hover{transform:translateY(-4px);box-shadow:0 24px 80px rgba(0,0,0,.08)}
+
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .trust-track{animation:none!important}
+}
 
 /* ═══ RESPONSIVE additions ═══ */
 @media(max-width:1024px){
