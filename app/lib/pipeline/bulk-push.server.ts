@@ -15,9 +15,10 @@
  */
 
 import db from "../db.server";
+import { apiVersion } from "../../shopify.server";
 
-// Shopify API version — must match shopify.server.ts
-const SHOPIFY_API_VERSION = "2026-01";
+// Shopify API version — imported from shopify.server.ts (single source of truth)
+const SHOPIFY_API_VERSION = apiVersion;
 
 // ---------------------------------------------------------------------------
 // Types

@@ -115,11 +115,33 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
     // Idle: poll much slower (30s) — just a safety net for stale data
     // At 1000 tenants idle, this reduces polling from ~67/sec to ~33/sec
     const safeInterval = activeJobs.length > 0 ? pollInterval : pollInterval * 6;
-    intervalRef.current = setInterval(poll, safeInterval);
+
+    const startPolling = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(poll, safeInterval);
+    };
+    const stopPolling = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+
+    startPolling();
+
+    // Pause polling when tab is hidden to save bandwidth + Vercel compute
+    const onVisibility = () => {
+      if (document.hidden) {
+        stopPolling();
+      } else {
+        poll(); // Immediate refresh when tab becomes visible
+        startPolling();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       clearTimeout(initialTimer);
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      stopPolling();
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [poll, pollInterval, activeJobs.length]);
 
