@@ -5,64 +5,27 @@ import { useTimelineDraw, useScrollReveal } from "../hooks/useGsap";
 export function HowItWorks() {
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
-
   useTimelineDraw(lineRef, containerRef);
-  useScrollReveal(".timeline-step", { stagger: 0.15, y: 30 });
 
   return (
-    <section id="how-it-works" className="tw-py-[clamp(100px,14vh,180px)]">
-      <div className="tw-max-w-[1240px] tw-mx-auto tw-px-6 md:tw-px-10">
-        {/* Header */}
-        <div className="tw-text-center tw-mb-14 gsap-reveal">
-          <div className="tw-text-xs tw-font-semibold tw-text-accent tw-uppercase tw-tracking-[0.1em] tw-mb-4">
-            How It Works
-          </div>
-          <h2 className="tw-font-heading tw-text-[clamp(32px,4.5vw,48px)] tw-font-extrabold tw-tracking-[-0.035em] tw-leading-[1.08] tw-text-ink">
-            From install to sales in 4 steps
-          </h2>
+    <section id="how-it-works" className="py-[clamp(100px,14vh,180px)]">
+      <div className="max-w-[1240px] mx-auto px-6 md:px-10">
+        <div className="text-center mb-14">
+          <div className="text-xs font-semibold text-accent uppercase tracking-[0.1em] mb-4">How It Works</div>
+          <h2 className="font-heading text-[clamp(32px,4.5vw,48px)] font-extrabold tracking-[-0.035em] leading-[1.08] text-ink">From install to sales in 4 steps</h2>
         </div>
-
-        {/* Vertical timeline */}
-        <div ref={containerRef} className="tw-relative tw-max-w-[700px] tw-mx-auto tw-pl-20 md:tw-pl-24">
-          {/* Line track (gray) */}
-          <div className="tw-absolute tw-left-8 md:tw-left-10 tw-top-0 tw-bottom-0 tw-w-[2px] tw-bg-silver/60" />
-          {/* Line fill (animated blue→purple) */}
-          <div
-            ref={lineRef}
-            className="tw-absolute tw-left-8 md:tw-left-10 tw-top-0 tw-bottom-0 tw-w-[2px] tw-origin-top"
-            style={{
-              background: "linear-gradient(180deg, #0099FF, #6B52D9)",
-              transformOrigin: "top center",
-              transform: "scaleY(0)",
-            }}
-          />
-
-          {/* Steps */}
-          {PIPELINE_STEPS.map((step, i) => (
-            <div
-              key={i}
-              className="timeline-step tw-relative tw-pb-16 last:tw-pb-0"
-            >
-              {/* Number circle */}
-              <div className="tw-absolute tw--left-20 md:tw--left-24 tw-top-0 tw-w-16 tw-h-16 md:tw-w-[72px] md:tw-h-[72px] tw-rounded-full tw-bg-white tw-border-2 tw-border-silver/60 tw-flex tw-items-center tw-justify-center tw-shadow-sm tw-z-10">
-                <span className="tw-font-heading tw-text-xl md:tw-text-2xl tw-font-extrabold tw-text-accent">
-                  {step.number}
-                </span>
+        <div ref={containerRef} className="relative max-w-[700px] mx-auto pl-24">
+          <div className="timeline-line-track left-10 top-0 bottom-0" />
+          <div ref={lineRef} className="timeline-line-fill left-10 top-0 bottom-0" />
+          {PIPELINE_STEPS.map((s, i) => (
+            <div key={i} className="relative pb-16 last:pb-0">
+              <div className="absolute -left-24 top-0 w-[72px] h-[72px] rounded-full bg-white border-2 border-silver/60 flex items-center justify-center shadow-card z-1">
+                <span className="font-heading text-2xl font-extrabold text-accent">{s.number}</span>
               </div>
-
-              {/* Content */}
-              <div className="tw-pt-1">
-                <h3 className="tw-font-heading tw-text-xl md:tw-text-[22px] tw-font-bold tw-text-ink tw-mb-2">
-                  {step.title}
-                </h3>
-                <p className="tw-text-[15px] tw-text-slate tw-leading-relaxed">
-                  {step.description}
-                </p>
-                {step.duration && (
-                  <span className="tw-inline-flex tw-mt-3 tw-px-3 tw-py-1 tw-rounded-pill tw-bg-snow tw-border tw-border-silver/40 tw-text-xs tw-font-medium tw-text-slate/60">
-                    {step.duration}
-                  </span>
-                )}
+              <div className="pt-1">
+                <h3 className="font-heading text-[22px] font-bold text-ink mb-2">{s.title}</h3>
+                <p className="text-[15px] text-slate leading-relaxed">{s.description}</p>
+                {s.duration && <span className="inline-flex mt-3 px-3 py-1 rounded-pill bg-snow border border-silver/40 text-xs font-medium text-slate/60">{s.duration}</span>}
               </div>
             </div>
           ))}

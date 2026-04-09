@@ -1,200 +1,66 @@
-import { useRef, useEffect, useState } from "react";
 import { AutoSyncLogo } from "./icons/AutoSyncLogo";
 import { BRAND } from "../data/website-content";
 import { useCounter } from "../hooks/useCounter";
-import { use3DTilt } from "../hooks/useGsap";
 
 function HeroStat({ end, label }: { end: number; label: string }) {
   const { value, ref } = useCounter(end);
-  return (
-    <div ref={ref}>
-      <div className="tw-font-heading tw-text-[28px] tw-font-extrabold tw-tracking-[-0.02em] tw-text-ink">
-        {value.toLocaleString()}+
-      </div>
-      <div className="tw-text-[11px] tw-font-medium tw-text-slate/60 tw-uppercase tw-tracking-[0.06em]">
-        {label}
-      </div>
-    </div>
-  );
+  return <div ref={ref}><div className="font-heading text-[28px] font-extrabold tracking-[-0.02em] text-ink">{value.toLocaleString()}+</div><div className="text-[11px] font-medium text-slate/60 uppercase tracking-[0.06em]">{label}</div></div>;
 }
 
 function MiniDashboard() {
   return (
-    <div className="tw-p-5 tw-text-xs">
-      {/* Header */}
-      <div className="tw-flex tw-justify-between tw-items-center tw-mb-4">
-        <div className="tw-flex tw-items-center tw-gap-2">
-          <AutoSyncLogo size={14} className="tw-text-ink" />
-          <span className="tw-font-heading tw-text-sm tw-font-bold tw-text-ink">Dashboard</span>
-        </div>
-        <span className="tw-text-[10px] tw-text-green-500 tw-font-medium tw-flex tw-items-center tw-gap-1">
-          <span className="tw-w-1.5 tw-h-1.5 tw-rounded-full tw-bg-green-500" />
-          Live
-        </span>
+    <div className="p-5 text-xs">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2 font-heading text-sm font-bold text-ink"><AutoSyncLogo size={14} /> Dashboard</div>
+        <span className="text-[10px] text-green font-medium flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green" /> Live</span>
       </div>
-
-      {/* Stats */}
-      <div className="tw-grid tw-grid-cols-3 tw-gap-2 tw-mb-4">
-        {[["2,844", "Products"], ["5,827", "Fitments"], ["44%", "Coverage"]].map(([val, label]) => (
-          <div key={label} className="tw-p-3 tw-rounded-xl tw-border tw-border-silver/60 tw-text-center">
-            <div className="tw-font-heading tw-text-lg tw-font-extrabold tw-tracking-[-0.02em] tw-text-ink">{val}</div>
-            <div className="tw-text-[9px] tw-text-slate/50 tw-uppercase tw-tracking-[0.04em]">{label}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-3 gap-2 mb-3.5">
+        {[["2,844","Products"],["5,827","Fitments"],["44%","Coverage"]].map(([v,l])=>
+          <div key={l} className="p-3 rounded-xl border border-silver/60 text-center"><b className="block font-heading text-lg font-extrabold tracking-[-0.02em]">{v}</b><small className="text-[9px] text-slate/50 uppercase tracking-[0.04em]">{l}</small></div>
+        )}
       </div>
-
-      {/* Progress */}
-      <div className="tw-text-[10px] tw-font-semibold tw-text-slate/50 tw-uppercase tw-tracking-[0.06em] tw-mb-1.5">
-        Fitment Coverage
-      </div>
-      <div className="tw-h-1.5 tw-bg-ghost tw-rounded-full tw-overflow-hidden tw-mb-1">
-        <div className="tw-h-full tw-rounded-full tw-bg-gradient-to-r tw-from-accent tw-to-purple" style={{ width: "44%" }} />
-      </div>
-      <div className="tw-flex tw-justify-between tw-text-[10px] tw-text-slate/40">
-        <span>1,593 Review</span>
-        <span>1,251 Mapped</span>
-      </div>
+      <div className="text-[10px] font-semibold text-slate/50 uppercase tracking-[0.06em] mb-1.5">Fitment Coverage</div>
+      <div className="h-1.5 bg-ghost rounded-full overflow-hidden mb-1"><div className="h-full rounded-full gradient-fill" style={{ width: "44%" }} /></div>
+      <div className="flex justify-between text-[10px] text-slate/40"><span>1,593 Review</span><span>1,251 Mapped</span></div>
     </div>
   );
 }
 
 export function Hero({ stats }: { stats: { makes: number; models: number; engines: number } }) {
-  const productRef = useRef<HTMLDivElement>(null);
-  const [entered, setEntered] = useState(false);
-  use3DTilt(productRef, { rotateX: 5, rotateY: -4 });
-
-  useEffect(() => {
-    const timer = setTimeout(() => setEntered(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const delay = (ms: number) => ({ transitionDelay: `${ms}ms` });
-
+  // NO useState for entrance — use pure CSS animation to avoid hydration mismatch
   return (
-    <section className="tw-relative tw-pt-[160px] tw-pb-24 tw-overflow-hidden">
-      {/* Background: lavender gradient */}
-      <div
-        className="tw-absolute tw-inset-0"
-        style={{
-          background: "linear-gradient(160deg, #EEE8FF 0%, #F5F0FF 35%, #FFFFFF 70%)",
-        }}
-      />
-      {/* Dot grid overlay */}
-      <div
-        className="tw-absolute tw-inset-0 tw-opacity-40 tw-pointer-events-none"
-        style={{
-          backgroundImage: "radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1px)",
-          backgroundSize: "20px 20px",
-          maskImage: "radial-gradient(ellipse 55% 45% at 35% 35%, black 10%, transparent 55%)",
-          WebkitMaskImage: "radial-gradient(ellipse 55% 45% at 35% 35%, black 10%, transparent 55%)",
-        }}
-      />
-
-      {/* Content: SPLIT LAYOUT */}
-      <div className="tw-relative tw-z-10 tw-max-w-[1240px] tw-mx-auto tw-px-6 md:tw-px-10">
-        <div className="tw-grid tw-grid-cols-1 lg:tw-grid-cols-2 tw-gap-16 tw-items-center">
-
-          {/* LEFT: Text */}
-          <div className="tw-max-w-[560px] lg:tw-max-w-none">
-            {/* Animated pill badge */}
-            <div
-              className={`tw-inline-flex tw-items-center tw-gap-2 tw-px-5 tw-py-2 tw-rounded-pill tw-bg-white/70 tw-border tw-border-silver/60 tw-text-[13px] tw-font-semibold tw-text-carbon tw-mb-7 tw-transition-all tw-duration-700 ${
-                entered ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-5"
-              }`}
-              style={delay(0)}
-            >
-              <span
-                className="tw-w-2 tw-h-2 tw-rounded-full tw-bg-accent"
-                style={{ animation: "pulse-dot 2s ease-in-out infinite" }}
-              />
-              Vehicle Fitment Intelligence
+    <section className="relative pt-[160px] pb-24 overflow-hidden gradient-hero">
+      <div className="absolute inset-0 opacity-40 pointer-events-none dot-grid dot-mask-hero" />
+      <div className="relative z-2 max-w-[1240px] mx-auto px-6 md:px-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <div className="hero-enter" style={{ animationDelay: "0ms" }}>
+              <span className="inline-flex items-center gap-2 px-5 py-2 rounded-pill bg-white/70 border border-silver/60 text-[13px] font-semibold text-carbon mb-7">
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse-dot" /> Vehicle Fitment Intelligence
+              </span>
             </div>
-
-            {/* H1 */}
-            <h1
-              className={`tw-font-heading tw-text-[clamp(40px,5.5vw,58px)] tw-font-extrabold tw-tracking-[-0.04em] tw-leading-[1.05] tw-text-ink tw-mb-5 tw-transition-all tw-duration-700 ${
-                entered ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-5"
-              }`}
-              style={delay(100)}
-            >
-              Vehicle fitment{" "}
-              <span className="tw-text-accent">intelligence</span>
-              {" "}for Shopify
+            <h1 className="hero-enter font-heading text-[clamp(40px,5.5vw,58px)] font-extrabold tracking-[-0.04em] leading-[1.05] text-ink mb-5" style={{ animationDelay: "100ms" }}>
+              Vehicle fitment <span className="text-accent">intelligence</span> for Shopify
             </h1>
-
-            {/* Subtitle */}
-            <p
-              className={`tw-text-[17px] tw-text-slate tw-leading-[1.7] tw-mb-8 tw-transition-all tw-duration-700 ${
-                entered ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-5"
-              }`}
-              style={delay(200)}
-            >
-              {BRAND.description}
-            </p>
-
-            {/* CTAs */}
-            <div
-              className={`tw-flex tw-gap-3 tw-flex-wrap tw-mb-10 tw-transition-all tw-duration-700 ${
-                entered ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-5"
-              }`}
-              style={delay(300)}
-            >
-              <a
-                href="#get-started"
-                className="tw-px-9 tw-py-4 tw-bg-ink tw-text-white tw-rounded-pill tw-text-base tw-font-semibold hover:tw-bg-void tw-transition-all tw-duration-200 hover:tw--translate-y-0.5 hover:tw-shadow-lg"
-              >
-                Start Free Trial
-              </a>
-              <a
-                href="#features"
-                className="tw-px-9 tw-py-4 tw-bg-transparent tw-text-carbon tw-rounded-pill tw-text-base tw-font-medium tw-border-[1.5px] tw-border-steel/60 hover:tw-border-ink hover:tw-text-ink tw-transition-all tw-duration-200"
-              >
-                See How It Works
-              </a>
+            <p className="hero-enter text-[17px] text-slate leading-[1.7] mb-8" style={{ animationDelay: "200ms" }}>{BRAND.description}</p>
+            <div className="hero-enter flex gap-3 flex-wrap mb-10" style={{ animationDelay: "300ms" }}>
+              <a href="#get-started" className="inline-flex items-center px-9 py-4 bg-ink text-white rounded-pill text-base font-semibold hover:bg-void transition-all hover:-translate-y-0.5 hover:shadow-heavy">Start Free Trial</a>
+              <a href="#features" className="inline-flex items-center px-9 py-4 bg-transparent text-carbon rounded-pill text-base font-medium border-[1.5px] border-steel/60 hover:border-ink hover:text-ink transition-all">See How It Works</a>
             </div>
-
-            {/* Stats inline */}
-            <div
-              className={`tw-flex tw-gap-8 tw-flex-wrap tw-transition-all tw-duration-700 ${
-                entered ? "tw-opacity-100 tw-translate-y-0" : "tw-opacity-0 tw-translate-y-5"
-              }`}
-              style={delay(400)}
-            >
+            <div className="hero-enter flex gap-8 flex-wrap" style={{ animationDelay: "400ms" }}>
               <HeroStat end={stats.makes} label="Makes" />
               <HeroStat end={stats.models} label="Models" />
               <HeroStat end={stats.engines} label="Engines" />
             </div>
           </div>
-
-          {/* RIGHT: Product Frame with 3D tilt */}
-          <div className="tw-relative lg:tw-block">
-            {/* Blue glow behind */}
-            <div
-              className="tw-absolute tw-top-[10%] tw-left-[10%] tw-w-[80%] tw-h-[80%] tw-pointer-events-none"
-              style={{
-                background: "radial-gradient(circle, rgba(0,153,255,0.1) 0%, transparent 60%)",
-                filter: "blur(40px)",
-              }}
-            />
-
-            {/* Product frame */}
-            <div
-              ref={productRef}
-              className={`perspective-container tw-relative tw-z-10 tw-rounded-card tw-border tw-border-silver/60 tw-overflow-hidden tw-bg-white tw-shadow-xl tw-transition-all tw-duration-1000 ${
-                entered ? "tw-opacity-100 tw-scale-100" : "tw-opacity-0 tw-scale-95"
-              }`}
-              style={{
-                ...delay(300),
-                transformStyle: "preserve-3d",
-              }}
-            >
-              {/* Chrome bar */}
-              <div className="tw-flex tw-gap-[7px] tw-px-4 tw-py-3 tw-bg-snow tw-border-b tw-border-silver/40">
-                <span className="chrome-dot" />
-                <span className="chrome-dot" />
-                <span className="chrome-dot" />
+          <div className="relative hidden lg:block">
+            <div className="absolute top-[10%] left-[10%] w-[80%] h-[80%] pointer-events-none glow-accent" />
+            <div className="hero-enter tilt-frame relative z-1 rounded-card border border-silver/60 overflow-hidden bg-white shadow-ultra" style={{ animationDelay: "300ms" }}>
+              <div className="flex gap-[7px] px-4 py-3 bg-snow border-b border-silver/40">
+                <span className="w-[11px] h-[11px] rounded-full chrome-dot-red" />
+                <span className="w-[11px] h-[11px] rounded-full chrome-dot-yellow" />
+                <span className="w-[11px] h-[11px] rounded-full chrome-dot-green" />
               </div>
-
               <MiniDashboard />
             </div>
           </div>

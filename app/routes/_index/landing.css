@@ -1,59 +1,74 @@
 @import "tailwindcss";
 
+/* ═══ TAILWIND V4 CONFIG (via CSS, not tailwind.config.ts) ═══ */
+@source "../../../app/routes/_index/**/*.tsx";
+
+@theme {
+  --font-heading: 'DM Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-lavender: #EEE8FF;
+  --color-lavender-mid: #F5F0FF;
+  --color-snow: #F8F8FA;
+  --color-ghost: #F1F3F5;
+  --color-silver: #E2E5E9;
+  --color-steel: #CBD1D8;
+  --color-gray: #9CA3AF;
+  --color-slate: #64748B;
+  --color-carbon: #334155;
+  --color-ink: #0F172A;
+  --color-void: #020617;
+
+  --color-accent: #0099FF;
+  --color-accent-deep: #0077CC;
+  --color-accent-soft: rgba(0, 153, 255, 0.06);
+  --color-accent-glow: rgba(0, 153, 255, 0.12);
+  --color-purple: #6B52D9;
+  --color-green: #10B981;
+  --color-red: #DC2626;
+  --color-amber: #f59e0b;
+
+  --radius-pill: 999px;
+  --radius-card: 24px;
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-float: 0 4px 16px rgba(0,0,0,0.06);
+  --shadow-heavy: 0 20px 50px rgba(0,0,0,0.08);
+  --shadow-ultra: 0 32px 64px rgba(0,0,0,0.1);
+  --shadow-glow: 0 0 40px rgba(0,153,255,0.12);
+
+  --animate-marquee: marquee 25s linear infinite;
+  --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
+  --animate-fade-in: fade-in 0.3s ease forwards;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
 /* ═══ GOOGLE FONTS ═══ */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-/* ═══ GSAP + CUSTOM ANIMATIONS ═══ */
-/* These can't be done in Tailwind alone */
-
-/* Smooth scroll */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Marquee for trust logos */
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-
-/* Pulse for pill dot */
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-/* Rotating gradient border (from Resend badge) */
-@keyframes rotate-gradient {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* GSAP reveal targets — start hidden, GSAP animates them */
-.gsap-reveal {
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-/* Perspective wrapper for 3D product frames */
-.perspective-container {
-  perspective: 1200px;
-  transform-style: preserve-3d;
-}
+/* ═══ CUSTOM (things Tailwind can't do) ═══ */
 
 /* Chrome bar dots */
-.chrome-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-}
-.chrome-dot:nth-child(1) { background: #ff5f57; }
-.chrome-dot:nth-child(2) { background: #febd2f; }
-.chrome-dot:nth-child(3) { background: #28c840; }
+.chrome-dot-red { background: #ff5f57; }
+.chrome-dot-yellow { background: #febd2f; }
+.chrome-dot-green { background: #28c840; }
 
-/* UK Plate styling — can't use Tailwind for this */
+/* UK Plate */
 .uk-plate {
   display: inline-flex;
   border: 3px solid #1a1a1a;
@@ -73,21 +88,113 @@ html {
   padding: 0 22px;
   font-size: 28px;
   font-weight: 800;
-  font-family: 'Courier New', monospace;
+  font-family: monospace;
   color: #000;
   display: flex;
   align-items: center;
   letter-spacing: 0.05em;
 }
 
+/* Marquee track */
+.marquee-track {
+  display: flex;
+  gap: 56px;
+  animation: marquee 25s linear infinite;
+  width: max-content;
+}
+
+/* Product frame 3D tilt */
+.tilt-frame {
+  transform: perspective(1200px) rotateY(-4deg) rotateX(3deg);
+  transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.tilt-frame:hover {
+  transform: perspective(1200px) rotateY(0) rotateX(0);
+}
+
+/* Showcase frame tilt */
+.tilt-showcase {
+  transform: perspective(1800px) rotateX(2deg);
+  transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.tilt-showcase:hover {
+  transform: perspective(1800px) rotateX(0);
+}
+
+/* Progress bar gradient */
+.gradient-fill {
+  background: linear-gradient(90deg, #0099FF, #6B52D9);
+}
+
+/* CTA gradient bg */
+.gradient-cta {
+  background: linear-gradient(135deg, #003d99 0%, #0099FF 50%, #6B52D9 100%);
+}
+
+/* Hero gradient bg */
+.gradient-hero {
+  background: linear-gradient(160deg, #EEE8FF 0%, #F5F0FF 35%, #FFFFFF 70%);
+}
+
+/* Dot grid patterns */
+.dot-grid {
+  background-image: radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.dot-grid-white {
+  background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.dot-mask-hero {
+  mask-image: radial-gradient(ellipse 55% 45% at 35% 35%, black 10%, transparent 55%);
+  -webkit-mask-image: radial-gradient(ellipse 55% 45% at 35% 35%, black 10%, transparent 55%);
+}
+
+/* Glow behind product */
+.glow-accent {
+  background: radial-gradient(circle, rgba(0,153,255,0.1) 0%, transparent 60%);
+  filter: blur(40px);
+}
+
+/* GSAP reveal target — disabled until GSAP is wired up */
+/* .gsap-reveal { opacity: 0; transform: translateY(40px); } */
+
+/* Systems scroll */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.snap-start {
+  scroll-snap-align: start;
+}
+
+/* Timeline line */
+.timeline-line-track {
+  position: absolute;
+  width: 2px;
+  background: #E2E5E9;
+}
+.timeline-line-fill {
+  position: absolute;
+  width: 2px;
+  background: linear-gradient(180deg, #0099FF, #6B52D9);
+  transform-origin: top center;
+  transform: scaleY(0);
+}
+
+/* Hero entrance animation — CSS only, no React state = no hydration mismatch */
+@keyframes hero-enter {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-enter {
+  animation: hero-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .gsap-reveal {
-    opacity: 1;
-    transform: none;
-  }
-  * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  .gsap-reveal { opacity: 1; transform: none; }
+  .marquee-track { animation: none; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

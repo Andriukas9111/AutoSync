@@ -1,107 +1,31 @@
 import { useState } from "react";
 import { PRICING_TIERS } from "../data/website-content";
-import { Check, ChevronDown } from "lucide-react";
 
 export function PricingSection() {
   const [showAll, setShowAll] = useState(false);
-  const visibleTiers = showAll ? PRICING_TIERS : PRICING_TIERS.slice(0, 3);
+  const tiers = showAll ? PRICING_TIERS : PRICING_TIERS.slice(0, 3);
 
   return (
-    <section id="pricing" className="tw-py-[clamp(100px,14vh,180px)] tw-bg-snow">
-      <div className="tw-max-w-[1240px] tw-mx-auto tw-px-6 md:tw-px-10">
-        {/* Header */}
-        <div className="tw-text-center tw-mb-14 gsap-reveal">
-          <div className="tw-text-xs tw-font-semibold tw-text-accent tw-uppercase tw-tracking-[0.1em] tw-mb-4">
-            Pricing
-          </div>
-          <h2 className="tw-font-heading tw-text-[clamp(32px,4.5vw,48px)] tw-font-extrabold tw-tracking-[-0.035em] tw-leading-[1.08] tw-text-ink">
-            Simple, transparent pricing
-          </h2>
-          <p className="tw-text-[17px] tw-text-slate tw-leading-[1.7] tw-mt-3 tw-max-w-[520px] tw-mx-auto">
-            Start free. Scale as you grow. 14-day trial on all paid plans.
-          </p>
+    <section id="pricing" className="py-[clamp(100px,14vh,180px)] bg-snow">
+      <div className="max-w-[1240px] mx-auto px-6 md:px-10">
+        <div className="text-center mb-14">
+          <div className="text-xs font-semibold text-accent uppercase tracking-[0.1em] mb-4">Pricing</div>
+          <h2 className="font-heading text-[clamp(32px,4.5vw,48px)] font-extrabold tracking-[-0.035em] leading-[1.08] text-ink">Simple, transparent pricing</h2>
+          <p className="text-[17px] text-slate leading-[1.7] mt-3 max-w-[520px] mx-auto">Start free. Scale as you grow. 14-day trial on all paid plans.</p>
         </div>
-
-        {/* Cards */}
-        <div className={`tw-grid tw-gap-5 ${showAll ? "tw-grid-cols-1 md:tw-grid-cols-2 lg:tw-grid-cols-3" : "tw-grid-cols-1 md:tw-grid-cols-3"}`}>
-          {visibleTiers.map((tier, i) => (
-            <div
-              key={tier.name}
-              className={`tw-p-10 tw-rounded-card tw-border tw-bg-white tw-relative tw-shadow-sm hover:tw-shadow-lg hover:tw--translate-y-1.5 tw-transition-all tw-duration-300 ${
-                tier.popular
-                  ? "tw-border-accent tw-shadow-lg tw-shadow-accent/10"
-                  : "tw-border-silver/60"
-              }`}
-            >
-              {tier.popular && (
-                <div className="tw-absolute tw--top-3.5 tw-left-1/2 tw--translate-x-1/2 tw-px-5 tw-py-1.5 tw-rounded-pill tw-bg-accent tw-text-white tw-text-xs tw-font-bold tw-uppercase tw-tracking-[0.04em]">
-                  Most Popular
-                </div>
-              )}
-
-              <div className="tw-font-heading tw-text-xl tw-font-bold tw-text-ink tw-mb-2">{tier.name}</div>
-
-              <div className="tw-mb-5">
-                {tier.price === 0 ? (
-                  <span className="tw-font-heading tw-text-[52px] tw-font-extrabold tw-tracking-[-0.04em] tw-text-ink">Free</span>
-                ) : (
-                  <>
-                    <span className="tw-font-heading tw-text-[52px] tw-font-extrabold tw-tracking-[-0.04em] tw-text-ink">
-                      ${tier.price}
-                    </span>
-                    <span className="tw-text-base tw-text-slate tw-ml-1">/mo</span>
-                  </>
-                )}
-              </div>
-
-              <div className="tw-mb-6">
-                <div className="tw-text-sm tw-text-slate tw-py-1">
-                  <strong className="tw-text-ink tw-font-semibold">
-                    {typeof tier.limits.products === "number" ? tier.limits.products.toLocaleString() : tier.limits.products}
-                  </strong> products
-                </div>
-                <div className="tw-text-sm tw-text-slate tw-py-1">
-                  <strong className="tw-text-ink tw-font-semibold">
-                    {typeof tier.limits.fitments === "number" ? tier.limits.fitments.toLocaleString() : tier.limits.fitments}
-                  </strong> fitments
-                </div>
-              </div>
-
-              <ul className="tw-mb-7">
-                {tier.features.map((feat) => (
-                  <li key={feat} className="tw-text-sm tw-text-carbon tw-py-1.5 tw-flex tw-items-center tw-gap-2.5">
-                    <Check size={16} className="tw-text-accent tw-shrink-0" />
-                    {feat}
-                  </li>
-                ))}
-              </ul>
-
-              <a
-                href="#get-started"
-                className={`tw-block tw-text-center tw-py-3 tw-rounded-pill tw-text-sm tw-font-semibold tw-transition-all tw-duration-200 ${
-                  tier.popular
-                    ? "tw-bg-accent tw-text-white hover:tw-bg-accent-deep"
-                    : "tw-bg-transparent tw-text-carbon tw-border tw-border-steel/60 hover:tw-border-ink hover:tw-text-ink"
-                }`}
-              >
-                {tier.cta}
-              </a>
+        <div className={`grid gap-5 ${showAll ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-3"}`}>
+          {tiers.map(p => (
+            <div key={p.name} className={`p-10 rounded-card border bg-white relative shadow-card hover:shadow-heavy hover:-translate-y-1.5 transition-all duration-300 ${p.popular ? "border-accent shadow-heavy" : "border-silver/60"}`}>
+              {p.popular && <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-5 py-1.5 rounded-pill bg-accent text-white text-xs font-bold uppercase tracking-[0.04em]">Most Popular</div>}
+              <div className="font-heading text-xl font-bold text-ink mb-2">{p.name}</div>
+              <div className="mb-5">{p.price === 0 ? <span className="font-heading text-[52px] font-extrabold tracking-[-0.04em] text-ink">Free</span> : <><span className="font-heading text-[52px] font-extrabold tracking-[-0.04em] text-ink">${p.price}</span><span className="text-base text-slate ml-1">/mo</span></>}</div>
+              <div className="mb-6"><div className="text-sm text-slate py-1"><strong className="text-ink font-semibold">{typeof p.limits.products==="number"?p.limits.products.toLocaleString():p.limits.products}</strong> products</div><div className="text-sm text-slate py-1"><strong className="text-ink font-semibold">{typeof p.limits.fitments==="number"?p.limits.fitments.toLocaleString():p.limits.fitments}</strong> fitments</div></div>
+              <ul className="mb-7">{p.features.map(f=><li key={f} className="text-sm text-carbon py-1.5 flex items-center gap-2.5"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke="#0099FF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>{f}</li>)}</ul>
+              <a href="#get-started" className={`block text-center py-3 rounded-pill text-sm font-semibold transition-all ${p.popular ? "bg-accent text-white hover:bg-accent-deep" : "bg-transparent text-carbon border border-steel/60 hover:border-ink hover:text-ink"}`}>{p.cta}</a>
             </div>
           ))}
         </div>
-
-        {/* Show all plans */}
-        {!showAll && (
-          <div className="tw-text-center tw-mt-8">
-            <button
-              onClick={() => setShowAll(true)}
-              className="tw-inline-flex tw-items-center tw-gap-2 tw-px-6 tw-py-3 tw-rounded-pill tw-border tw-border-steel/60 tw-text-sm tw-font-semibold tw-text-carbon hover:tw-border-ink hover:tw-text-ink tw-transition-all tw-cursor-pointer"
-            >
-              View all 6 plans
-              <ChevronDown size={16} />
-            </button>
-          </div>
-        )}
+        {!showAll && <div className="text-center mt-8"><button onClick={()=>setShowAll(true)} className="inline-flex items-center gap-2 px-6 py-3 rounded-pill border border-steel/60 text-sm font-semibold text-carbon hover:border-ink hover:text-ink transition-all cursor-pointer">View all 6 plans <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></button></div>}
       </div>
     </section>
   );

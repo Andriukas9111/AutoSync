@@ -1,83 +1,59 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { YmmeDemo } from "../demos/YmmeDemo";
 import { PlateDemo } from "../demos/PlateDemo";
 import { VinDemo } from "../demos/VinDemo";
 import { WheelDemo } from "../demos/WheelDemo";
 import { BadgeDemo } from "../demos/BadgeDemo";
-import { use3DTilt } from "../hooks/useGsap";
 
 const TABS = [
-  { id: "ymme", label: "YMME Search", Component: YmmeDemo },
-  { id: "plate", label: "Plate Lookup", Component: PlateDemo },
-  { id: "vin", label: "VIN Decode", Component: VinDemo },
-  { id: "wheel", label: "Wheel Finder", Component: WheelDemo },
-  { id: "badge", label: "Fitment Badge", Component: BadgeDemo },
-] as const;
+  { id: "ymme", label: "YMME Search", C: YmmeDemo },
+  { id: "plate", label: "Plate Lookup", C: PlateDemo },
+  { id: "vin", label: "VIN Decode", C: VinDemo },
+  { id: "wheel", label: "Wheel Finder", C: WheelDemo },
+  { id: "badge", label: "Fitment Badge", C: BadgeDemo },
+];
 
 export function WidgetShowcase() {
-  const [active, setActive] = useState<string>("ymme");
-  const frameRef = useRef<HTMLDivElement>(null);
-  use3DTilt(frameRef, { rotateX: 2, rotateY: 0 });
-
-  const ActiveComponent = TABS.find((t) => t.id === active)?.Component || YmmeDemo;
+  const [active, setActive] = useState("ymme");
+  const ActiveC = TABS.find(t => t.id === active)?.C || YmmeDemo;
 
   return (
-    <section id="features" className="tw-py-[clamp(100px,14vh,180px)]">
-      <div className="tw-max-w-[1240px] tw-mx-auto tw-px-6 md:tw-px-10">
-        {/* Header */}
-        <div className="tw-text-center tw-mb-14 gsap-reveal">
-          <div className="tw-text-xs tw-font-semibold tw-text-accent tw-uppercase tw-tracking-[0.1em] tw-mb-4">
-            Storefront Widgets
-          </div>
-          <h2 className="tw-font-heading tw-text-[clamp(32px,4.5vw,48px)] tw-font-extrabold tw-tracking-[-0.035em] tw-leading-[1.08] tw-text-ink">
-            7 widgets your store needs
-          </h2>
-          <p className="tw-text-[17px] tw-text-slate tw-leading-[1.7] tw-mt-3 tw-max-w-[520px] tw-mx-auto">
-            Native Shopify blocks. Drag and drop into any Online Store 2.0 theme. No code changes.
-          </p>
+    <section id="features" className="py-[clamp(100px,14vh,180px)]">
+      <div className="max-w-[1240px] mx-auto px-6 md:px-10">
+        <div className="text-center mb-14">
+          <div className="text-xs font-semibold text-accent uppercase tracking-[0.1em] mb-4">Storefront Widgets</div>
+          <h2 className="font-heading text-[clamp(32px,4.5vw,48px)] font-extrabold tracking-[-0.035em] leading-[1.08] text-ink">7 widgets your store needs</h2>
+          <p className="text-[17px] text-slate leading-[1.7] mt-3 max-w-[520px] mx-auto">Native Shopify blocks. Drag and drop into any Online Store 2.0 theme.</p>
         </div>
-
-        {/* Showcase */}
-        <div className="tw-max-w-[1000px] tw-mx-auto">
+        <div className="max-w-[1000px] mx-auto">
           {/* Tabs */}
-          <div className="tw-flex tw-gap-1 tw-justify-center tw-mb-8 tw-flex-wrap">
-            {TABS.map((tab) => (
+          <div className="flex gap-1 justify-center mb-8 flex-wrap">
+            {TABS.map(t => (
               <button
-                key={tab.id}
-                onClick={() => setActive(tab.id)}
-                className={`tw-px-5 tw-py-2.5 tw-rounded-pill tw-text-[13px] tw-font-semibold tw-cursor-pointer tw-transition-all tw-duration-200 tw-border ${
-                  active === tab.id
-                    ? "tw-bg-ink tw-text-white tw-border-ink"
-                    : "tw-bg-transparent tw-text-slate tw-border-transparent hover:tw-bg-ghost hover:tw-text-carbon"
+                key={t.id}
+                onClick={() => setActive(t.id)}
+                className={`px-5 py-2.5 rounded-pill text-[13px] font-semibold cursor-pointer transition-all border ${
+                  active === t.id
+                    ? "bg-ink text-white border-ink"
+                    : "bg-transparent text-slate border-transparent hover:bg-ghost hover:text-carbon"
                 }`}
               >
-                {tab.label}
+                {t.label}
               </button>
             ))}
           </div>
 
-          {/* Product frame */}
-          <div
-            ref={frameRef}
-            className="perspective-container tw-rounded-card tw-border tw-border-silver/60 tw-overflow-hidden tw-bg-white tw-shadow-lg"
-          >
-            {/* Chrome bar */}
-            <div className="tw-flex tw-gap-[7px] tw-px-4 tw-py-3 tw-bg-snow tw-border-b tw-border-silver/40">
-              <span className="chrome-dot" />
-              <span className="chrome-dot" />
-              <span className="chrome-dot" />
-              <div className="tw-flex-1 tw-flex tw-justify-center">
-                <div className="tw-px-4 tw-py-1 tw-rounded-full tw-bg-white tw-border tw-border-silver/40 tw-text-[10px] tw-text-slate/40 tw-w-[200px] tw-text-center">
-                  yourstore.myshopify.com
-                </div>
-              </div>
+          {/* Product frame — NO flex-1 on chrome bar */}
+          <div className="tilt-showcase rounded-card border border-silver/60 overflow-hidden bg-white shadow-heavy">
+            <div className="flex items-center gap-[7px] px-4 py-3 bg-snow border-b border-silver/40">
+              <span className="w-[11px] h-[11px] rounded-full chrome-dot-red" />
+              <span className="w-[11px] h-[11px] rounded-full chrome-dot-yellow" />
+              <span className="w-[11px] h-[11px] rounded-full chrome-dot-green" />
+              <span className="mx-auto px-4 py-1 rounded-full bg-white border border-silver/40 text-[10px] text-slate/40 text-center">yourstore.myshopify.com</span>
             </div>
-
-            {/* Demo content */}
-            <div className="tw-p-7 tw-min-h-[360px]" key={active}>
-              <div className="tw-animate-fade-in">
-                <ActiveComponent />
-              </div>
+            {/* Demo content — render all, show active via display */}
+            <div className="p-7" style={{ minHeight: 360 }}>
+              <ActiveC />
             </div>
           </div>
         </div>

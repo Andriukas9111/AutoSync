@@ -4,48 +4,18 @@ import { NAVIGATION } from "../data/website-content";
 
 export function Nav() {
   const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  useEffect(() => { const fn = () => setScrolled(window.scrollY > 40); window.addEventListener("scroll", fn, { passive: true }); return () => window.removeEventListener("scroll", fn); }, []);
 
   return (
-    <nav
-      className={`tw-fixed tw-top-0 tw-left-0 tw-right-0 tw-z-50 tw-h-[72px] tw-flex tw-items-center tw-transition-all tw-duration-300 ${
-        scrolled
-          ? "tw-bg-white/90 tw-backdrop-blur-xl tw-border-b tw-border-silver/60"
-          : "tw-bg-transparent"
-      }`}
-    >
-      <div className="tw-max-w-[1240px] tw-mx-auto tw-px-6 md:tw-px-10 tw-w-full tw-flex tw-items-center tw-justify-between">
-        {/* Logo */}
-        <a href="#" className="tw-flex tw-items-center tw-gap-2.5 tw-text-ink hover:tw-opacity-80 tw-transition-opacity">
-          <AutoSyncLogo size={28} />
-          <span className="tw-font-heading tw-text-[22px] tw-font-extrabold tw-tracking-[-0.03em]">
-            AutoSync
-          </span>
+    <nav className={`fixed top-0 left-0 right-0 z-50 h-[72px] flex items-center transition-all duration-300 ${scrolled ? "bg-white/90 backdrop-blur-xl border-b border-silver/60" : "bg-transparent"}`}>
+      <div className="max-w-[1240px] mx-auto px-6 md:px-10 w-full flex items-center justify-between">
+        <a href="#" className="flex items-center gap-2.5 text-ink font-heading text-[22px] font-extrabold tracking-[-0.03em] hover:opacity-80 transition-opacity">
+          <AutoSyncLogo size={28} /> AutoSync
         </a>
-
-        {/* Links — hidden on mobile */}
-        <div className="tw-hidden md:tw-flex tw-items-center tw-gap-7">
-          {NAVIGATION.mainLinks.map((link) => (
-            <a
-              key={link.label}
-              href={link.href}
-              className="tw-text-sm tw-font-medium tw-text-slate hover:tw-text-ink tw-transition-colors tw-duration-150"
-            >
-              {link.label}
-            </a>
-          ))}
+        <div className="hidden md:flex items-center gap-7">
+          {NAVIGATION.mainLinks.map(l => <a key={l.label} href={l.href} className="text-sm font-medium text-slate hover:text-ink transition-colors">{l.label}</a>)}
         </div>
-
-        {/* CTA */}
-        <a
-          href={NAVIGATION.ctaButton.href}
-          className="tw-px-5 tw-py-2.5 tw-bg-ink tw-text-white tw-rounded-pill tw-text-[13px] tw-font-semibold hover:tw-bg-void tw-transition-all tw-duration-200 hover:tw--translate-y-0.5"
-        >
+        <a href={NAVIGATION.ctaButton.href} className="px-5 py-2.5 bg-ink text-white rounded-pill text-[13px] font-semibold hover:bg-void transition-all hover:-translate-y-0.5">
           {NAVIGATION.ctaButton.label}
         </a>
       </div>
