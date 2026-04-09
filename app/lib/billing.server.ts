@@ -96,7 +96,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   growth: {
     products: 5_000,
     fitments: 25_000,
-    providers: 3,
+    providers: 2,
     scheduledFetchesPerDay: 1,
     activeMakes: 30,
     features: {
@@ -125,7 +125,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   professional: {
     products: 25_000,
     fitments: 100_000,
-    providers: 5,
+    providers: 3,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
     features: {
@@ -154,7 +154,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   business: {
     products: 100_000,
     fitments: 500_000,
-    providers: 15,
+    providers: 4,
     scheduledFetchesPerDay: 4,
     activeMakes: 999_999,
     features: {
@@ -183,7 +183,7 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   enterprise: {
     products: 500_000,
     fitments: 2_000_000,
-    providers: 999_999,
+    providers: 5,
     scheduledFetchesPerDay: 12,
     activeMakes: 999_999,
     features: {
