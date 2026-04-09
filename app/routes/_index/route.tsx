@@ -170,9 +170,9 @@ function Dashboard() {
 
   return (
     <div className="dash">
-      <div className="dash__side">
+      <div className="dash__s">
         <div className="dash__logo">{Logo(15)} AutoSync</div>
-        <div className="dash__nav">
+        <div className="dash__n">
           {pages.map((p, i) => (
             <div key={p} className={`dash__item ${pg === i ? "on" : ""}`} onClick={() => setPg(i)} style={{ cursor: "pointer" }}>
               {navIcons[i]} {p}
@@ -180,11 +180,11 @@ function Dashboard() {
           ))}
         </div>
       </div>
-      <div className="dash__main">
+      <div className="dash__m">
         {pg === 0 && <>
-          <div className="d-title">Dashboard</div>
-          <div className="d-label">Quick Actions</div>
-          <div className="d-actions">
+          <div className="d-t">Dashboard</div>
+          <div className="d-l">Quick Actions</div>
+          <div className="d-acts">
             <div className="d-act"><span className="d-dot" style={{ background: "#2563eb" }}/> Fetch Products</div>
             <div className="d-act"><span className="d-dot" style={{ background: "#ea580c" }}/> Auto Extract</div>
             <div className="d-act"><span className="d-dot" style={{ background: "#16a34a" }}/> Manual Map</div>
@@ -192,15 +192,15 @@ function Dashboard() {
           </div>
           <div className="d-row">
             {[["2,844", "Products"], ["5,827", "Fitments"], ["1,251", "Mapped"], ["44%", "Coverage"]].map(([n, l], i) =>
-              <div key={i} className="d-card"><div className="d-card__n">{n}</div><div className="d-card__l">{l}</div></div>
+              <div key={i} className="d-c"><div className="d-c__n">{n}</div><div className="d-c__l">{l}</div></div>
             )}
           </div>
-          <div className="d-label">Fitment Coverage</div>
-          <div className="d-bar"><div className="d-bar__fill" style={{ width: "44%" }}/></div>
+          <div className="d-l">Fitment Coverage</div>
+          <div className="d-bar"><div className="d-bar__f" style={{ width: "44%" }}/></div>
           <div className="d-meta"><span>1,593 Needs Review</span><span>1,251 Mapped</span></div>
         </>}
         {pg === 1 && <>
-          <div className="d-title">Products</div>
+          <div className="d-t">Products</div>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead><tr>{["Product", "Status", "Fits"].map(h => <th key={h} style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid var(--border)", color: "var(--text-4)", fontSize: 10, textTransform: "uppercase" as const, letterSpacing: ".05em", fontWeight: 600 }}>{h}</th>)}</tr></thead>
             <tbody>
@@ -217,7 +217,7 @@ function Dashboard() {
           </table>
         </>}
         {pg === 2 && <>
-          <div className="d-title">Push to Shopify</div>
+          <div className="d-t">Push to Shopify</div>
           <button className="dm-btn" style={{ width: "100%", marginBottom: 14, borderRadius: "var(--r)", padding: "12px" }}>Push All Mapped Products</button>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13, color: "var(--text-2)" }}>
             {["Push Tags", "Push Metafields", "Create Collections"].map(t => (
@@ -228,7 +228,7 @@ function Dashboard() {
           </div>
         </>}
         {pg === 3 && <>
-          <div className="d-title">Collections</div>
+          <div className="d-t">Collections</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {MAKES.slice(0, 4).map((m, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: 12, borderRadius: "var(--r)", border: "1px solid var(--border)", background: "var(--bg)" }}>
@@ -253,13 +253,13 @@ function Dashboard() {
 function YmmeVisual() {
   return (
     <div>
-      <div className="chrome"><span className="chrome__d"/><span className="chrome__d"/><span className="chrome__d"/></div>
-      <div className="demo-inner">
-        <div className="dm-title">Find Parts for Your Vehicle</div>
-        <div className="dm-grid4">
+      <div className="chr"><span/><span/><span/></div>
+      <div className="di">
+        <div className="dm-t">Find Parts for Your Vehicle</div>
+        <div className="dm-g4">
           {[["Make", "BMW"], ["Model", "3 Series"], ["Year", "2022"], ["Engine", "M340i"]].map(([label, val]) => (
             <div key={label}>
-              <div className="dm-label">{label}</div>
+              <div className="dm-lb">{label}</div>
               <div className="dm-sel dm-anim">
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   {label === "Make" && <img src={MAKES[0].l} alt="" width="18" height="18" style={{ objectFit: "contain" }}/>}
@@ -280,7 +280,7 @@ function YmmeVisual() {
             <span style={{ position: "absolute", top: -4, right: -4, width: 16, height: 16, borderRadius: "50%", background: "var(--ac)", color: "#fff", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>3</span>
           </div>
         </div>
-        <div className="dm-footer">{Logo(11)} Powered by AutoSync</div>
+        <div className="dm-foot">{Logo(11)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -289,23 +289,23 @@ function YmmeVisual() {
 function PlateVisual() {
   return (
     <div>
-      <div className="chrome"><span className="chrome__d"/><span className="chrome__d"/><span className="chrome__d"/></div>
-      <div className="demo-inner">
-        <div className="dm-title" style={{ textAlign: "center" }}>UK Plate Lookup</div>
-        <div className="dm-sub" style={{ textAlign: "center" }}>Enter your registration number</div>
+      <div className="chr"><span/><span/><span/></div>
+      <div className="di">
+        <div className="dm-t" style={{ textAlign: "center" }}>UK Plate Lookup</div>
+        <div className="dm-s" style={{ textAlign: "center" }}>Enter your registration number</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <div className="dm-plate" style={{ flex: 1 }}>
             <div className="dm-plate__gb">
               <svg width="22" height="15" viewBox="0 0 60 40"><rect width="60" height="40" fill="#012169"/><path d="M0 0L60 40M60 0L0 40" stroke="#fff" strokeWidth="6"/><path d="M0 0L60 40M60 0L0 40" stroke="#C8102E" strokeWidth="3"/><path d="M30 0V40M0 20H60" stroke="#fff" strokeWidth="10"/><path d="M30 0V40M0 20H60" stroke="#C8102E" strokeWidth="6"/></svg>
             </div>
-            <input className="dm-plate__input" value="AL61 EAJ" readOnly/>
+            <input className="dm-plate__in" value="AL61 EAJ" readOnly/>
           </div>
           <button className="dm-btn" style={{ height: 44, padding: "0 18px" }}>Look Up</button>
         </div>
         <div style={{ fontFamily: "var(--heading)", fontSize: 16, fontWeight: 700, marginBottom: 3, color: "var(--text)" }}>BMW M340I XDRIVE MHEV AUTO</div>
         <div style={{ fontSize: 12, color: "var(--text-4)", marginBottom: 12 }}>2022 · ORANGE · HYBRID ELECTRIC</div>
         {[["Year", "2022"], ["Engine", "2998cc"], ["Fuel", "HYBRID ELECTRIC"], ["CO\u2082", "176 g/km"]].map(([k, v], i) =>
-          <div key={i} className="dm-spec-row"><span>{k}</span><span>{v}</span></div>
+          <div key={i} className="dm-sr"><span>{k}</span><span>{v}</span></div>
         )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "12px 0" }}>
           {[["MOT", "Valid", "var(--green)"], ["TAX", "Taxed", "var(--green)"]].map(([l, v, c]) => (
@@ -318,7 +318,7 @@ function PlateVisual() {
           ))}
         </div>
         <button className="dm-btn" style={{ width: "100%" }}>Find Parts for This Vehicle</button>
-        <div className="dm-footer">{Logo(11)} Powered by AutoSync</div>
+        <div className="dm-foot">{Logo(11)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -327,25 +327,25 @@ function PlateVisual() {
 function VinVisual() {
   return (
     <div>
-      <div className="chrome"><span className="chrome__d"/><span className="chrome__d"/><span className="chrome__d"/></div>
-      <div className="demo-inner" style={{ textAlign: "center" }}>
-        <div className="dm-title">VIN Decode</div>
-        <div className="dm-sub">Decode any 17-character VIN worldwide</div>
+      <div className="chr"><span/><span/><span/></div>
+      <div className="di" style={{ textAlign: "center" }}>
+        <div className="dm-t">VIN Decode</div>
+        <div className="dm-s">Decode any 17-character VIN worldwide</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
           <span style={{ padding: "5px 10px", background: "var(--ac-light)", color: "var(--ac)", fontSize: 10, fontWeight: 700, borderRadius: 6, letterSpacing: ".05em", border: "1px solid rgba(37,99,235,.08)" }}>VIN</span>
-          <div className="dm-vin-field">
+          <div className="dm-vf">
             <input value="WBAPH5C55BA123456" readOnly style={{ letterSpacing: 1.2 }}/>
             <span style={{ fontSize: 10, color: "var(--green)", fontWeight: 600, fontFamily: "var(--mono)" }}>17/17</span>
           </div>
           <button className="dm-btn">Decode</button>
         </div>
         <div style={{ fontFamily: "var(--heading)", fontSize: 16, fontWeight: 700, marginBottom: 6, color: "var(--text)" }}>2011 BMW 5 Series 528i</div>
-        <div className="dm-vin-grid">
+        <div className="dm-vg">
           {[["Year", "2011"], ["Make", "BMW"], ["Model", "5 Series"], ["Body", "Sedan"], ["Drive", "RWD"], ["Engine", "3.0L I6"], ["Fuel", "Gasoline"], ["Trans", "Auto"], ["Country", "Germany"], ["Trim", "528i"]].map(([k, v], i) =>
-            <div key={i} className="dm-vin-cell"><div className="dm-vin-k">{k}</div><div className="dm-vin-v">{v}</div></div>
+            <div key={i} className="dm-vc"><div className="dm-vk">{k}</div><div className="dm-vv">{v}</div></div>
           )}
         </div>
-        <div className="dm-footer">{Logo(11)} Powered by AutoSync</div>
+        <div className="dm-foot">{Logo(11)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -354,10 +354,10 @@ function VinVisual() {
 function BadgeVisual() {
   return (
     <div>
-      <div className="chrome"><span className="chrome__d"/><span className="chrome__d"/><span className="chrome__d"/></div>
-      <div className="demo-inner" style={{ textAlign: "center" }}>
-        <div className="dm-title">Fitment Badge</div>
-        <div className="dm-sub">Appears on every product page automatically</div>
+      <div className="chr"><span/><span/><span/></div>
+      <div className="di" style={{ textAlign: "center" }}>
+        <div className="dm-t">Fitment Badge</div>
+        <div className="dm-s">Appears on every product page automatically</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="dm-badge dm-badge--green">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8l3 3 7-7" stroke="#16a34a" strokeWidth="2" strokeLinecap="round"/></svg>
@@ -369,20 +369,20 @@ function BadgeVisual() {
           </div>
         </div>
         <div style={{ marginTop: 16 }}>
-          <div className="dm-vgrid">
+          <div className="dm-vcg">
             {[{ m: "BMW", n: "3 Series", hp: "102 HP" }, { m: "Audi", n: "A3", hp: "115 HP" }].map((v, i) => (
-              <div key={i} className="dm-vcard">
-                <div className="dm-vcard__make"><img src={MAKES[i].l} alt="" />{v.m}</div>
+              <div key={i} className="dm-vcd">
+                <div className="dm-vcd__m"><img src={MAKES[i].l} alt="" />{v.m}</div>
                 <h4>{v.n}</h4>
-                <div className="dm-vcard__pills">
-                  <span className="dm-vcard__pill dm-vcard__pill--ac">{v.hp}</span>
+                <div className="dm-vcd__p">
+                  <span className="dm-vcd__pl dm-vcard__pill--ac">{v.hp}</span>
                   <span className="dm-vcard__pill">Petrol</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <div className="dm-footer">{Logo(11)} Powered by AutoSync</div>
+        <div className="dm-foot">{Logo(11)} Powered by AutoSync</div>
       </div>
     </div>
   );
@@ -433,7 +433,7 @@ export default function LandingPage() {
             });
           }
           // Product frame scale on scroll
-          const frame = document.querySelector(".product-frame");
+          const frame = document.querySelector(".product__frame");
           if (frame) {
             gsap.fromTo(frame, { scale: 0.92, rotateX: 6 }, {
               scale: 1, rotateX: 0, ease: "none",
@@ -450,7 +450,7 @@ export default function LandingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const el = bentoRef.current; if (!el) return;
-    const cards = el.querySelectorAll(".bento__card");
+    const cards = el.querySelectorAll(".bc");
     const obs = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -470,7 +470,7 @@ export default function LandingPage() {
 
       {/* ══════ 1. NAV ══════ */}
       <nav className={`N ${scrolled ? "scrolled" : ""}`}>
-        <div className="N__inner">
+        <div className="N__i">
           <a href="#" className="N__logo">{Logo()} AutoSync</a>
           <div className="N__links">
             <a href="#features">Features</a>
@@ -515,7 +515,7 @@ export default function LandingPage() {
 
       {/* ══════ 4. TRUST MARQUEE ══════ */}
       <section className="trust">
-        <div className="W"><p className="trust__label">Trusted by parts retailers using these vehicle brands</p></div>
+        <div className="W"><p className="trust__l">Trusted by parts retailers using these vehicle brands</p></div>
         <div style={{ overflow: "hidden" }}>
           <div className="marquee">
             {[...MAKES, ...MAKES].map((m, i) => <img key={i} src={m.l} alt={m.n} title={m.n} loading="lazy"/>)}
@@ -538,15 +538,15 @@ export default function LandingPage() {
               <div key={i} className={`bento__card ${sys.wide ? "bento__card--wide" : ""}`}>
                 <h3>{sys.t}</h3>
                 <p>{sys.d}</p>
-                <span className="bento__stat">{sys.s}</span>
+                <span className="bc__stat">{sys.s}</span>
                 {sys.wide && (
-                  <div className="bento__visual">
+                  <div className="bc__vis">
                     {i === 0 ? (
                       [["Auto Mapped", "#16a34a", "72%"], ["Flagged", "#ea580c", "18%"], ["No Match", "#94a3b8", "10%"]].map(([l, c, w], j) => (
-                        <div key={j} className="bento__vis-row">
-                          <span className="bento__vis-dot" style={{ background: c as string }}/>
+                        <div key={j} className="bc__vr">
+                          <span className="bc__vd" style={{ background: c as string }}/>
                           <span style={{ flex: "0 0 90px", fontSize: 13 }}>{l}</span>
-                          <div className="bento__vis-bar"><div className="bento__vis-fill" style={{ width: w as string, background: c as string }}/></div>
+                          <div className="bc__vb"><div className="bc__vf" style={{ width: w as string, background: c as string }}/></div>
                         </div>
                       ))
                     ) : (
@@ -575,8 +575,8 @@ export default function LandingPage() {
 
           {/* Row 1: YMME (text left, visual right) */}
           <Rv>
-            <div className="feat-row">
-              <div className="feat-row__text">
+            <div className="fr">
+              <div className="fr__text">
                 <span className="tag">YMME Search</span>
                 <h3>Find parts by vehicle</h3>
                 <p>Cascading Make, Model, Year, Engine dropdowns with brand logos, My Garage for saved vehicles, and instant search results.</p>
@@ -586,14 +586,14 @@ export default function LandingPage() {
                   <li>{Chk} Search & Discovery integration</li>
                 </ul>
               </div>
-              <div className="feat-row__visual"><YmmeVisual/></div>
+              <div className="fr__visual"><YmmeVisual/></div>
             </div>
           </Rv>
 
           {/* Row 2: Plate (reversed) */}
           <Rv>
-            <div className="feat-row feat-row--rev">
-              <div className="feat-row__text">
+            <div className="fr feat-row--rev">
+              <div className="fr__text">
                 <span className="tag">Plate Lookup</span>
                 <h3>UK registration lookup</h3>
                 <p>DVLA integration with MOT history, tax status, and instant vehicle identification from a UK number plate.</p>
@@ -603,14 +603,14 @@ export default function LandingPage() {
                   <li>{Chk} Recent searches saved</li>
                 </ul>
               </div>
-              <div className="feat-row__visual"><PlateVisual/></div>
+              <div className="fr__visual"><PlateVisual/></div>
             </div>
           </Rv>
 
           {/* Row 3: VIN */}
           <Rv>
-            <div className="feat-row">
-              <div className="feat-row__text">
+            <div className="fr">
+              <div className="fr__text">
                 <span className="tag">VIN Decode</span>
                 <h3>Decode any vehicle worldwide</h3>
                 <p>17-character VIN decoder covering 60+ manufacturers with full spec breakdown and one-click part search.</p>
@@ -620,14 +620,14 @@ export default function LandingPage() {
                   <li>{Chk} One-click compatible parts search</li>
                 </ul>
               </div>
-              <div className="feat-row__visual"><VinVisual/></div>
+              <div className="fr__visual"><VinVisual/></div>
             </div>
           </Rv>
 
           {/* Row 4: Badge & Specs (reversed) */}
           <Rv>
-            <div className="feat-row feat-row--rev">
-              <div className="feat-row__text">
+            <div className="fr feat-row--rev">
+              <div className="fr__text">
                 <span className="tag">Badge & Specs</span>
                 <h3>Compatibility everywhere</h3>
                 <p>Fitment badges on every product page and SEO-optimized vehicle specification galleries with 90+ fields per vehicle.</p>
@@ -637,7 +637,7 @@ export default function LandingPage() {
                   <li>{Chk} Auto-generated SEO pages</li>
                 </ul>
               </div>
-              <div className="feat-row__visual"><BadgeVisual/></div>
+              <div className="fr__visual"><BadgeVisual/></div>
             </div>
           </Rv>
         </div>
@@ -653,11 +653,11 @@ export default function LandingPage() {
             </div>
           </Rv>
           <div className="steps">
-            <div className="steps__line"><div ref={stepsRef} className="steps__fill"/></div>
+            <div className="steps__ln"><div ref={stepsRef} className="steps__fl"/></div>
             {STEPS.map((s, i) => (
               <Rv key={i} delay={i * 0.12}>
                 <div className="step">
-                  <div className="step__num">{s.n}</div>
+                  <div className="step__n">{s.n}</div>
                   <h3>{s.t}</h3>
                   <p>{s.d}</p>
                 </div>
@@ -680,20 +680,20 @@ export default function LandingPage() {
           <div className="pricing">
             {PLANS.map((p, i) => (
               <Rv key={p.name} delay={i * 0.06}>
-                <div className={`price ${p.pop ? "price--pop" : ""}`}>
-                  {p.pop && <div className="price__badge">Most Popular</div>}
-                  <div className="price__name">{p.name}</div>
+                <div className={`pr ${p.pop ? "pr--pop" : ""}`}>
+                  {p.pop && <div className="pr__badge">Most Popular</div>}
+                  <div className="pr__name">{p.name}</div>
                   <div style={{ marginBottom: 16 }}>
                     {p.price === 0
-                      ? <span className="price__amt">Free</span>
-                      : <><span className="price__amt">${p.price}</span><span className="price__per">/mo</span></>
+                      ? <span className="pr__amt">Free</span>
+                      : <><span className="pr__amt">${p.price}</span><span className="pr__per">/mo</span></>
                     }
                   </div>
-                  <div className="price__limits">
+                  <div className="pr__limits">
                     <div><strong>{p.products}</strong> products</div>
                     <div><strong>{p.fitments}</strong> fitments</div>
                   </div>
-                  <ul className="price__feat">
+                  <ul className="pr__feat">
                     {p.features.map((f, j) => <li key={j}>{Chk} {f}</li>)}
                   </ul>
                   <a href="#login" className={`B ${p.pop ? "B--ac" : "B--ghost"}`} style={{ width: "100%", justifyContent: "center" }}>
@@ -716,7 +716,7 @@ export default function LandingPage() {
             </div>
           </Rv>
           <Rv delay={0.1}>
-            <div className="compare-wrap">
+            <div className="cmp">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -749,14 +749,14 @@ export default function LandingPage() {
               <div className="h2">What parts retailers say</div>
             </div>
           </Rv>
-          <div className="testimonials">
+          <div className="tss">
             {TESTIMONIALS.map((t, i) => (
               <Rv key={i} delay={i * 0.1}>
-                <div className="testi">
-                  <div className="testi__stars">★★★★★</div>
-                  <div className="testi__q">"{t.q}"</div>
-                  <div className="testi__name">{t.n}</div>
-                  <div className="testi__role">{t.r}</div>
+                <div className="ts">
+                  <div className="ts__stars">★★★★★</div>
+                  <div className="ts__q">"{t.q}"</div>
+                  <div className="ts__n">{t.n}</div>
+                  <div className="ts__r">{t.r}</div>
                 </div>
               </Rv>
             ))}
@@ -790,7 +790,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══════ 12. CTA ══════ */}
-      <section className="cta-sec">
+      <section className="cta">
         <div className="W" style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
           <Rv>
             <div className="h2">Ready to sell more parts?</div>
@@ -811,7 +811,7 @@ export default function LandingPage() {
           {showForm && (
             <Form method="post" action="/auth/login">
               <div style={{ display: "flex", gap: 8 }}>
-                <input name="shop" className="login-input" placeholder="your-store.myshopify.com" value={shop} onChange={e => setShop(e.target.value)}/>
+                <input name="shop" className="login-i" placeholder="your-store.myshopify.com" value={shop} onChange={e => setShop(e.target.value)}/>
                 <button type="submit" className="B B--ac">Install</button>
               </div>
             </Form>
@@ -829,31 +829,31 @@ export default function LandingPage() {
       {/* ══════ 14. FOOTER ══════ */}
       <footer className="foot">
         <div className="W">
-          <div className="foot__grid">
+          <div className="foot__g">
             <div>
               <div className="foot__brand">{Logo(18)} AutoSync</div>
               <p className="foot__desc">Vehicle fitment intelligence for Shopify. Help customers find parts that fit their vehicle.</p>
             </div>
             <div>
               <h4>Product</h4>
-              <div className="foot__links">
+              <div className="foot__lk">
                 <a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a><a href="#faq">FAQ</a>
               </div>
             </div>
             <div>
               <h4>Company</h4>
-              <div className="foot__links">
+              <div className="foot__lk">
                 <a href="#">About</a><a href="#">Blog</a><a href="#">Changelog</a>
               </div>
             </div>
             <div>
               <h4>Legal</h4>
-              <div className="foot__links">
+              <div className="foot__lk">
                 <a href="/legal/privacy">Privacy</a><a href="/legal/terms">Terms</a><a href="mailto:support@autosync.app">Contact</a>
               </div>
             </div>
           </div>
-          <div className="foot__bottom">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
+          <div className="foot__b">&copy; {new Date().getFullYear()} AutoSync. All rights reserved.</div>
         </div>
       </footer>
     </div>
