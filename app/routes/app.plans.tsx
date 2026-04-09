@@ -958,10 +958,10 @@ function BuildYourPlan({ currentPlan, onSubscribe, loading }: {
   const isActive = currentPlan === "custom";
 
   const sliders: { label: string; desc: string; tiers: { label: string; addon: number }[]; value: number; set: (v: number) => void }[] = [
-    { label: "Products", desc: "Enterprise includes 500K", tiers: CUSTOM_PLAN_TIERS.products, value: products, set: setProducts },
-    { label: "Providers", desc: "Enterprise includes 5", tiers: CUSTOM_PLAN_TIERS.providers, value: providers, set: setProviders },
-    { label: "Fitments", desc: "Enterprise includes 2M", tiers: CUSTOM_PLAN_TIERS.fitments, value: fitments, set: setFitments },
-    { label: "Scheduled Fetches", desc: "Enterprise includes 12/day", tiers: CUSTOM_PLAN_TIERS.scheduledFetches, value: fetches, set: setFetches },
+    { label: "Products", desc: `Enterprise includes ${CUSTOM_PLAN_TIERS.products[0].label}`, tiers: CUSTOM_PLAN_TIERS.products, value: products, set: setProducts },
+    { label: "Providers", desc: `Enterprise includes ${CUSTOM_PLAN_TIERS.providers[0].label}`, tiers: CUSTOM_PLAN_TIERS.providers, value: providers, set: setProviders },
+    { label: "Fitments", desc: `Enterprise includes ${CUSTOM_PLAN_TIERS.fitments[0].label}`, tiers: CUSTOM_PLAN_TIERS.fitments, value: fitments, set: setFitments },
+    { label: "Scheduled Fetches", desc: `Enterprise includes ${CUSTOM_PLAN_TIERS.scheduledFetches[0].label}`, tiers: CUSTOM_PLAN_TIERS.scheduledFetches, value: fetches, set: setFetches },
   ];
 
   return (
