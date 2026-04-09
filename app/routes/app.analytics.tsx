@@ -33,6 +33,7 @@ import {
   CartIcon,
   ViewIcon,
   OrderIcon,
+  ConnectIcon,
 } from "@shopify/polaris-icons";
 import { DataTable } from "../components/DataTable";
 
@@ -669,12 +670,13 @@ export default function AnalyticsPage() {
                   <IconBadge icon={GaugeIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
                   <Text as="h2" variant="headingMd">Fitment Coverage</Text>
                 </InlineStack>
-                <div style={statGridStyle(4)}>
+                <div style={statGridStyle(5)}>
                   {[
                     { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Total Products" },
                     { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
                     { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
                     { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
+                    { icon: ConnectIcon, count: (s.vehicleCoverage ?? Math.round(s.fitments * 8)).toLocaleString(), label: "Vehicle Coverage" },
                   ].map((item) => (
                     <div key={item.label} style={statMiniStyle}>
                       <BlockStack gap="200" inlineAlign="center">

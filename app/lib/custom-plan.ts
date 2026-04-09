@@ -25,14 +25,14 @@ export const CUSTOM_PLAN_BASE_PRICE = 299;
 
 // Each slider starts at Enterprise limits (addon: 0) and scales UP
 export const CUSTOM_PLAN_TIERS: CustomPlanConfig = {
-  // Enterprise gives 500,000 — scale up from there
+  // Enterprise gives 50,000 — scale up from there
   products: [
-    { value: 500_000, label: "500K", addon: 0 },
-    { value: 750_000, label: "750K", addon: 40 },
-    { value: 1_000_000, label: "1M", addon: 80 },
-    { value: 2_000_000, label: "2M", addon: 160 },
-    { value: 5_000_000, label: "5M", addon: 300 },
-    { value: 999_999_999, label: "Unlimited", addon: 500 },
+    { value: 50_000, label: "50K", addon: 0 },
+    { value: 100_000, label: "100K", addon: 50 },
+    { value: 250_000, label: "250K", addon: 120 },
+    { value: 500_000, label: "500K", addon: 200 },
+    { value: 1_000_000, label: "1M", addon: 350 },
+    { value: 999_999_999, label: "Unlimited", addon: 600 },
   ],
   // Enterprise gives 5 — scale up from there
   providers: [
@@ -43,12 +43,12 @@ export const CUSTOM_PLAN_TIERS: CustomPlanConfig = {
     { value: 100, label: "100", addon: 220 },
     { value: 999_999, label: "Unlimited", addon: 400 },
   ],
-  // Enterprise gives 2,000,000 — scale up from there
+  // Enterprise gives 250,000 — scale up from there
   fitments: [
-    { value: 2_000_000, label: "2M", addon: 0 },
-    { value: 5_000_000, label: "5M", addon: 50 },
-    { value: 10_000_000, label: "10M", addon: 120 },
-    { value: 50_000_000, label: "50M", addon: 250 },
+    { value: 250_000, label: "250K", addon: 0 },
+    { value: 500_000, label: "500K", addon: 50 },
+    { value: 1_000_000, label: "1M", addon: 120 },
+    { value: 5_000_000, label: "5M", addon: 250 },
     { value: 999_999_999, label: "Unlimited", addon: 450 },
   ],
   // Enterprise gives 12/day — scale up from there

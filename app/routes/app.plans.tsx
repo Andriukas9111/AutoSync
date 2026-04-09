@@ -183,8 +183,12 @@ const FAQ_ITEMS = [
     a: "Yes. Upgrades take effect immediately with prorated billing. Downgrades take effect at the end of your current billing cycle. You can downgrade to Free at any time — your data stays safe.",
   },
   {
+    q: "How are fitments counted?",
+    a: "Fitments are counted at the Make + Model + Year level — one fitment rule per vehicle combination. For example, mapping a product to 'BMW 3 Series 2019-2024' counts as 1 fitment, even though it covers dozens of individual trims and engine variants (M340i, 320d, 330e, etc.). This means your fitment limits go much further than per-trim counting used by other apps. We also show 'Vehicle Coverage' — the estimated number of individual vehicle configurations your fitments cover (~8× your fitment count).",
+  },
+  {
     q: "What happens if I exceed my product or fitment limit?",
-    a: "You won't be able to import new products, add new fitments, or run auto-extraction until you upgrade or remove existing data. Your existing data remains intact and your storefront widgets continue working.",
+    a: "You won't be able to import new products, add new fitments, or run auto-extraction until you upgrade or remove existing data. Your existing data remains intact and your storefront widgets continue working. You can also use the Build Your Plan option to add extra capacity without changing your base plan.",
   },
   {
     q: "What are 'active makes'?",
@@ -212,7 +216,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Is there a free trial?",
-    a: "The Free plan lets you explore AutoSync with up to 50 products at no cost. All paid plans include a 14-day free trial and are billed monthly through Shopify with no long-term commitment.",
+    a: "The Free plan lets you explore AutoSync with up to 25 products at no cost. All paid plans include a 14-day free trial and are billed monthly through Shopify with no long-term commitment.",
   },
 ];
 

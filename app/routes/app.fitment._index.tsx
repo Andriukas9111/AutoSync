@@ -354,6 +354,7 @@ export default function Fitment() {
             {([
               { icon: ProductIcon, label: "Total", count: liveTotal },
               { icon: ConnectIcon, label: "Fitments", count: liveFitments },
+              { icon: ConnectIcon, label: "Coverage", count: stats.vehicleCoverage ?? Math.round(liveFitments * 8) },
               { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
               { icon: MinusCircleIcon, label: "No Match", count: stats.noMatch, critical: false as boolean },
               { icon: WandIcon, label: "Auto", count: autoMapped },

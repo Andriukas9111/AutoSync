@@ -503,7 +503,7 @@ export const FAQ_ITEMS = [
   },
   {
     question: "Is there a free trial?",
-    answer: "The Free plan lets you try AutoSync with 50 products at no cost, forever — no credit card required. All paid plans include a 14-day free trial so you can test the full feature set before committing.",
+    answer: "The Free plan lets you try AutoSync with 25 products at no cost, forever — no credit card required. All paid plans include a 14-day free trial so you can test the full feature set before committing.",
   },
 ];
 
