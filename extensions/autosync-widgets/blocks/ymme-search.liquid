@@ -7,9 +7,13 @@
 {% liquid
   assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
   assign ymme_allowed = false
+  assign garage_allowed = false
   if allowed_widgets_raw != blank
     if allowed_widgets_raw.ymme == true
       assign ymme_allowed = true
+    endif
+    if allowed_widgets_raw.garage == true
+      assign garage_allowed = true
     endif
   endif
   assign container_class = 'autosync-ymme-search'
@@ -134,8 +138,8 @@
         {{ block.settings.button_text | default: "Find Parts" }}
       </button>
 
-      {% if block.settings.show_garage %}
-        {%- comment -%} Compact garage icon button — opens popover {%- endcomment -%}
+      {% if block.settings.show_garage and garage_allowed %}
+        {%- comment -%} Compact garage icon button — only visible if plan allows My Garage {%- endcomment -%}
         <div class="autosync-ymme__garage-trigger-wrap">
           <button type="button" class="autosync-ymme__garage-trigger" data-autosync-garage-trigger title="My Garage">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -164,7 +168,7 @@
   </div>
 
   {%- comment -%} Hidden save-garage data attr for JS (no visible button needed — auto-saves) {%- endcomment -%}
-  {% if block.settings.show_garage %}
+  {% if block.settings.show_garage and garage_allowed %}
     <div data-autosync-save-garage style="display:none;">
       <button type="button" data-autosync-save-garage-btn style="display:none;"></button>
     </div>
