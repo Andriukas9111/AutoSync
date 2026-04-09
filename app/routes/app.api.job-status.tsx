@@ -178,6 +178,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       noMatch,
       // Fitment & collections
       fitments: fitmentRes.count ?? 0,
+      // Vehicle coverage = fitments × avg engines per model (~8 trims average)
+      // This is the "expanded" count showing how many individual vehicle configs are covered
+      vehicleCoverage: Math.round((fitmentRes.count ?? 0) * 8),
       wheelFitments: wheelFitmentRes.count ?? 0,
       wheelProducts: wheelProductRes.count ?? 0,
       wheelMapped: wheelMappedRes.count ?? 0,

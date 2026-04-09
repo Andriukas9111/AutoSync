@@ -36,11 +36,11 @@ export function invalidatePlanConfigCache(): void {
 // ---------------------------------------------------------------------------
 const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    products: 50,
-    fitments: 200,
+    products: 25,
+    fitments: 100,
     providers: 0,
     scheduledFetchesPerDay: 0,
-    activeMakes: 0,
+    activeMakes: 3,
     features: {
       pushTags: false,
       pushMetafields: false,
@@ -65,8 +65,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   starter: {
-    products: 500,
-    fitments: 2_500,
+    products: 250,
+    fitments: 1_000,
     providers: 1,
     scheduledFetchesPerDay: 0,
     activeMakes: 10,
@@ -94,11 +94,11 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   growth: {
-    products: 5_000,
-    fitments: 25_000,
+    products: 1_000,
+    fitments: 5_000,
     providers: 2,
     scheduledFetchesPerDay: 1,
-    activeMakes: 30,
+    activeMakes: 25,
     features: {
       pushTags: true,
       pushMetafields: true,
@@ -123,8 +123,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   professional: {
-    products: 25_000,
-    fitments: 100_000,
+    products: 3_000,
+    fitments: 15_000,
     providers: 3,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,
@@ -152,8 +152,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   business: {
-    products: 100_000,
-    fitments: 500_000,
+    products: 10_000,
+    fitments: 50_000,
     providers: 4,
     scheduledFetchesPerDay: 4,
     activeMakes: 999_999,
@@ -181,8 +181,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   enterprise: {
-    products: 500_000,
-    fitments: 2_000_000,
+    products: 50_000,
+    fitments: 250_000,
     providers: 5,
     scheduledFetchesPerDay: 12,
     activeMakes: 999_999,
@@ -210,8 +210,8 @@ const DEFAULT_PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   },
 
   custom: {
-    products: 25_000,
-    fitments: 100_000,
+    products: 50_000,
+    fitments: 250_000,
     providers: 5,
     scheduledFetchesPerDay: 2,
     activeMakes: 999_999,

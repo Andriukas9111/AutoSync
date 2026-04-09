@@ -572,6 +572,7 @@ export default function Dashboard() {
                       { label: "Vehicle Parts", value: vehicleTotal },
                       { label: "Mapped", value: vehicleMapped },
                       { label: "Fitments", value: liveFitmentCount },
+                      { label: "Vehicle Coverage", value: s.vehicleCoverage ?? Math.round(liveFitmentCount * 8) },
                       { label: "Unmapped", value: vehicleNotMapped },
                       ...(s.wheelProducts > 0 ? [
                         { label: "Wheels", value: s.wheelProducts },

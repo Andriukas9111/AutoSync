@@ -19,6 +19,7 @@ export interface AppStats {
   noMatch: number;
   // Fitment & collections
   fitments: number;
+  vehicleCoverage: number;
   wheelFitments: number;
   wheelProducts: number;
   wheelMapped: number;
@@ -66,7 +67,7 @@ export interface AppData {
 
 const DEFAULT_STATS: AppStats = {
   total: 0, unmapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0, noMatch: 0,
-  fitments: 0, wheelFitments: 0, wheelProducts: 0, wheelMapped: 0, collections: 0,
+  fitments: 0, vehicleCoverage: 0, wheelFitments: 0, wheelProducts: 0, wheelMapped: 0, collections: 0,
   vehiclePages: 0, vehiclePagesSynced: 0, vehiclePagesPending: 0, vehiclePagesFailed: 0,
   providers: 0,
   pushedProducts: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,

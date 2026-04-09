@@ -242,7 +242,7 @@ export const PRICING_TIERS = [
     name: "Free",
     price: 0,
     description: "Try AutoSync with no commitment",
-    limits: { products: 50, fitments: 200, providers: 0, activeMakes: 5 },
+    limits: { products: 25, fitments: 100, providers: 0, activeMakes: 3 },
     features: [
       "Manual fitment mapping",
       "Product browser & search",
@@ -257,7 +257,7 @@ export const PRICING_TIERS = [
     name: "Starter",
     price: 19,
     description: "Essential tools for small catalogs",
-    limits: { products: 500, fitments: 2500, providers: 1, activeMakes: 10 },
+    limits: { products: 250, fitments: 1000, providers: 1, activeMakes: 10 },
     features: [
       "Push tags & metafields to Shopify",
       "YMME Search widget",
@@ -273,7 +273,7 @@ export const PRICING_TIERS = [
     name: "Growth",
     price: 49,
     description: "Everything you need to scale",
-    limits: { products: 5000, fitments: 25000, providers: 2, activeMakes: 30 },
+    limits: { products: 1000, fitments: 5000, providers: 2, activeMakes: 25 },
     features: [
       "All Starter features",
       "Smart auto-extraction (80%+ accuracy)",
@@ -289,7 +289,7 @@ export const PRICING_TIERS = [
     name: "Professional",
     price: 99,
     description: "Advanced tools for growing businesses",
-    limits: { products: 25000, fitments: 100000, providers: 3, activeMakes: "Unlimited" },
+    limits: { products: 3000, fitments: 15000, providers: 3, activeMakes: "Unlimited" },
     features: [
       "All Growth features",
       "API & FTP data import",
@@ -305,7 +305,7 @@ export const PRICING_TIERS = [
     name: "Business",
     price: 179,
     description: "Full power for large catalogs",
-    limits: { products: 100000, fitments: 500000, providers: 4, activeMakes: "Unlimited" },
+    limits: { products: 10000, fitments: 50000, providers: 4, activeMakes: "Unlimited" },
     features: [
       "All Professional features",
       "Pricing Engine (markup, margin, MAP)",
@@ -321,7 +321,7 @@ export const PRICING_TIERS = [
     name: "Enterprise",
     price: 299,
     description: "Maximum power, premium support",
-    limits: { products: 500000, fitments: 2000000, providers: 5, activeMakes: "Unlimited" },
+    limits: { products: 50000, fitments: 250000, providers: 5, activeMakes: "Unlimited" },
     features: [
       "All Business features",
       "UK Plate Lookup (DVLA/MOT integration)",
