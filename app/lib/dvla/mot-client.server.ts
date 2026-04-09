@@ -48,7 +48,7 @@ export class MotError extends Error {
 // Cache the OAuth token in-memory (serverless-safe: one per cold start)
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-const MOT_TENANT_ID = "a455b827-244f-4c97-b5b4-ce5d13b4d00c";
+const MOT_TENANT_ID = process.env.MOT_TENANT_ID || "a455b827-244f-4c97-b5b4-ce5d13b4d00c";
 const MOT_SCOPE = "https://tapi.dvsa.gov.uk/.default";
 const MOT_ENDPOINT = "https://history.mot.api.gov.uk/v1/trade/vehicles/registration";
 

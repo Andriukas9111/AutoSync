@@ -625,6 +625,16 @@ async function upsertCollectionMapping(
 
 // ── String Builders ─────────────────────────────────────────
 
+/** Escape HTML entities to prevent XSS in collection descriptions */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildCollectionTitle(target: CollectionTarget): string {
   if (target.yearRange && target.model) {
     return `${target.make} ${target.model} ${target.yearRange} Parts`;
@@ -641,9 +651,9 @@ function buildCollectionTitle(target: CollectionTarget): string {
  * keyword-rich, informative, and help with on-page SEO.
  */
 function buildCollectionDescriptionHtml(target: CollectionTarget): string {
-  const make = target.make;
-  const model = target.model;
-  const yearRange = target.yearRange;
+  const make = escHtml(target.make);
+  const model = target.model ? escHtml(target.model) : undefined;
+  const yearRange = target.yearRange ? escHtml(target.yearRange) : undefined;
 
   if (yearRange && model) {
     return [

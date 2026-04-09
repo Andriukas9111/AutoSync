@@ -42,6 +42,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     "providers",
     "scrape_changelog",
     "admin_activity_log",
+    "provider_archived_products",
+    "provider_product_changes",
+    "wheel_fitments",
+    "widget_events",
   ] as const;
 
   for (const table of explicitTables) {

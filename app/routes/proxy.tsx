@@ -572,8 +572,12 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
     .select("shopify_app_id")
     .eq("shop_id", shop)
     .maybeSingle();
-  // Default app ID — will be overridden per-tenant when we store it
+  // App ID for metafield namespace — prefer tenant record, then env var, then hardcoded default
+  // IMPORTANT: Set SHOPIFY_APP_ID env var in production. Hardcoded value is for dev only.
   const appId = tenant?.shopify_app_id ?? process.env.SHOPIFY_APP_ID ?? "334692253697";
+  if (!process.env.SHOPIFY_APP_ID && !tenant?.shopify_app_id) {
+    console.warn("[proxy] Using hardcoded app ID fallback — set SHOPIFY_APP_ID env var for production");
+  }
   const mfNs = `app--${appId}--vehicle_fitment`;
 
   const found = (row: { handle: string; title: string; type: string }) => {
@@ -1266,6 +1270,9 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
     .eq("shop_id", shop)
     .maybeSingle();
   const appId = tenant?.shopify_app_id ?? process.env.SHOPIFY_APP_ID ?? "334692253697";
+  if (!process.env.SHOPIFY_APP_ID && !tenant?.shopify_app_id) {
+    console.warn("[proxy/wheel] Using hardcoded app ID fallback — set SHOPIFY_APP_ID env var for production");
+  }
   const mfNs = `app--${appId}--wheel_spec`;
 
   // Build collection URL — use per-PCD collection (same pattern as YMME per-make collections)
