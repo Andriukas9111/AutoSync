@@ -676,7 +676,7 @@ export default function AnalyticsPage() {
                     { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
                     { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
                     { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
-                    { icon: ConnectIcon, count: (s.vehicleCoverage ?? Math.round(s.fitments * 8)).toLocaleString(), label: "Vehicle Coverage" },
+                    { icon: ConnectIcon, count: (liveStats.vehicleCoverage ?? Math.round(liveStats.fitments * 8)).toLocaleString(), label: "Vehicle Coverage" },
                   ].map((item) => (
                     <div key={item.label} style={statMiniStyle}>
                       <BlockStack gap="200" inlineAlign="center">
