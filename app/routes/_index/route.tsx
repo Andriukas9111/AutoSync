@@ -2,6 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect, useLoaderData } from "react-router";
 import { login } from "../../shopify.server";
 import db from "../../lib/db.server";
+import { CAR_BRANDS, PRICING_TIERS, COMPARE_FEATURES, FAQ_ITEMS, TESTIMONIALS, SYSTEMS, PIPELINE_STEPS, BRAND } from "./data/website-content";
 import "./landing.css";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -123,10 +124,200 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* PLACEHOLDER for remaining sections — will be built one by one */}
-      <div style={{ padding: "120px 40px", textAlign: "center", color: "#9ca3af" }}>
-        <p style={{ fontSize: 14 }}>More sections coming — building section by section with verification</p>
-      </div>
+      {/* TRUST MARQUEE */}
+      <section className="trust">
+        <p className="trust-label">Trusted by automotive parts retailers worldwide</p>
+        <div style={{ overflow: "hidden" }}>
+          <div className="trust-track">
+            {[...CAR_BRANDS, ...CAR_BRANDS].map((b, i) => (
+              <img key={i} src={b.logo} alt={b.name} loading="lazy" />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FEATURES — Bento grid (Opscale style) */}
+      <section id="features" className="sec sec--gray">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">Features</div>
+            <h2 className="sec-h2">Everything you need to sell auto parts</h2>
+            <p className="sec-desc">From smart extraction to storefront widgets — a complete vehicle fitment platform built for Shopify.</p>
+          </div>
+          <div className="bento">
+            {SYSTEMS.slice(0, 6).map((sys, i) => (
+              <div key={sys.id} className={`bento-card ${i < 2 ? "bento-card--wide" : ""}`}>
+                <h3>{sys.name}</h3>
+                <p>{sys.headline}</p>
+                <span className="bento-tag">{Object.values(sys.stats)[0]}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS — Vertical timeline */}
+      <section id="how-it-works" className="sec">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">How It Works</div>
+            <h2 className="sec-h2">Install to sales in 4 steps</h2>
+          </div>
+          <div className="timeline">
+            <div className="timeline-line" />
+            {PIPELINE_STEPS.map((s, i) => (
+              <div key={i} className="tl-step">
+                <div className="tl-num">{s.number}</div>
+                <h3>{s.title}</h3>
+                <p>{s.description}</p>
+                {s.duration && <span className="tl-dur">{s.duration}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* STATS DARK BAND */}
+      <section className="stats-band">
+        <div className="stats-row">
+          <div className="stat-item"><div className="stat-num">{makes.toLocaleString()}+</div><div className="stat-label">Vehicle Makes</div></div>
+          <div className="stat-item"><div className="stat-num">{models.toLocaleString()}+</div><div className="stat-label">Models</div></div>
+          <div className="stat-item"><div className="stat-num">{engines.toLocaleString()}+</div><div className="stat-label">Engines</div></div>
+          <div className="stat-item"><div className="stat-num">80%+</div><div className="stat-label">Accuracy</div></div>
+        </div>
+      </section>
+
+      {/* PRICING */}
+      <section id="pricing" className="sec">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">Pricing</div>
+            <h2 className="sec-h2">Smart pricing for every plan</h2>
+            <p className="sec-desc">Start free. Scale as you grow. 14-day trial on all paid plans.</p>
+          </div>
+          <div className="price-grid">
+            {PRICING_TIERS.slice(0, 3).map((p) => (
+              <div key={p.name} className={`price-col ${p.popular ? "price-col--hl" : ""}`}>
+                {p.popular && <span className="price-badge">Most Popular</span>}
+                <div className="price-name">{p.name}</div>
+                <div className="price-amt">{p.price === 0 ? "Free" : `$${p.price}`}</div>
+                {p.price > 0 && <div className="price-per">/month</div>}
+                <div className="price-limits">
+                  <div><strong>{typeof p.limits.products === "number" ? p.limits.products.toLocaleString() : p.limits.products}</strong> products</div>
+                  <div><strong>{typeof p.limits.fitments === "number" ? p.limits.fitments.toLocaleString() : p.limits.fitments}</strong> fitments</div>
+                </div>
+                <ul className="price-feat">
+                  {p.features.map((f) => <li key={f}><svg className="chk" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>{f}</li>)}
+                </ul>
+                <a href="#install" className="price-btn">{p.cta}</a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* COMPARE — Side by side */}
+      <section id="compare" className="sec sec--gray">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">Comparison</div>
+            <h2 className="sec-h2">Why stores switch to AutoSync</h2>
+          </div>
+          <div className="cmp-grid">
+            <div className="cmp-card cmp-card--hl">
+              <div className="cmp-title"><L s={18} /> AutoSync</div>
+              <div className="cmp-list">
+                {COMPARE_FEATURES.map((f) => <div key={f.key} className="cmp-item"><svg className="chk" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>{f.label}</div>)}
+                <div className="cmp-item"><svg className="chk" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg><strong>7</strong> storefront widgets</div>
+              </div>
+              <div className="cmp-price">Starting <strong>Free</strong> — up to $299/mo</div>
+            </div>
+            <div className="cmp-card">
+              <div className="cmp-title">Other Solutions</div>
+              <div className="cmp-list">
+                {["No pre-loaded database", "No auto extraction", "No smart collections", "No UK plate lookup", "No wheel finder", "No vehicle spec pages", "1-2 widgets only", "Requires setup support"].map((s) => (
+                  <div key={s} className="cmp-item cmp-item--dim"><svg className="xk" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>{s}</div>
+                ))}
+              </div>
+              <div className="cmp-price">Starting at <strong>$250/mo</strong> (Convermax)</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* TESTIMONIALS */}
+      <section className="sec">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">Testimonials</div>
+            <h2 className="sec-h2">What retailers say</h2>
+          </div>
+          <div className="rev-grid">
+            {TESTIMONIALS.map((t, i) => (
+              <div key={i} className="rev-card">
+                <div className="rev-stars">{"★".repeat(t.stars)}</div>
+                <div className="rev-text">{t.quote}</div>
+                <div className="rev-name">{t.name}</div>
+                <div className="rev-role">{t.role}, {t.company}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="sec sec--gray">
+        <div className="sec-inner">
+          <div className="sec-header sec-header--c">
+            <div className="sec-eyebrow">FAQ</div>
+            <h2 className="sec-h2">Common questions</h2>
+          </div>
+          <div className="faq-list">
+            {FAQ_ITEMS.map((item, i) => (
+              <details key={i} className="faq-item">
+                <summary className="faq-q">{item.question}<span className="faq-icon">+</span></summary>
+                <div className="faq-a">{item.answer}</div>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA BAND */}
+      <section className="cta-band">
+        <h2>Ready to sell more parts?</h2>
+        <p>Join automotive stores using AutoSync for exact-fit parts discovery.</p>
+        <a href="#install">Start Your Free Trial</a>
+      </section>
+
+      {/* LOGIN */}
+      <section id="install" className="login-sec">
+        <L s={36} />
+        <div className="login-title">AutoSync</div>
+        <p className="login-desc">Enter your Shopify store domain to get started</p>
+        {showForm && (
+          <form method="post" action="/auth/login" className="login-form">
+            <input name="shop" placeholder="your-store.myshopify.com" className="login-input" />
+            <button type="submit" className="nav-cta" style={{ padding: "12px 24px" }}>Install</button>
+          </form>
+        )}
+      </section>
+
+      {/* FOOTER */}
+      <footer className="foot">
+        <div className="foot-inner">
+          <div className="foot-grid">
+            <div>
+              <div className="foot-brand"><L s={16} /> AutoSync</div>
+              <p className="foot-desc">{BRAND.shortDescription}</p>
+            </div>
+            <div><h4>Product</h4><div className="foot-links"><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#compare">Compare</a><a href="#faq">FAQ</a></div></div>
+            <div><h4>Company</h4><div className="foot-links"><a href="#">About</a><a href="#">Blog</a><a href="#">Changelog</a></div></div>
+            <div><h4>Legal</h4><div className="foot-links"><a href="/legal/privacy">Privacy</a><a href="/legal/terms">Terms</a><a href="mailto:support@autosync.app">Contact</a></div></div>
+          </div>
+          <div className="foot-copy">© 2026 AutoSync. All rights reserved.</div>
+        </div>
+      </footer>
     </div>
   );
 }
