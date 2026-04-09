@@ -91,13 +91,14 @@
     arrow.appendChild(path);
     trigger.appendChild(arrow);
 
-    // Create dropdown panel
+    // Create dropdown panel — uses flex layout so inner list can scroll
     var dropdown = document.createElement('div');
     dropdown.className = 'autosync-ymme__select-dropdown';
-    dropdown.style.cssText = 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:280px;overflow-y:auto;animation:autosync-dropdown-in 0.15s ease;';
+    dropdown.style.cssText = 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:280px;overflow:hidden;flex-direction:column;animation:autosync-dropdown-in 0.15s ease;';
 
     var optionsList = document.createElement('ul');
-    optionsList.style.cssText = 'list-style:none;margin:0;padding:4px 0;';
+    optionsList.className = 'autosync-ymme__select-options';
+    optionsList.style.cssText = 'list-style:none;margin:0;padding:4px 0;overflow-y:auto;flex:1;overscroll-behavior:contain;';
 
     var isOpen = false;
 
@@ -130,7 +131,7 @@
     function openDD() {
       if (trigger.disabled) return;
       isOpen = true;
-      dropdown.style.display = 'block';
+      dropdown.style.display = 'flex';
       wrapper.classList.add('autosync-ymme__custom-select--open');
       trigger.setAttribute('aria-expanded', 'true');
       renderOptions();
