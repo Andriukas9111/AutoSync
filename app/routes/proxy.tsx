@@ -354,16 +354,69 @@ async function handleYears(params: URLSearchParams, request?: Request) {
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
-  // Fetch model's own year range to clamp engine years
-  const { data: model } = await db
+  // Get model info (name + make) to check fitments
+  const { data: modelRow } = await db
     .from("ymme_models")
-    .select("year_from, year_to")
+    .select("name, make_id, year_from, year_to")
     .eq("id", modelId)
     .maybeSingle();
 
-  const modelYearFrom = model?.year_from ?? null;
-  const modelYearTo = model?.year_to ?? new Date().getFullYear();
+  if (!modelRow) return json({ years: [] });
 
+  const modelYearFrom = modelRow.year_from ?? null;
+  const modelYearTo = modelRow.year_to ?? new Date().getFullYear();
+
+  // When shop context exists, filter years by actual fitments
+  if (shop && modelRow.make_id) {
+    const { data: makeRow } = await db
+      .from("ymme_makes")
+      .select("name")
+      .eq("id", modelRow.make_id)
+      .maybeSingle();
+
+    if (makeRow?.name) {
+      // Get fitment year ranges for this shop + make + model
+      const { data: fitmentYears } = await db
+        .from("vehicle_fitments")
+        .select("year_from, year_to")
+        .eq("shop_id", shop)
+        .ilike("make", makeRow.name)
+        .ilike("model", modelRow.name ?? "");
+
+      if (fitmentYears && fitmentYears.length > 0) {
+        const currentYear = new Date().getFullYear();
+        const yearSet = new Set<number>();
+        for (const f of fitmentYears) {
+          const from = f.year_from;
+          const to = f.year_to ?? currentYear;
+          if (typeof from !== "number" || from < 1900) continue;
+          for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
+            yearSet.add(y);
+          }
+        }
+        if (yearSet.size > 0) {
+          const years = Array.from(yearSet).sort((a, b) => b - a);
+          return json({ years });
+        }
+      }
+
+      // Check if fitments exist at all for this make+model (without year data)
+      const { count: fitmentCount } = await db
+        .from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shop)
+        .ilike("make", makeRow.name)
+        .ilike("model", modelRow.name ?? "");
+
+      if ((fitmentCount ?? 0) === 0) {
+        // No fitments for this model at all — return empty
+        return json({ years: [] });
+      }
+      // Fitments exist but have no year data — fall through to engine-based years
+    }
+  }
+
+  // Fallback: derive years from engine year ranges in YMME DB
   const { data: engines, error } = await db
     .from("ymme_engines")
     .select("year_from, year_to")
@@ -379,14 +432,12 @@ async function handleYears(params: URLSearchParams, request?: Request) {
     if (typeof from !== "number" || from < 1900) continue;
     const to = engine.year_to ?? currentYear;
     for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
-      // Clamp to model's year range
       if (modelYearFrom != null && y < modelYearFrom) continue;
       if (y > modelYearTo) continue;
       yearSet.add(y);
     }
   }
 
-  // Fallback to model range if no engine years found
   if (yearSet.size === 0 && modelYearFrom != null) {
     for (let y = modelYearFrom; y <= modelYearTo; y++) {
       yearSet.add(y);
