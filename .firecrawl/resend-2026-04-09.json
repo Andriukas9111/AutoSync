@@ -1,0 +1,55 @@
+{
+  "url": "https://resend.com",
+  "scraped": "2026-04-09",
+  "bodyBg": "rgb(0, 0, 0)",
+  "bodyColor": "rgb(240, 240, 240)",
+  "bodyFont": "inter, ui-sans-serif, system-ui",
+  "nav": {
+    "bg": "transparent",
+    "backdrop": "none",
+    "position": "sticky",
+    "height": 59
+  },
+  "h1": {
+    "text": "Email for developers",
+    "fontSize": "96px",
+    "fontWeight": "400",
+    "letterSpacing": "-0.96px",
+    "lineHeight": "96px",
+    "fontFamily": "domaine (serif)",
+    "bgImage": "linear-gradient(to right bottom, rgb(255,255,255) 30%, rgba(255,255,255,0.5))",
+    "bgClip": "text"
+  },
+  "hero": {
+    "layout": "split_left_text_right_canvas",
+    "badge": {
+      "text": "Launch Week 6 is here",
+      "border": "rotating rainbow gradient (30s infinite)",
+      "gradient": "linear-gradient(119.846deg, cyan/44%, amber/44%, purple/44%)"
+    },
+    "canvas": {"type": "WebGL", "size": "648x550", "animation": "open-scale-up-fade 1.5s + webgl-scale-in-fade 1s"}
+  },
+  "sections": [
+    {"name": "hero", "top": 59, "height": 950},
+    {"name": "logos", "top": 1089, "height": 479, "padding": "96px 24px"},
+    {"name": "integrate_tonight", "top": 1567, "height": 1295, "padding": "96px 24px"},
+    {"name": "developer_experience", "top": 2862, "height": 974, "padding": "96px 24px"},
+    {"name": "email_editor", "top": 3837, "height": 1358, "padding": "96px 24px"},
+    {"name": "beyond_editing", "top": 5195, "height": 899, "padding": "96px 24px"},
+    {"name": "react_emails", "top": 6094, "height": 1367, "padding": "96px 24px"},
+    {"name": "deliverability", "top": 7460, "height": 941, "padding": "96px 24px"},
+    {"name": "control_dashboard", "top": 9032, "height": 1351, "padding": "96px 24px"},
+    {"name": "testimonials", "top": 10382, "height": 659, "padding": "96px 0px"},
+    {"name": "cta", "top": 11041, "height": 768, "padding": "96px 24px 0px"}
+  ],
+  "gradients": [
+    "hero_badge_rainbow: linear-gradient(119.846deg, cyan, amber, purple)",
+    "h1_text: linear-gradient(to right bottom, white 30%, white/50%)",
+    "nav_button: linear-gradient(104deg, white/5%, white/10%)",
+    "line_divider: linear-gradient(90deg, transparent, gray/67%, transparent)",
+    "corner_glow: conic-gradient(from 90deg, transparent 50%, black 50%)",
+    "purple_accent: linear-gradient(to right bottom in oklab, #9281F7, #9A54DC)",
+    "card_borders: 0.667px solid rgba(217,237,255,0.365)"
+  ],
+  "totalHeight": 12192
+}
