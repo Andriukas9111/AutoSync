@@ -5,6 +5,14 @@
  */
 
 import { Text } from "@shopify/polaris";
+import {
+  dataTableWrapStyle,
+  dataTableStyle,
+  dataTableHeaderRowStyle,
+  dataTableCellStyle,
+  dataTableFooterRowStyle,
+  dataTableFooterStyle,
+} from "../lib/design";
 
 interface DataTableProps {
   columnContentTypes: ("text" | "numeric")[];
@@ -16,16 +24,16 @@ interface DataTableProps {
 
 export function DataTable({ columnContentTypes, headings, rows, totals, footerContent }: DataTableProps) {
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <div style={dataTableWrapStyle}>
+      <table style={dataTableStyle}>
         <thead>
-          <tr style={{ borderBottom: "2px solid var(--p-color-border-secondary)" }}>
+          <tr style={dataTableHeaderRowStyle}>
             {headings.map((h, i) => (
               <th
                 key={i}
                 style={{
+                  ...dataTableCellStyle,
                   textAlign: columnContentTypes[i] === "numeric" ? "right" : "left",
-                  padding: "8px 12px",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -46,8 +54,8 @@ export function DataTable({ columnContentTypes, headings, rows, totals, footerCo
                 <td
                   key={ci}
                   style={{
+                    ...dataTableCellStyle,
                     textAlign: columnContentTypes[ci] === "numeric" ? "right" : "left",
-                    padding: "8px 12px",
                   }}
                 >
                   {typeof cell === "string" || typeof cell === "number" ? (
@@ -62,13 +70,13 @@ export function DataTable({ columnContentTypes, headings, rows, totals, footerCo
         </tbody>
         {totals && (
           <tfoot>
-            <tr style={{ borderTop: "2px solid var(--p-color-border-secondary)", fontWeight: 600 }}>
+            <tr style={dataTableFooterRowStyle}>
               {totals.map((t, i) => (
                 <td
                   key={i}
                   style={{
+                    ...dataTableCellStyle,
                     textAlign: columnContentTypes[i] === "numeric" ? "right" : "left",
-                    padding: "8px 12px",
                   }}
                 >
                   {t !== "" && <Text as="span" variant="bodyMd" fontWeight="bold">{String(t)}</Text>}
@@ -78,7 +86,7 @@ export function DataTable({ columnContentTypes, headings, rows, totals, footerCo
           </tfoot>
         )}
       </table>
-      {footerContent && <div style={{ padding: "8px 12px" }}>{footerContent}</div>}
+      {footerContent && <div style={dataTableFooterStyle}>{footerContent}</div>}
     </div>
   );
 }

@@ -59,6 +59,47 @@ export const listRowStyle = (isLast: boolean): CSSProperties => ({
   borderBottom: isLast ? "none" : "1px solid var(--p-color-border-secondary)",
 });
 
+// ─── Data Table Styles ────────────────────────────────────────────
+// Used in: DataTable component
+export const dataTableWrapStyle: CSSProperties = { overflowX: "auto" };
+export const dataTableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse" };
+export const dataTableHeaderRowStyle: CSSProperties = { borderBottom: "2px solid var(--p-color-border-secondary)" };
+export const dataTableCellStyle: CSSProperties = { padding: "8px 12px", textAlign: "left", fontSize: "13px" };
+export const dataTableFooterRowStyle: CSSProperties = { borderTop: "2px solid var(--p-color-border-secondary)", fontWeight: 600 };
+export const dataTableFooterStyle: CSSProperties = { padding: "8px 12px" };
+
+// ─── Onboarding Step Styles ──────────────────────────────────────
+// Used in: OnboardingChecklist
+export const onboardingStepStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "12px",
+  padding: "12px",
+  borderRadius: "var(--p-border-radius-200)",
+  cursor: "pointer",
+  transition: "background 0.15s ease",
+};
+export const onboardingCheckStyle = (done: boolean): CSSProperties => ({
+  width: "28px",
+  height: "28px",
+  borderRadius: "50%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  flexShrink: 0,
+  background: done ? "var(--p-color-bg-fill-success)" : "var(--p-color-bg-surface-secondary)",
+  color: done ? "var(--p-color-text-inverse)" : "var(--p-color-text-subdued)",
+  fontSize: "12px",
+  fontWeight: 600,
+});
+
+// ─── Suggestion Card Styles ──────────────────────────────────────
+// Used in: SuggestionCard
+export const suggestionOverlayStyle: CSSProperties = {
+  padding: "12px",
+  opacity: 0.6,
+};
+
 // ─── Status Dot (small colored circle for status indicators) ───────
 export const statusDotStyle = (status: string): CSSProperties => ({
   width: "8px",

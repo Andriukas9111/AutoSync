@@ -36,7 +36,28 @@ export function triggerEdgeFunction(jobId: string, shopId: string): void {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ job_id: jobId, shop_id: shopId }),
-  }).catch((err) => console.error("[triggerEdgeFunction] Invocation failed:", err));
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        console.error(`[triggerEdgeFunction] HTTP ${res.status} for job ${jobId}: ${text}`);
+        // Mark job as trigger-failed so it doesn't sit in pending forever
+        await db
+          .from("sync_jobs")
+          .update({ status: "failed", error: `Edge Function trigger failed: HTTP ${res.status}`, completed_at: new Date().toISOString() })
+          .eq("id", jobId)
+          .eq("status", "pending");
+      }
+    })
+    .catch((err) => {
+      console.error("[triggerEdgeFunction] Network error for job", jobId, ":", err);
+      // Mark as failed — stale recovery will also catch this after 30 min
+      db.from("sync_jobs")
+        .update({ status: "failed", error: `Edge Function trigger error: ${err.message}`, completed_at: new Date().toISOString() })
+        .eq("id", jobId)
+        .eq("status", "pending")
+        .then(() => {});
+    });
 }
 
 /**
@@ -75,6 +96,7 @@ export async function paginatedSelect<T = Record<string, unknown>>(
 ): Promise<T[]> {
   const allRows: T[] = [];
   let offset = 0;
+  let hadErrors = false;
 
   while (true) {
     let query = db.from(table).select(select).range(offset, offset + pageSize - 1);
@@ -82,12 +104,17 @@ export async function paginatedSelect<T = Record<string, unknown>>(
     const { data, error } = await query;
     if (error) {
       console.error(`[paginatedSelect] ${table} error at offset ${offset}:`, error.message);
+      hadErrors = true;
       break;
     }
     if (!data || data.length === 0) break;
     allRows.push(...(data as T[]));
     if (data.length < pageSize) break; // Last page
     offset += data.length;
+  }
+
+  if (hadErrors && allRows.length > 0) {
+    console.warn(`[paginatedSelect] ${table}: Returning ${allRows.length} partial rows (query failed mid-pagination)`);
   }
 
   return allRows;
