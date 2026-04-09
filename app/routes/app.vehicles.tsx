@@ -81,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult;
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   const allMakes = makesResult.data ?? [];
@@ -154,7 +154,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (enable) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = getEffectivePlan(tenant as any);
+      const plan: PlanTier = getEffectivePlan(tenant);
       const limits = getPlanLimits(plan);
 
       const { count: currentActive } = await db

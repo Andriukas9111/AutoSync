@@ -185,7 +185,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Provider not found", { status: 404 });
   }
 
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   if (limits.providers === 0) {

@@ -60,34 +60,34 @@
   <div class="autosync-wheel-finder__fields">
     <div class="autosync-wheel-finder__field">
       <label for="autosync-pcd-{{ block.id }}">PCD (Bolt Pattern)</label>
-      <select id="autosync-pcd-{{ block.id }}" data-autosync-wheel-level="pcd">
+      <select id="autosync-pcd-{{ block.id }}" data-autosync-wheel-level="pcd" aria-label="Select PCD bolt pattern">
         <option value="">Loading...</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field">
       <label for="autosync-diameter-{{ block.id }}">Diameter</label>
-      <select id="autosync-diameter-{{ block.id }}" data-autosync-wheel-level="diameter" disabled>
+      <select id="autosync-diameter-{{ block.id }}" data-autosync-wheel-level="diameter" disabled aria-label="Select wheel diameter">
         <option value="">Select PCD first</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field">
       <label for="autosync-width-{{ block.id }}">Width</label>
-      <select id="autosync-width-{{ block.id }}" data-autosync-wheel-level="width" disabled>
+      <select id="autosync-width-{{ block.id }}" data-autosync-wheel-level="width" disabled aria-label="Select wheel width">
         <option value="">Select Diameter first</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field">
       <label for="autosync-offset-{{ block.id }}">Offset (ET)</label>
-      <select id="autosync-offset-{{ block.id }}" data-autosync-wheel-level="offset" disabled>
+      <select id="autosync-offset-{{ block.id }}" data-autosync-wheel-level="offset" disabled aria-label="Select wheel offset">
         <option value="">Select Width first</option>
       </select>
     </div>
 
     <div class="autosync-wheel-finder__field autosync-wheel-finder__field--button">
-      <button type="button" data-autosync-wheel-search disabled>
+      <button type="button" data-autosync-wheel-search disabled aria-label="Search wheels by selected specifications">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;"><path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
         {{ block.settings.button_text | default: "Search Wheels" }}
       </button>

@@ -60,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .eq("shop_id", shopId),
   ]);
 
-  const plan = getEffectivePlan(tenant as any);
+  const plan = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
   const providerCount = providerCountResult.count ?? 0;
   const atLimit =
@@ -107,7 +107,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan = getEffectivePlan(tenant as any);
+  const plan = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   if (type === "api" && !limits.features.apiIntegration) {

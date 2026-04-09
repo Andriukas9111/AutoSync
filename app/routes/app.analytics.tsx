@@ -156,7 +156,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan = getEffectivePlan(tenant as any) as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
   const limits = getPlanLimits(plan);
   const analyticsLevel = limits.features.dashboardAnalytics;
 

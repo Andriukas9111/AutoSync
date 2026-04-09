@@ -124,7 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (err: unknown) {
     if (err instanceof BillingGateError) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = getEffectivePlan(tenant as any);
+      const plan: PlanTier = getEffectivePlan(tenant);
       const limits = getPlanLimits(plan);
       return data(
         {
@@ -146,7 +146,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   // Run all queries in parallel

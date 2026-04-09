@@ -84,7 +84,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .eq("shop_id", shopId),
     ]);
 
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   return {

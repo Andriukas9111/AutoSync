@@ -145,7 +145,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const plan = getEffectivePlan(tenant as any);
+  const plan = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
   const providers = (providersResult.data ?? []) as Provider[];
 

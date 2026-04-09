@@ -71,7 +71,7 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     // Get plan product limit to cap the fetch
     const tenant = await getTenant(shopId);
-    const planLimits = getPlanLimits(getEffectivePlan(tenant as any));
+    const planLimits = getPlanLimits(getEffectivePlan(tenant));
     const maxProducts = planLimits.products === Infinity ? undefined : planLimits.products;
 
     const result = await fetchProductsFromShopify({

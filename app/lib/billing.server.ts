@@ -489,7 +489,7 @@ export async function getTenant(shopId: string): Promise<Tenant | null> {
  * If plan_status is "cancelled", the effective plan is "free" —
  * the tenant keeps their data but loses paid features.
  */
-export function getEffectivePlan(tenant: Tenant | null): PlanTier {
+export function getEffectivePlan(tenant: { plan?: string; plan_status?: string } | null): PlanTier {
   if (!tenant) return "free";
   // Cancelled subscription → free tier (data preserved, features locked)
   if (tenant.plan_status === "cancelled" && tenant.plan !== "free") {

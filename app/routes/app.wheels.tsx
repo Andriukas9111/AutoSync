@@ -69,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantRes.data;
-  const plan = getEffectivePlan(tenant as any) as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
 
   // PCD distribution
   const pcdCounts = new Map<string, number>();

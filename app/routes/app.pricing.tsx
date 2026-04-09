@@ -70,7 +70,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   // If plan doesn't support pricing engine, return minimal data

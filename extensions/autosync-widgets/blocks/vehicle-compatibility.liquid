@@ -53,14 +53,14 @@ padding-bottom: {{ block.settings.padding_bottom }}px;
   {% endif %}
 
   <div class="autosync-compat-table__wrapper">
-<table class="autosync-compat-table__table">
+<table class="autosync-compat-table__table" aria-label="Vehicle compatibility list">
 <thead>
 <tr>
-<th>Make</th>
-<th>Model</th>
-<th>Years</th>
+<th scope="col">Make</th>
+<th scope="col">Model</th>
+<th scope="col">Years</th>
           {% if block.settings.show_engine %}
-<th>Engine</th>
+<th scope="col">Engine</th>
           {% endif %}
 </tr>
 </thead>

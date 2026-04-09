@@ -88,7 +88,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   // Server-side enforcement: redirect if plan doesn't allow providers
   const tenant = await getTenant(shopId);
-  const planLimits = getPlanLimits(getEffectivePlan(tenant as any));
+  const planLimits = getPlanLimits(getEffectivePlan(tenant));
   if (planLimits.providers === 0) {
     throw redirect("/app/providers?error=plan_limit");
   }

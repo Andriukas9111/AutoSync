@@ -257,7 +257,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const currentPlan: PlanTier = getEffectivePlan(tenant as any);
+  const currentPlan: PlanTier = getEffectivePlan(tenant);
   const planConfigs = await getPlanConfigs();
 
   const serializedConfigs: Record<string, {

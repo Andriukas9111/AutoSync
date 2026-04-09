@@ -100,7 +100,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(10),
   ]);
 
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   return {

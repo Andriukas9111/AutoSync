@@ -62,7 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("vehicle_fitments").select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
   ]);
 
-  const plan: PlanTier = getEffectivePlan(tenant as any);
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   if (collectionsResult.error) {
@@ -121,14 +121,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // Enforce collection strategy level based on plan
     const tenant = await getTenant(shopId);
-    const limits = getPlanLimits(getEffectivePlan(tenant as any));
+    const limits = getPlanLimits(getEffectivePlan(tenant));
     const allowedLevel = limits.features.smartCollections; // false | "make" | "make_model" | "full"
     const strategyLevels: Record<string, number> = { make: 1, make_model: 2, make_model_year: 3 };
     const allowedLevels: Record<string, number> = { make: 1, make_model: 2, full: 3 };
     const requestedLevel = strategyLevels[collectionStrategy] ?? 1;
     const maxLevel = typeof allowedLevel === "string" ? (allowedLevels[allowedLevel] ?? 0) : 0;
     if (requestedLevel > maxLevel) {
-      return data({ error: `Your ${getEffectivePlan(tenant as any)} plan allows "${allowedLevel}" collection strategy. "${collectionStrategy}" requires a higher plan.` }, { status: 403 });
+      return data({ error: `Your ${getEffectivePlan(tenant)} plan allows "${allowedLevel}" collection strategy. "${collectionStrategy}" requires a higher plan.` }, { status: 403 });
     }
 
     // Upsert app_settings

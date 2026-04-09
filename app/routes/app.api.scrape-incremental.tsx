@@ -31,10 +31,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .eq("status", "running")
       .lt("started_at", new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
-    // Check for existing running jobs
+    // Check for existing running incremental_update jobs
     const { data: existingJobs } = await db
       .from("scrape_jobs")
       .select("id")
+      .eq("type", "incremental_update")
       .in("status", ["running", "pending"])
       .limit(1);
 

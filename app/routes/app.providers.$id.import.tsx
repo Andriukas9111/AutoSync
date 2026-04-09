@@ -89,7 +89,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan = getEffectivePlan(tenant as any) as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
   const limits = getPlanLimits(plan);
 
   // Server-side enforcement: redirect if plan doesn't allow providers

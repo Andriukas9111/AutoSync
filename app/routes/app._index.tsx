@@ -123,7 +123,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult.data;
-  const plan = getEffectivePlan(tenant as any) as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
   const limits = getPlanLimits(plan);
   const isFirstTime = !tenant;
 
