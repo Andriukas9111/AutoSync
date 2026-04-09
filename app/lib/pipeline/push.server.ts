@@ -330,6 +330,8 @@ export async function pushToShopify(
           }
 
           result.processed++;
+          // Proactive rate limiting: 200ms delay between products to avoid burst flooding
+          await new Promise((r) => setTimeout(r, 200));
         } catch (err: unknown) {
           console.error(
             `Push failed for product ${product.shopify_product_id}:`,

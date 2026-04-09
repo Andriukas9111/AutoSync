@@ -259,12 +259,14 @@ export default function App() {
   const { apiKey, isAdmin, announcements } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
-  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(() => {
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set());
+  // Load dismissed announcements from localStorage on client only (SSR-safe)
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("autosync_dismissed_announcements");
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch { return new Set(); }
-  });
+      if (saved) setDismissedAnnouncements(new Set(JSON.parse(saved)));
+    } catch {}
+  }, []);
   const dismissAnnouncement = (id: string) => {
     setDismissedAnnouncements(prev => {
       const next = new Set(prev);

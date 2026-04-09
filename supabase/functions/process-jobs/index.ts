@@ -1205,6 +1205,15 @@ async function processPushChunk(
     let gid = product.shopify_gid || (product.shopify_product_id ? `gid://shopify/Product/${product.shopify_product_id}` : null);
 
     // If product doesn't exist on Shopify yet, create it (with or without fitments)
+    // Idempotency check: re-read from DB in case a previous run already created it
+    if (!gid) {
+      const { data: freshProduct } = await db.from("products").select("shopify_product_id, shopify_gid").eq("id", product.id).maybeSingle();
+      if (freshProduct?.shopify_gid) {
+        gid = freshProduct.shopify_gid;
+      } else if (freshProduct?.shopify_product_id) {
+        gid = `gid://shopify/Product/${freshProduct.shopify_product_id}`;
+      }
+    }
     if (!gid) {
       try {
         const createRes = await shopifyFetch(apiUrl, {
@@ -1521,10 +1530,16 @@ async function processPushChunk(
 
         // Remove makes that are no longer in the active set
         const activeMakeIds = makeRows.map((m: { id: string }) => m.id);
-        await db.from("tenant_active_makes")
-          .delete()
-          .eq("shop_id", shopId)
-          .not("ymme_make_id", "in", `(${activeMakeIds.join(",")})`);
+        // Get all current active makes for this tenant, then delete ones not in the new set
+        const { data: currentActive } = await db.from("tenant_active_makes")
+          .select("id, ymme_make_id")
+          .eq("shop_id", shopId);
+        const staleIds = (currentActive || [])
+          .filter((row: { ymme_make_id: string }) => !activeMakeIds.includes(row.ymme_make_id))
+          .map((row: { id: string }) => row.id);
+        if (staleIds.length > 0) {
+          await db.from("tenant_active_makes").delete().in("id", staleIds);
+        }
 
         console.log(`[push] Synced active makes: ${makeRows.length} (upserted, stale removed)`);
       }
