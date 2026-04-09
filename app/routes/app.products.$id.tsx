@@ -167,6 +167,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const productQuery = db.from("products").select("*").eq("id", productId).eq("shop_id", shopId).maybeSingle();
   const fitmentsQuery = db.from("vehicle_fitments").select("*, ymme_engine_id")
     .eq("product_id", productId)
+    .eq("shop_id", shopId)
     .order("make", { ascending: true })
     .order("model", { ascending: true })
     .order("year_from", { ascending: true });

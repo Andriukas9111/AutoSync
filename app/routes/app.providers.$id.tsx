@@ -232,7 +232,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const logoUrl = String(formData.get("logo_url") || "").trim();
     if (!name) return data({ error: "Provider name is required." }, { status: 400 });
 
-    const existing = (await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).maybeSingle()).data;
+    const { data: existing, error: existingError } = await db.from("providers").select("config, type").eq("id", providerId).eq("shop_id", shopId).maybeSingle();
+    if (existingError) return data({ error: "Failed to load provider data." }, { status: 500 });
     const type = existing?.type as ProviderType || "csv";
     const config: Record<string, unknown> = { ...(existing?.config as Record<string, unknown> || {}) };
 
