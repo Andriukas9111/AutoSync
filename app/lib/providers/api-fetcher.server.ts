@@ -2,6 +2,8 @@
 // API Fetcher — fetch product data from a remote HTTP API endpoint
 // ---------------------------------------------------------------------------
 
+import { parseCsv } from "./csv-parser.server";
+
 export type AuthType = "none" | "api_key" | "bearer" | "basic";
 
 export interface ApiFetcherConfig {
@@ -379,23 +381,20 @@ function detectFormat(text: string): "csv" | "xml" | "json" {
  * Parse CSV/TSV/semicolon-delimited text into array of objects
  */
 function parseCSVText(text: string): Record<string, unknown>[] {
-  const lines = text.split("\n").filter(l => l.trim());
-  if (lines.length < 2) return [];
+  // Use the proper CSV parser which handles quoted fields, embedded delimiters,
+  // newlines in quotes, BOM characters, and escaped quotes.
+  // Auto-detect delimiter
+  const firstLine = text.split("\n")[0] || "";
+  const delimiter = firstLine.includes("\t") ? "\t" : firstLine.includes(";") ? ";" : ",";
 
-  // Detect delimiter from header line
-  const header = lines[0];
-  const delimiter = header.includes("\t") ? "\t" : header.includes(";") ? ";" : ",";
-
-  const columns = header.split(delimiter).map(c => c.trim().replace(/^"|"$/g, ""));
+  const result = parseCsv(text, { delimiter, hasHeaders: true });
   const rows: Record<string, unknown>[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
-    const row: Record<string, unknown> = {};
-    columns.forEach((col, j) => {
-      row[col] = values[j] ?? "";
+  for (const row of result.rows) {
+    const obj: Record<string, unknown> = {};
+    result.headers.forEach((h: string, i: number) => {
+      obj[h] = row[i] ?? "";
     });
-    rows.push(row);
+    rows.push(obj);
   }
 
   return rows;
