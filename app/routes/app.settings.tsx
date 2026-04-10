@@ -311,6 +311,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // 1. DB cleanup first (instant)
     await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+    await db.from("wheel_fitments").delete().eq("shop_id", shopId);
     await db.from("collection_mappings").delete().eq("shop_id", shopId);
     await db.from("vehicle_page_sync").delete().eq("shop_id", shopId);
     await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
