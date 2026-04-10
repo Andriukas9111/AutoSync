@@ -601,6 +601,27 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (dueProvider) {
+          // Plan gate: check if tenant's plan allows scheduled fetches
+          const { data: tenant } = await db.from("tenants")
+            .select("plan, plan_status")
+            .eq("shop_id", dueProvider.shop_id)
+            .maybeSingle();
+
+          // Load plan config to check scheduledFetchesPerDay
+          const effectivePlan = (!tenant || tenant.plan_status === "cancelled") ? "free" : (tenant?.plan || "free");
+          const { data: planConfig } = await db.from("plan_configurations")
+            .select("scheduled_fetches_per_day")
+            .eq("tier", effectivePlan)
+            .maybeSingle();
+          const maxFetchesPerDay = planConfig?.scheduled_fetches_per_day ?? 0;
+
+          if (maxFetchesPerDay <= 0) {
+            // Plan doesn't allow scheduled fetches — skip and push next_scheduled_fetch far forward
+            console.log(`[process-jobs] Provider ${dueProvider.name} scheduled fetch blocked — plan "${effectivePlan}" has 0 scheduled fetches/day`);
+            await db.from("providers").update({
+              next_scheduled_fetch: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Check again tomorrow
+            }).eq("id", dueProvider.id);
+          } else {
           // Check saved mappings exist
           const { count: mappingCount } = await db.from("provider_column_mappings")
             .select("id", { count: "exact", head: true })
@@ -612,6 +633,8 @@ Deno.serve(async (req) => {
             .eq("shop_id", dueProvider.shop_id)
             .in("type", ["provider_refresh", "provider_import"])
             .in("status", ["running", "pending"]);
+
+          const hours = parseInt(dueProvider.fetch_schedule) || 24;
 
           if (mappingCount && mappingCount > 0 && (!runningCount || runningCount === 0)) {
             console.log(`[process-jobs] Scheduled fetch due for provider ${dueProvider.name} — creating job`);
@@ -626,13 +649,21 @@ Deno.serve(async (req) => {
             }).select("id").single();
 
             if (newJob) targetJobId = newJob.id;
-          }
 
-          // Calculate next fetch time regardless
-          const hours = parseInt(dueProvider.fetch_schedule) || 24;
-          await db.from("providers").update({
-            next_scheduled_fetch: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
-          }).eq("id", dueProvider.id);
+            // Only bump next_scheduled_fetch AFTER successfully creating a job
+            await db.from("providers").update({
+              next_scheduled_fetch: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString(),
+            }).eq("id", dueProvider.id);
+          } else {
+            // Job couldn't be created (no mappings or another job running)
+            // Bump by a short retry interval (5 min) instead of full schedule
+            // so we try again soon rather than skipping an entire cycle
+            console.log(`[process-jobs] Scheduled fetch for ${dueProvider.name} deferred — ${!mappingCount || mappingCount === 0 ? 'no column mappings' : 'another job running'}`);
+            await db.from("providers").update({
+              next_scheduled_fetch: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+            }).eq("id", dueProvider.id);
+          }
+          } // close plan check else
         }
       } catch (e) {
         console.warn("[process-jobs] Scheduled fetch scan error:", e);
