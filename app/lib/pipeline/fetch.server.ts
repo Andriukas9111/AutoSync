@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { detectWheelProduct } from "../wheel-detect";
 
 const PRODUCTS_QUERY = `
   query FetchProducts($first: Int!, $after: String) {
@@ -105,6 +106,16 @@ export async function fetchProductsFromShopify({
       const now = new Date().toISOString();
       const batchRows = trimmedEdges.map(({ node: product }: { node: Record<string, any> }) => {
         const shopifyId = parseInt(product.id.replace("gid://shopify/Product/", ""), 10);
+
+        // ── Auto-detect wheel products ──
+        // Checks product_type, title, tags for wheel indicators
+        const titleLower = (product.title || "").toLowerCase();
+        const typeLower = (product.productType || "").toLowerCase();
+        const tagsLower = (product.tags || []).map((t: string) => t.toLowerCase());
+        const allTextLower = `${titleLower} ${typeLower} ${tagsLower.join(" ")}`;
+
+        const isWheel = detectWheelProduct(titleLower, typeLower, tagsLower);
+
         return {
           shop_id: shopId,
           shopify_product_id: shopifyId,
@@ -127,7 +138,7 @@ export async function fetchProductsFromShopify({
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          synced_at: now,
+          product_category: isWheel ? "wheels" : "vehicle_parts",
           updated_at: now,
         };
       });

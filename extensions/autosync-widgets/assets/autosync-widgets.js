@@ -804,6 +804,17 @@
     }
 
     function restoreById(saved) {
+      // Only restore if makes actually loaded — prevents stale localStorage from
+      // populating Model/Year/Engine when no data has been pushed to Shopify yet
+      if (allMakesData.length === 0) return;
+
+      // Verify the saved make exists in the loaded makes list
+      var makeExists = false;
+      for (var k = 0; k < allMakesData.length; k++) {
+        if (String(allMakesData[k].id) === String(saved.makeId)) { makeExists = true; break; }
+      }
+      if (!makeExists) return;
+
       // 1. Set make
       state.make = saved.makeId;
       state.makeName = saved.makeName || '';

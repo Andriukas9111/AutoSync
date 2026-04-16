@@ -55,7 +55,9 @@ export function OperationProgress({
 }: OperationProgressProps) {
   if (status === "idle") return null;
 
-  const percent = total > 0 ? Math.round((processed / total) * 100) : 0;
+  // Cap processed at total to prevent display bugs like "111/101"
+  const displayProcessed = total > 0 ? Math.min(processed, total) : processed;
+  const percent = total > 0 ? Math.round((displayProcessed / total) * 100) : 0;
   const isActive = status === "running";
   const isPaused = status === "paused";
   const isDone = status === "completed";
@@ -84,7 +86,7 @@ export function OperationProgress({
               </Text>
             )}
             <Text as="span" variant="bodySm" tone="subdued">
-              {`${processed.toLocaleString()} / ${total.toLocaleString()} (${percent}%)`}
+              {`${displayProcessed.toLocaleString()} / ${total.toLocaleString()} (${percent}%)`}
             </Text>
           </InlineStack>
         </InlineStack>

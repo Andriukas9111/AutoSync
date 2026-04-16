@@ -51,7 +51,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Run ALL queries in parallel — including tenant lookup
   // ALL queries in single Promise.all for maximum parallelism
-  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult] = await Promise.all([
+  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult, fitmentCountResult] = await Promise.all([
     getTenant(shopId),
     paginatedSelect("collection_mappings", "*", (q) =>
       q.eq("shop_id", shopId).order("created_at", { ascending: false })
@@ -60,6 +60,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Make/model counts — run in parallel instead of sequential
     db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000),
     db.from("vehicle_fitments").select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
+    // Fitment count for the stat bar — prevents flash-of-zero before first poll.
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
 
   const plan: PlanTier = getEffectivePlan(tenant);
@@ -90,6 +92,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     uniqueMakes,
     uniqueMakeModelCount: uniqueMakeModels.length,
     uniqueMakeModelYearCount: uniqueMakeModelYears.length,
+    fitmentCount: fitmentCountResult.count ?? 0,
     loaderError: collectionsResult.error?.message ?? null,
   };
 };
@@ -117,7 +120,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (_action === "save_collection_settings") {
     const collectionStrategy = formData.get("collection_strategy") as string || "make";
-    const autoCreateCollections = formData.get("auto_create_collections") === "true";
+    // auto_create_collections is managed on the Push page — not here
+    const seoEnabled = formData.get("seo_enabled") === "true";
 
     // Enforce collection strategy level based on plan
     const tenant = await getTenant(shopId);
@@ -143,7 +147,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .from("app_settings")
         .update({
           collection_strategy: collectionStrategy,
-          auto_create_collections: autoCreateCollections,
+
+          seo_enabled: seoEnabled,
           updated_at: new Date().toISOString(),
         })
         .eq("shop_id", shopId);
@@ -157,7 +162,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         .insert({
           shop_id: shopId,
           collection_strategy: collectionStrategy,
-          auto_create_collections: autoCreateCollections,
+
+          seo_enabled: seoEnabled,
         });
 
       if (error) {
@@ -201,6 +207,7 @@ export default function Collections() {
     uniqueMakes,
     uniqueMakeModelCount,
     uniqueMakeModelYearCount,
+    fitmentCount,
     loaderError,
   } = useLoaderData<typeof loader>();
 
@@ -212,16 +219,19 @@ export default function Collections() {
   const [strategy, setStrategy] = useState<string>(
     appSettings?.collection_strategy ?? "make"
   );
-  const [autoCreate, setAutoCreate] = useState<boolean>(
-    limits.features.smartCollections
-      ? (appSettings?.auto_create_collections ?? false)
-      : false
+  // auto_create_collections is managed on the Push page (Create Collections checkbox)
+  const [seoEnabled, setSeoEnabled] = useState<boolean>(
+    appSettings?.seo_enabled ?? false
   );
 
-  // Live stats + active jobs polling
-  const { stats: polledStats, activeJobs, refresh: refreshData } = useAppData();
-  const liveCollectionCount = polledStats.collections ?? collections.length;
-  const liveFitmentCount = polledStats.fitments ?? 0;
+  // Live stats + active jobs polling — pass initial loader data to prevent flash-of-wrong-data.
+  // MUST seed both `collections` and `fitments` because the UI reads both before polling returns.
+  const { stats: polledStats, activeJobs } = useAppData({
+    collections: collections.length,
+    fitments: fitmentCount,
+  });
+  const liveCollectionCount = polledStats.collections;
+  const liveFitmentCount = polledStats.fitments;
 
   // Find active collection job for progress bar
   const collectionJob = (activeJobs || []).find((j: any) => j.type === "collections");
@@ -277,6 +287,7 @@ export default function Collections() {
 
   return (
     <Page fullWidth title="Collections">
+      <BlockStack gap="600">
       <Layout>
         {/* How It Works */}
         <Layout.Section>
@@ -367,29 +378,27 @@ export default function Collections() {
 
                 <Divider />
 
-                <Checkbox
-                  label="Auto-create collections on push"
-                  helpText="Automatically create or update smart collections whenever you push fitment data to Shopify"
-                  checked={autoCreate}
-                  onChange={setAutoCreate}
-                />
+                {/* SEO option — the only collection-specific setting */}
+                <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                  <PlanGate
+                    feature="collectionSeoImages"
+                    currentPlan={plan}
+                    limits={limits}
+                    allLimits={allLimits}
+                  >
+                    <Checkbox
+                      label="Include SEO"
+                      helpText="Add SEO titles, descriptions, and make logos to collections"
+                      checked={seoEnabled}
+                      onChange={setSeoEnabled}
+                    />
+                  </PlanGate>
+                </Box>
 
                 <Divider />
-
-                {/* SEO Images gating */}
-                <PlanGate
-                  feature="collectionSeoImages"
-                  currentPlan={plan}
-                  limits={limits}
-                  allLimits={allLimits}
-                >
-                  <InlineStack gap="200" blockAlign="center">
-                    <Badge tone="success" size="small">Included</Badge>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      SEO titles, descriptions, and images are included with collections on your plan.
-                    </Text>
-                  </InlineStack>
-                </PlanGate>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  To create collections, go to Push to Shopify and enable "Create Collections". Wheel collections (PCD, diameter, width, offset) are automatically created from your wheel fitment data.
+                </Text>
               </BlockStack>
             </Card>
           </PlanGate>
@@ -399,7 +408,7 @@ export default function Collections() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              ...autoFitGridStyle("120px", "8px"),
+              ...autoFitGridStyle("100px", "0px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[
@@ -453,11 +462,7 @@ export default function Collections() {
             <Form method="post">
               <input type="hidden" name="_action" value="save_collection_settings" />
               <input type="hidden" name="collection_strategy" value={strategy} />
-              <input
-                type="hidden"
-                name="auto_create_collections"
-                value={String(autoCreate)}
-              />
+              <input type="hidden" name="seo_enabled" value={String(seoEnabled)} />
               <Button variant="primary" submit loading={isSubmitting}>
                 Save Collection Settings
               </Button>
@@ -521,8 +526,8 @@ export default function Collections() {
                           </Text>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
-                          <Badge tone={col.type === "make" ? "info" : col.type === "make_model_year" ? "warning" : "success"}>
-                            {col.type === "make" ? "Make" : col.type === "make_model" ? "Make + Model" : col.type === "make_model_year" ? "Make + Model + Year" : col.type || "—"}
+                          <Badge tone={col.type === "make" ? "info" : col.type === "make_model_year" ? "warning" : col.type === "wheel_pcd" ? "attention" : col.type === "wheel_diameter" ? "attention" : "success"}>
+                            {col.type === "make" ? "Make" : col.type === "make_model" ? "Make + Model" : col.type === "make_model_year" ? "Year Range" : col.type === "wheel_pcd" ? "Wheel PCD" : col.type === "wheel_diameter" ? "Wheel Size" : col.type || "—"}
                           </Badge>
                         </IndexTable.Cell>
                         <IndexTable.Cell>
@@ -555,6 +560,7 @@ export default function Collections() {
           </Card>
         </Layout.Section>
       </Layout>
+      </BlockStack>
     </Page>
   );
 }

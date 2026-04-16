@@ -14,6 +14,7 @@ import {
   Collapsible,
   TextField,
   Box,
+  List,
 } from "@shopify/polaris";
 import { BookOpenIcon } from "@shopify/polaris-icons";
 
@@ -34,8 +35,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const planSummaries = tiers.map((tier) => {
     const limits = getPlanLimits(tier);
     const price = getPlanPriceLabel(tier);
-    const products = limits.maxProducts === Infinity ? "Unlimited" : limits.maxProducts.toLocaleString();
-    const fitments = limits.maxFitments === Infinity ? "Unlimited" : limits.maxFitments.toLocaleString();
+    const products = limits.products === Infinity ? "Unlimited" : limits.products.toLocaleString();
+    const fitments = limits.fitments === Infinity ? "Unlimited" : limits.fitments.toLocaleString();
     return { tier, name: tier.charAt(0).toUpperCase() + tier.slice(1), price, products, fitments };
   });
   return { planSummaries };
@@ -275,8 +276,101 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
       ),
     },
     {
+      id: "data-sync",
+      title: "6. Automatic Data Sync & Cleanup",
+      keywords: ["sync", "cleanup", "delete", "stale", "ghost", "automatic", "webhook", "orphan", "metafield", "collection", "vehicle page", "YMME", "dropdown"],
+      content: (
+        <BlockStack gap="300">
+          <Text as="p" variant="bodyMd">
+            AutoSync automatically keeps your Shopify store in sync with your fitment data.
+            When products or fitments are deleted, all related data is cleaned up automatically
+            — tags, metafields, collections, vehicle pages, and YMME dropdowns stay accurate
+            with zero manual work.
+          </Text>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              How It Works
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Every time you delete products or fitments — whether in AutoSync or directly
+              on Shopify — the system automatically detects the change and cleans up
+              everything downstream. This happens in three ways:
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              1. Instant Cleanup (When You Delete in AutoSync)
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Deleting products or fitments from any page in AutoSync immediately recounts
+              your totals, removes empty vehicle makes from your YMME dropdowns, marks
+              orphaned vehicle pages for removal, and schedules a background job to remove
+              stale tags and metafields from your Shopify products.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              2. Webhook Detection (When You Delete on Shopify)
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              If you delete products directly on Shopify (e.g., through Shopify Admin or a
+              bulk delete), AutoSync receives a webhook notification within seconds.
+              The product is removed from our database, and a cleanup job is automatically
+              created to sync all related data. Multiple rapid deletions are batched into
+              a single cleanup for efficiency.
+            </Text>
+          </BlockStack>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              3. Hourly Safety Net (Automatic Background Check)
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Every hour, the system automatically scans all stores to detect any data
+              drift — miscounted totals, stale vehicle makes, orphaned vehicle pages,
+              or products with outdated Shopify data. If anything is out of sync, it is
+              corrected automatically. This catches edge cases like webhook failures or
+              network timeouts.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              What Gets Cleaned Up
+            </Text>
+            <List type="bullet">
+              <List.Item>Product and fitment counts on your dashboard</List.Item>
+              <List.Item>YMME dropdowns — makes with zero products are automatically removed</List.Item>
+              <List.Item>Shopify tags — "_autosync_" prefixed tags are removed from affected products</List.Item>
+              <List.Item>Shopify metafields — vehicle fitment data is removed from products that no longer have fitments</List.Item>
+              <List.Item>Smart collections — empty collections for makes/models with zero products are cleaned up</List.Item>
+              <List.Item>Vehicle pages — specification pages for engines with zero products are marked for removal</List.Item>
+              <List.Item>Wheel fitments — automatically removed when wheel products are deleted (database cascade)</List.Item>
+            </List>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Bulk Operations
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Cleanup uses Shopify&apos;s Bulk Operations API for maximum speed. Instead of
+              updating products one-by-one, AutoSync scans your entire catalog, builds a
+              single batch file, and uploads it to Shopify for server-side processing. This
+              means cleaning up 10,000 products takes minutes, not hours.
+            </Text>
+          </BlockStack>
+          <Banner tone="info">
+            <p>
+              You never need to manually clean up stale data. The system handles everything
+              automatically — whether you delete 1 product or 10,000.
+            </p>
+          </Banner>
+        </BlockStack>
+      ),
+    },
+    {
       id: "providers",
-      title: "6. Providers",
+      title: "7. Providers",
       keywords: ["provider", "csv", "xml", "api", "ftp", "import", "source", "feed"],
       content: (
         <BlockStack gap="300">
@@ -311,7 +405,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "storefront-widgets",
-      title: "7. Storefront Widgets",
+      title: "8. Storefront Widgets",
       keywords: [
         "widget", "storefront", "theme", "ymme", "search", "badge", "compatibility",
         "table", "floating", "bar", "install", "extension",
@@ -374,7 +468,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "wheel-finder",
-      title: "8. Wheel Finder",
+      title: "9. Wheel Finder",
       keywords: ["wheel", "pcd", "offset", "bolt", "pattern", "diameter", "bore", "staggered", "alloy"],
       content: (
         <BlockStack gap="300">
@@ -415,7 +509,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "dvla-mot",
-      title: "9. DVLA/MOT Plate Lookup",
+      title: "10. DVLA/MOT Plate Lookup",
       keywords: ["dvla", "mot", "plate", "registration", "uk", "number", "lookup", "vehicle"],
       content: (
         <BlockStack gap="300">
@@ -458,7 +552,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "vin-decode",
-      title: "10. VIN Decode",
+      title: "11. VIN Decode",
       keywords: ["vin", "decode", "vehicle", "identification", "number", "17", "chassis"],
       content: (
         <BlockStack gap="300">
@@ -500,7 +594,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "wheel-finder",
-      title: "11. Wheel Finder",
+      title: "12. Wheel Finder Widget",
       keywords: ["wheel", "finder", "pcd", "bolt", "pattern", "offset", "diameter", "width", "center", "bore", "alloy", "rim"],
       content: (
         <BlockStack gap="300">
@@ -545,7 +639,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "analytics",
-      title: "12. Analytics Dashboard",
+      title: "13. Analytics Dashboard",
       keywords: ["analytics", "fitment", "coverage", "popular", "makes", "models", "supplier", "performance", "inventory", "gap", "export", "report"],
       content: (
         <BlockStack gap="300">
@@ -604,7 +698,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "plan-comparison",
-      title: "12. Plan Comparison",
+      title: "14. Plan Comparison",
       keywords: ["plan", "pricing", "tier", "upgrade", "downgrade", "billing", "subscription"],
       content: (
         <BlockStack gap="300">
@@ -624,7 +718,7 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
     },
     {
       id: "faq",
-      title: "13. FAQ",
+      title: "15. FAQ",
       keywords: ["faq", "question", "answer", "help", "common", "troubleshoot"],
       content: (
         <BlockStack gap="400">
@@ -721,6 +815,55 @@ function buildSections(navigate: ReturnType<typeof useNavigate>, planSummaries: 
               A: Wheel specifications (PCD, offset, diameter, centre bore, width) can be imported
               via CSV upload or through provider feeds. Each product can have multiple wheel
               fitment entries to support different sizes and configurations.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: What happens if I delete products from Shopify directly?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: AutoSync detects the deletion via Shopify webhooks within seconds. The product
+              and its fitments are removed from our database automatically. A background cleanup
+              job then recounts your totals, removes empty makes from YMME dropdowns, and cleans
+              up any stale tags or metafields on other products. No manual action needed.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: Why do my YMME dropdowns still show makes/models with no products?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: This should not happen — AutoSync automatically removes makes with zero products
+              from your YMME widget. If you see empty makes, try waiting a few minutes for the
+              automatic cleanup to complete. The system also runs an hourly background check that
+              catches any edge cases. If the issue persists, go to Settings and use the
+              &quot;Delete All Fitments&quot; option to reset, then re-map your products.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: Do I need to manually clean up old data after deleting products?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: No. AutoSync handles all cleanup automatically. When products or fitments are
+              deleted, the system removes stale tags, metafields, empty collections, and orphaned
+              vehicle pages from your Shopify store. Dashboard counts, YMME dropdowns, and all
+              widgets update automatically. There is nothing you need to do manually.
+            </Text>
+          </BlockStack>
+          <Divider />
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Q: How long does cleanup take after deleting products?
+            </Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              A: Dashboard counts and YMME dropdowns update within seconds. Shopify tag and
+              metafield cleanup uses bulk operations and typically completes within 2-5 minutes
+              for stores with up to 50,000 products. You can continue using the app normally
+              while cleanup runs in the background.
             </Text>
           </BlockStack>
         </BlockStack>

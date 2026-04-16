@@ -27,6 +27,7 @@ export interface PlanConfig {
 export function formatTimeAgo(date: string | null | undefined): string {
   if (!date) return "Never";
   const diffMs = Date.now() - new Date(date).getTime();
+  if (isNaN(diffMs)) return "—";
   if (diffMs < 0) return "Just now";
 
   const seconds = Math.floor(diffMs / 1000);
@@ -71,10 +72,10 @@ export function formatPrice(
   }
 }
 
-export type FitmentStatus = "unmapped" | "auto_mapped" | "smart_mapped" | "manual_mapped" | "partial" | "flagged";
+export type FitmentStatus = "unmapped" | "auto_mapped" | "smart_mapped" | "manual_mapped" | "partial" | "flagged" | "no_match";
 
-export type SyncJobType = "fetch" | "extract" | "push" | "provider_import" | "scrape";
-export type SyncJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type SyncJobType = "fetch" | "extract" | "push" | "bulk_push" | "collections" | "vehicle_pages" | "provider_import" | "provider_refresh" | "cleanup" | "cleanup_tags" | "cleanup_metafields" | "cleanup_collections" | "delete_vehicle_pages" | "scrape" | "sync" | "wheel_extract" | "wheel_push" | "bulk_publish" | "sync_after_delete";
+export type SyncJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled" | "paused";
 
 export type ProviderType = "csv" | "xml" | "api" | "ftp";
 
@@ -122,7 +123,17 @@ export interface Tenant {
   pending_plan: PlanTier | null;
   billing_subscription_id: string | null;
   billing_charge_id: string | null;
-  updated_at: string | null;
+  shopify_access_token: string | null;
+  shopify_app_id: string | null;
+  online_store_publication_id: string | null;
+  custom_price: number | null;
+  custom_plan_config: Record<string, unknown> | null;
+  /** PRODUCT-level $app:vehicle_fitment.* definitions confirmed on Shopify (migration 026). */
+  metafield_definitions_created: boolean;
+  /** SHOP-level $app:autosync.* definitions confirmed on Shopify (migration 031). */
+  shop_metafield_defs_created: boolean;
+  /** Last plan tier synced to Shopify metafields — skip redundant syncs (migration 030). */
+  last_synced_plan: string | null;
 }
 
 export interface Product {
@@ -143,6 +154,8 @@ export interface Product {
   map_price: number | null;
   price: string | null;
   image_url: string | null;
+  product_category: string | null;
+  synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -192,10 +205,39 @@ export interface SyncJob {
   shop_id: string;
   type: SyncJobType;
   status: SyncJobStatus;
-  total: number;
-  processed: number;
-  errors: number;
-  error_log: string | null;
-  created_at: string;
+  total_items: number;
+  processed_items: number;
+  progress: number;
+  error: string | null;
+  started_at: string | null;
   completed_at: string | null;
+  created_at: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+/**
+ * Shape returned by the `get_push_stats(p_shop_id)` Supabase RPC.
+ * All counts are COUNT(DISTINCT product_id) for the given shop.
+ */
+export interface PushStats {
+  auto_mapped: number;
+  smart_mapped: number;
+  manual_mapped: number;
+  mapped_total: number;
+  stale_push: number;
+}
+
+/**
+ * Narrow an `unknown` RPC payload (Supabase returns `any`) into a typed PushStats
+ * with zero-filled defaults. Use in loaders that call `db.rpc("get_push_stats", ...)`.
+ */
+export function asPushStats(data: unknown): PushStats {
+  const d = (data ?? {}) as Partial<PushStats>;
+  return {
+    auto_mapped: d.auto_mapped ?? 0,
+    smart_mapped: d.smart_mapped ?? 0,
+    manual_mapped: d.manual_mapped ?? 0,
+    mapped_total: d.mapped_total ?? 0,
+    stale_push: d.stale_push ?? 0,
+  };
 }

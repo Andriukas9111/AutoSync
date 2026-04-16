@@ -369,14 +369,14 @@ const limits = getPlanLimits(tenant?.plan ?? "free");
 
 ## 6-Tier Pricing
 
-| Tier | Price | Products | Fitments | Providers | Key Features |
+| Tier | Price | Products | Fitments | Providers | Active Makes |
 |------|-------|----------|----------|-----------|-------------|
-| Free | $0 | 50 | 200 | 0 | Manual mapping only |
-| Starter | $19/mo | 500 | 2,500 | 1 | Push tags/metafields, YMME widget, fitment badge |
-| Growth | $49/mo | 5,000 | 25,000 | 3 | Auto extraction, bulk ops, all 4 widgets, collections (make) |
-| Professional | $99/mo | 25,000 | 100,000 | 5 | API integration, custom vehicles, My Garage, collections (make+model) |
-| Business | $179/mo | 100,000 | 500,000 | 15 | FTP import, Wheel Finder, priority support |
-| Enterprise | $299/mo | Unlimited | Unlimited | Unlimited | DVLA plate lookup, VIN decode, full CSS customisation |
+| Free | $0 | 25 | 100 | 0 | 3 |
+| Starter | $19/mo | 250 | 1,000 | 1 | 10 |
+| Growth | $49/mo | 1,000 | 5,000 | 2 | 25 |
+| Professional | $99/mo | 3,000 | 15,000 | 3 | Unlimited |
+| Business | $179/mo | 10,000 | 50,000 | 4 | Unlimited |
+| Enterprise | $299/mo | 50,000 | 250,000 | 5 | Unlimited |
 
 ---
 

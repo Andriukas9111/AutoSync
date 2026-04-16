@@ -29,7 +29,7 @@ import { RouteError } from "../components/RouteError";
 // Constants
 // ---------------------------------------------------------------------------
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 const STATUS_TONES: Record<string, "info" | "success" | "warning" | "critical" | undefined> = {
   pending: undefined,

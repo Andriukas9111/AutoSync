@@ -15,6 +15,19 @@ import { PageFooter } from "../components/PageFooter";
 import type { PlanTier, Tenant } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Internal Edge Function bypass — skip full auth for API-only calls with valid service key
+  // This allows the auto-extract system to call suggest-fitments without Shopify session
+  const internalKey = request.headers.get("X-Internal-Key");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (internalKey && serviceKey && internalKey.length === serviceKey.length) {
+    try {
+      const crypto = await import("crypto");
+      if (crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(serviceKey))) {
+        return { apiKey: process.env.SHOPIFY_API_KEY || "", isAdmin: false, plan: "enterprise" as PlanTier, tenant: null as Tenant | null };
+      }
+    } catch { /* fall through to normal auth */ }
+  }
+
   const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
@@ -110,10 +123,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
-  // Ensure shop-level metafield definitions exist (runs once per tenant)
-  // Required for Liquid to read $app:autosync.* metafields
+  // Ensure SHOP-level metafield definitions exist (runs once per tenant)
+  // Required for Liquid to read $app:autosync.* metafields.
+  //
+  // IMPORTANT: Uses `shop_metafield_defs_created` (migration 031), NOT
+  // `metafield_definitions_created`. The latter tracks PRODUCT-level definitions
+  // created by app/lib/pipeline/metafield-definitions.server.ts — sharing one flag
+  // caused whichever path ran first to skip the other path's definitions.
   const freshTenantCheck = tenant;
-  if (!freshTenantCheck?.widget_metadefs_created) {
+  if (!freshTenantCheck?.shop_metafield_defs_created) {
     const shopMetaDefs = [
       { name: "Plan Tier", key: "plan_tier", type: "single_line_text_field", description: "Current plan tier" },
       { name: "Allowed Widgets", key: "allowed_widgets", type: "json", description: "Widget permissions by plan" },
@@ -143,18 +161,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           },
         });
         const defJson = await defRes.json();
-        const ue = defJson?.data?.metafieldDefinitionCreate?.userErrors;
-        // "taken" means already exists — that's fine
-        if (ue?.length && !ue.some((e: { message: string }) => e.message.includes("taken") || e.message.includes("already"))) {
+        const ue = defJson?.data?.metafieldDefinitionCreate?.userErrors ?? [];
+        // "Already exists" in Shopify's API takes multiple forms — all are OK for our purposes:
+        //   - "Key is in use for Shop metafields on the '...' namespace." (exact string when re-run)
+        //   - "taken"
+        //   - "already exists"
+        // Treat any of these as success so we can flip the flag and stop re-trying.
+        const isBenign = (msg: string) => {
+          const m = msg.toLowerCase();
+          return m.includes("taken") || m.includes("already") || m.includes("in use") || m.includes("exists");
+        };
+        if (ue.length && !ue.every((e: { message: string }) => isBenign(e.message))) {
           console.error("[app.tsx] Metafield def error:", def.key, ue);
           allCreated = false;
         }
-      } catch {
+      } catch (defErr) {
+        console.warn("[app.tsx] Metafield def exception:", def.key, defErr instanceof Error ? defErr.message : defErr);
         allCreated = false;
       }
     }
+    // Flip the flag even if every error was "already exists" — the definitions are confirmed
+    // present, so there's no reason to hammer Shopify with 3 GraphQL calls on every page load.
     if (allCreated) {
-      await db.from("tenants").update({ widget_metadefs_created: true }).eq("shop_id", shopId);
+      const { error: flagErr } = await db
+        .from("tenants")
+        .update({ shop_metafield_defs_created: true })
+        .eq("shop_id", shopId);
+      if (flagErr) {
+        console.warn("[app.tsx] Failed to persist shop_metafield_defs_created flag:", flagErr.message);
+      }
     }
   }
 

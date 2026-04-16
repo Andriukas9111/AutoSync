@@ -55,9 +55,15 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
   const linkMap: Record<string, string> = {
     extract: "/app/fitment",
     push: "/app/push",
+    bulk_push: "/app/push",
+    wheel_push: "/app/wheels",
     collections: "/app/collections",
     vehicle_pages: "/app/vehicle-pages",
     sync: "/app/products",
+    provider_import: "/app/providers",
+    provider_refresh: "/app/providers",
+    provider_auto_fetch: "/app/providers",
+    cleanup: "/app/settings",
   };
 
   return (
@@ -78,13 +84,16 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
         }).map((job, i) => {
           // For collection jobs, show actual created count from live stats
           const isCollectionJob = job.type === "collections";
-          const processed = isCollectionJob ? (stats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
-          // Guard against wrong total (product count leaked into collection job)
+          const rawProcessed = isCollectionJob ? (stats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
           let total = job.total_items ?? 0;
-          if (isCollectionJob && total > 0 && processed > 0 && total > processed * 2.5) {
-            total = processed + 50;
+          // Guard against wrong total (product count leaked into collection job)
+          if (isCollectionJob && total > 0 && rawProcessed > 0 && total > rawProcessed * 2.5) {
+            total = rawProcessed + 50;
           }
-          const percent = total > 0 ? Math.min(Math.round((processed / total) * 100), 99) : 0;
+          // Cap processed at total — prevents "111/101" from double-counting bugs
+          const processed = total > 0 ? Math.min(rawProcessed, total) : rawProcessed;
+          const rawPercent = total > 0 ? Math.round((processed / total) * 100) : 0;
+          const percent = job.status === "completed" ? 100 : Math.min(rawPercent, 99);
           const isPending = job.status === "pending";
           const isRunning = job.status === "running" || isPending;
           const isComplete = job.status === "completed";

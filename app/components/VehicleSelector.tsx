@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
-import { BlockStack, Button, InlineStack, Select } from "@shopify/polaris";
+import { BlockStack, Button, InlineStack, Combobox, Listbox, Text, Icon } from "@shopify/polaris";
+import { SearchIcon } from "@shopify/polaris-icons";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,348 +13,240 @@ export interface VehicleSelection {
   year: number | null;
   engineId: string | null;
   engineName: string | null;
+  engineYearFrom: number | null;
+  engineYearTo: number | null;
+  /** Engine details from YMME — stored alongside fitment for consistent display */
+  engineCode: string | null;
+  fuelType: string | null;
 }
 
-interface Make {
-  id: string;
-  name: string;
-  country: string | null;
-  logo_url: string | null;
-}
-
-interface Model {
-  id: string;
-  name: string;
-  generation: string | null;
-  year_from: number;
-  year_to: number | null;
-  body_type: string | null;
-}
-
-interface Engine {
-  id: string;
-  code: string | null;
-  name: string;
-  displacement_cc: number | null;
-  fuel_type: string | null;
-  power_hp: number | null;
-  power_kw: number | null;
-  torque_nm: number | null;
-  year_from: number;
-  year_to: number | null;
-  cylinders: number | null;
-  cylinder_config: string | null;
-  aspiration: string | null;
-  modification: string | null;
-}
+interface Make { id: string; name: string; country: string | null; logo_url: string | null; }
+interface Model { id: string; name: string; generation: string | null; year_from: number; year_to: number | null; body_type: string | null; }
+interface Engine { id: string; code: string | null; name: string; displacement_cc: number | null; fuel_type: string | null; power_hp: number | null; year_from: number; year_to: number | null; aspiration: string | null; }
 
 interface VehicleSelectorProps {
-  /** Fires when all required fields (make + model) are filled. */
   onChange: (selection: VehicleSelection) => void;
-  /** Pre-populate for editing an existing fitment. */
   initialSelection?: Partial<VehicleSelection>;
-  /** Compact inline layout (vs. vertical stacked). */
-  compact?: boolean;
+}
+
+// ── Searchable Combobox ─────────────────────────────────────────────────────
+
+function SearchableDropdown({
+  label,
+  placeholder,
+  options,
+  value,
+  onChange,
+  disabled,
+  loading,
+}: {
+  label: string;
+  placeholder: string;
+  options: Array<{ id: string; label: string; sublabel?: string; searchText: string; icon?: string }>;
+  value: string;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+  loading?: boolean;
+}) {
+  const [inputValue, setInputValue] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!inputValue) return options;
+    const lower = inputValue.toLowerCase();
+    return options.filter((o) => o.searchText.toLowerCase().includes(lower));
+  }, [options, inputValue]);
+
+  const handleSelect = useCallback((selected: string) => {
+    const match = options.find((o) => o.id === selected);
+    if (match) { setInputValue(match.label); onChange(selected); }
+  }, [options, onChange]);
+
+  useEffect(() => {
+    if (!value) setInputValue("");
+    else { const m = options.find((o) => o.id === value); if (m) setInputValue(m.label); }
+  }, [value, options]);
+
+  return (
+    <Combobox
+      activator={
+        <Combobox.TextField
+          label={label}
+          value={inputValue}
+          onChange={setInputValue}
+          placeholder={loading ? "Loading..." : placeholder}
+          disabled={disabled || loading}
+          autoComplete="off"
+          prefix={<Icon source={SearchIcon} />}
+        />
+      }
+      onScrolledToBottom={() => {}}
+    >
+      {filtered.length > 0 ? (
+        <Listbox onSelect={handleSelect}>
+          {filtered.map((opt) => (
+            <Listbox.Option key={opt.id} value={opt.id} selected={opt.id === value} accessibilityLabel={opt.label}>
+              <Listbox.TextOption selected={opt.id === value}>
+                <InlineStack gap="200" blockAlign="center" wrap={false}>
+                  {opt.icon && (
+                    <img src={opt.icon} alt="" style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }} />
+                  )}
+                  <span>{opt.label}</span>
+                  {opt.sublabel && (
+                    <span style={{ color: "var(--p-color-text-secondary)", fontSize: "12px" }}>{opt.sublabel}</span>
+                  )}
+                </InlineStack>
+              </Listbox.TextOption>
+            </Listbox.Option>
+          ))}
+        </Listbox>
+      ) : (
+        <Listbox onSelect={() => {}}>
+          <Listbox.Action value="empty">
+            {inputValue ? `No results for "${inputValue}"` : "Type to search..."}
+          </Listbox.Action>
+        </Listbox>
+      )}
+    </Combobox>
+  );
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function VehicleSelector({
-  onChange,
-  initialSelection,
-  compact = false,
-}: VehicleSelectorProps) {
-  // Fetchers for each cascading level
+export function VehicleSelector({ onChange, initialSelection }: VehicleSelectorProps) {
   const makesFetcher = useFetcher<{ makes?: Make[] }>();
   const modelsFetcher = useFetcher<{ models?: Model[] }>();
-  const yearsFetcher = useFetcher<{ years?: number[] }>();
   const enginesFetcher = useFetcher<{ engines?: Engine[] }>();
 
-  // Selected values
-  const [selectedMakeId, setSelectedMakeId] = useState(
-    initialSelection?.makeId ?? "",
-  );
-  const [selectedModelId, setSelectedModelId] = useState(
-    initialSelection?.modelId ?? "",
-  );
-  const [selectedYear, setSelectedYear] = useState<string>(
-    initialSelection?.year != null ? String(initialSelection.year) : "",
-  );
-  const [selectedEngineId, setSelectedEngineId] = useState(
-    initialSelection?.engineId ?? "",
-  );
+  const [selectedMakeId, setSelectedMakeId] = useState(initialSelection?.makeId ?? "");
+  const [selectedModelId, setSelectedModelId] = useState(initialSelection?.modelId ?? "");
+  const [selectedEngineId, setSelectedEngineId] = useState(initialSelection?.engineId ?? "");
 
-  // ── Load makes on mount ──────────────────────────────────────────────────
-
+  // Load makes on mount
   useEffect(() => {
-    if (makesFetcher.state === "idle" && !makesFetcher.data) {
-      makesFetcher.load("/app/api/ymme?level=makes");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (makesFetcher.state === "idle" && !makesFetcher.data) makesFetcher.load("/app/api/ymme?level=makes");
+  }, []); // eslint-disable-line
 
-  // ── Load initial cascade when initialSelection is provided ───────────────
-
+  // Load cascade for initial selection
   useEffect(() => {
-    if (initialSelection?.makeId && makesFetcher.data) {
-      modelsFetcher.load(
-        `/app/api/ymme?level=models&make_id=${initialSelection.makeId}`,
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSelection?.makeId, makesFetcher.data]);
-
+    if (initialSelection?.makeId && makesFetcher.data) modelsFetcher.load(`/app/api/ymme?level=models&make_id=${initialSelection.makeId}`);
+  }, [initialSelection?.makeId, makesFetcher.data]); // eslint-disable-line
   useEffect(() => {
-    if (initialSelection?.modelId && modelsFetcher.data) {
-      yearsFetcher.load(
-        `/app/api/ymme?level=years&model_id=${initialSelection.modelId}`,
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSelection?.modelId, modelsFetcher.data]);
-
-  useEffect(() => {
-    if (initialSelection?.modelId && yearsFetcher.data) {
-      const yearParam = initialSelection.year
-        ? `&year=${initialSelection.year}`
-        : "";
-      enginesFetcher.load(
-        `/app/api/ymme?level=engines&model_id=${initialSelection.modelId}${yearParam}`,
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialSelection?.modelId, initialSelection?.year, yearsFetcher.data]);
-
-  // ── Derived option lists ─────────────────────────────────────────────────
+    if (initialSelection?.modelId && modelsFetcher.data) enginesFetcher.load(`/app/api/ymme?level=engines&model_id=${initialSelection.modelId}`);
+  }, [initialSelection?.modelId, modelsFetcher.data]); // eslint-disable-line
 
   const makes = makesFetcher.data?.makes ?? [];
   const models = modelsFetcher.data?.models ?? [];
-  const years = yearsFetcher.data?.years ?? [];
   const engines = enginesFetcher.data?.engines ?? [];
 
-  const makeOptions = useMemo(
-    () => [
-      { label: "Select make...", value: "" },
-      ...makes.map((m) => ({ label: m.name, value: m.id })),
-    ],
-    [makes],
-  );
+  // ── Options ──────────────────────────────────────────────────────────────
 
-  const modelOptions = useMemo(
-    () => [
-      { label: "Select model...", value: "" },
-      ...models.map((m) => {
-        const yearRange =
-          m.year_from && m.year_to
-            ? ` (${m.year_from}–${m.year_to})`
-            : m.year_from
-              ? ` (${m.year_from}+)`
-              : "";
-        const gen = m.generation && !m.generation.includes(" | ") && !m.generation.startsWith(m.name) ? ` (${m.generation})` : "";
-        return { label: `${m.name}${gen}${yearRange}`, value: m.id };
-      }),
-    ],
-    [models],
-  );
+  const makeOptions = useMemo(() => makes.map((m) => ({
+    id: m.id,
+    label: m.name,
+    sublabel: m.country ?? undefined,
+    searchText: `${m.name} ${m.country ?? ""}`,
+    icon: m.logo_url ?? undefined,
+  })), [makes]);
 
-  const yearOptions = useMemo(
-    () => [
-      { label: "Select year...", value: "" },
-      ...years.map((y) => ({ label: String(y), value: String(y) })),
-    ],
-    [years],
-  );
+  const modelOptions = useMemo(() => models.map((m) => {
+    const yr = m.year_from && m.year_to ? `${m.year_from}–${m.year_to}` : m.year_from ? `${m.year_from}+` : "";
+    const gen = m.generation && !m.generation.includes(" | ") && !m.generation.startsWith(m.name) ? m.generation : "";
+    const parts = [m.name, gen, yr].filter(Boolean);
+    return {
+      id: m.id,
+      label: parts.join(" · "),
+      sublabel: m.body_type ?? undefined,
+      searchText: `${m.name} ${gen} ${m.body_type ?? ""}`,
+    };
+  }), [models]);
 
-  const engineOptions = useMemo(
-    () => [
-      { label: "Select engine...", value: "" },
-      ...engines.map((e) => {
-        const name = e.name || "Unknown Engine";
-        const parts = [name];
-        if (e.fuel_type) parts.push(e.fuel_type);
-        if (e.power_hp) parts.push(`${String(e.power_hp)}hp`);
-        return { label: parts.join(" \u2014 "), value: e.id };
-      }),
-    ],
-    [engines],
-  );
+  const engineOptions = useMemo(() => engines.map((e) => {
+    const parts = [e.name];
+    if (e.fuel_type) parts.push(e.fuel_type);
+    if (e.power_hp) parts.push(`${e.power_hp}hp`);
+    const yr = e.year_from && e.year_to ? `${e.year_from}–${e.year_to}` : e.year_from ? `${e.year_from}+` : "";
+    return {
+      id: e.id,
+      label: parts.join(" — "),
+      sublabel: yr || undefined,
+      searchText: `${e.name} ${e.code ?? ""} ${e.fuel_type ?? ""}`,
+    };
+  }), [engines]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Emit selection ───────────────────────────────────────────────────────
 
-  const findMakeName = useCallback(
-    (id: string) => makes.find((m) => m.id === id)?.name ?? "",
-    [makes],
-  );
-
-  const findModelName = useCallback(
-    (id: string) => {
-      const m = models.find((mod) => mod.id === id);
-      if (!m) return "";
-      const showGen = m.generation && !m.generation.includes(" | ") && !m.generation.startsWith(m.name);
-      return showGen ? `${m.name} (${m.generation})` : m.name;
-    },
-    [models],
-  );
-
-  const findEngineName = useCallback(
-    (id: string) => engines.find((e) => e.id === id)?.name ?? null,
-    [engines],
-  );
-
-  const emitChange = useCallback(
-    (
-      makeId: string,
-      modelId: string,
-      year: string,
-      engineId: string,
-    ) => {
-      if (makeId && modelId) {
-        onChange({
-          makeId,
-          makeName: findMakeName(makeId),
-          modelId,
-          modelName: findModelName(modelId),
-          year: year ? parseInt(year, 10) : null,
-          engineId: engineId || null,
-          engineName: engineId ? findEngineName(engineId) : null,
-        });
-      }
-    },
-    [onChange, findMakeName, findModelName, findEngineName],
-  );
+  const emitChange = useCallback((makeId: string, modelId: string, engineId: string) => {
+    if (!makeId || !modelId) return;
+    const make = makes.find((m) => m.id === makeId);
+    const model = models.find((m) => m.id === modelId);
+    const engine = engineId ? engines.find((e) => e.id === engineId) : null;
+    onChange({
+      makeId, makeName: make?.name ?? "",
+      modelId, modelName: model?.name ?? "",
+      year: engine?.year_from ?? model?.year_from ?? null,
+      engineId: engine?.id ?? null,
+      engineName: engine?.name ?? null,
+      engineYearFrom: engine?.year_from ?? model?.year_from ?? null,
+      engineYearTo: engine?.year_to ?? model?.year_to ?? null,
+      engineCode: engine?.code ?? null,
+      fuelType: engine?.fuel_type ?? null,
+    });
+  }, [onChange, makes, models, engines]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
-  const handleMakeChange = useCallback(
-    (value: string) => {
-      setSelectedMakeId(value);
-      setSelectedModelId("");
-      setSelectedYear("");
-      setSelectedEngineId("");
+  const handleMakeChange = useCallback((v: string) => {
+    setSelectedMakeId(v); setSelectedModelId(""); setSelectedEngineId("");
+    if (v) modelsFetcher.load(`/app/api/ymme?level=models&make_id=${v}`);
+  }, []); // eslint-disable-line
 
-      if (value) {
-        modelsFetcher.load(`/app/api/ymme?level=models&make_id=${value}`);
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  const handleModelChange = useCallback((v: string) => {
+    setSelectedModelId(v); setSelectedEngineId("");
+    if (v) { enginesFetcher.load(`/app/api/ymme?level=engines&model_id=${v}`); emitChange(selectedMakeId, v, ""); }
+  }, [selectedMakeId, emitChange]); // eslint-disable-line
 
-  const handleModelChange = useCallback(
-    (value: string) => {
-      setSelectedModelId(value);
-      setSelectedYear("");
-      setSelectedEngineId("");
-
-      if (value) {
-        yearsFetcher.load(`/app/api/ymme?level=years&model_id=${value}`);
-        emitChange(selectedMakeId, value, "", "");
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedMakeId, emitChange],
-  );
-
-  const handleYearChange = useCallback(
-    (value: string) => {
-      setSelectedYear(value);
-      setSelectedEngineId("");
-
-      if (value) {
-        enginesFetcher.load(
-          `/app/api/ymme?level=engines&model_id=${selectedModelId}&year=${value}`,
-        );
-      }
-      emitChange(selectedMakeId, selectedModelId, value, "");
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedMakeId, selectedModelId, emitChange],
-  );
-
-  const handleEngineChange = useCallback(
-    (value: string) => {
-      setSelectedEngineId(value);
-      emitChange(selectedMakeId, selectedModelId, selectedYear, value);
-    },
-    [selectedMakeId, selectedModelId, selectedYear, emitChange],
-  );
+  const handleEngineChange = useCallback((v: string) => {
+    setSelectedEngineId(v);
+    emitChange(selectedMakeId, selectedModelId, v);
+  }, [selectedMakeId, selectedModelId, emitChange]);
 
   const handleClear = useCallback(() => {
-    setSelectedMakeId("");
-    setSelectedModelId("");
-    setSelectedYear("");
-    setSelectedEngineId("");
+    setSelectedMakeId(""); setSelectedModelId(""); setSelectedEngineId("");
   }, []);
-
-  // ── Loading states ───────────────────────────────────────────────────────
-
-  const makesLoading = makesFetcher.state === "loading";
-  const modelsLoading = modelsFetcher.state === "loading";
-  const yearsLoading = yearsFetcher.state === "loading";
-  const enginesLoading = enginesFetcher.state === "loading";
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const selects = (
-    <>
-      <Select
+  return (
+    <BlockStack gap="300">
+      <SearchableDropdown
         label="Make"
+        placeholder="Search makes..."
         options={makeOptions}
         value={selectedMakeId}
         onChange={handleMakeChange}
-        disabled={makesLoading}
-        placeholder={makesLoading ? "Loading makes..." : undefined}
+        loading={makesFetcher.state === "loading"}
       />
-      <Select
+      <SearchableDropdown
         label="Model"
+        placeholder="Search models..."
         options={modelOptions}
         value={selectedModelId}
         onChange={handleModelChange}
-        disabled={!selectedMakeId || modelsLoading}
-        placeholder={modelsLoading ? "Loading models..." : undefined}
+        disabled={!selectedMakeId}
+        loading={modelsFetcher.state === "loading"}
       />
-      <Select
-        label="Year"
-        options={yearOptions}
-        value={selectedYear}
-        onChange={handleYearChange}
-        disabled={!selectedModelId || yearsLoading}
-        placeholder={yearsLoading ? "Loading years..." : undefined}
-      />
-      <Select
-        label="Engine"
+      <SearchableDropdown
+        label="Engine (optional)"
+        placeholder="Search engines or skip..."
         options={engineOptions}
         value={selectedEngineId}
         onChange={handleEngineChange}
-        disabled={!selectedModelId || enginesLoading}
-        placeholder={enginesLoading ? "Loading engines..." : undefined}
+        disabled={!selectedModelId}
+        loading={enginesFetcher.state === "loading"}
       />
-    </>
-  );
-
-  const hasSelection = selectedMakeId !== "";
-
-  if (compact) {
-    return (
-      <InlineStack gap="300" align="start" blockAlign="end" wrap>
-        {selects}
-        {hasSelection && (
-          <Button onClick={handleClear} variant="plain">
-            Clear
-          </Button>
-        )}
-      </InlineStack>
-    );
-  }
-
-  return (
-    <BlockStack gap="300">
-      {selects}
-      {hasSelection && (
+      {selectedMakeId && (
         <InlineStack align="end">
-          <Button onClick={handleClear} variant="plain">
-            Clear selection
-          </Button>
+          <Button onClick={handleClear} variant="plain">Clear selection</Button>
         </InlineStack>
       )}
     </BlockStack>

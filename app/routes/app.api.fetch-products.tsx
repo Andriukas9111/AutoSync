@@ -39,6 +39,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .eq("shop_id", shopId)
     .eq("type", "fetch")
     .in("status", ["running", "pending"])
+    .limit(1)
     .maybeSingle();
 
   if (existingJob) {

@@ -59,6 +59,22 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Guard against concurrent imports for the same provider (except self-chain continuations)
+    if (current_offset === 0) {
+      const { count: runningImports } = await db
+        .from("provider_imports")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shop_id)
+        .eq("provider_id", provider_id)
+        .eq("status", "processing");
+      if (runningImports && runningImports > 0) {
+        console.warn(`[provider-import] Blocked: concurrent import already running for provider ${provider_id}`);
+        return new Response(JSON.stringify({ error: "Import already in progress for this provider" }), {
+          status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     // Get provider config
     const { data: provider } = await db
       .from("providers")
@@ -207,6 +223,9 @@ Deno.serve(async (req) => {
       const rawDesc = mapped.description || String(item.short_desc || item.desc || "");
       const description = rawDesc ? fixMojibake(stripHtml(rawDesc)) : null;
 
+      // Inherit product_category from provider (e.g., "wheels" or "vehicle_parts")
+      const providerCategory = provider.product_category || "vehicle_parts";
+
       return {
         shop_id,
         provider_id,
@@ -224,6 +243,7 @@ Deno.serve(async (req) => {
         image_url: mapped.image_url || String(item.image || "") || null,
         weight: mapped.weight || (item.weight ? String(item.weight) : null),
         source: "api",
+        product_category: providerCategory,
         fitment_status: "unmapped",
         status: "staged",
         raw_data: item,
@@ -232,32 +252,127 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Insert products (with dedup)
+    // ── BULLETPROOF DEDUPLICATION ────────────────────────────────
+    // Handles: concurrent refreshes, NULL SKUs, update vs skip vs create_new
     let insertedCount = 0;
-    if (duplicate_strategy === "skip" && products.length > 0) {
-      const skus = products.map((p) => p.sku).filter(Boolean) as string[];
-      if (skus.length > 0) {
-        const { data: existing } = await db
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    if (products.length > 0) {
+      // 1. Get ALL existing products for this PROVIDER (not just shop — prevents cross-provider confusion)
+      //    Also fetch handle as secondary dedup key when SKU is missing
+      const existingMap = new Map<string, { id: string; sku: string | null; handle: string | null }>(); // sku → product
+      const existingHandleMap = new Map<string, string>(); // handle → id
+      let offset = 0;
+      while (true) {
+        const { data: batch } = await db
           .from("products")
-          .select("sku")
+          .select("id, sku, handle")
           .eq("shop_id", shop_id)
-          .in("sku", skus);
-        const existingSkus = new Set((existing || []).map((e: any) => e.sku));
-        const filtered = products.filter((p) => !p.sku || !existingSkus.has(p.sku));
-        if (filtered.length > 0) {
-          const { error: insertErr } = await db.from("products").insert(filtered);
-          if (insertErr) console.error(`[provider-import] Insert error: ${insertErr.message}`);
-          else insertedCount = filtered.length;
+          .eq("provider_id", provider_id)
+          .range(offset, offset + 999);
+        if (!batch || batch.length === 0) break;
+        for (const p of batch) {
+          if (p.sku) existingMap.set(p.sku, p);
+          if (p.handle) existingHandleMap.set(p.handle, p.id);
         }
-      } else {
-        const { error: insertErr } = await db.from("products").insert(products);
-        if (insertErr) console.error(`[provider-import] Insert error: ${insertErr.message}`);
-        else insertedCount = products.length;
+        offset += batch.length;
+        if (batch.length < 1000) break;
       }
-    } else if (products.length > 0) {
-      const { error: insertErr } = await db.from("products").insert(products);
-      if (insertErr) console.error(`[provider-import] Insert error: ${insertErr.message}`);
-      else insertedCount = products.length;
+
+      // 2. Also check cross-provider SKUs (for "skip" strategy — don't import if SKU exists in ANY provider)
+      const crossProviderSkus = new Set<string>();
+      if (duplicate_strategy === "skip") {
+        const skus = products.map((p) => p.sku).filter(Boolean) as string[];
+        if (skus.length > 0) {
+          const BATCH = 500;
+          for (let i = 0; i < skus.length; i += BATCH) {
+            const batch = skus.slice(i, i + BATCH);
+            const { data: existing } = await db
+              .from("products").select("sku").eq("shop_id", shop_id).neq("provider_id", provider_id).in("sku", batch);
+            if (existing) existing.forEach((e: any) => { if (e.sku) crossProviderSkus.add(e.sku); });
+          }
+        }
+      }
+
+      // 3. Track seen SKUs in THIS batch to prevent intra-batch duplicates
+      //    (e.g., API returns same product twice in one page)
+      const seenInBatch = new Set<string>();
+
+      const toInsert: typeof products = [];
+
+      for (const product of products) {
+        // Skip products with no SKU AND no title (garbage data)
+        if (!product.sku && !product.title) { skippedCount++; continue; }
+
+        // Intra-batch dedup — if same SKU already processed in this batch, skip
+        if (product.sku && seenInBatch.has(product.sku)) { skippedCount++; continue; }
+        if (product.sku) seenInBatch.add(product.sku);
+
+        // Find existing product — by SKU (primary) or handle (fallback for SKU-less products)
+        const existing = product.sku ? existingMap.get(product.sku) : null;
+        const existingByHandle = !existing && product.handle ? existingHandleMap.get(product.handle) : null;
+        const existingId = existing?.id || existingByHandle || null;
+
+        if (existingId) {
+          if (duplicate_strategy === "skip") {
+            skippedCount++;
+            continue;
+          }
+          if (duplicate_strategy === "update") {
+            // Update ONLY content fields — NEVER touch: fitment_status, status, shopify_product_id, synced_at
+            const updates: Record<string, unknown> = {};
+            if (product.title) updates.title = product.title;
+            if (product.description) updates.description = product.description;
+            if (product.price !== null && product.price !== undefined) updates.price = product.price;
+            if (product.cost_price !== null && product.cost_price !== undefined) updates.cost_price = product.cost_price;
+            if (product.vendor) updates.vendor = product.vendor;
+            if (product.product_type) updates.product_type = product.product_type;
+            if (product.image_url) updates.image_url = product.image_url;
+            if (product.weight) updates.weight = product.weight;
+            if (product.weight_unit) updates.weight_unit = product.weight_unit;
+            if (product.raw_data) updates.raw_data = product.raw_data;
+            updates.updated_at = new Date().toISOString();
+
+            if (Object.keys(updates).length > 1) { // > 1 because updated_at is always present
+              await db.from("products").update(updates).eq("id", existingId).eq("shop_id", shop_id);
+              updatedCount++;
+            }
+            continue;
+          }
+          // "create_new" — fall through to insert (intentional duplicates)
+        }
+
+        // Cross-provider dedup for "skip" strategy
+        if (duplicate_strategy === "skip" && product.sku && crossProviderSkus.has(product.sku)) {
+          skippedCount++;
+          continue;
+        }
+
+        toInsert.push(product);
+      }
+
+      // 4. Batch insert new products
+      if (toInsert.length > 0) {
+        const BATCH = 500;
+        for (let i = 0; i < toInsert.length; i += BATCH) {
+          const batch = toInsert.slice(i, i + BATCH);
+          const { error: insertErr } = await db.from("products").insert(batch);
+          if (insertErr) {
+            console.error(`[provider-import] Insert error: ${insertErr.message}`);
+            // Try inserting one by one to skip problematic rows
+            for (const single of batch) {
+              const { error: singleErr } = await db.from("products").insert(single);
+              if (!singleErr) insertedCount++;
+              else console.warn(`[provider-import] Skipped product "${single.title?.slice(0, 40)}": ${singleErr.message}`);
+            }
+          } else {
+            insertedCount += batch.length;
+          }
+        }
+      }
+
+      console.log(`[provider-import] Results: ${insertedCount} inserted, ${updatedCount} updated, ${skippedCount} skipped (strategy: ${duplicate_strategy})`);
     }
 
     console.log(`[provider-import] Inserted ${insertedCount}/${items.length} products`);

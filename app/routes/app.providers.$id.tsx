@@ -461,7 +461,7 @@ export default function ProviderDetail() {
         onAction: () => navigate(`/app/providers/${provider.id}/import?step=upload`),
       }}
     >
-      <BlockStack gap="400">
+      <BlockStack gap="600">
         {/* How It Works */}
         <HowItWorks
           steps={[

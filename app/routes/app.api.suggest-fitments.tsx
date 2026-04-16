@@ -38,6 +38,118 @@ export interface SuggestedFitment {
   matchedHints: string[];
 }
 
+// ── Performance variant suffixes ─────────────────────────────
+// Commonly concatenated with model names without spaces in supplier data:
+// "I30N" (Hyundai N-line), "GolfGTI", "CaymanGTS", "CooperS", "FocusST", etc.
+// Ordered longest-first for correct regex alternation priority.
+const VARIANT_SUFFIXES = "NISMO|Type-R|JCW|VXR|GSI|OPC|STI|SRT|SVR|TRD|GTI|GTE|GTD|GTS|GT3|GT4|GT2|AMG|CSL|CS|ST|RS|GT|GR|FR|SE|Si|SS|QV|N|S|R";
+
+// ── Performance variant → base YMME model mapping ──────────────
+// Maps variant codes like "A45" → "A-class", "M3" → "3 Series", "S4" → "A4"
+const VARIANT_TO_MODEL: Record<string, Record<string, string>> = {
+  "Mercedes-Benz": {
+    "A45": "A-class", "A35": "A-class", "A250": "A-class", "A200": "A-class", "A180": "A-class",
+    "CLA45": "CLA", "CLA35": "CLA", "CLA250": "CLA", "CLA200": "CLA",
+    "GLA45": "GLA", "GLA35": "GLA", "GLA250": "GLA", "GLA200": "GLA",
+    "C63": "C-class", "C43": "C-class", "C300": "C-class", "C200": "C-class", "C180": "C-class",
+    "E63": "E-class", "E53": "E-class", "E400": "E-class", "E300": "E-class", "E200": "E-class",
+    "S63": "S-class", "S65": "S-class", "S500": "S-class", "S580": "S-class", "S400": "S-class",
+    "GLC63": "GLC", "GLC43": "GLC", "GLC300": "GLC", "GLC200": "GLC",
+    "GLE63": "GLE", "GLE53": "GLE", "GLE450": "GLE", "GLE400": "GLE", "GLE350": "GLE",
+    "GLS63": "GLS", "GLS580": "GLS", "GLS450": "GLS",
+    "GT63": "AMG GT", "GT53": "AMG GT", "GT43": "AMG GT",
+    "ML350": "M-class", "ML500": "M-class", "ML63": "M-class",
+    "GLB35": "GLB", "GLB250": "GLB",
+  },
+  "BMW": {
+    "M2": "2 Series", "M3": "3 Series", "M4": "4 Series",
+    "M5": "5 Series", "M6": "6 Series", "M8": "8 Series",
+    "X3M": "X3", "X4M": "X4", "X5M": "X5", "X6M": "X6",
+    "M135i": "1 Series", "M140i": "1 Series",
+    "M235i": "2 Series", "M240i": "2 Series",
+    "M340i": "3 Series", "M440i": "4 Series",
+    "M550i": "5 Series", "M760i": "7 Series", "M850i": "8 Series",
+  },
+  "Audi": {
+    "S3": "A3", "RS3": "A3", "S4": "A4", "RS4": "A4",
+    "S5": "A5", "RS5": "A5", "S6": "A6", "RS6": "A6",
+    "S7": "A7", "RS7": "A7", "S8": "A8",
+    "SQ5": "Q5", "SQ2": "Q2", "SQ7": "Q7", "SQ8": "Q8",
+    "RSQ3": "Q3", "RSQ8": "Q8",
+  },
+  "Volkswagen": {
+    "GTI": "Golf", "GolfR": "Golf", "GolfGTD": "Golf", "GolfGTE": "Golf",
+    "PoloGTI": "Polo", "T-RocR": "T-Roc", "TiguanR": "Tiguan",
+  },
+  "Ford": {
+    "FocusST": "Focus", "FocusRS": "Focus",
+    "FiestaST": "Fiesta", "PumaST": "Puma", "MustangGT": "Mustang",
+  },
+  "Honda": { "CivicR": "Civic", "CivicSi": "Civic", "TypeR": "Civic" },
+  "Hyundai": {
+    "i20N": "i20", "i30N": "i30", "KonaN": "Kona",
+    "VelosterN": "Veloster", "ElantraN": "Elantra",
+  },
+  "Kia": { "CeedGT": "Ceed", "StingerGT": "Stinger", "EV6GT": "EV6" },
+  "Renault": { "ClioRS": "Clio", "MeganeRS": "Megane" },
+  "Seat": { "LeonCupra": "Leon", "IbizaCupra": "Ibiza", "LeonFR": "Leon" },
+  "Vauxhall": {
+    "CorsaVXR": "Corsa", "AstraVXR": "Astra", "InsigniaVXR": "Insignia",
+    "CorsaGSi": "Corsa", "AstraGSi": "Astra",
+  },
+  "Subaru": { "WRXSTI": "WRX" },
+  "Toyota": { "GRYaris": "Yaris", "GRCorolla": "Corolla", "SupraTRD": "Supra" },
+  "Nissan": { "370ZNISMO": "370Z", "350ZNISMO": "350Z", "GTRNISMO": "GT-R", "JukeNISMO": "Juke" },
+  "Mini": { "CooperS": "Hatch", "CooperJCW": "Hatch", "JCW": "Hatch" },
+  "Alfa Romeo": { "GiuliaQV": "Giulia", "StelvioQV": "Stelvio" },
+  "Porsche": {
+    "911GT3": "911", "911GT2": "911", "911Turbo": "911", "911GTS": "911", "911TurboS": "911",
+    "CaymanGT4": "Cayman", "CaymanGTS": "Cayman", "CaymanS": "Cayman",
+    "BoxsterGTS": "Boxster", "BoxsterS": "Boxster",
+    "718GT4": "718", "718GTS": "718",
+    "MacanGTS": "Macan", "MacanTurbo": "Macan", "MacanS": "Macan",
+    "CayenneGTS": "Cayenne", "CayenneTurbo": "Cayenne",
+    "TaycanGTS": "Taycan", "TaycanTurbo": "Taycan",
+    "PanameraGTS": "Panamera", "PanameraTurbo": "Panamera",
+  },
+  "Peugeot": { "208GTi": "208", "308GTi": "308" },
+};
+
+// ── Engine code → model scope mapping ──────────────────────────
+// Maps engine family codes to the make + models they are used in
+const ENGINE_CODE_TO_MODELS: Record<string, { make: string; models: string[] }> = {
+  M133: { make: "Mercedes-Benz", models: ["A-class", "CLA", "GLA"] },
+  M139: { make: "Mercedes-Benz", models: ["A-class", "CLA", "GLA"] },
+  M177: { make: "Mercedes-Benz", models: ["C-class", "E-class", "AMG GT", "S-class", "GLC", "GLE", "GLS"] },
+  M176: { make: "Mercedes-Benz", models: ["S-class"] },
+  M256: { make: "Mercedes-Benz", models: ["CLS", "E-class", "GLE", "S-class"] },
+  M264: { make: "Mercedes-Benz", models: ["C-class", "E-class", "GLC"] },
+  M270: { make: "Mercedes-Benz", models: ["A-class", "CLA", "GLA", "B-class"] },
+  M274: { make: "Mercedes-Benz", models: ["C-class", "E-class", "GLC", "SLC"] },
+  M276: { make: "Mercedes-Benz", models: ["C-class", "E-class", "GLE", "GLS", "S-class", "SL"] },
+  B58: { make: "BMW", models: ["3 Series", "4 Series", "5 Series", "7 Series", "X3", "X4", "X5", "Z4"] },
+  B48: { make: "BMW", models: ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "X1", "X2", "X3"] },
+  B38: { make: "BMW", models: ["1 Series", "2 Series", "X1"] },
+  N54: { make: "BMW", models: ["1 Series", "3 Series", "5 Series", "Z4"] },
+  N55: { make: "BMW", models: ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "X3", "X4", "X5", "X6", "M2"] },
+  S55: { make: "BMW", models: ["M3", "M4"] },
+  S58: { make: "BMW", models: ["M2", "M3", "M4"] },
+  N20: { make: "BMW", models: ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "X1", "X3", "Z4"] },
+  S63: { make: "BMW", models: ["M5", "M6", "M8"] },
+  S68: { make: "BMW", models: ["M5", "XM"] },
+  EA888: { make: "Volkswagen", models: ["Golf", "Passat", "Tiguan", "T-Roc", "Arteon"] },
+  EA211: { make: "Volkswagen", models: ["Golf", "Polo", "T-Cross", "T-Roc"] },
+  EA839: { make: "Audi", models: ["S4", "S5", "SQ5", "RS4", "RS5"] },
+  EA855: { make: "Audi", models: ["RS3", "RSQ3"] },
+  EB20: { make: "Ford", models: ["Focus", "Mondeo", "Kuga"] },
+  EB23: { make: "Ford", models: ["Focus", "Mustang"] },
+  K20: { make: "Honda", models: ["Civic", "Integra", "Accord"] },
+  FA20: { make: "Subaru", models: ["BRZ", "WRX"] },
+  EJ25: { make: "Subaru", models: ["WRX", "Impreza", "Forester", "Legacy"] },
+  VR38: { make: "Nissan", models: ["GT-R"] },
+  "2JZ": { make: "Toyota", models: ["Supra"] },
+};
+
 // ── Vehicle Profile ───────────────────────────────────────────
 
 export interface VehicleProfile {
@@ -288,10 +400,24 @@ const CHASSIS_TO_MODEL: Record<string, { make: string; models: string[] }> = {
   W246: { make: "Mercedes-Benz", models: ["B-class"] },
   W247: { make: "Mercedes-Benz", models: ["B-class"] },
   // ─── Porsche ───
+  "930": { make: "Porsche", models: ["911"] },
+  "964": { make: "Porsche", models: ["911"] },
+  "993": { make: "Porsche", models: ["911"] },
+  "996": { make: "Porsche", models: ["911"] },
+  "997": { make: "Porsche", models: ["911"] },
   "991": { make: "Porsche", models: ["911"] },
   "992": { make: "Porsche", models: ["911"] },
-  "981": { make: "Porsche", models: ["718"] },
-  "982": { make: "Porsche", models: ["718"] },
+  "986": { make: "Porsche", models: ["Boxster"] },
+  "987": { make: "Porsche", models: ["Boxster", "Cayman"] },
+  "981": { make: "Porsche", models: ["718", "Boxster", "Cayman"] },
+  "982": { make: "Porsche", models: ["718", "Boxster", "Cayman"] },
+  "955": { make: "Porsche", models: ["Cayenne"] },
+  "957": { make: "Porsche", models: ["Cayenne"] },
+  "958": { make: "Porsche", models: ["Cayenne"] },
+  "9YA": { make: "Porsche", models: ["Cayenne"] },
+  "970": { make: "Porsche", models: ["Panamera"] },
+  "971": { make: "Porsche", models: ["Panamera"] },
+  "95B": { make: "Porsche", models: ["Macan"] },
   // ─── Volvo ───
   P1: { make: "Volvo", models: ["C30", "S40", "V50", "C70"] },
   // Note: MK3 already mapped to VW Golf above — Ford Focus MK3 shares the code
@@ -386,6 +512,62 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
     if (new RegExp(`\\b${makeUpper.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)) {
       if (!profile.directMakes.includes(make) && !profile.makeGroup.includes(make)) {
         profile.directMakes.push(make);
+      }
+    }
+  }
+
+  // ─── 2b. Slash-separated model expansion ────────────────────
+  // "A/CL/GLA45" → shared suffix → [A45, CLA45, GLA45]
+  // "A35/A250/CLA250" → independent codes → [A35, A250, CLA250]
+  // "335i/435i" → independent codes → [335i, 435i]
+  // "Golf/Jetta" → independent names → [Golf, Jetta]
+  const slashGroups = text.match(/\b(\w{1,10}(?:\/\w{1,10}){1,5}\d{0,3}[a-z]?)\b/gi) || [];
+  for (const group of slashGroups) {
+    const parts = group.split("/");
+    if (parts.length < 2) continue;
+
+    // Check for SHARED suffix pattern: "A/CL/GLA45" where ONLY the last part has digits
+    // and earlier parts are short letter-only prefixes
+    const lastPart = parts[parts.length - 1];
+    const allPreviousLetterOnly = parts.slice(0, -1).every(p => /^[A-Za-z]{1,5}$/.test(p));
+    const lastHasSuffix = /^[A-Za-z]{1,5}\d{2,3}[a-z]?$/i.test(lastPart);
+
+    if (allPreviousLetterOnly && lastHasSuffix) {
+      // Shared suffix: A/CL/GLA + 45 → extract suffix from last part
+      const suffixMatch = lastPart.match(/^([A-Za-z]+?)(\d{2,3}[a-z]?)$/i);
+      if (suffixMatch) {
+        const suffix = suffixMatch[2];
+        const expandedModels = parts.slice(0, -1).map(p => p + suffix);
+        expandedModels.push(lastPart);
+        for (const em of expandedModels) {
+          if (!profile.modelCodes.includes(em) && em.length >= 2) {
+            profile.modelCodes.push(em);
+          }
+        }
+      }
+    } else {
+      // Independent codes: A35/A250/CLA250, Golf/Jetta, 335i/435i
+      for (const part of parts) {
+        if (part.length >= 2 && !profile.modelCodes.includes(part)) {
+          profile.modelCodes.push(part);
+        }
+      }
+    }
+  }
+
+  // ─── 2c. Comma/ampersand-separated model expansion ─────────
+  // "BMW 2, 3 & 4 Series" → [2 Series, 3 Series, 4 Series]
+  // "A35, CLA250" → [A35, CLA250]
+  const commaAmpPattern = text.match(/\b(\d)\s*,\s*(\d)\s*(?:&|and)\s*(\d)\s*(Series|Class)\b/gi);
+  if (commaAmpPattern) {
+    for (const match of commaAmpPattern) {
+      const nums = match.match(/\d/g) || [];
+      const suffix = match.match(/(Series|Class)/i)?.[1] || "";
+      for (const n of nums) {
+        const modelName = `${n} ${suffix}`;
+        if (!profile.modelCodes.includes(modelName)) {
+          profile.modelCodes.push(modelName);
+        }
       }
     }
   }
@@ -683,19 +865,123 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
   }
 
   // ─── 12. Chassis code → model resolution ──────────────────
-  // If we found chassis codes, use them to infer make + model
-  for (const chassisCode of profile.chassisCodes) {
-    const mapping = CHASSIS_TO_MODEL[chassisCode];
-    if (mapping) {
-      // Add make if not already present
-      if (knownMakes.includes(mapping.make) && !profile.directMakes.includes(mapping.make) && !profile.makeGroup.includes(mapping.make)) {
-        profile.directMakes.push(mapping.make);
-      }
-      // Add models if not already present
-      for (const modelName of mapping.models) {
-        if (!profile.modelNames.includes(modelName)) {
-          profile.modelNames.push(modelName);
+  // Check BOTH chassisCodes AND modelCodes against CHASSIS_TO_MODEL
+  // This catches pure numeric codes like "997", "996" that the chassis regex misses
+  for (const code of profile.modelCodes) {
+    const key = code.toUpperCase();
+    if (CHASSIS_TO_MODEL[key] && !profile.chassisCodes.includes(key)) {
+      profile.chassisCodes.push(key);
+    }
+  }
+
+  // If we found chassis codes AND no explicit models yet, use them to infer make + model
+  // When explicit models are named (e.g., "S5"), chassis codes qualify but don't expand scope
+  if (profile.modelNames.length === 0) {
+    for (const chassisCode of profile.chassisCodes) {
+      const mapping = CHASSIS_TO_MODEL[chassisCode];
+      if (mapping) {
+        // Add make if not already present
+        if (knownMakes.includes(mapping.make) && !profile.directMakes.includes(mapping.make) && !profile.makeGroup.includes(mapping.make)) {
+          profile.directMakes.push(mapping.make);
         }
+        // Add models if not already present
+        for (const modelName of mapping.models) {
+          if (!profile.modelNames.includes(modelName)) {
+            profile.modelNames.push(modelName);
+          }
+        }
+      }
+    }
+  } else {
+    // Models already found — chassis codes only add makes, not expand model scope
+    for (const chassisCode of profile.chassisCodes) {
+      const mapping = CHASSIS_TO_MODEL[chassisCode];
+      if (mapping) {
+        if (knownMakes.includes(mapping.make) && !profile.directMakes.includes(mapping.make) && !profile.makeGroup.includes(mapping.make)) {
+          profile.directMakes.push(mapping.make);
+        }
+      }
+    }
+  }
+
+  // ─── 13. Engine technology → make inference ────────────────
+  // When NO makes were found but engine tech codes exist, infer the make
+  // TSI/TFSI/TDI/FSI/EA888 → VAG (Volkswagen, Audi, Seat, Skoda) — NOT Porsche
+  // EcoBoost → Ford
+  // VTEC/i-VTEC → Honda
+  // BlueTEC/CDI → Mercedes-Benz
+  // HDi → Peugeot/Citroen
+  // dCi → Renault
+  if (profile.directMakes.length === 0 && profile.makeGroup.length === 0) {
+    const ENGINE_TECH_TO_MAKES: Record<string, string[]> = {
+      TSI: ["Volkswagen", "Audi", "Seat", "Skoda"],
+      TFSI: ["Audi", "Volkswagen", "Seat", "Skoda"],
+      TDI: ["Volkswagen", "Audi", "Seat", "Skoda"],
+      FSI: ["Volkswagen", "Audi"],
+      EcoBoost: ["Ford"],
+      VTEC: ["Honda"],
+      "i-VTEC": ["Honda"],
+      BlueTEC: ["Mercedes-Benz"],
+      CDI: ["Mercedes-Benz"],
+      HDi: ["Peugeot", "Citroen"],
+      dCi: ["Renault"],
+      Skyactiv: ["Mazda"],
+      MIVEC: ["Mitsubishi"],
+    };
+    // EA888/EA113/EA211 platform codes → VAG
+    if (/\bEA[0-9]{3}\b/i.test(text)) {
+      for (const m of ["Volkswagen", "Audi", "Seat", "Skoda"]) {
+        if (knownMakes.includes(m) && !profile.directMakes.includes(m)) profile.directMakes.push(m);
+      }
+    }
+    if (profile.technology) {
+      const makes = ENGINE_TECH_TO_MAKES[profile.technology];
+      if (makes) {
+        for (const m of makes) {
+          if (knownMakes.includes(m) && !profile.directMakes.includes(m)) profile.directMakes.push(m);
+        }
+      }
+    }
+  }
+
+  // ─── 14. Model name → make inference (unique models) ──────
+  // Fiesta/Focus/Mustang → Ford, Golf/Polo/Passat → Volkswagen, Civic/Jazz → Honda, etc.
+  if (profile.directMakes.length === 0 && profile.makeGroup.length === 0) {
+    const MODEL_TO_MAKE: Record<string, string> = {
+      Fiesta: "Ford", Focus: "Ford", Mustang: "Ford", Mondeo: "Ford", Kuga: "Ford", Puma: "Ford", "S-Max": "Ford",
+      Golf: "Volkswagen", Polo: "Volkswagen", Passat: "Volkswagen", Tiguan: "Volkswagen", Touareg: "Volkswagen", Amarok: "Volkswagen",
+      Civic: "Honda", Jazz: "Honda", "CR-V": "Honda", "HR-V": "Honda", Accord: "Honda",
+      Impreza: "Subaru", WRX: "Subaru", BRZ: "Subaru", Forester: "Subaru", Outback: "Subaru",
+      Corsa: "Vauxhall", Astra: "Vauxhall", Insignia: "Vauxhall", Mokka: "Vauxhall",
+      Clio: "Renault", Megane: "Renault", Twingo: "Renault", Captur: "Renault",
+      Ibiza: "Seat", Leon: "Seat", Ateca: "Seat",
+      Octavia: "Skoda", Fabia: "Skoda", Superb: "Skoda", Kodiaq: "Skoda",
+      Yaris: "Toyota", Corolla: "Toyota", Supra: "Toyota", "GR86": "Toyota", "C-HR": "Toyota",
+      Swift: "Suzuki", Jimny: "Suzuki", Vitara: "Suzuki",
+      i30: "Hyundai", Tucson: "Hyundai", Kona: "Hyundai", Veloster: "Hyundai",
+      Sportage: "Kia", Ceed: "Kia", Stinger: "Kia",
+    };
+    // Also handle misspellings
+    const MISSPELL_TO_MAKE: Record<string, string> = {
+      Reanult: "Renault", Renualt: "Renault", Renualt: "Renault",
+      Porshe: "Porsche", Porche: "Porsche",
+      Mercedez: "Mercedes-Benz", "Mercedes Benz": "Mercedes-Benz",
+      Volkswagon: "Volkswagen",
+      Hyundia: "Hyundai", Hundai: "Hyundai",
+    };
+
+    for (const [model, make] of Object.entries(MODEL_TO_MAKE)) {
+      // Allow optional concatenated performance suffix (I30N, GolfGTI, etc.)
+      const re = new RegExp(`\\b${model}(?:${VARIANT_SUFFIXES})?\\b`, "i");
+      if (re.test(text) && knownMakes.includes(make) && !profile.directMakes.includes(make)) {
+        profile.directMakes.push(make);
+        if (!profile.modelNames.includes(model)) profile.modelNames.push(model);
+      }
+    }
+    for (const [misspell, make] of Object.entries(MISSPELL_TO_MAKE)) {
+      const re = new RegExp(`\\b${misspell}\\b`, "i");
+      if (re.test(text) && knownMakes.includes(make) && !profile.directMakes.includes(make)) {
+        profile.directMakes.push(make);
       }
     }
   }
@@ -715,11 +1001,42 @@ export function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { sc
   matchedHints.push(engine.model.make.name);
 
   // +0.35 if engine name contains a model code from the profile
+  // Also handles variant codes: "A250" matches "A 250 (218 Hp)", "A35" matches "A 35 AMG"
+  let modelCodeMatched = false;
   for (const code of profile.modelCodes) {
-    if (code.length >= 3 && engName.includes(code.toLowerCase())) {
+    if (code.length < 2) continue;
+    const codeLower = code.toLowerCase();
+    // Direct match: "335i" in engine name
+    if (codeLower.length >= 3 && engName.includes(codeLower)) {
       score += 0.35;
       matchedHints.push(code);
+      modelCodeMatched = true;
       break;
+    }
+    // Variant match: "A250" → check for "A 250" or "A250" in engine name
+    // Extract letter prefix + numeric suffix → search with optional space
+    const variantMatch = code.match(/^([A-Za-z]+?)(\d{2,3})$/);
+    if (variantMatch) {
+      const prefix = variantMatch[1].toLowerCase();
+      const num = variantMatch[2];
+      // Match "A 250", "A250", "CLA 250", "CLA250" in engine name
+      const variantRegex = new RegExp(`\\b${prefix}\\s*${num}\\b`, "i");
+      if (variantRegex.test(engName)) {
+        score += 0.35;
+        matchedHints.push(code);
+        modelCodeMatched = true;
+        break;
+      }
+    }
+  }
+  // If profile has variant codes but engine doesn't match any → penalty
+  // This prevents A45 engines showing when title says A250
+  if (!modelCodeMatched && profile.modelCodes.length > 0) {
+    // Only penalize if the codes look like variant codes (letter+digits), not generic
+    const hasVariantCodes = profile.modelCodes.some(c => /^[A-Za-z]+\d{2,3}[a-z]?$/.test(c));
+    if (hasVariantCodes) {
+      score -= 0.30;
+      matchedHints.push("variant_mismatch");
     }
   }
 
@@ -819,7 +1136,9 @@ export function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { sc
       score += 0.20; // Strong boost for model name match
       matchedHints.push("model:" + engine.model?.name);
     } else {
-      score -= 0.25; // Penalize wrong model when title clearly says which model
+      // Model mismatch: if profile has specific models and this engine is NOT one of them
+      // HARD penalty — this is the ACES standard: explicit model = explicit fitment
+      score -= 0.80; // Was -0.25, now effectively kills wrong-model suggestions
     }
   }
 
@@ -930,8 +1249,27 @@ export function buildSearchPatterns(profile: VehicleProfile): string[] {
 // ── Main action ──────────────────────────────────────────────
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const _shopId = session.shop;
+  // Support internal Edge Function calls via X-Internal-Key header
+  // This allows the auto-extract system to call suggest-fitments directly
+  const internalKey = request.headers.get("X-Internal-Key");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  let _shopId: string;
+
+  if (internalKey && serviceKey && internalKey.length === serviceKey.length) {
+    const crypto = await import("crypto");
+    const isValid = crypto.timingSafeEqual(
+      Buffer.from(internalKey),
+      Buffer.from(serviceKey),
+    );
+    if (isValid) {
+      _shopId = request.headers.get("X-Shop-Id") || "";
+    } else {
+      return data({ error: "Invalid internal key" }, { status: 401 });
+    }
+  } else {
+    const { session } = await authenticate.admin(request);
+    _shopId = session.shop;
+  }
 
   const body = await request.json();
   const { title, description, sku, vendor, productType, tags } = body as {
@@ -1048,10 +1386,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       for (const model of sortedModels) {
         const mName = (model as { id: string; name: string }).name.toLowerCase();
         if (modelNameBlocklist.has(mName)) continue;
+        // 1-2 char models require allowlist (too many false positives: "M3" vs "M3 bolt")
         if ((model as { id: string; name: string }).name.length <= 2 && !validShortModels.has(mName)) continue;
-        // For 3-char models, require them to be in the valid short models set
-        if ((model as { id: string; name: string }).name.length === 3 && !validShortModels.has(mName)) continue;
-        const wordBoundaryRegex = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+        // 3+ char models: blocklist is sufficient — they match within make context so false positives are low
+        // (e.g., "i30" only checked when make=Hyundai, "WRX" only when make=Subaru)
+        const escapedName = mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Prevent engine code → model name collision
+        // M133 → NOT "M-class", S55 → NOT "S-class", N54 → NOT "N-class"
+        if (profile.engineFamily) {
+          const efFirst = profile.engineFamily.charAt(0).toUpperCase();
+          const modelFirst = (model as { id: string; name: string }).name.charAt(0).toUpperCase();
+          const modelName = (model as { id: string; name: string }).name;
+          // If engine family starts with same letter AND model is a "-class" type, skip
+          if (efFirst === modelFirst && (modelName.endsWith("-class") || modelName === "M-class")) {
+            continue;
+          }
+        }
+        // Match model name with optional concatenated performance variant suffix
+        // Handles: I30N, GolfGTI, CaymanGTS, CooperS, FocusST, WRX STI, etc.
+        const wordBoundaryRegex = new RegExp(`\\b${escapedName}(?:${VARIANT_SUFFIXES})?\\b`, "i");
         if (wordBoundaryRegex.test(allText)) {
           modelNameMatchIds.push((model as { id: string; name: string }).id);
           if (!profile.modelNames.includes((model as { id: string; name: string }).name)) {
@@ -1129,6 +1482,63 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
 
+      // ── Variant code → base model resolution (ALL makes) ──
+      // A45 → A-class, M3 → 3 Series, S4 → A4, etc.
+      const makeVariants = VARIANT_TO_MODEL[makeName];
+      if (makeVariants) {
+        for (const [variantCode, baseModelName] of Object.entries(makeVariants)) {
+          const varRegex = new RegExp(`\\b${variantCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+          if (varRegex.test(allText)) {
+            // Find the base model in DB
+            const baseModel = makeModels.find((m: any) =>
+              m.name.toLowerCase() === baseModelName.toLowerCase()
+            );
+            if (baseModel && !modelNameMatchIds.includes(baseModel.id)) {
+              modelNameMatchIds.push(baseModel.id);
+              if (!profile.modelNames.includes(baseModel.name)) {
+                profile.modelNames.push(baseModel.name);
+              }
+            }
+            // Also add the variant itself as a model name if it exists in DB
+            const variantModel = makeModels.find((m: any) =>
+              m.name.toLowerCase() === variantCode.toLowerCase()
+            );
+            if (variantModel && !modelNameMatchIds.includes(variantModel.id)) {
+              modelNameMatchIds.push(variantModel.id);
+              if (!profile.modelNames.includes(variantModel.name)) {
+                profile.modelNames.push(variantModel.name);
+              }
+            }
+          }
+        }
+      }
+
+      // ── Engine code → model scope (fallback when no models detected) ──
+      if (modelNameMatchIds.length === 0 && profile.engineFamily) {
+        const ecMapping = ENGINE_CODE_TO_MODELS[profile.engineFamily] || ENGINE_CODE_TO_MODELS[profile.engineFamily.replace(/\.\d$/, "")];
+        if (ecMapping && ecMapping.make === makeName) {
+          for (const ecModel of ecMapping.models) {
+            const dbModel = makeModels.find((m: any) => m.name.toLowerCase() === ecModel.toLowerCase());
+            if (dbModel && !modelNameMatchIds.includes(dbModel.id)) {
+              modelNameMatchIds.push(dbModel.id);
+              if (!profile.modelNames.includes(dbModel.name)) {
+                profile.modelNames.push(dbModel.name);
+              }
+            }
+          }
+        }
+      }
+
+      // Also add models resolved from chassis codes (e.g., 997 → 911)
+      for (const resolvedModelName of profile.modelNames) {
+        const matchingModel = makeModels.find((m: any) =>
+          m.name.toLowerCase() === resolvedModelName.toLowerCase()
+        );
+        if (matchingModel && !modelNameMatchIds.includes(matchingModel.id)) {
+          modelNameMatchIds.push(matchingModel.id);
+        }
+      }
+
       let engines: EngineRow[] = [];
 
       // Path A: Query engines for matched model names
@@ -1179,9 +1589,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
 
-      // Path B: Query engines by search patterns across ALL models for this make
+      // Path B: ONLY when no models detected — universal/engine-only parts
+      // Query engines by search patterns across ALL models for this make
       // Also search by engine code (e.g., EA888 in the code field)
-      if (searchPatterns.length > 0) {
+      if (modelNameMatchIds.length === 0 && profile.modelNames.length === 0 && searchPatterns.length > 0) {
         // Build OR filter for both name and code fields
         const nameFilters = searchPatterns.map((p) => `name.ilike.${p}`);
         const codeFilters = searchPatterns
@@ -1235,6 +1646,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // Step 5: Score each engine against the FULL profile
       let scoreDebugCount = 0;
       for (const engineRow of engines) {
+        // ── SCOPE LOCK: If models were detected, HARD REJECT engines from wrong models ──
+        // This is the ACES industry standard: explicit model name = explicit fitment claim
+        // Engine codes/displacement/tech are qualifiers within the model, not expanders across models
+        if (profile.modelNames.length > 0) {
+          const engineModelName = engineRow.model?.name || "";
+          const isInScope = profile.modelNames.some((m: string) =>
+            m.toLowerCase() === engineModelName.toLowerCase()
+          );
+          if (!isInScope) continue; // Skip — model not in scope
+        }
+
         let { score, matchedHints } = scoreByProfile(engineRow, profile);
 
         // Boost engines from model name matches (e.g., "Golf" found in text)
@@ -1267,14 +1689,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         if (score < 0.15) continue;
 
-        const displayName = engineRow.name || "Unknown Engine";
+        // Strip any UUID hash suffixes like [cc46c88f] from engine names
+        const displayName = (engineRow.name || "Unknown Engine").replace(/\s*\[[0-9a-f]{8}\]$/i, "");
         suggestions.push({
           make: { id: engineRow.model.make.id, name: engineRow.model.make.name },
           model: { id: engineRow.model.id, name: engineRow.model.name, generation: engineRow.model.generation },
           engine: {
             id: engineRow.id,
             code: engineRow.code || "",
-            name: engineRow.name,
+            name: displayName,
             displayName,
             displacementCc: engineRow.displacement_cc,
             fuelType: engineRow.fuel_type,
@@ -1312,6 +1735,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return (a.model?.name || "").localeCompare(b.model?.name || "");
     });
 
+    // Filter out low-confidence suggestions — don't show weak/wrong matches
+    const filtered = uniqueSuggestions.filter(s => s.confidence >= 0.40);
+
     // Build hints from profile
     const hints: string[] = [
       ...allMakes.map((m) => `make: ${m}`),
@@ -1327,7 +1753,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ];
 
     return data({
-      suggestions: uniqueSuggestions.slice(0, 20),
+      suggestions: filtered.slice(0, 20),
       hints: [...new Set(hints)],
       diagnostics: diagnostics.slice(-10),
     });

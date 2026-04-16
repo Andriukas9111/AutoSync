@@ -98,6 +98,7 @@ const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critic
   professional: "attention",
   business: "warning",
   enterprise: "critical",
+  custom: "critical",
 };
 
 const PLAN_DISPLAY: Record<PlanTier, string> = {
@@ -107,6 +108,7 @@ const PLAN_DISPLAY: Record<PlanTier, string> = {
   professional: "Professional",
   business: "Business",
   enterprise: "Enterprise",
+  custom: "Custom",
 };
 
 function cap(plan: string): string {

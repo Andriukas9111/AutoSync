@@ -36,13 +36,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   //   - unmapped: never processed by extraction
   //   - flagged: extraction found partial matches, needs human review
   //   - no_match: extraction found no vehicle data, but human might know the vehicle
+  // Manual mapping is for VEHICLE PARTS only — wheels use the Wheel Finder system
   const [totalResult, notMappedResult, nextFlaggedResult, nextNoMatchResult, nextUnmappedResult] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"]),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").in("fitment_status", ["unmapped", "flagged", "no_match"]),
     // Priority order: flagged first (has suggestions), then no_match, then unmapped
-    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
-    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match").order("created_at", { ascending: true }).limit(1).maybeSingle(),
-    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "no_match").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
   // Prioritize flagged (has suggestions to review), then no_match, then unmapped

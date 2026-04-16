@@ -524,13 +524,14 @@ export async function assertFitmentLimit(shopId: string): Promise<void> {
   if (!tenant) throw new Error(`Tenant not found: ${shopId}`);
   const limits = getPlanLimits(getEffectivePlan(tenant));
 
-  // Use REAL count from vehicle_fitments table, not cached tenant.fitment_count
-  const { count } = await db
-    .from("vehicle_fitments")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
+  // Use REAL count from vehicle_fitments + wheel_fitments tables, not cached tenant.fitment_count
+  const [vfRes, wfRes] = await Promise.all([
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+  ]);
+  const count = (vfRes.count ?? 0) + (wfRes.count ?? 0);
 
-  if ((count ?? 0) >= limits.fitments) {
+  if (count >= limits.fitments) {
     const next = getNextPlan(tenant.plan);
     throw new BillingGateError("fitments", tenant.plan, next);
   }

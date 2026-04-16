@@ -13,6 +13,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
+import crypto from "crypto";
 import { authenticate } from "../shopify.server";
 import db, { triggerEdgeFunction } from "../lib/db.server";
 import { assertFeature, assertFitmentLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
@@ -27,7 +28,7 @@ import {
   type EngineRow,
 } from "./app.api.suggest-fitments";
 
-const CHUNK_SIZE = 10; // Products per chunk — stays well within Vercel timeout
+const CHUNK_SIZE = 10; // Products per chunk — safe for Vercel 10s timeout with vehicle-heavy products
 
 // ── Loader: return current job status ──────────────────────────
 
@@ -68,20 +69,50 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // ── Action: chunked extraction ─────────────────────────────────
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request);
-  const shopId = session.shop;
+  // Support internal calls from Edge Function (no Shopify session needed for extraction)
+  // The Edge Function sends X-Internal-Key header with the service role key
+  const internalKey = request.headers.get("X-Internal-Key") ?? "";
+  const internalShopId = request.headers.get("X-Shop-Id");
+  const expectedKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  // Use timing-safe comparison to prevent side-channel attacks (consistent with proxy.tsx HMAC check)
+  const keyMatch = internalKey.length === expectedKey.length && expectedKey.length > 0 &&
+    crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expectedKey));
+  const isInternalCall = keyMatch && internalShopId;
 
-  const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
+  let shopId: string;
+  if (isInternalCall) {
+    shopId = internalShopId!;
+  } else {
+    const { session } = await authenticate.admin(request);
+    shopId = session.shop;
+  }
 
-  // Plan gate
-  try {
-    await assertFeature(shopId, "autoExtraction");
-  } catch (err) {
-    if (err instanceof BillingGateError) {
-      return data({ error: err.message, requiredPlan: err.requiredPlan }, { status: 403 });
+  // Support both form-urlencoded (from UI) and JSON (from pg_net/Edge Function)
+  let actionType: string;
+  let formData: FormData;
+  const contentType = request.headers.get("Content-Type") || "";
+  if (contentType.includes("application/json")) {
+    const json = await request.json();
+    formData = new FormData();
+    for (const [k, v] of Object.entries(json)) {
+      formData.append(k, String(v));
     }
-    throw err;
+    actionType = (json._action || json.action || "chunk") as string;
+  } else {
+    formData = await request.formData();
+    actionType = formData.get("_action") as string;
+  }
+
+  // Plan gate (skip for internal calls — Edge Function already checked)
+  if (!isInternalCall) {
+    try {
+      await assertFeature(shopId, "autoExtraction");
+    } catch (err) {
+      if (err instanceof BillingGateError) {
+        return data({ error: err.message, requiredPlan: err.requiredPlan }, { status: 403 });
+      }
+      throw err;
+    }
   }
 
   // ── RE-EXTRACT: Reset flagged/no_match products and re-run extraction ──
@@ -184,12 +215,19 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: "An extraction job is already running", jobId: running.id }, { status: 409 });
     }
 
+    // Count unmapped products
     const { count: unmappedCount } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
       .neq("status", "staged")
       .eq("fitment_status", "unmapped");
+
+    const totalToProcess = unmappedCount ?? 0;
+
+    if (totalToProcess === 0) {
+      return data({ error: "No unmapped products to extract" });
+    }
 
     const { data: job, error: jobError } = await db
       .from("sync_jobs")
@@ -198,7 +236,7 @@ export async function action({ request }: ActionFunctionArgs) {
         type: "extract",
         status: "running",
         processed_items: 0,
-        total_items: unmappedCount ?? 0,
+        total_items: totalToProcess,
         started_at: new Date().toISOString(),
       })
       .select("id, total_items")
@@ -254,7 +292,7 @@ export async function action({ request }: ActionFunctionArgs) {
         .eq("fitment_status", "unmapped");
 
       // Get processed count directly from the job record
-      const { data: jobData } = await db.from("sync_jobs").select("processed_items").eq("id", jobId).maybeSingle();
+      const { data: jobData } = await db.from("sync_jobs").select("processed_items").eq("id", jobId).eq("shop_id", shopId).maybeSingle();
       const processedCount = jobData?.processed_items ?? 0;
 
       await db.from("sync_jobs")
@@ -273,7 +311,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // Check job is still running (not paused/stopped)
     const { data: job } = await db
       .from("sync_jobs")
-      .select("id, status, processed_items")
+      .select("id, status, processed_items, total_items")
       .eq("id", jobId)
       .eq("shop_id", shopId)
       .maybeSingle();
@@ -282,7 +320,9 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ done: true, reason: job?.status || "not_found" });
     }
 
-    // Get next chunk of unmapped products (exclude staged — they're in provider view)
+    // Get next chunk of unmapped products needing extraction
+    // Only process "unmapped" — once the engine processes a product it gets set to
+    // auto_mapped, flagged, or no_match. Those are terminal states for this pass.
     const { data: products } = await db
       .from("products")
       .select("id, title, description, handle, tags, product_type, vendor, sku, raw_data")
@@ -398,9 +438,44 @@ export async function action({ request }: ActionFunctionArgs) {
         const allMakes = [...profile.makeGroup, ...profile.directMakes];
 
         if (allMakes.length === 0) {
+          await db.from("products")
+            .update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
+            .eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
           continue;
         }
+
+        // Universal hardware parts detection — parts that fit ALL vehicles from a make group
+        // Only applies to generic hardware (spacers, bolts, caps) that have NO engine specs
+        // VAG engine parts (e.g., "Audi, VW 2.0 TSI Blow Off Valve") have engine specs and
+        // should go through normal smart matching to find EVERY vehicle with that engine
+        const universalHardwareKeywords = /\b(spacers?|wheel ?bolts?|lug ?nuts?|lug ?bolts?|hub ?rings?|hub ?centric|valve ?stems?|centre ?caps?|center ?caps?|wheel ?locks?|wheel ?nuts?|lock ?nuts?)\b/i;
+        const hasEngineSpec = /\b(\d\.\d\s*(?:TSI|TFSI|TDI|FSI|T|L|V\d|HDi|CDTi|dCi|VTEC|EcoBoost|Turbo|BiTurbo)|\d{3,4}\s*(?:cc|HP|Hp|hp|bhp|PS))\b/i.test(allText);
+        const isUniversalHardware = allMakes.length >= 3 && universalHardwareKeywords.test(allText) && !hasEngineSpec;
+
+        if (isUniversalHardware) {
+          // True universal hardware — create make-only fitments for ALL detected makes
+          const makeInserts = allMakes
+            .filter((makeName: string) => makeIdMap.has(makeName))
+            .map((makeName: string) => ({
+              product_id: product.id, shop_id: shopId,
+              make: makeName, ymme_make_id: makeIdMap.get(makeName),
+              extraction_method: "universal_part", confidence_score: 0.80,
+              source_text: product.title ?? "",
+            }));
+
+          if (makeInserts.length > 0) {
+            const { error: fitErr } = await db.from("vehicle_fitments").insert(makeInserts);
+            if (!fitErr) {
+              chunkFitments += makeInserts.length;
+              await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkAutoMapped++;
+            }
+          }
+          continue; // Skip engine-level matching for universal hardware
+        }
+        // VAG group parts with engine specs (e.g., "Audi, VW, SEAT, Skoda 2.0 TSI Blow Off Valve")
+        // proceed to normal smart matching — they'll find ALL vehicles with that engine across makes
 
         const searchPatterns = buildSearchPatterns(profile);
         const suggestions: SuggestedFitment[] = [];
@@ -423,12 +498,33 @@ export async function action({ request }: ActionFunctionArgs) {
             const mName = (model as { id: string; name: string }).name.toLowerCase();
             if (modelNameBlocklist.has(mName)) continue;
             if ((model as { id: string; name: string }).name.length <= 3 && !validShortModels.has(mName)) continue;
+
+            // Pure numeric model names (100, 200, 80, etc.) must appear near the make name
+            // to avoid false positives like "100 Hp" matching "Audi 100"
+            const isPureNumeric = /^\d+$/.test((model as { id: string; name: string }).name);
+            if (isPureNumeric) {
+              // Require "Make Model" pattern (e.g., "Audi 100" not just "100")
+              const makeModelRe = new RegExp(`\\b${makeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${mName}\\b`, "i");
+              if (!makeModelRe.test(allText)) continue;
+            }
+
             const re = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
             if (re.test(allText)) {
               modelNameMatchIds.push((model as { id: string; name: string }).id);
               if (!profile.modelNames.includes((model as { id: string; name: string }).name)) {
                 profile.modelNames.push((model as { id: string; name: string }).name);
               }
+            }
+          }
+
+          // Also add models resolved from chassis codes (e.g., 997 → 911)
+          // These models won't appear in the text but ARE the correct match
+          for (const resolvedModelName of profile.modelNames) {
+            const matchingModel = makeModels.find((m: { name: string }) =>
+              m.name.toLowerCase() === resolvedModelName.toLowerCase()
+            );
+            if (matchingModel && !modelNameMatchIds.includes((matchingModel as { id: string }).id)) {
+              modelNameMatchIds.push((matchingModel as { id: string }).id);
             }
           }
 
@@ -525,24 +621,14 @@ export async function action({ request }: ActionFunctionArgs) {
         // not sit in the flagged queue where a human has to approve them.
         // The model name filter below ensures we only auto-map engines from the
         // correct model, so false positives are still prevented.
-        const AUTO_MAP_THRESHOLD = 0.65;
-        const FLAG_THRESHOLD = 0.40;
+        const AUTO_MAP_THRESHOLD = 0.55; // Lowered from 0.65 — products with model name match are reliable
+        const FLAG_THRESHOLD = 0.30;   // Lowered from 0.40 — catch more products for review instead of no_match
 
         if (confidence >= AUTO_MAP_THRESHOLD && unique.length > 0) {
-          const detectedModel = profile.modelNames[0] || profile.chassisCodes[0] || null;
-          const top = unique.filter((s) => {
-            if (s.confidence < 0.55) return false;
-            // If we detected a specific model, only auto-map engines from that model
-            if (detectedModel && s.model?.name) {
-              const modelUpper = s.model.name.toUpperCase();
-              const detectedUpper = detectedModel.toUpperCase();
-              // Model must match — e.g. "Golf" must match "Golf", not "Passat CC"
-              if (!modelUpper.includes(detectedUpper) && !detectedUpper.includes(modelUpper)) {
-                return false; // Skip engines from non-matching models
-              }
-            }
-            return true;
-          }).slice(0, 5);
+          // Auto-accept ALL suggestions above the threshold — same as manual smart mapping
+          // No model name filter — products like "Porsche 996/997 & Audi S4" have MULTIPLE makes
+          // No limit of 5 — map EVERYTHING the smart engine finds
+          const top = unique.filter((s) => s.confidence >= FLAG_THRESHOLD);
           // CRITICAL: Only create fitments that have complete engine data (make+model+engine IDs)
           // Fitments without engine IDs break vehicle pages and provide no value.
           let inserts = top
@@ -606,9 +692,47 @@ export async function action({ request }: ActionFunctionArgs) {
           // Medium confidence — flag for manual review
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
+        } else if (allMakes.length > 0) {
+          // Make found but no model/engine match — create MAKE-LEVEL fitments
+          // so the product still appears in make collections (e.g., "BMW Parts")
+          // This catches products like "BMW Brake Lines" that don't specify a model
+          const makeInserts = allMakes
+            .filter((makeName: string) => makeIdMap.has(makeName))
+            .slice(0, 3) // Max 3 makes per product to prevent spam
+            .map((makeName: string) => ({
+              product_id: product.id,
+              shop_id: shopId,
+              make: makeName,
+              ymme_make_id: makeIdMap.get(makeName),
+              extraction_method: "make_only",
+              confidence_score: 0.30,
+              source_text: product.title ?? "",
+            }));
+
+          if (makeInserts.length > 0) {
+            // Check fitment limit before inserting
+            try {
+              await assertFitmentLimit(shopId);
+              const { error: fitErr } = await db.from("vehicle_fitments").insert(makeInserts);
+              if (!fitErr) {
+                chunkFitments += makeInserts.length;
+                await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkAutoMapped++;
+              } else {
+                await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkFlagged++;
+              }
+            } catch {
+              // Plan limit reached
+              await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkFlagged++;
+            }
+          } else {
+            await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkUnmapped++;
+          }
         } else {
-          // Low/no confidence — mark as "no_match" to prevent infinite reprocessing
-          // Products can be manually re-scanned later if needed
+          // No makes found at all — genuinely no vehicle data
           await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
         }
@@ -620,25 +744,31 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Update job progress
-    const newProcessed = (job.processed_items ?? 0) + products.length;
-    await db.from("sync_jobs")
-      .update({ processed_items: newProcessed })
-      .eq("id", jobId);
-
-    // Update tenant fitment count
-    if (chunkFitments > 0) {
-      const { data: tenant } = await db.from("tenants").select("fitment_count").eq("shop_id", shopId).maybeSingle();
-      await db.from("tenants").update({ fitment_count: (tenant?.fitment_count ?? 0) + chunkFitments }).eq("shop_id", shopId);
-    }
-
-    // Check if more products remain (exclude staged)
+    // Check how many unmapped products remain
     const { count: remaining } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
       .neq("status", "staged")
       .eq("fitment_status", "unmapped");
+
+    // Update job progress
+    const newProcessed = (job.processed_items ?? 0) + products.length;
+    const totalItems = (job.total_items ?? 7783) as number;
+    const progress = totalItems > 0 ? Math.round((newProcessed / totalItems) * 100) : 0;
+    await db.from("sync_jobs")
+      .update({ processed_items: newProcessed, progress: Math.min(progress, (remaining ?? 0) === 0 ? 100 : 99) })
+      .eq("id", jobId);
+
+    // Update tenant fitment count
+    if (chunkFitments > 0) {
+      const { count: actualFitments } = await db.from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId);
+      if (actualFitments !== null) {
+        await db.from("tenants").update({ fitment_count: actualFitments }).eq("shop_id", shopId);
+      }
+    }
 
     return data({
       chunk: true,

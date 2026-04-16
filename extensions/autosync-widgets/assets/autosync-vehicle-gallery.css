@@ -1,6 +1,6 @@
   /* ── Base ────────────────────────────────────────── */
   .autosync-vehicle-showcase {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-family: inherit !important;
     color: var(--avs-text, #1a1a2e) !important;
     background: var(--avs-bg, #ffffff) !important;
     margin: 0 auto;

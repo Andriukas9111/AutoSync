@@ -61,15 +61,128 @@ export function triggerEdgeFunction(jobId: string, shopId: string): void {
 }
 
 /**
- * Recount and sync the tenant's fitment_count with the actual vehicle_fitments table.
+ * Recount and sync the tenant's fitment_count with vehicle_fitments + wheel_fitments.
  * Call this after any bulk fitment delete to prevent counter drift.
  */
 export async function syncFitmentCount(shopId: string): Promise<void> {
-  const { count } = await db
-    .from("vehicle_fitments")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId);
-  await db.from("tenants").update({ fitment_count: count ?? 0 }).eq("shop_id", shopId);
+  const [{ count: vCount }, { count: wCount }] = await Promise.all([
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+  ]);
+  await db.from("tenants").update({ fitment_count: (vCount ?? 0) + (wCount ?? 0) }).eq("shop_id", shopId);
+}
+
+/**
+ * Comprehensive post-delete sync — call after any product or fitment deletion.
+ * Ensures all downstream systems reflect the current data state:
+ * 1. Syncs tenant counts (product_count, fitment_count)
+ * 2. Deactivates makes that no longer have any products
+ * 3. Removes vehicle_page_sync entries for engines with 0 products
+ * 4. Creates a cleanup job to remove stale Shopify tags + metafields
+ *
+ * This prevents stale data from appearing in:
+ * - YMME widget dropdowns (empty makes/models)
+ * - Storefront collection filters (engines with 0 results)
+ * - Vehicle specification gallery (pages with 0 products)
+ * - Shopify metafield-based Search & Discovery filters
+ */
+export async function syncAfterDelete(shopId: string): Promise<void> {
+  try {
+    // 1. Sync tenant counts
+    const [productRes, fitmentRes, wheelFitRes] = await Promise.all([
+      db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+      db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+      db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    ]);
+    await db.from("tenants").update({
+      product_count: productRes.count ?? 0,
+      fitment_count: (fitmentRes.count ?? 0) + (wheelFitRes.count ?? 0),
+    }).eq("shop_id", shopId);
+
+    // 2. Deactivate makes that no longer have any fitments
+    // tenant_active_makes has ymme_make_id (UUID FK to ymme_makes)
+    // vehicle_fitments has make (text name) — need to join through ymme_makes
+    const { data: activeMakes } = await db.from("tenant_active_makes")
+      .select("ymme_make_id, ymme_makes(name)")
+      .eq("shop_id", shopId);
+    if (activeMakes && activeMakes.length > 0) {
+      // Get make names that still have fitments
+      const { data: makesWithFitments } = await db.from("vehicle_fitments")
+        .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
+      const liveMakeNames = new Set((makesWithFitments ?? []).map((f: any) => f.make));
+
+      // Find active makes whose name is NOT in live fitments
+      const staleMakeIds = (activeMakes ?? [])
+        .filter((m: any) => {
+          const makeName = m.ymme_makes?.name;
+          return makeName && !liveMakeNames.has(makeName);
+        })
+        .map((m: any) => m.ymme_make_id);
+      if (staleMakeIds.length > 0) {
+        await db.from("tenant_active_makes").delete()
+          .eq("shop_id", shopId).in("ymme_make_id", staleMakeIds);
+        const staleNames = activeMakes
+          .filter((m: any) => staleMakeIds.includes(m.ymme_make_id))
+          .map((m: any) => m.ymme_makes?.name);
+        console.log(`[syncAfterDelete] Deactivated ${staleMakeIds.length} makes with 0 fitments: ${staleNames.join(", ")}`);
+      }
+    }
+
+    // 3. Mark vehicle_page_sync entries as pending_delete for engines with 0 fitments
+    const { data: syncedPages } = await db.from("vehicle_page_sync")
+      .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced").limit(5000);
+    if (syncedPages && syncedPages.length > 0) {
+      const syncedEngineIds = syncedPages.map((s: { engine_id: string }) => s.engine_id);
+      // Check in chunks of 500 to avoid PostgREST URL limits
+      const liveEngineIds = new Set<string>();
+      for (let i = 0; i < syncedEngineIds.length; i += 500) {
+        const chunk = syncedEngineIds.slice(i, i + 500);
+        const { data: enginesWithFitments } = await db.from("vehicle_fitments")
+          .select("ymme_engine_id").eq("shop_id", shopId)
+          .in("ymme_engine_id", chunk).not("ymme_engine_id", "is", null);
+        for (const f of enginesWithFitments ?? []) liveEngineIds.add(f.ymme_engine_id);
+      }
+      const staleEngineIds = syncedEngineIds.filter(id => !liveEngineIds.has(id));
+      if (staleEngineIds.length > 0) {
+        // Mark stale vehicle pages for removal — next vehicle pages push will clean them
+        for (let i = 0; i < staleEngineIds.length; i += 500) {
+          await db.from("vehicle_page_sync")
+            .update({ sync_status: "pending_delete" })
+            .eq("shop_id", shopId)
+            .in("engine_id", staleEngineIds.slice(i, i + 500));
+        }
+        console.log(`[syncAfterDelete] Marked ${staleEngineIds.length} vehicle pages for deletion (engines with 0 fitments)`);
+      }
+    }
+
+    // 4. Create cleanup job to remove stale Shopify tags + metafields
+    // Only if there are products that were previously synced but now have no fitments
+    const { count: staleCount } = await db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["no_match", "unmapped"])
+      .not("synced_at", "is", null); // Was synced before = has stale Shopify data
+
+    if (staleCount && staleCount > 0) {
+      // Check if cleanup job already exists (any cleanup type)
+      const { data: existingCleanup } = await db.from("sync_jobs")
+        .select("id").eq("shop_id", shopId)
+        .in("type", ["cleanup", "cleanup_tags", "cleanup_metafields", "sync_after_delete"])
+        .in("status", ["pending", "running"]).maybeSingle();
+
+      if (!existingCleanup) {
+        await db.from("sync_jobs").insert({
+          shop_id: shopId, type: "cleanup", status: "pending",
+          metadata: { phases: ["tags", "metafields"], current_phase: "tags" },
+        });
+        console.log(`[syncAfterDelete] Created cleanup job for ${staleCount} products with stale Shopify data`);
+      }
+    }
+
+    console.log(`[syncAfterDelete] Sync complete for ${shopId}`);
+  } catch (err) {
+    console.error(`[syncAfterDelete] Error:`, err);
+  }
 }
 
 /**

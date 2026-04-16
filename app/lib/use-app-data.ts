@@ -4,6 +4,9 @@
  * Replaces 9 different useState+useEffect polling implementations.
  * Every page imports from this ONE hook.
  * Returns isLoading for skeleton states until first poll succeeds.
+ *
+ * IMPORTANT: Pass loaderStats from each page's loader to prevent flash-of-wrong-data.
+ * The loader and job-status API MUST use identical queries (same RPC, same filters).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +14,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export interface AppStats {
   // Product counts
   total: number;
-  unmapped: number; // Includes unmapped + flagged + no_match (all needing review)
+  unmapped: number;
+  mapped: number;
   autoMapped: number;
   smartMapped: number;
   manualMapped: number;
@@ -23,6 +27,12 @@ export interface AppStats {
   wheelFitments: number;
   wheelProducts: number;
   wheelMapped: number;
+  /** Wheel products with fitment_status='unmapped'. Used by Products page (shows mixed categories). */
+  wheelUnmapped: number;
+  /** Wheel products with fitment_status='flagged'. Used by Products page. */
+  wheelFlagged: number;
+  /** Wheel products with fitment_status='no_match'. Used by Products page. */
+  wheelNoMatch: number;
   collections: number;
   // Vehicle pages
   vehiclePages: number;
@@ -33,6 +43,8 @@ export interface AppStats {
   providers: number;
   // Push status
   pushedProducts: number;
+  needsPush: number;
+  stalePush: number;
   activeMakes: number;
   uniqueMakes: number;
   uniqueModels: number;
@@ -66,11 +78,13 @@ export interface AppData {
 }
 
 const DEFAULT_STATS: AppStats = {
-  total: 0, unmapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0, noMatch: 0,
-  fitments: 0, vehicleCoverage: 0, wheelFitments: 0, wheelProducts: 0, wheelMapped: 0, collections: 0,
+  total: 0, unmapped: 0, mapped: 0, autoMapped: 0, smartMapped: 0, manualMapped: 0, flagged: 0, noMatch: 0,
+  fitments: 0, vehicleCoverage: 0,
+  wheelFitments: 0, wheelProducts: 0, wheelMapped: 0, wheelUnmapped: 0, wheelFlagged: 0, wheelNoMatch: 0,
+  collections: 0,
   vehiclePages: 0, vehiclePagesSynced: 0, vehiclePagesPending: 0, vehiclePagesFailed: 0,
   providers: 0,
-  pushedProducts: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,
+  pushedProducts: 0, needsPush: 0, stalePush: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,
   ymmeMakes: 0, ymmeModels: 0, ymmeEngines: 0,
   plan: "free", lastPushDate: null,
 };
@@ -149,7 +163,6 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
   return {
     stats: {
       ...stats,
-      // Add computed fields for convenience
     },
     jobs,
     activeJobs,
@@ -161,25 +174,19 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
  * Computed helpers — use these instead of calculating in every page
  */
 export function computeFromStats(stats: AppStats) {
-  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
-  // "Needs Review" = only FLAGGED products (extraction found partial matches that need human decision)
-  // NOT no_match (those have zero vehicle data — reviewing won't help)
-  // NOT unmapped (those haven't been processed yet — run extraction first)
+  const mapped = stats.mapped || (stats.autoMapped + stats.smartMapped + stats.manualMapped);
   const needsReview = stats.flagged;
-  // "Not Mapped" = everything that doesn't have fitments yet
   const notMapped = stats.total - mapped;
   const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
   const pendingPush = Math.max(0, mapped - stats.pushedProducts);
 
-  // ── Vehicle parts only (excludes wheel products) ──
-  const vehicleTotal = stats.total - stats.wheelProducts;
-  const vehicleMapped = mapped - stats.wheelMapped;
+  const vehicleTotal = stats.total;
+  const vehicleMapped = mapped;
   const vehicleNotMapped = vehicleTotal - vehicleMapped;
   const vehicleCoverage = vehicleTotal > 0 ? Math.round((vehicleMapped / vehicleTotal) * 100) : 0;
 
   return {
     mapped, needsReview, notMapped, coverage, pendingPush,
-    // Vehicle-specific
     vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage,
   };
 }

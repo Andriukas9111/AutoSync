@@ -18,6 +18,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { asPushStats } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // YMME global cache — these counts are shared across ALL tenants and change
@@ -69,15 +70,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // ── Product counts by fitment_status (7 parallel head-only count queries) ──
   // Each query returns just a count, not rows — efficient at scale (100K+ products).
   // Exclude staged provider imports from main product counts — they're in the provider products view
+  // Vehicle parts ONLY — exclude wheels using .neq (safe with NULL: NULL != 'wheels' evaluates correctly)
+  // NOTE: .or() breaks when combined with .eq() — it creates top-level OR instead of scoped AND
   const productCountQueries = {
-    total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
-    unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
-    autoMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
-    smartMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
-    manualMapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "manual_mapped"),
-    flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
-    noMatch: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match"),
-    pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
+    total: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    unmapped: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped").neq("product_category", "wheels"),
+    // Method-based counts: use RPC for efficient server-side COUNT(DISTINCT product_id)
+    // This replaces 3 full-row fetches + 1 stale-push fetch with a single DB function call
+    // autoMapped/smartMapped/manualMapped/mappedTotal/stalePush all come from get_push_stats RPC
+    flagged: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged").neq("product_category", "wheels"),
+    noMatch: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match").neq("product_category", "wheels"),
+    pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null).neq("product_category", "wheels"),
+    // Products that need pushing: mapped but never synced to Shopify
+    needsPush: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"]).is("synced_at", null).neq("product_category", "wheels"),
+    // Note: "stale push" (updated_at > synced_at) can't be done with PostgREST column comparison
+    // We'll compute it from needsPush count instead
   };
 
   // ── Query 3: Vehicle page sync_status counts (head-only) ──
@@ -91,7 +98,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // ── All queries in parallel ──
   const [
     jobsResult,
-    pTotal, pUnmapped, pAuto, pSmart, pManual, pFlagged, pNoMatch, pPushed,
+    pTotal, pUnmapped, pFlagged, pNoMatch, pPushed, pNeedsPush,
     vpTotal, vpSynced, vpPending, vpFailed,
     fitmentRes,
     collectionRes,
@@ -102,45 +109,52 @@ export async function loader({ request }: LoaderFunctionArgs) {
     wheelFitmentRes,
     wheelProductRes,
     wheelMappedRes,
+    // Wheel breakdowns — same statuses as vehicle parts, but filtered to wheels.
+    // Products page shows BOTH categories so it needs both breakdowns to avoid 0-flash
+    // when a wheel product has status `no_match` / `flagged` / `unmapped`.
+    wheelUnmappedRes,
+    wheelFlaggedRes,
+    wheelNoMatchRes,
+    // RPC: returns {auto_mapped, smart_mapped, manual_mapped, mapped_total, stale_push} in ONE query
+    // Replaces 4 heavy queries (3 full-row fetches + 1 10K-row stale push check)
+    pushStatsRes,
   ] = await Promise.all([
     jobQuery.limit(5),
     productCountQueries.total,
     productCountQueries.unmapped,
-    productCountQueries.autoMapped,
-    productCountQueries.smartMapped,
-    productCountQueries.manualMapped,
     productCountQueries.flagged,
     productCountQueries.noMatch,
     productCountQueries.pushed,
+    productCountQueries.needsPush,
     vehicleCountQueries.total,
     vehicleCountQueries.synced,
     vehicleCountQueries.pending,
     vehicleCountQueries.failed,
-    // Fitment count — count fitments linked to non-staged products only
-    // Using shop_id filter + checking product status would require a join,
-    // but since ALL fitments belong to active products (staged products don't have fitments
-    // created through the normal flow), the shop_id filter is sufficient.
-    // Provider imports create staged products WITHOUT fitments — fitments are only added
-    // after products are activated and mapped.
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("tenant_active_makes").select("ymme_make_id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "make_model"),
     db.from("providers").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("tenants").select("plan, plan_status").eq("shop_id", shopId).maybeSingle(),
-    // Wheel fitment count + wheel product counts
     db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged"),
-    // Wheel mapped = wheel products with auto_mapped status (have wheel_fitments)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "flagged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "no_match"),
+    // Efficient RPC: COUNT(DISTINCT) + column comparison done in SQL, returns 5 numbers
+    db.rpc("get_push_stats", { p_shop_id: shopId }),
   ]);
 
   // ── Extract counts ──
   const total = pTotal.count ?? 0;
   const unmapped = pUnmapped.count ?? 0;
-  const autoMapped = pAuto.count ?? 0;
-  const smartMapped = pSmart.count ?? 0;
-  const manualMapped = pManual.count ?? 0;
+  // Method-based counts from RPC (efficient server-side COUNT DISTINCT)
+  const pushStats = asPushStats(pushStatsRes.data);
+  const autoMapped = pushStats.auto_mapped;
+  const smartMapped = pushStats.smart_mapped;
+  const manualMapped = pushStats.manual_mapped;
+  const mappedCount = pushStats.mapped_total || (autoMapped + smartMapped + manualMapped);
   const flagged = pFlagged.count ?? 0;
   const noMatch = pNoMatch.count ?? 0;
   const pushedProducts = pPushed.count ?? 0;
@@ -171,6 +185,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       // Product counts (from single query)
       total,
       unmapped, // Raw unmapped count (NOT including flagged/no_match — those are separate fields)
+      mapped: mappedCount, // Distinct products with ANY fitment (no double-counting)
       autoMapped,
       smartMapped,
       manualMapped,
@@ -184,6 +199,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       wheelFitments: wheelFitmentRes.count ?? 0,
       wheelProducts: wheelProductRes.count ?? 0,
       wheelMapped: wheelMappedRes.count ?? 0,
+      wheelUnmapped: wheelUnmappedRes.count ?? 0,
+      wheelFlagged: wheelFlaggedRes.count ?? 0,
+      wheelNoMatch: wheelNoMatchRes.count ?? 0,
       collections: collectionRes.count ?? 0,
       // Vehicle pages (head-only count queries)
       vehiclePages: vpTotalCount,
@@ -194,6 +212,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
       providers: providerRes.count ?? 0,
       // Push status
       pushedProducts,
+      // Sync status — tells dashboard when a push is needed
+      needsPush: (pNeedsPush.count ?? 0),   // Mapped but never pushed to Shopify
+      stalePush: pushStats.stale_push,  // Efficient: computed server-side via RPC
       activeMakes: activeMakesRes.count ?? 0,
       uniqueMakes: activeMakesRes.count ?? 0,
       uniqueModels: modelCollectionRes.count ?? 0,

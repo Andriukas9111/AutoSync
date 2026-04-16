@@ -34,7 +34,7 @@ import {
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { syncAfterDelete } from "../lib/db.server";
 import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
@@ -50,6 +50,7 @@ const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critic
   professional: "attention",
   business: "warning",
   enterprise: "critical",
+  custom: "critical",
 };
 
 const PLAN_DISPLAY_NAME: Record<PlanTier, string> = {
@@ -59,6 +60,7 @@ const PLAN_DISPLAY_NAME: Record<PlanTier, string> = {
   professional: "Professional",
   business: "Business",
   enterprise: "Enterprise",
+  custom: "Custom",
 };
 
 function capitalisePlan(plan: string): string {
@@ -133,9 +135,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
     // Fitment status breakdown
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
+    // Method-based counts: products with ANY fitment of that type
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "auto"),
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "smart"),
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "manual"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "partial"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
     // Top makes
@@ -161,9 +164,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const statusBreakdown = {
     unmapped: unmappedRes.count ?? 0,
-    auto_mapped: autoMappedRes.count ?? 0,
-    smart_mapped: smartMappedRes.count ?? 0,
-    manual_mapped: manualMappedRes.count ?? 0,
+    auto_mapped: new Set((autoMappedRes.data ?? []).map((r: any) => r.product_id)).size,
+    smart_mapped: new Set((smartMappedRes.data ?? []).map((r: any) => r.product_id)).size,
+    manual_mapped: new Set((manualMappedRes.data ?? []).map((r: any) => r.product_id)).size,
     partial: partialRes.count ?? 0,
     flagged: flaggedRes.count ?? 0,
   };
@@ -273,33 +276,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     case "purge-fitments": {
-      const { error, count } = await db
-        .from("vehicle_fitments")
-        .delete()
-        .eq("shop_id", shopId);
+      const [{ error }, { error: wheelErr }] = await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+        db.from("wheel_fitments").delete().eq("shop_id", shopId),
+      ]);
 
-      if (error) {
-        return data({ ok: false, message: `Failed: ${error.message}` });
+      if (error || wheelErr) {
+        return data({ ok: false, message: `Failed: ${(error ?? wheelErr)!.message}` });
       }
 
       // Reset all products to unmapped
       await db.from("products").update({ fitment_status: "unmapped" }).eq("shop_id", shopId);
-      // Update tenant counts
-      await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
+      // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+      await syncAfterDelete(shopId);
 
       return data({ ok: true, message: `Purged all fitments for this tenant. Products reset to unmapped.` });
     }
 
     case "purge-products": {
-      // Delete fitments first (FK constraint)
-      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+      // Delete all fitments first (vehicle + wheel), then products
+      await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+        db.from("wheel_fitments").delete().eq("shop_id", shopId),
+      ]);
       const { error } = await db.from("products").delete().eq("shop_id", shopId);
 
       if (error) {
         return data({ ok: false, message: `Failed: ${error.message}` });
       }
 
-      await db.from("tenants").update({ product_count: 0, fitment_count: 0 }).eq("shop_id", shopId);
+      // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+      await syncAfterDelete(shopId);
       return data({ ok: true, message: "Purged all products and fitments for this tenant." });
     }
 
@@ -397,7 +404,7 @@ export default function TenantDetail() {
         {/* ── KPI Cards ── */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("120px", "8px"),
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[

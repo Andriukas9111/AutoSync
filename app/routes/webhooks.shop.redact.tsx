@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import prisma from "../db.server";
 
 /**
  * Mandatory GDPR webhook: shop/redact
@@ -51,6 +52,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   for (const table of explicitTables) {
     const { error } = await db.from(table).delete().eq("shop_id", shop);
     if (error) errors.push(`${table}: ${error.message}`);
+  }
+
+  // Delete Prisma sessions (belt-and-suspenders — APP_UNINSTALLED already deletes these)
+  try {
+    await prisma.session.deleteMany({ where: { shop } });
+  } catch (e) {
+    errors.push(`Session: ${e instanceof Error ? e.message : String(e)}`);
   }
 
   // Delete tenant row — FK CASCADE handles products, providers, fitments, etc.

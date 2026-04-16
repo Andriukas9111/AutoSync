@@ -229,10 +229,23 @@ async function handleTrack(params: URLSearchParams, body: string | null, request
   return json({ tracked, message: `${tracked} event(s) queued` });
 }
 
+// ---------- Helpers ----------
+
+/** Returns true if at least one product has been pushed to Shopify for this shop */
+async function hasPushedProducts(shop: string): Promise<boolean> {
+  if (!shop) return false;
+  const { count } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shop)
+    .not("synced_at", "is", null);
+  return (count ?? 0) > 0;
+}
+
 // ---------- Sub-route handlers ----------
 
 async function handleMakes(shop: string, request?: Request) {
-  // Plan check: YMME widget requires Starter+
+  // Plan check
   const tenant = await getTenant(shop);
   if (!tenant) return json({ makes: [] }, 200, request);
   const limits = getPlanLimits(getEffectivePlan(tenant));
@@ -240,16 +253,29 @@ async function handleMakes(shop: string, request?: Request) {
     return json({ error: "YMME widget requires Starter plan or higher", makes: [] }, 403, request);
   }
 
-  // Only return makes the tenant has activated (tenant_active_makes junction table)
-  // If no tenant active makes exist, return empty array — forces merchant to activate makes first
+  // GATE: Only show YMME data if at least one product has been pushed to Shopify.
+  // Before push, no tags/collections/metafields exist — widget links would 404.
+  if (!(await hasPushedProducts(shop))) return json({ makes: [] });
+
+  // PRINCIPLE: Only show makes that have COMPLETE fitment chains (make+model+engine)
+  // in vehicle_fitments. No YMME database guessing.
   const { data: activeMakeIds } = await db
     .from("tenant_active_makes")
     .select("ymme_make_id")
     .eq("shop_id", shop);
+  if (!activeMakeIds || activeMakeIds.length === 0) return json({ makes: [] });
 
-  if (!activeMakeIds || activeMakeIds.length === 0) {
-    return json({ makes: [] });
-  }
+  // Get make names that have at least 1 fitment with model AND engine
+  const { data: liveFitmentMakes } = await db
+    .from("vehicle_fitments")
+    .select("make")
+    .eq("shop_id", shop)
+    .not("make", "is", null)
+    .not("model", "is", null)
+    .not("engine", "is", null)
+    .limit(50000);
+  const liveMakeNames = new Set((liveFitmentMakes ?? []).map((f: any) => f.make));
+  if (liveMakeNames.size === 0) return json({ makes: [] });
 
   const makeIds = activeMakeIds.map((r) => r.ymme_make_id);
   const { data: makes, error } = await db
@@ -258,13 +284,12 @@ async function handleMakes(shop: string, request?: Request) {
     .in("id", makeIds)
     .eq("active", true)
     .order("name");
-
   if (error) return json({ error: error.message }, 500);
-  return json({ makes });
+
+  return json({ makes: (makes ?? []).filter((m: any) => liveMakeNames.has(m.name)) });
 }
 
 async function handleModels(params: URLSearchParams, request?: Request) {
-  // Plan check: YMME widget requires Starter+
   const shop = params.get("shop") ?? "";
   if (shop) {
     const tenant = await getTenant(shop);
@@ -274,72 +299,60 @@ async function handleModels(params: URLSearchParams, request?: Request) {
         return json({ error: "YMME widget requires Starter plan or higher", models: [] }, 403, request);
       }
     }
+    // GATE: No data until at least one product is pushed
+    if (!(await hasPushedProducts(shop))) return json({ models: [] });
   }
 
   const makeId = params.get("make_id");
   if (!makeId) return json({ error: "Missing make_id parameter" }, 400);
-  const shopId = shop;
 
-  // First get all models for this make from YMME DB
-  const { data: allModels, error } = await db
-    .from("ymme_models")
-    .select("id, name, generation, year_from, year_to, body_type")
-    .eq("make_id", makeId)
-    .eq("active", true)
-    .order("name")
-    .order("year_from", { ascending: false });
+  // Get make name
+  const { data: makeRow } = await db.from("ymme_makes").select("name").eq("id", makeId).maybeSingle();
+  if (!makeRow?.name) return json({ models: [] });
 
-  if (error) return json({ error: error.message }, 500);
+  if (shop) {
+    // PRINCIPLE: Only show models that have fitments with engine data in THIS shop.
+    // Get distinct model names from vehicle_fitments (must have model AND engine)
+    const { data: fitmentModels } = await db
+      .from("vehicle_fitments")
+      .select("model")
+      .eq("shop_id", shop)
+      .ilike("make", makeRow.name)
+      .not("model", "is", null)
+      .not("engine", "is", null)
+      .limit(50000);
+    const fitmentModelNames = new Set(
+      (fitmentModels ?? []).map((f: any) => (f.model ?? "").toLowerCase().trim()).filter(Boolean)
+    );
+    if (fitmentModelNames.size === 0) return json({ models: [] });
 
-  // Filter to only models that have fitments for this shop (by model NAME text match)
-  // vehicle_fitments uses text columns (make, model), not UUID FKs
-  if (shopId) {
-    // Get the make name for this make_id
-    const { data: makeRow } = await db
-      .from("ymme_makes")
-      .select("name")
-      .eq("id", makeId)
-      .maybeSingle();
+    // Get YMME model details for display (generation, year range, body type)
+    const { data: allModels } = await db
+      .from("ymme_models")
+      .select("id, name, generation, year_from, year_to, body_type")
+      .eq("make_id", makeId).eq("active", true)
+      .order("name").order("year_from", { ascending: false });
 
-    if (makeRow?.name) {
-      const fitmentModels = await paginatedSelect<{ model: string }>(
-        "vehicle_fitments", "model", (q) => q.eq("shop_id", shopId).ilike("make", makeRow.name)
-      );
+    const filtered = (allModels ?? []).filter((m: any) =>
+      fitmentModelNames.has((m.name ?? "").toLowerCase().trim())
+    ).map((m: any) => ({
+      ...m,
+      generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
+    }));
 
-      const fitmentModelNames = new Set(
-        (fitmentModels ?? []).map((f: any) => (f.model ?? "").toLowerCase().trim())
-      );
-
-      if (fitmentModelNames.size > 0) {
-        // Filter YMME models to only those with matching fitments
-        const filteredModels = (allModels ?? []).filter((m: any) =>
-          fitmentModelNames.has((m.name ?? "").toLowerCase().trim())
-        );
-
-        const cleanModels = filteredModels.map((m: any) => ({
-          ...m,
-          generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
-        }));
-
-        return json({ models: cleanModels });
-      }
-    }
-
-    // No fitments found — return empty
-    return json({ models: [] });
+    return json({ models: filtered });
   }
 
-  // Fallback: no shop context — return all models (admin/preview mode)
-  const cleanModels = (allModels ?? []).map((m: any) => ({
-    ...m,
-    generation: m.generation && m.generation.includes(" | ") ? null : m.generation,
-  }));
-
-  return json({ models: cleanModels });
+  // No shop context — admin/preview mode, show all
+  const { data: allModels } = await db.from("ymme_models")
+    .select("id, name, generation, year_from, year_to, body_type")
+    .eq("make_id", makeId).eq("active", true).order("name");
+  return json({ models: (allModels ?? []).map((m: any) => ({
+    ...m, generation: m.generation?.includes(" | ") ? null : m.generation,
+  })) });
 }
 
 async function handleYears(params: URLSearchParams, request?: Request) {
-  // Plan check: YMME widget requires Starter+
   const shop = params.get("shop") ?? "";
   if (shop) {
     const tenant = await getTenant(shop);
@@ -349,107 +362,66 @@ async function handleYears(params: URLSearchParams, request?: Request) {
         return json({ error: "YMME widget requires Starter plan or higher", years: [] }, 403, request);
       }
     }
+    // GATE: No data until at least one product is pushed
+    if (!(await hasPushedProducts(shop))) return json({ years: [] });
   }
 
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
 
-  // Get model info (name + make) to check fitments
-  const { data: modelRow } = await db
-    .from("ymme_models")
-    .select("name, make_id, year_from, year_to")
-    .eq("id", modelId)
-    .maybeSingle();
-
+  // Get model info
+  const { data: modelRow } = await db.from("ymme_models")
+    .select("name, make_id, year_from, year_to").eq("id", modelId).maybeSingle();
   if (!modelRow) return json({ years: [] });
 
-  const modelYearFrom = modelRow.year_from ?? null;
-  const modelYearTo = modelRow.year_to ?? new Date().getFullYear();
+  const { data: makeRow } = await db.from("ymme_makes")
+    .select("name").eq("id", modelRow.make_id).maybeSingle();
+  if (!makeRow?.name) return json({ years: [] });
 
-  // When shop context exists, filter years by actual fitments
-  if (shop && modelRow.make_id) {
-    const { data: makeRow } = await db
-      .from("ymme_makes")
-      .select("name")
-      .eq("id", modelRow.make_id)
-      .maybeSingle();
+  if (shop) {
+    // PRINCIPLE: Years come ONLY from fitment data for products in THIS shop.
+    // Get year ranges from fitments that have engine data (complete chain)
+    const { data: fitmentYears } = await db
+      .from("vehicle_fitments")
+      .select("year_from, year_to")
+      .eq("shop_id", shop)
+      .ilike("make", makeRow.name)
+      .ilike("model", modelRow.name ?? "")
+      .not("engine", "is", null);
 
-    if (makeRow?.name) {
-      // Get fitment year ranges for this shop + make + model
-      const { data: fitmentYears } = await db
-        .from("vehicle_fitments")
-        .select("year_from, year_to")
-        .eq("shop_id", shop)
-        .ilike("make", makeRow.name)
-        .ilike("model", modelRow.name ?? "");
+    if (!fitmentYears || fitmentYears.length === 0) return json({ years: [] });
 
-      if (fitmentYears && fitmentYears.length > 0) {
-        const currentYear = new Date().getFullYear();
-        const yearSet = new Set<number>();
-        for (const f of fitmentYears) {
-          const from = f.year_from;
-          const to = f.year_to ?? currentYear;
-          if (typeof from !== "number" || from < 1900) continue;
-          for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
-            yearSet.add(y);
-          }
-        }
-        if (yearSet.size > 0) {
-          const years = Array.from(yearSet).sort((a, b) => b - a);
-          return json({ years });
-        }
+    const currentYear = new Date().getFullYear();
+    const yearSet = new Set<number>();
+
+    for (const f of fitmentYears) {
+      if (typeof f.year_from === "number" && f.year_from >= 1900) {
+        const to = typeof f.year_to === "number" ? f.year_to : currentYear;
+        for (let y = f.year_from; y <= Math.min(to, currentYear + 1); y++) yearSet.add(y);
       }
-
-      // Check if fitments exist at all for this make+model (without year data)
-      const { count: fitmentCount } = await db
-        .from("vehicle_fitments")
-        .select("id", { count: "exact", head: true })
-        .eq("shop_id", shop)
-        .ilike("make", makeRow.name)
-        .ilike("model", modelRow.name ?? "");
-
-      if ((fitmentCount ?? 0) === 0) {
-        // No fitments for this model at all — return empty
-        return json({ years: [] });
-      }
-      // Fitments exist but have no year data — fall through to engine-based years
     }
+
+    // If fitments exist but ALL have null years, use the YMME model year range
+    // as a reasonable fallback (these are make-only fitments like universal parts)
+    if (yearSet.size === 0) {
+      const modelFrom = modelRow.year_from ?? currentYear - 5;
+      const modelTo = modelRow.year_to ?? currentYear;
+      for (let y = modelFrom; y <= Math.min(modelTo, currentYear + 1); y++) yearSet.add(y);
+    }
+
+    const years = Array.from(yearSet).sort((a, b) => b - a);
+    return json({ years });
   }
 
-  // Fallback: derive years from engine year ranges in YMME DB
-  const { data: engines, error } = await db
-    .from("ymme_engines")
-    .select("year_from, year_to")
-    .eq("model_id", modelId)
-    .eq("active", true)
-    .not("year_from", "is", null);
-  if (error) return json({ error: error.message }, 500);
-
-  const currentYear = new Date().getFullYear();
-  const yearSet = new Set<number>();
-  for (const engine of engines ?? []) {
-    const from = engine.year_from;
-    if (typeof from !== "number" || from < 1900) continue;
-    const to = engine.year_to ?? currentYear;
-    for (let y = from; y <= Math.min(to, currentYear + 1); y++) {
-      if (modelYearFrom != null && y < modelYearFrom) continue;
-      if (y > modelYearTo) continue;
-      yearSet.add(y);
-    }
-  }
-
-  if (yearSet.size === 0 && modelYearFrom != null) {
-    for (let y = modelYearFrom; y <= modelYearTo; y++) {
-      yearSet.add(y);
-    }
-  }
-
-  const years = Array.from(yearSet).sort((a, b) => b - a);
+  // No shop context — admin/preview mode
+  const modelFrom = modelRow.year_from ?? 2000;
+  const modelTo = modelRow.year_to ?? new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = modelTo; y >= modelFrom; y--) years.push(y);
   return json({ years });
 }
 
 async function handleEngines(params: URLSearchParams, request?: Request) {
-  // Plan check: YMME widget requires Starter+
   const shop = params.get("shop") ?? "";
   if (shop) {
     const tenant = await getTenant(shop);
@@ -459,141 +431,91 @@ async function handleEngines(params: URLSearchParams, request?: Request) {
         return json({ error: "YMME widget requires Starter plan or higher", engines: [] }, 403, request);
       }
     }
+    // GATE: No data until at least one product is pushed
+    if (!(await hasPushedProducts(shop))) return json({ engines: [] });
   }
 
   const modelId = params.get("model_id");
   if (!modelId) return json({ error: "Missing model_id parameter" }, 400);
-
   const year = params.get("year");
-  const shopId = shop;
 
-  // Get model info (name + make) for this model_id
-  const { data: modelRow } = await db
-    .from("ymme_models")
-    .select("name, make_id")
-    .eq("id", modelId)
-    .maybeSingle();
-
+  // Get model + make name
+  const { data: modelRow } = await db.from("ymme_models")
+    .select("name, make_id").eq("id", modelId).maybeSingle();
   if (!modelRow) return json({ engines: [] });
-
-  let makeName = "";
+  const { data: makeRow } = await db.from("ymme_makes")
+    .select("name").eq("id", modelRow.make_id).maybeSingle();
+  const makeName = makeRow?.name ?? "";
   const modelName = modelRow.name ?? "";
-  if (modelRow.make_id) {
-    const { data: makeRow } = await db
-      .from("ymme_makes")
-      .select("name")
-      .eq("id", modelRow.make_id)
-      .maybeSingle();
-    makeName = makeRow?.name ?? "";
-  }
 
-  // When shop context exists, use fitment-driven approach:
-  // Search engines across ALL sibling models (same name, same make) — not just this model_id.
-  // This handles cases where engines are under "4 Series Coupe (F32)" but the
-  // widget shows consolidated "4 Series" which is a different model_id.
-  if (shopId && makeName && modelName) {
-    // Get fitment engine names for this shop + make + model
-    const { data: fitmentEngines } = await db
+  if (shop && makeName && modelName) {
+    // PRINCIPLE: Only show engines from vehicle_fitments for THIS shop+make+model+year.
+    // No YMME database guessing. If a fitment exists, the engine shows. If not, it doesn't.
+    let fitmentQuery = db
       .from("vehicle_fitments")
       .select("engine")
-      .eq("shop_id", shopId)
+      .eq("shop_id", shop)
       .ilike("make", makeName)
       .ilike("model", modelName)
       .not("engine", "is", null);
 
+    // Year filter: match fitments covering this year OR fitments with no year data
+    if (year) {
+      const y = parseInt(year, 10);
+      if (!isNaN(y)) {
+        fitmentQuery = fitmentQuery
+          .or(`year_from.is.null,and(year_from.lte.${y},or(year_to.gte.${y},year_to.is.null))`);
+      }
+    }
+
+    const { data: fitmentEngines } = await fitmentQuery;
     const fitmentEngineNames = new Set(
       (fitmentEngines ?? []).map((f: any) => (f.engine ?? "").toLowerCase().trim())
     );
 
-    if (fitmentEngineNames.size > 0) {
-      // Search engines across ALL models for this make — not just one model_id.
-      // BMW "M440i" could be under "4 Series Coupe (F32)", "4 Series Gran Coupe (F36)",
-      // or any other sub-model. We search the entire make's engine catalog.
-      const { data: allMakeModels } = await db
-        .from("ymme_models")
-        .select("id")
-        .eq("make_id", modelRow.make_id);
+    if (fitmentEngineNames.size === 0) return json({ engines: [] });
 
-      const allMakeModelIds = (allMakeModels ?? []).map((m: any) => m.id);
+    // Enrich with YMME engine details (displacement, fuel type, power) for display
+    // Search across ALL sibling models for this make (handles sub-models like "4 Series Coupe")
+    const { data: allMakeModels } = await db.from("ymme_models").select("id").eq("make_id", modelRow.make_id);
+    const allModelIds = (allMakeModels ?? []).map((m: any) => m.id);
 
-      // Get ALL engines across the entire make (batched if needed)
-      let engineQuery = db
-        .from("ymme_engines")
-        .select(
-          "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
-        )
-        .in("model_id", allMakeModelIds)
-        .eq("active", true)
-        .order("name")
-        .limit(5000);
+    const { data: ymmeEngines } = await db.from("ymme_engines")
+      .select("id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification")
+      .in("model_id", allModelIds).eq("active", true).order("name").limit(5000);
 
-      const { data: allEngines, error } = await engineQuery;
-      if (error) return json({ error: error.message }, 500);
+    // Match YMME engines to fitment engine names
+    const seen = new Set<string>();
+    const matched = (ymmeEngines ?? []).filter((e: any) => {
+      const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
+      if (!fitmentEngineNames.has(cleanName)) return false;
+      if (seen.has(cleanName)) return false;
+      seen.add(cleanName);
+      return true;
+    }).map((e: any) => ({
+      ...e, name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
+    }));
 
-      // Filter to only engines matching fitment names (strip dedup suffix before comparison)
-      const matched = (allEngines ?? []).filter((e: any) => {
-        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
-        return fitmentEngineNames.has(cleanName);
-      });
-
-      // Deduplicate by clean name (same engine might appear under multiple sibling models)
-      const seen = new Set<string>();
-      const deduped = matched.filter((e: any) => {
-        const cleanName = (e.name ?? "").replace(/\s*\[[0-9a-f]{8}\]$/, "").toLowerCase().trim();
-        if (seen.has(cleanName)) return false;
-        seen.add(cleanName);
-        return true;
-      });
-
-      const cleanEngines = deduped.map((e: any) => ({
-        ...e,
-        name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
+    // If YMME didn't have matching engines, return basic engine names from fitments
+    if (matched.length === 0) {
+      const basicEngines = [...fitmentEngineNames].sort().map((name, i) => ({
+        id: `fitment-${i}`, name, code: null, displacement_cc: null, fuel_type: null,
+        power_hp: null, power_kw: null, torque_nm: null, year_from: null, year_to: null,
+        cylinders: null, cylinder_config: null, aspiration: null, modification: null,
       }));
-
-      return json({ engines: cleanEngines });
+      return json({ engines: basicEngines });
     }
 
-    // Check if there are model-level fitments (engine = null means "all engines")
-    const { count: modelFitments } = await db
-      .from("vehicle_fitments")
-      .select("id", { count: "exact", head: true })
-      .eq("shop_id", shopId)
-      .ilike("make", makeName)
-      .ilike("model", modelName);
-
-    if ((modelFitments ?? 0) === 0) {
-      return json({ engines: [] });
-    }
-    // Fall through to show all engines for this model
+    return json({ engines: matched });
   }
 
-  // Fallback: no shop context or model-level fitments — show all engines for this model
-  let query = db
-    .from("ymme_engines")
-    .select(
-      "id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification",
-    )
-    .eq("model_id", modelId)
-    .eq("active", true)
-    .order("name");
-
-  if (year) {
-    const y = parseInt(year, 10);
-    if (!isNaN(y)) {
-      query = query.lte("year_from", y).or(`year_to.gte.${y},year_to.is.null`);
-    }
-  }
-
-  const { data: fallbackEngines, error: fallbackError } = await query;
-  if (fallbackError) return json({ error: fallbackError.message }, 500);
-
-  // Strip dedup suffixes like " [92efc5dd]" from engine names for clean display
-  const cleanEngines = (fallbackEngines ?? []).map((e: any) => ({
-    ...e,
-    name: e.name ? e.name.replace(/\s*\[[0-9a-f]{8}\]$/, "") : e.name,
-  }));
-
-  return json({ engines: cleanEngines });
+  // No shop context — admin/preview mode
+  const { data: engines } = await db.from("ymme_engines")
+    .select("id, code, name, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, cylinders, cylinder_config, aspiration, modification")
+    .eq("model_id", modelId).eq("active", true).order("name");
+  return json({ engines: (engines ?? []).map((e: any) => ({
+    ...e, name: e.name?.replace(/\s*\[[0-9a-f]{8}\]$/, "") ?? e.name,
+  })) });
 }
 
 async function handleCollectionLookup(params: URLSearchParams, request?: Request) {
@@ -632,15 +554,21 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
   const mfNs = `app--${appId}--vehicle_fitment`;
 
   const found = (row: { handle: string; title: string; type: string }) => {
-    // Build collection URL — try metafield filters for precise matching
-    // These work when Search & Discovery is configured by the merchant
-    // Falls back gracefully to just the collection (tag-based filtering still works)
+    // Build collection URL with metafield filters for Search & Discovery sidebar.
+    // All 4 YMME selections (make, model, year, engine) are added as filters
+    // so the sidebar highlights them. The collection handles make+model via tags,
+    // and the filters narrow further by year and engine.
     let url = `/collections/${row.handle}`;
     const filters: string[] = [];
     if (make) filters.push(`filter.p.m.${mfNs}.make=${encodeURIComponent(make)}`);
-    if (model) filters.push(`filter.p.m.${mfNs}.model=${encodeURIComponent(model)}`);
+    if (model) {
+      // Model name in metafield matches the YMME model name (text match)
+      const cleanModel = model.replace(/\s*\d{4}[-–]present$/i, '').replace(/\s*\d{4}\+$/i, '').trim();
+      filters.push(`filter.p.m.${mfNs}.model=${encodeURIComponent(cleanModel)}`);
+    }
     if (year) filters.push(`filter.p.m.${mfNs}.year=${encodeURIComponent(year)}`);
     if (engine) {
+      // Strip "1796cc Petrol" suffix that the YMME widget appends for display
       const cleanEngine = engine.replace(/\s*\d+cc\s*(Petrol|Diesel|Electric|Hybrid)?$/i, '').trim();
       filters.push(`filter.p.m.${mfNs}.engine=${encodeURIComponent(cleanEngine)}`);
     }
@@ -656,7 +584,24 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
   };
 
   if (model) {
-    // 1. If year provided, try year-range collection FIRST (most specific)
+    // 1. Try make_model collection FIRST (e.g. bmw-3-series-parts)
+    // This is the safest choice — tag rule uses `_autosync_3 Series` which matches
+    // ALL products for that model regardless of year range.
+    // Year-range collections (bmw-3-series-2015-parts) only match products with
+    // the EXACT year-range tag, which often mismatches.
+    const { data: modelMatch } = await db
+      .from("collection_mappings")
+      .select("handle, title, type")
+      .eq("shop_id", shop)
+      .ilike("make", make)
+      .ilike("model", model)
+      .eq("type", "make_model")
+      .limit(1)
+      .maybeSingle();
+
+    if (modelMatch) return found(modelMatch);
+
+    // 2. If no model collection, try year-range as fallback
     if (year) {
       const yearNum = parseInt(year, 10);
       if (!isNaN(yearNum)) {
@@ -688,11 +633,16 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
           });
 
           if (matches.length > 0) {
-            // Pick the tightest year range (smallest span)
+            // Pick the tightest year range (smallest span that contains the year)
+            const currentYear = new Date().getFullYear();
             const best = matches.sort((a, b) => {
               const getSpan = (t: string) => {
                 const m = t.match(/(\d{4})[-–](\d{4})/);
-                return m ? parseInt(m[2], 10) - parseInt(m[1], 10) : 100;
+                if (m) return parseInt(m[2], 10) - parseInt(m[1], 10);
+                // For "2022+" style, span = currentYear - yearFrom (smaller = tighter)
+                const mp = t.match(/(\d{4})\+/);
+                if (mp) return currentYear - parseInt(mp[1], 10);
+                return 999;
               };
               return getSpan(a.title) - getSpan(b.title);
             })[0];
@@ -701,19 +651,6 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
         }
       }
     }
-
-    // 2. Fall back to make_model collection
-    const { data: modelMatch } = await db
-      .from("collection_mappings")
-      .select("handle, title, type")
-      .eq("shop_id", shop)
-      .ilike("make", make)
-      .ilike("model", model)
-      .eq("type", "make_model")
-      .limit(1)
-      .maybeSingle();
-
-    if (modelMatch) return found(modelMatch);
 
     // 3. Fall back to any collection with this make+model
     const { data: anyModelMatch } = await db
@@ -764,6 +701,14 @@ async function handleCollectionLookup(params: URLSearchParams, request?: Request
     .maybeSingle();
 
   if (anyMake) return found(anyMake);
+
+  // No collection exists at all — return a search URL as fallback
+  // This ensures the user always lands on a page with products
+  if (make) {
+    const searchTerms = [make, model, year].filter(Boolean).join(" ");
+    const searchUrl = `/search?q=${encodeURIComponent(searchTerms)}&type=product`;
+    return json({ found: true, handle: null, title: `Search: ${searchTerms}`, type: "search", url: searchUrl });
+  }
 
   return json({ found: false });
 }
@@ -1186,7 +1131,11 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null, r
         resolved_make_id: resolved?.makeId || null,
         resolved_model_id: resolved?.modelId || null,
         resolved_engine_id: resolved?.engineId || null,
-      }).then(() => {}).catch(() => {});
+      }).then(({ error }) => {
+        if (error) console.warn(`[proxy] plate_lookups insert failed: ${error.message}`);
+      }).catch((err) => {
+        console.warn(`[proxy] plate_lookups insert error:`, err);
+      });
     }
 
     // Count compatible products for the "Find X Parts" button
@@ -1314,6 +1263,17 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
 
   if (!pcd) return json({ error: "Missing pcd parameter" }, 400, request);
 
+  if (shop) {
+    const tenant = await getTenant(shop);
+    if (tenant) {
+      const limits = getPlanLimits(getEffectivePlan(tenant));
+      if (!limits.features.wheelFinder) {
+        return json({ error: "Wheel Finder requires Professional plan or higher" }, 403, request);
+      }
+    }
+    if (!(await hasPushedProducts(shop))) return json({ url: "/collections/all" });
+  }
+
   // Get the app's metafield namespace (same logic as collection-lookup)
   const { data: tenant } = await db
     .from("tenants")
@@ -1326,9 +1286,11 @@ async function handleWheelLookup(params: URLSearchParams, request?: Request) {
   }
   const mfNs = `app--${appId}--wheel_spec`;
 
-  // Build collection URL — use per-PCD collection (same pattern as YMME per-make collections)
-  // This keeps product counts under 5K per collection so Shopify filters work properly
-  const pcdHandle = `wheels-${pcd.replace(/[^a-z0-9]/gi, "-").toLowerCase()}`;
+  // Build collection URL — look up actual handle from our DB (Shopify auto-generates handles)
+  const pcdTitle = `${pcd} Wheels`;
+  const { data: pcdCollection } = await db.from("collection_mappings")
+    .select("handle").eq("shop_id", shop).eq("title", pcdTitle).maybeSingle();
+  const pcdHandle = pcdCollection?.handle || `${pcd.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-wheels`;
   let url = `/collections/${pcdHandle}`;
 
   // Add metafield filters — PCD for the chip display, diameter, width, center_bore for refinement
@@ -1381,12 +1343,11 @@ async function handleWheelSearch(params: URLSearchParams, request?: Request) {
   }
 
   // Filter by offset range — if the user's offset falls within the wheel's min/max range
+  // Include rows with NULL offsets (meaning "fits all offsets")
   if (offset) {
     const offsetNum = parseInt(offset, 10);
     if (!isNaN(offsetNum)) {
-      query = query
-        .lte("offset_min", offsetNum)
-        .gte("offset_max", offsetNum);
+      query = query.or(`and(offset_min.lte.${offsetNum},offset_max.gte.${offsetNum}),offset_min.is.null`);
     }
   }
 
@@ -1801,15 +1762,18 @@ async function handleVehicleGallery(params: URLSearchParams, request?: Request) 
     }
   }
 
-  // Fetch YMME engine data for linked vehicles
+  // Fetch YMME engine data for linked vehicles — chunked .in() to avoid PostgREST URL limits
   const engineMap = new Map<string, any>();
   if (ymmeIds.length > 0) {
-    const { data: engines } = await db
-      .from("ymme_engines")
-      .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name, logo_url))")
-      .in("id", ymmeIds);
-    for (const e of engines ?? []) {
-      engineMap.set(String(e.id), e);
+    for (let i = 0; i < ymmeIds.length; i += 200) {
+      const chunk = ymmeIds.slice(i, i + 200);
+      const { data: engines } = await db
+        .from("ymme_engines")
+        .select("id, name, code, power_hp, torque_nm, fuel_type, displacement_cc, ymme_models!inner(name, ymme_makes!inner(name, logo_url))")
+        .in("id", chunk);
+      for (const e of engines ?? []) {
+        engineMap.set(String(e.id), e);
+      }
     }
   }
 

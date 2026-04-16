@@ -220,11 +220,12 @@ async function processProviderAutoFetch(
   const schedule = meta.schedule;
   if (!providerId) return { processed: 0, hasMore: false, error: "Missing provider_id in metadata" };
 
-  // Get provider info
+  // Get provider info (scoped by shop_id for defense-in-depth)
   const { data: provider } = await db
     .from("providers")
     .select("id, name, type, config, fetch_schedule")
     .eq("id", providerId)
+    .eq("shop_id", job.shop_id as string)
     .maybeSingle();
 
   if (!provider) return { processed: 0, hasMore: false, error: "Provider not found" };
@@ -232,15 +233,18 @@ async function processProviderAutoFetch(
     return { processed: 0, hasMore: false, error: `Auto-fetch not supported for ${provider.type} providers` };
   }
 
-  // Get saved column mappings for this provider
+  // Get saved column mappings for this provider (scoped by shop_id)
   const { data: savedMappings } = await db
     .from("provider_column_mappings")
     .select("mappings")
     .eq("provider_id", providerId)
+    .eq("shop_id", job.shop_id as string)
     .maybeSingle();
 
   if (!savedMappings?.mappings) {
-    return { processed: 0, hasMore: false, error: "No saved column mappings — import at least once manually first" };
+    // Not an error — just needs initial manual setup. Mark job as completed with info.
+    console.log(`[provider_auto_fetch] Provider ${providerId} has no saved column mappings — needs manual import first`);
+    return { processed: 0, hasMore: false }; // No error = job completes cleanly, no red banner
   }
 
   try {
@@ -272,7 +276,7 @@ async function processProviderAutoFetch(
     await db.from("providers").update({
       next_scheduled_fetch: nextFetch,
       last_fetched_at: new Date().toISOString(),
-    }).eq("id", providerId);
+    }).eq("id", providerId).eq("shop_id", job.shop_id as string);
 
     console.log(`[auto-fetch] Triggered import for provider ${provider.name}, next fetch: ${nextFetch}`);
     return { processed: 1, hasMore: false };
@@ -502,7 +506,7 @@ async function processProviderImport(
         import_count: (provider.import_count ?? 0) + 1,
         last_fetch_at: new Date().toISOString(),
         status: "active",
-      }).eq("id", providerId);
+      }).eq("id", providerId).eq("shop_id", job.shop_id as string);
 
       console.log(`[provider_import] COMPLETED: ${productCount} total products for ${provider.name}`);
     }
@@ -673,18 +677,54 @@ Deno.serve(async (req) => {
     let candidate: { id: string } | null = null;
 
     if (targetJobId) {
-      // Direct invocation — use the specified job
+      // Direct invocation (from INSERT trigger or self-chain) — use the specified job
       candidate = { id: targetJobId };
     } else {
-      // Queue-based: find the next pending/running job
-      const { data: found, error: candidateError } = await db
+      // Queue-based (from pg_cron safety net):
+      // Multi-tenant fair scheduling — prioritise jobs from shops that DON'T already
+      // have a running job. This prevents one shop with 50 jobs from starving others.
+      //
+      // Step 1: Find shops that currently have a locked (actively processing) job
+      const { data: busyShops } = await db
         .from("sync_jobs")
-        .select("id")
-        .in("status", ["running", "pending"])
-        .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
+        .select("shop_id")
+        .eq("status", "running")
+        .not("locked_at", "is", null)
+        .gt("locked_at", staleLockCutoff);
+      const busyShopIds = (busyShops || []).map((s: { shop_id: string }) => s.shop_id);
+
+      // Step 2: Find the oldest unlocked job, preferring shops that aren't busy
+      let found = null;
+      let candidateError = null;
+
+      if (busyShopIds.length > 0) {
+        // Try to find a job from a shop that ISN'T currently busy
+        const result = await db
+          .from("sync_jobs")
+          .select("id")
+          .in("status", ["running", "pending"])
+          .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+          .not("shop_id", "in", `(${busyShopIds.map(s => `"${s}"`).join(",")})`)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        found = result.data;
+        candidateError = result.error;
+      }
+
+      // Fallback: if no non-busy shop jobs found, take any available job
+      if (!found && !candidateError) {
+        const result = await db
+          .from("sync_jobs")
+          .select("id")
+          .in("status", ["running", "pending"])
+          .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        found = result.data;
+        candidateError = result.error;
+      }
 
       if (candidateError) {
         console.error("[process-jobs] Job query error:", candidateError.message);
@@ -823,6 +863,9 @@ Deno.serve(async (req) => {
       case "delete_vehicle_pages":
         result = await processDeleteVehiclePages(db, job);
         break;
+      case "wheel_extract":
+        result = await processWheelExtract(db, job);
+        break;
       case "bulk_push":
         result = await processBulkPush(db, job);
         break;
@@ -838,6 +881,21 @@ Deno.serve(async (req) => {
       case "cleanup_collections":
         result = await processCleanupCollections(db, job);
         break;
+      case "sync_after_delete":
+        result = await processSyncAfterDelete(db, job);
+        break;
+      case "bulk_publish":
+        result = await processBulkPublish(db, job);
+        break;
+      case "wheel_push":
+        // Redirect to bulk_push — unified pipeline handles both vehicle + wheel products
+        console.log(`[wheel_push] Converting to bulk_push for unified processing`);
+        await db.from("sync_jobs").update({
+          type: "bulk_push",
+          metadata: JSON.stringify({ pushTags: true, pushMetafields: true, autoActivateMakes: true, _creationDone: true }),
+        }).eq("id", job.id);
+        result = { processed: 0, hasMore: true };
+        break;
       case "provider_auto_fetch":
       case "provider_refresh":
         result = await processProviderAutoFetch(db, job);
@@ -852,6 +910,13 @@ Deno.serve(async (req) => {
     // Update job progress
     const newProcessed = (job.processed_items ?? 0) + result.processed;
 
+    // Safety: if processed >= total, force completion even if handler says hasMore
+    const totalItems = job.total_items as number | null;
+    if (result.hasMore && totalItems && totalItems > 0 && newProcessed >= totalItems) {
+      console.log(`[process-jobs] Safety: processed ${newProcessed} >= total ${totalItems}, forcing completion`);
+      result.hasMore = false;
+    }
+
     if (result.error) {
       await db.from("sync_jobs").update({
         status: "failed",
@@ -861,9 +926,11 @@ Deno.serve(async (req) => {
         locked_at: null,
       }).eq("id", job.id);
     } else if (!result.hasMore) {
+      const finalItems = (job.total_items as number) || newProcessed;
       await db.from("sync_jobs").update({
         status: "completed",
-        processed_items: newProcessed,
+        processed_items: Math.max(newProcessed, finalItems),
+        progress: 100,
         completed_at: new Date().toISOString(),
         locked_at: null,
       }).eq("id", job.id);
@@ -871,13 +938,14 @@ Deno.serve(async (req) => {
       // Update tenant counts on job completion (keeps Dashboard accurate)
       try {
         const shopId = job.shop_id as string;
-        const [productRes, fitmentRes] = await Promise.all([
-          db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+        const [productRes, fitmentRes, wheelFitRes] = await Promise.all([
+          db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
           db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+          db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
         ]);
         await db.from("tenants").update({
           product_count: productRes.count ?? 0,
-          fitment_count: fitmentRes.count ?? 0,
+          fitment_count: (fitmentRes.count ?? 0) + (wheelFitRes.count ?? 0),
         }).eq("shop_id", shopId);
       } catch (_e) { /* non-critical */ }
     } else {
@@ -895,15 +963,25 @@ Deno.serve(async (req) => {
         ...(job.started_at ? {} : { started_at: new Date().toISOString() }),
       }).eq("id", job.id);
 
-      // Self-chain: immediately invoke for the next chunk (fire-and-forget)
-      fetch(`${SUPABASE_URL}/functions/v1/process-jobs`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ job_id: job.id, shop_id: job.shop_id }),
-      }).catch((e) => console.error("[process-jobs] Self-chain failed:", e));
+      // Self-chain: invoke next chunk immediately. MUST await to prevent Deno
+      // runtime from cancelling the request when the response is sent.
+      try {
+        const chainCtrl = new AbortController();
+        const chainTimeout = setTimeout(() => chainCtrl.abort(), 8000);
+        await fetch(`${SUPABASE_URL}/functions/v1/process-jobs`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ job_id: job.id, shop_id: job.shop_id }),
+          signal: chainCtrl.signal,
+        });
+        clearTimeout(chainTimeout);
+      } catch (_e) {
+        // Expected: AbortError from timeout, or network error — pg_cron safety net handles it
+        console.log("[process-jobs] Self-chain sent (may have timed out — next batch will pick up via pg_cron)");
+      }
     }
 
     return new Response(JSON.stringify({
@@ -945,98 +1023,76 @@ async function processExtractChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const shopId = job.shop_id as string;
 
-  // Get unmapped products — exclude staged (they're in provider view, not extraction queue)
-  const { data: products, error: fetchErr } = await db
-    .from("products")
-    .select("id, title, description, tags, product_type, vendor, sku, raw_data")
-    .eq("shop_id", shopId)
-    .neq("status", "staged")
-    .eq("fitment_status", "unmapped")
-    .order("id")
-    .limit(BATCH_SIZE);
-
-  if (fetchErr) return { processed: 0, hasMore: false, error: fetchErr.message };
-  if (!products || products.length === 0) return { processed: 0, hasMore: false };
-
-  // Load known makes
-  const { data: makeRows } = await db
-    .from("ymme_makes")
-    .select("id, name")
-    .eq("active", true)
-    .limit(5000);
-  const knownMakes = (makeRows || []).map((r: { name: string }) => r.name);
-
-  let autoMapped = 0;
-  let flagged = 0;
-
-  for (const product of products) {
-    try {
-      // Build combined text from all product fields including provider raw_data
-      const textParts = [
-        product.title ?? "",
-        product.description ?? "",
-        product.sku ?? "",
-        product.vendor ?? "",
-        product.product_type ?? "",
-        Array.isArray(product.tags) ? product.tags.join(" ") : (product.tags ?? ""),
-      ];
-
-      // Extract vehicle-relevant data from provider raw_data
-      const rawData = product.raw_data as Record<string, unknown> | null;
-      if (rawData && typeof rawData === "object") {
-        for (const [key, val] of Object.entries(rawData)) {
-          if (typeof val !== "string" || !val) continue;
-          const kl = key.toLowerCase();
-          if (kl.startsWith("tags_") || kl.startsWith("tag_") ||
-              kl.includes("fitment") || kl.includes("vehicle") ||
-              kl.includes("make") || kl.includes("model") ||
-              kl.includes("year") || kl.includes("engine") ||
-              kl.includes("application") || kl.includes("compatibility") ||
-              kl.includes("car") || kl.includes("auto")) {
-            textParts.push(val);
-          }
-        }
-      }
-
-      const allText = textParts.join(" ");
-
-      // Simple make detection — flag for review if make found, leave unmapped if not
-      const foundMakes = knownMakes.filter((make: string) => {
-        if (make.length <= 2) return false;
-        const regex = new RegExp(`\\b${make.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
-        return regex.test(allText);
-      });
-
-      if (foundMakes.length > 0) {
-        // Flag for review — the full matching engine runs in the Vercel app
-        await db.from("products")
-          .update({ fitment_status: "flagged", updated_at: new Date().toISOString() })
-          .eq("id", product.id)
-          .eq("shop_id", shopId);
-        flagged++;
-      } else {
-        // No vehicle signals detected — mark as "no_match" to prevent infinite reprocessing
-        await db.from("products")
-          .update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
-          .eq("id", product.id)
-          .eq("shop_id", shopId);
-      }
-    } catch (err) {
-      console.error(`[extract] Product ${product.id} failed:`, err);
-    }
-  }
-
-  // Check if more remain (exclude staged)
-  const { count } = await db
+  // Check if any unmapped products remain
+  const { count: unmappedCount } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
     .neq("status", "staged")
     .eq("fitment_status", "unmapped");
 
-  console.log(`[extract] Processed ${products.length}: ${autoMapped} auto, ${flagged} flagged, ${(count ?? 0)} remaining`);
+  if (!unmappedCount || unmappedCount === 0) return { processed: 0, hasMore: false };
 
-  return { processed: products.length, hasMore: (count ?? 0) > 0 };
+  // Delegate extraction to the Vercel auto-extract API — it has the FULL smart mapping engine
+  // (same buildVehicleProfile + scoreByProfile used for manual smart mapping)
+  // (same suggest-fitments logic used for manual smart mapping)
+  const appUrl = (job.metadata as any)?.appUrl || "https://autosync-v3.vercel.app";
+  let autoMapped = 0;
+  let noMatch = 0;
+
+  try {
+    const formBody = new URLSearchParams();
+    formBody.append("_action", "chunk");
+    formBody.append("jobId", job.id as string);
+
+    console.log(`[extract] Calling Vercel auto-extract chunk for job ${job.id}`);
+    const chunkRes = await fetch(`${appUrl}/app/api/auto-extract`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Internal-Key": SUPABASE_SERVICE_ROLE_KEY,
+        "X-Shop-Id": shopId,
+      },
+      redirect: "follow",
+      body: formBody.toString(),
+    });
+
+    if (chunkRes.ok) {
+      const result = await chunkRes.json();
+      autoMapped = result.autoMapped ?? result.chunkAutoMapped ?? 0;
+      noMatch = result.unmapped ?? result.chunkUnmapped ?? 0;
+      const chunkProcessed = result.processed ?? 10;
+      console.log(`[extract] Vercel chunk: ${autoMapped} mapped, ${noMatch} no-match, processed=${chunkProcessed}, remaining=${result.remaining ?? '?'}, done=${result.done}`);
+
+      if (result.done) {
+        return { processed: chunkProcessed, hasMore: false };
+      }
+    } else {
+      const errBody = await chunkRes.text().catch(() => "");
+      console.error(`[extract] Vercel auto-extract failed: HTTP ${chunkRes.status} — ${errBody.slice(0, 300)}`);
+      // Wait 30 seconds before retrying to prevent rapid infinite loops
+      await new Promise((r) => setTimeout(r, 30000));
+      return { processed: 0, hasMore: true };
+    }
+  } catch (err) {
+    console.error(`[extract] Vercel auto-extract call failed:`, err);
+    // Wait 30 seconds before retrying
+    await new Promise((r) => setTimeout(r, 30000));
+    return { processed: 0, hasMore: true };
+  }
+
+  // Check remaining unmapped
+  const { count: remaining } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .neq("status", "staged")
+    .eq("fitment_status", "unmapped");
+
+  const processed = autoMapped + noMatch;
+  console.log(`[extract] Chunk: ${autoMapped} mapped, ${noMatch} no-match, ${remaining ?? 0} remaining`);
+
+  return { processed: processed > 0 ? processed : 10, hasMore: (remaining ?? 0) > 0 };
 }
 
 // ── Push processor ─────────────────────────────────────────
@@ -1484,6 +1540,8 @@ async function processPushChunk(
             if (wf.pcd) tags.push(`_autosync_wheel_PCD_${wf.pcd}`);
             if (wf.diameter) tags.push(`_autosync_wheel_${wf.diameter}inch`);
             if (wf.width) tags.push(`_autosync_wheel_${wf.width}J`);
+            if (wf.offset_min != null) tags.push(`_autosync_wheel_ET${wf.offset_min}`);
+            if (wf.offset_max != null && wf.offset_max !== wf.offset_min) tags.push(`_autosync_wheel_ET${wf.offset_max}`);
           }
           if (pcdSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...pcdSet].sort()), ownerId: gid });
           if (diamSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
@@ -1597,6 +1655,11 @@ async function processPushChunk(
 
 // ── Collections processor ──────────────────────────────────
 
+// Collections per Edge Function invocation.
+// Each collection: ~1.5s (create + publish + DB). Edge Function timeout = 400s.
+// 200 × 1.5s = 300s — safe margin within 400s. Self-chain handles remaining batches.
+const COLLECTION_BATCH_SIZE = 200;
+
 async function processCollectionsChunk(
   db: ReturnType<typeof createClient>,
   job: Record<string, unknown>,
@@ -1616,15 +1679,22 @@ async function processCollectionsChunk(
     return text.slice(0, cut > 100 ? cut : 157) + "...";
   }
 
-  // Parse job metadata for strategy
+  // Parse strategy — check job metadata first, then app_settings, then default to "make"
   let strategy = "make", seoEnabled = true;
   try {
     const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : job.metadata;
-    if (meta) {
-      strategy = meta.strategy ?? "make";
+    if (meta?.strategy) {
+      strategy = meta.strategy;
       seoEnabled = meta.seoEnabled ?? true;
+    } else {
+      // Read from app_settings (where the Collections page saves the strategy)
+      const { data: settings } = await db.from("app_settings")
+        .select("collection_strategy")
+        .eq("shop_id", shopId).maybeSingle();
+      if (settings?.collection_strategy) strategy = settings.collection_strategy;
     }
   } catch (_e) { /* defaults */ }
+  console.log(`[collections] Strategy: ${strategy}, SEO: ${seoEnabled}`);
 
   // Get the Shopify access token
   const { data: tenant } = await db
@@ -1658,59 +1728,76 @@ async function processCollectionsChunk(
     if (batch.length < 1000) break;
   }
 
-  if (uniqueMakes.size === 0) {
+  // Get all unique PCDs and diameters from wheel fitments
+  const uniquePcds = new Set<string>();
+  const uniqueDiameters = new Set<number>();
+  let wfOffset = 0;
+  while (true) {
+    const { data: batch } = await db
+      .from("wheel_fitments")
+      .select("pcd, diameter")
+      .eq("shop_id", shopId)
+      .range(wfOffset, wfOffset + 999);
+    if (!batch || batch.length === 0) break;
+    for (const wf of batch) {
+      if (wf.pcd) uniquePcds.add(wf.pcd);
+      if (wf.diameter) uniqueDiameters.add(wf.diameter);
+    }
+    wfOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
+  console.log(`[collections] Found ${uniquePcds.size} unique PCDs, ${uniqueDiameters.size} unique diameters`);
+
+  if (uniqueMakes.size === 0 && uniquePcds.size === 0) {
     return { processed: 0, hasMore: false };
   }
 
-  // Check existing collections to avoid duplicates (paginated for 1000-row limit)
-  const existingSet = new Set<string>();
-  let exOffset = 0;
-  while (true) {
-    const { data: batch } = await db
-      .from("collection_mappings")
-      .select("make, model, title, type")
-      .eq("shop_id", shopId)
-      .range(exOffset, exOffset + 999);
-    if (!batch || batch.length === 0) break;
-    for (const e of batch) {
-      // Add make key
-      if (e.make && !e.model) existingSet.add(e.make);
-      // Add make|||model key
-      if (e.make && e.model) existingSet.add(`${e.make}|||${e.model}`);
-      // Add year key from title (e.g., "BMW 3 Series 2019-2022 Parts" → extract year range)
-      if (e.type === "make_model_year" && e.title) {
-        const yrMatch = e.title.match(/(\d{4}[-+]\d{0,4})\s+Parts$/);
-        if (yrMatch) existingSet.add(`${e.make}|||${e.model}|||${yrMatch[1]}`);
-      }
-    }
-    exOffset += batch.length;
-    if (batch.length < 1000) break;
+  // ── SYNC: Clear stale DB records and rebuild from Shopify's actual state ──
+  // This handles cases where collections were deleted directly from Shopify admin.
+  // We wipe our DB records and rebuild existingSet from what actually exists on Shopify.
+  // Only wipe on first invocation — subsequent self-chain continuations should NOT wipe
+  if ((job.processed_items ?? 0) === 0) {
+    await db.from("collection_mappings").delete().eq("shop_id", shopId);
   }
 
-  // Also check Shopify for existing collections (prevents duplicates when DB mappings are cleared)
-  let shopifyCursor: string | null = null;
-  while (true) {
-    const shopifyColls = await shopifyGraphQL(shopId, accessToken,
-      `{ collections(first: 250${shopifyCursor ? `, after: "${shopifyCursor}"` : ""}) { edges { node { title ruleSet { rules { column condition } } } } pageInfo { hasNextPage endCursor } } }`
-    );
-    const edges = shopifyColls?.data?.collections?.edges ?? [];
-    for (const edge of edges) {
-      const rules = (edge.node.ruleSet?.rules ?? []) as Array<{ column: string; condition: string }>;
-      const hasAutoSync = rules.some(r => r.column === "TAG" && r.condition?.startsWith("_autosync_"));
-      if (hasAutoSync) {
-        // Extract make/model from title (e.g., "BMW 3 Series 2019-2022 Parts" → BMW|||3 Series)
-        const title = edge.node.title as string;
-        const partsIdx = title.lastIndexOf(" Parts");
-        if (partsIdx > 0) {
-          const namePart = title.substring(0, partsIdx);
-          existingSet.add(namePart); // "BMW" or "BMW 3 Series" or "BMW 3 Series 2019-2022"
+  const existingSet = new Set<string>();
+  // On first invocation (processed_items === 0), DB was just cleared — nothing to read.
+  // On self-chain invocations (processed_items > 0), DB has records from prior batches — read them.
+  const isFirstInvocation = (job.processed_items ?? 0) === 0;
+  if (!isFirstInvocation) {
+    let exOffset = 0;
+    while (true) {
+      const { data: batch } = await db
+        .from("collection_mappings")
+        .select("make, model, title, type")
+        .eq("shop_id", shopId)
+        .range(exOffset, exOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const e of batch) {
+        // Add make key
+        if (e.make && !e.model) existingSet.add(e.make);
+        // Add make|||model key
+        if (e.make && e.model) existingSet.add(`${e.make}|||${e.model}`);
+        // Add year key from title (e.g., "BMW 3 Series 2019-2022 Parts" → extract year range)
+        if (e.type === "make_model_year" && e.title) {
+          const yrMatch = e.title.match(/(\d{4}[-+]\d{0,4})\s+Parts$/);
+          if (yrMatch) existingSet.add(`${e.make}|||${e.model}|||${yrMatch[1]}`);
+        }
+        // Add ALL wheel collection titles (PCD, diameter, width, offset)
+        if ((e.type === "wheel_pcd" || e.type === "wheel_diameter" || e.type === "wheel_width" || e.type === "wheel_offset") && e.title) {
+          existingSet.add(e.title);
         }
       }
+      exOffset += batch.length;
+      if (batch.length < 1000) break;
     }
-    const pi = shopifyColls?.data?.collections?.pageInfo;
-    if (!pi?.hasNextPage) break;
-    shopifyCursor = pi.endCursor;
+    console.log(`[collections] Loaded ${existingSet.size} existing collections into memory`);
   }
+
+  // Shopify scan REMOVED — the shopifyCollectionExists() check before EACH creation
+  // is the atomic dedup. The Shopify scan was causing a bug: it found old collections
+  // → added to existingSet → skipped creation → but never inserted into DB.
+  // Now: DB cleared above, existingSet is empty, each creation checks Shopify directly.
 
   // Calculate and set total_items so progress bar works
   // For make_model_year, we need to count year combos too
@@ -1735,11 +1822,17 @@ async function processCollectionsChunk(
     }
     yearComboCount = yearSet.size;
   }
-  const totalNeeded = strategy === "make"
+  // Vehicle collections count
+  const vehicleCollections = strategy === "make"
     ? uniqueMakes.size
     : strategy === "make_model_year"
       ? uniqueMakes.size + uniqueMakeModels.size + yearComboCount
       : uniqueMakes.size + uniqueMakeModels.size;
+  // Wheel collections: PCD + diameter + width + offset
+  // Width and offset counts come from wheel_fitments (queried later in the handler)
+  // Estimate: assume ~4 widths + ~8 offsets (actual count calculated during creation)
+  const wheelCollections = uniquePcds.size + uniqueDiameters.size + 12;
+  const totalNeeded = vehicleCollections + wheelCollections;
   if ((job.total_items as number) === 0 || !(job.total_items as number)) {
     await db.from("sync_jobs").update({ total_items: totalNeeded }).eq("id", job.id);
   }
@@ -1753,6 +1846,21 @@ async function processCollectionsChunk(
       }
     }
   `;
+
+  // ── Dedup helper: check Shopify for existing collection by exact title ──
+  // This is the ATOMIC check that prevents ALL duplicates regardless of DB/cache state
+  async function shopifyCollectionExists(title: string): Promise<string | null> {
+    // Escape both double quotes and single quotes for Shopify's search query syntax
+    const escaped = title.replace(/"/g, '\\"').replace(/'/g, "\\'");
+    const res = await shopifyGraphQL(shopId, accessToken,
+      `{ collections(first: 1, query: "title:'${escaped}'") { edges { node { id title } } } }`
+    );
+    const edges = res?.data?.collections?.edges ?? [];
+    for (const e of edges) {
+      if (e.node.title === title) return e.node.id;
+    }
+    return null;
+  }
 
   const COLLECTION_PUBLISH_MUTATION = `
     mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
@@ -1784,7 +1892,7 @@ async function processCollectionsChunk(
     const { count: makeExists } = await db.from("collection_mappings")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId).eq("title", title);
-    if ((makeExists ?? 0) > 0) { existingSet.add(make); continue; }
+    if ((makeExists ?? 0) > 0) { existingSet.add(make); created++; continue; }
     const input: Record<string, unknown> = {
       title,
       ruleSet: {
@@ -1820,6 +1928,20 @@ async function processCollectionsChunk(
 <li><strong>Trusted Brands</strong> — We stock parts from leading aftermarket manufacturers</li>
 <li><strong>Expert Knowledge</strong> — Specialist ${make} modification experience and support</li>
 </ul>`;
+
+      // DEDUP: Check Shopify for existing collection with same title before creating
+      const existingId = await shopifyCollectionExists(title);
+      if (existingId) {
+        const numId = parseInt(existingId.replace(/\D/g, ""), 10);
+        await db.from("collection_mappings").upsert({
+          shop_id: shopId, make, model: null, type: "make",
+          title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          shopify_collection_id: numId, synced_at: new Date().toISOString(),
+        }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+        existingSet.add(make);
+        created++; // Count dedup-found collections so hasMore stays true for model/year phase
+        continue;
+      }
 
       const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
         method: "POST",
@@ -1869,14 +1991,14 @@ async function processCollectionsChunk(
     }
 
     // Limit per invocation to stay within Edge Function timeout
-    if (created >= 10) break;
+    if (created >= COLLECTION_BATCH_SIZE) break;
   }
 
   // Create model-level collections if strategy includes models
-  if ((strategy === "make_model" || strategy === "make_model_year") && created < 10) {
+  if ((strategy === "make_model" || strategy === "make_model_year") && created < COLLECTION_BATCH_SIZE) {
     for (const key of uniqueMakeModels) {
       if (existingSet.has(key)) continue;
-      if (created >= 10) break;
+      if (created >= COLLECTION_BATCH_SIZE) break;
 
       const [make, model] = key.split("|||");
       const title = `${make} ${model} Parts`;
@@ -1885,7 +2007,7 @@ async function processCollectionsChunk(
       const { count: mmExists } = await db.from("collection_mappings")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId).eq("title", title);
-      if ((mmExists ?? 0) > 0) { existingSet.add(key); continue; }
+      if ((mmExists ?? 0) > 0) { existingSet.add(key); created++; continue; }
       const input: Record<string, unknown> = {
         title,
         ruleSet: {
@@ -1921,6 +2043,20 @@ async function processCollectionsChunk(
 <li>Brake upgrades, pads, and discs</li>
 <li>Styling accessories and body parts</li>
 </ul>`;
+
+        // DEDUP: Check Shopify before creating
+        const existingModelId = await shopifyCollectionExists(title);
+        if (existingModelId) {
+          const numId = parseInt(existingModelId.replace(/\D/g, ""), 10);
+          await db.from("collection_mappings").upsert({
+            shop_id: shopId, make, model, type: "make_model",
+            title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            shopify_collection_id: numId, synced_at: new Date().toISOString(),
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          existingSet.add(key);
+          created++;
+          continue;
+        }
 
         const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
@@ -1969,7 +2105,7 @@ async function processCollectionsChunk(
   }
 
   // Create year-range collections if strategy is make_model_year
-  if (strategy === "make_model_year" && created < 10) {
+  if (strategy === "make_model_year" && created < COLLECTION_BATCH_SIZE) {
     // Get year ranges from fitments (paginated to avoid 1000-row limit)
     const yearCombos = new Set<string>();
     let yrOffset = 0;
@@ -1993,7 +2129,7 @@ async function processCollectionsChunk(
     console.log(`[collections] Found ${yearCombos.size} unique year combos`);
 
     for (const combo of yearCombos) {
-      if (created >= 10) break;
+      if (created >= COLLECTION_BATCH_SIZE) break;
       const [make, model, yearRange] = combo.split("|||");
       const yearKey = `${make}|||${model}|||${yearRange}`;
       if (existingSet.has(yearKey)) continue;
@@ -2005,6 +2141,7 @@ async function processCollectionsChunk(
         .eq("shop_id", shopId).eq("title", title);
       if ((existsInDb ?? 0) > 0) {
         existingSet.add(yearKey); // Cache for this invocation
+        created++;
         continue;
       }
 
@@ -2037,6 +2174,20 @@ async function processCollectionsChunk(
       }
 
       try {
+        // DEDUP: Check Shopify before creating year collection
+        const existingYearId = await shopifyCollectionExists(title);
+        if (existingYearId) {
+          const numId = parseInt(existingYearId.replace(/\D/g, ""), 10);
+          await db.from("collection_mappings").upsert({
+            shop_id: shopId, make, model, type: "make_model_year",
+            title, handle: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+            shopify_collection_id: numId, synced_at: new Date().toISOString(),
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          existingSet.add(yearKey);
+          created++;
+          continue;
+        }
+
         const makeLogoRow = { logo_url: logoMap.get(make) ?? null };
         if (makeLogoRow?.logo_url) {
           input.image = { src: makeLogoRow.logo_url, altText: `${make} ${model} ${yearRange} parts` };
@@ -2085,23 +2236,325 @@ async function processCollectionsChunk(
     }
   }
 
+  // ── Wheel PCD Collections ──
+  // Creates collections like "5x112 Wheels", "5x120 Wheels" etc.
+  if (created < COLLECTION_BATCH_SIZE && uniquePcds.size > 0) {
+    for (const pcd of uniquePcds) {
+      if (created >= COLLECTION_BATCH_SIZE) break;
+      const pcdTitle = `${pcd} Wheels`;
+      if (existingSet.has(pcdTitle)) continue;
+
+      // DB-level dedup
+      const { count: pcdExists } = await db.from("collection_mappings")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("title", pcdTitle);
+      if ((pcdExists ?? 0) > 0) { existingSet.add(pcdTitle); created++; continue; }
+
+      // DEDUP: Check Shopify for existing collection with same title before creating
+      const existingPcdId = await shopifyCollectionExists(pcdTitle);
+      if (existingPcdId) {
+        const numId = parseInt(existingPcdId.replace(/\D/g, ""), 10);
+        await db.from("collection_mappings").upsert({
+          shop_id: shopId, make: null, model: null, type: "wheel_pcd",
+          title: pcdTitle, handle: pcdTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          shopify_collection_id: numId, synced_at: new Date().toISOString(),
+        }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+        existingSet.add(pcdTitle);
+        created++;
+        continue;
+      }
+
+      const pcdTag = `_autosync_wheel_PCD_${pcd}`;
+      const input: Record<string, unknown> = {
+        title: pcdTitle,
+        ruleSet: {
+          appliedDisjunctively: false,
+          rules: [{ column: "TAG", relation: "EQUALS", condition: pcdTag }],
+        },
+      };
+
+      if (seoEnabled) {
+        input.seo = {
+          title: seoTitle(`${pcd} Wheels | Alloy Wheels & Rims | Shop by PCD`),
+          description: seoDesc(`Browse ${pcd} PCD alloy wheels and rims. All wheels are fitment-verified with correct bolt pattern, offset, and center bore specifications. Find the perfect wheels for your vehicle.`),
+        };
+        input.descriptionHtml = `<h2>${pcd} Alloy Wheels &amp; Rims</h2>
+<p>Shop our complete collection of <strong>${pcd}</strong> bolt pattern alloy wheels and rims. Every wheel in this collection uses the ${pcd} PCD (Pitch Circle Diameter) bolt pattern, ensuring a perfect fit for compatible vehicles.</p>
+<p>Our ${pcd} wheel collection includes options across multiple diameters, widths, and offsets — so you can find the ideal wheel for your vehicle's specifications.</p>
+<h3>What Does ${pcd} Mean?</h3>
+<p>The bolt pattern ${pcd} indicates the number of bolt holes and the diameter of the circle they form. For example, "${pcd}" means the wheel has a specific number of bolts arranged on a circle of a specific diameter in millimetres.</p>
+<h3>Finding the Right ${pcd} Wheel</h3>
+<ul>
+<li><strong>Verified Bolt Pattern</strong> — Every wheel confirmed as ${pcd} PCD</li>
+<li><strong>Multiple Sizes</strong> — Available in various diameters and widths</li>
+<li><strong>Offset Options</strong> — Choose the right ET offset for your vehicle</li>
+<li><strong>Center Bore Info</strong> — Hub-centric fitment data included</li>
+</ul>`;
+      }
+
+      try {
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+          body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
+        });
+        const json = await res.json();
+        const collection = json?.data?.collectionCreate?.collection;
+
+        if (collection) {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+            body: JSON.stringify({
+              query: COLLECTION_PUBLISH_MUTATION,
+              variables: {
+                id: collection.id,
+                input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })),
+              },
+            }),
+          });
+
+          const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
+          await db.from("collection_mappings").upsert({
+            shop_id: shopId, make: null, model: null,
+            type: "wheel_pcd",
+            title: pcdTitle,
+            shopify_collection_id: numId,
+            handle: collection.handle,
+            image_url: null,
+            seo_title: seoEnabled ? seoTitle(`${pcd} Wheels | Alloy Wheels & Rims | Shop by PCD`) : null,
+            seo_description: seoEnabled ? seoDesc(`Browse ${pcd} PCD alloy wheels and rims. Fitment-verified with correct bolt pattern, offset, and center bore.`) : null,
+            synced_at: new Date().toISOString(),
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          console.log(`[collections] Created PCD collection: ${pcdTitle} (${collection.handle})`);
+          created++;
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`[collections] Failed PCD collection ${pcdTitle}:`, err);
+      }
+    }
+  }
+
+  // ── Wheel Diameter Collections ──
+  // Creates collections like "18 Inch Wheels", "19 Inch Wheels" etc.
+  if (created < COLLECTION_BATCH_SIZE && uniqueDiameters.size > 0) {
+    const sortedDiameters = [...uniqueDiameters].sort((a, b) => a - b);
+    for (const diameter of sortedDiameters) {
+      if (created >= COLLECTION_BATCH_SIZE) break;
+      const diaTitle = `${diameter} Inch Wheels`;
+      if (existingSet.has(diaTitle)) continue;
+
+      // DB-level dedup
+      const { count: diaExists } = await db.from("collection_mappings")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).eq("title", diaTitle);
+      if ((diaExists ?? 0) > 0) { existingSet.add(diaTitle); created++; continue; }
+
+      // DEDUP: Check Shopify for existing collection with same title before creating
+      const existingDiaId = await shopifyCollectionExists(diaTitle);
+      if (existingDiaId) {
+        const numId = parseInt(existingDiaId.replace(/\D/g, ""), 10);
+        await db.from("collection_mappings").upsert({
+          shop_id: shopId, make: null, model: null, type: "wheel_diameter",
+          title: diaTitle, handle: diaTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+          shopify_collection_id: numId, synced_at: new Date().toISOString(),
+        }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+        existingSet.add(diaTitle);
+        created++;
+        continue;
+      }
+
+      const diaTag = `_autosync_wheel_${diameter}inch`;
+      const input: Record<string, unknown> = {
+        title: diaTitle,
+        ruleSet: {
+          appliedDisjunctively: false,
+          rules: [{ column: "TAG", relation: "EQUALS", condition: diaTag }],
+        },
+      };
+
+      if (seoEnabled) {
+        input.seo = {
+          title: seoTitle(`${diameter} Inch Wheels | Alloy Rims | Shop by Size`),
+          description: seoDesc(`Browse ${diameter}" alloy wheels and rims. Multiple bolt patterns, widths, and offsets available. Fitment-verified for guaranteed compatibility with your vehicle.`),
+        };
+        input.descriptionHtml = `<h2>${diameter} Inch Alloy Wheels &amp; Rims</h2>
+<p>Explore our collection of <strong>${diameter} inch</strong> alloy wheels and rims. Whether you're upgrading from factory wheels or replacing your current set, we have ${diameter}" wheels available across multiple bolt patterns, widths, and offset options.</p>
+<p>Every wheel includes detailed fitment specifications including PCD, center bore, and ET offset — making it easy to find wheels that fit your vehicle perfectly.</p>
+<h3>Why Choose ${diameter}" Wheels?</h3>
+<ul>
+<li><strong>Multiple Bolt Patterns</strong> — Available in various PCD configurations</li>
+<li><strong>Width Options</strong> — Choose the right width for your tyre setup</li>
+<li><strong>Offset Range</strong> — ET values to suit different vehicle applications</li>
+<li><strong>Fitment Data</strong> — Full specifications for every wheel</li>
+</ul>`;
+      }
+
+      try {
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+          body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }),
+        });
+        const json = await res.json();
+        const collection = json?.data?.collectionCreate?.collection;
+
+        if (collection) {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+            body: JSON.stringify({
+              query: COLLECTION_PUBLISH_MUTATION,
+              variables: {
+                id: collection.id,
+                input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })),
+              },
+            }),
+          });
+
+          const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
+          await db.from("collection_mappings").upsert({
+            shop_id: shopId, make: null, model: null,
+            type: "wheel_diameter",
+            title: diaTitle,
+            shopify_collection_id: numId,
+            handle: collection.handle,
+            image_url: null,
+            seo_title: seoEnabled ? seoTitle(`${diameter} Inch Wheels | Alloy Rims | Shop by Size`) : null,
+            seo_description: seoEnabled ? seoDesc(`Browse ${diameter}" alloy wheels and rims. Multiple bolt patterns, widths, and offsets available. Fitment-verified.`) : null,
+            synced_at: new Date().toISOString(),
+          }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          console.log(`[collections] Created diameter collection: ${diaTitle} (${collection.handle})`);
+          created++;
+        }
+
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) {
+        console.error(`[collections] Failed diameter collection ${diaTitle}:`, err);
+      }
+    }
+  }
+
+  // ── Wheel Width Collections (e.g., "8.5J Wheels", "9J Wheels") ──
+  if (created < COLLECTION_BATCH_SIZE) {
+    const uniqueWidths = new Set<string>();
+    let uwOffset = 0;
+    while (true) {
+      const { data: batch } = await db.from("wheel_fitments").select("width").eq("shop_id", shopId).not("width", "is", null).range(uwOffset, uwOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const wf of batch) { if (wf.width) uniqueWidths.add(String(wf.width)); }
+      uwOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
+
+    for (const w of uniqueWidths) {
+      if (created >= COLLECTION_BATCH_SIZE) break;
+      const widthTitle = `${w}J Wheels`;
+      if (existingSet.has(widthTitle)) continue;
+      const { count: wExists } = await db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("title", widthTitle);
+      if ((wExists ?? 0) > 0) { existingSet.add(widthTitle); created++; continue; }
+      const wTag = `_autosync_wheel_${w}J`;
+      const input: Record<string, unknown> = {
+        title: widthTitle,
+        ruleSet: { appliedDisjunctively: false, rules: [{ column: "TAG", relation: "EQUALS", condition: wTag }] },
+      };
+      if (seoEnabled) {
+        input.seo = { title: seoTitle(`${w}J Width Wheels | Alloy Rims`), description: seoDesc(`Browse ${w}J width alloy wheels. Multiple bolt patterns and offsets available.`) };
+      }
+      try {
+        const eWid = await shopifyCollectionExists(widthTitle);
+        if (eWid) {
+          await db.from("collection_mappings").upsert({ shop_id: shopId, make: null, model: null, type: "wheel_width", title: widthTitle, handle: widthTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-"), shopify_collection_id: parseInt(eWid.replace(/\D/g, ""), 10), synced_at: new Date().toISOString() }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          existingSet.add(widthTitle); created++; continue;
+        }
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, { method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken }, body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }) });
+        const json = await res.json();
+        const collection = json?.data?.collectionCreate?.collection;
+        if (collection) {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, { method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken }, body: JSON.stringify({ query: COLLECTION_PUBLISH_MUTATION, variables: { id: collection.id, input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })) } }) });
+          await db.from("collection_mappings").upsert({ shop_id: shopId, make: null, model: null, type: "wheel_width", title: widthTitle, shopify_collection_id: parseInt(collection.id.replace(/\D/g, ""), 10), handle: collection.handle, synced_at: new Date().toISOString() }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          console.log(`[collections] Created width collection: ${widthTitle}`);
+          created++;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) { console.error(`[collections] Failed width collection ${widthTitle}:`, err); }
+    }
+  }
+
+  // ── Wheel Offset Collections (e.g., "ET45 Wheels", "ET30 Wheels") ──
+  if (created < COLLECTION_BATCH_SIZE) {
+    const uniqueOffsets = new Set<string>();
+    let uoOffset = 0;
+    while (true) {
+      const { data: batch } = await db.from("wheel_fitments").select("offset_min").eq("shop_id", shopId).not("offset_min", "is", null).range(uoOffset, uoOffset + 999);
+      if (!batch || batch.length === 0) break;
+      for (const wf of batch) { if (wf.offset_min != null) uniqueOffsets.add(String(wf.offset_min)); }
+      uoOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
+
+    for (const et of uniqueOffsets) {
+      if (created >= COLLECTION_BATCH_SIZE) break;
+      const etTitle = `ET${et} Wheels`;
+      if (existingSet.has(etTitle)) continue;
+      const { count: etExists } = await db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("title", etTitle);
+      if ((etExists ?? 0) > 0) { existingSet.add(etTitle); created++; continue; }
+      const etTag = `_autosync_wheel_ET${et}`;
+      const input: Record<string, unknown> = {
+        title: etTitle,
+        ruleSet: { appliedDisjunctively: false, rules: [{ column: "TAG", relation: "EQUALS", condition: etTag }] },
+      };
+      if (seoEnabled) {
+        input.seo = { title: seoTitle(`ET${et} Offset Wheels | Alloy Rims`), description: seoDesc(`Browse ET${et} offset alloy wheels. Multiple bolt patterns and sizes available.`) };
+      }
+      try {
+        const eOff = await shopifyCollectionExists(etTitle);
+        if (eOff) {
+          await db.from("collection_mappings").upsert({ shop_id: shopId, make: null, model: null, type: "wheel_offset", title: etTitle, handle: etTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-"), shopify_collection_id: parseInt(eOff.replace(/\D/g, ""), 10), synced_at: new Date().toISOString() }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          existingSet.add(etTitle); created++; continue;
+        }
+        const res = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, { method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken }, body: JSON.stringify({ query: COLLECTION_CREATE_MUTATION, variables: { input } }) });
+        const json = await res.json();
+        const collection = json?.data?.collectionCreate?.collection;
+        if (collection) {
+          await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, { method: "POST", headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken }, body: JSON.stringify({ query: COLLECTION_PUBLISH_MUTATION, variables: { id: collection.id, input: (await getPublicationIds(shopId, accessToken, db)).map((pid: string) => ({ publicationId: pid })) } }) });
+          await db.from("collection_mappings").upsert({ shop_id: shopId, make: null, model: null, type: "wheel_offset", title: etTitle, shopify_collection_id: parseInt(collection.id.replace(/\D/g, ""), 10), handle: collection.handle, synced_at: new Date().toISOString() }, { onConflict: "shop_id,title", ignoreDuplicates: true });
+          console.log(`[collections] Created offset collection: ${etTitle}`);
+          created++;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      } catch (err) { console.error(`[collections] Failed offset collection ${etTitle}:`, err); }
+    }
+  }
+
   // Check if more collections need creating (totalNeeded already calculated above)
   const { count: existingCount } = await db
     .from("collection_mappings")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId);
 
-  // If we created 0 in this tick, nothing more to do — avoid infinite loop
-  // This handles the case where existingCount < totalNeeded due to title mismatches
-  // but all actual combos already exist in the DB
-  const hasMore = created > 0 && (existingCount ?? 0) < totalNeeded;
+  // Determine if more work remains:
+  // - If we created 0 collections this batch, STOP — all remaining already exist
+  //   (dedup checked DB + Shopify). The user can trigger another collections job later
+  //   if new fitments are added.
+  // - If we created >0, continue only if DB count < target (more remain)
+  // Recount existing collections after this batch to check if more are needed
+  const { count: newExistingCount } = await db.from("collection_mappings")
+    .select("id", { count: "exact", head: true }).eq("shop_id", shopId);
+  const hasMore = (newExistingCount ?? 0) < totalNeeded && created > 0;
 
-  console.log(`[collections] Created ${created}, total ${existingCount}/${totalNeeded}, hasMore=${hasMore}`);
+  console.log(`[collections] Created ${created}, total ${newExistingCount}/${totalNeeded}, hasMore=${hasMore}`);
 
   return { processed: created, hasMore };
 }
 
-// ── Vehicle Pages processor ────────────────────────────────
+// ── Vehicle Pages processor (Bulk Operations) ─────────────
+// Uses Shopify's Bulk Mutation API to create all metaobjects at once.
+// Phase 1: Build JSONL + upload + start bulk operation
+// Phase 2: Poll until complete
+// Phase 3: Mark all as synced in DB
 
 async function processVehiclePagesChunk(
   db: ReturnType<typeof createClient>,
@@ -2109,7 +2562,7 @@ async function processVehiclePagesChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const shopId = job.shop_id as string;
   const alreadyProcessed = (job.processed_items as number) ?? 0;
-  const VPAGE_BATCH = 25; // Vehicle pages per batch (Pro: 400s wall clock, ~500ms per page)
+  const VPAGE_BATCH = 200; // Metaobjects per JSONL batch (bulk op handles them all server-side)
 
   // Get the Shopify access token
   const { data: tenant } = await db
@@ -2165,25 +2618,52 @@ async function processVehiclePagesChunk(
     return { processed: 0, hasMore: false };
   }
 
-  // Get unique engine IDs
   const uniqueEngineIds = allEngineIds;
 
-  // Get engines with their make/model info via JOINs
-  const engineBatch = uniqueEngineIds.slice(alreadyProcessed, alreadyProcessed + VPAGE_BATCH);
-  if (engineBatch.length === 0) {
+  if (uniqueEngineIds.length === 0) {
     return { processed: 0, hasMore: false };
   }
 
-  // Update total if first batch
+  // Update total on first run
   if (alreadyProcessed === 0) {
     await db.from("sync_jobs").update({ total_items: uniqueEngineIds.length }).eq("id", job.id);
   }
 
-  // Get engine details
-  const { data: engines } = await db
-    .from("ymme_engines")
-    .select("id, name, model_id, code, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, aspiration, drive_type, transmission_type, body_type, cylinders, cylinder_config")
-    .in("id", engineBatch);
+  // Instead of slicing by alreadyProcessed (unreliable across invocations),
+  // filter out already-synced engines and take the next batch
+  const alreadySyncedSet2 = new Set<string>();
+  let syncOff2 = 0;
+  while (true) {
+    const { data: batch } = await db.from("vehicle_page_sync")
+      .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced")
+      .range(syncOff2, syncOff2 + 999);
+    if (!batch || batch.length === 0) break;
+    for (const s of batch) alreadySyncedSet2.add(s.engine_id);
+    syncOff2 += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  // Get unsynced engine IDs — take first 200 for this invocation
+  const unsyncedIds = uniqueEngineIds.filter(id => !alreadySyncedSet2.has(id));
+  const batchIds = unsyncedIds.slice(0, 200);
+
+  if (batchIds.length === 0) {
+    return { processed: 0, hasMore: false };
+  }
+
+  console.log(`[vehicle_pages] Processing ${batchIds.length} unsynced of ${uniqueEngineIds.length} total (${alreadySyncedSet2.size} already synced)`);
+
+  // Get engine details for this batch — chunk .in() to avoid PostgREST URL length limits
+  const engines: Record<string, unknown>[] = [];
+  for (let i = 0; i < batchIds.length; i += 200) {
+    const chunk = batchIds.slice(i, i + 200);
+    const { data: batch } = await db
+      .from("ymme_engines")
+      .select("id, name, model_id, code, displacement_cc, fuel_type, power_hp, power_kw, torque_nm, year_from, year_to, aspiration, drive_type, transmission_type, body_type, cylinders, cylinder_config")
+      .in("id", chunk);
+    if (batch) engines.push(...batch);
+  }
+  const engineBatch = batchIds; // Current batch IDs for reference
 
   if (!engines || engines.length === 0) {
     // No engine records found for this batch — skip them and advance the counter
@@ -2191,12 +2671,17 @@ async function processVehiclePagesChunk(
     return { processed: engineBatch.length, hasMore: (alreadyProcessed + engineBatch.length) < uniqueEngineIds.length };
   }
 
-  // Get vehicle specs for richer data (hero images, full specs JSON, etc.)
-  const { data: vehicleSpecs } = await db
-    .from("ymme_vehicle_specs")
-    .select("engine_id, hero_image_url, top_speed_kmh, acceleration_0_100, kerb_weight_kg, transmission_type, drive_type, body_type, raw_specs")
-    .in("engine_id", engineBatch);
-  const specMap = new Map((vehicleSpecs || []).map((s: Record<string, unknown>) => [s.engine_id, s]));
+  // Get vehicle specs — chunk .in() for PostgREST URL limits
+  const vehicleSpecsBatch: Record<string, unknown>[] = [];
+  for (let i = 0; i < batchIds.length; i += 200) {
+    const chunk = batchIds.slice(i, i + 200);
+    const { data: batch } = await db
+      .from("ymme_vehicle_specs")
+      .select("engine_id, hero_image_url, top_speed_kmh, acceleration_0_100, kerb_weight_kg, transmission_type, drive_type, body_type, raw_specs")
+      .in("engine_id", chunk);
+    if (batch) vehicleSpecsBatch.push(...batch);
+  }
+  const specMap = new Map(vehicleSpecsBatch.map((s: Record<string, unknown>) => [s.engine_id, s]));
 
   // Get model IDs to fetch make/model names
   const modelIds = [...new Set(engines.map((e: { model_id: number }) => e.model_id))];
@@ -2247,26 +2732,15 @@ async function processVehiclePagesChunk(
   let processed = 0;
 
   // Ensure metaobject definition exists
-  const DEFINITION_QUERY = `{
-    metaobjectDefinitions(first: 50) {
-      nodes { type name }
-    }
-  }`;
-
-  const defRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
-    body: JSON.stringify({ query: DEFINITION_QUERY }),
-  });
-  const defJson = await defRes.json();
-  const hasDef = (defJson?.data?.metaobjectDefinitions?.nodes ?? [])
+  const defRes = await shopifyGraphQL(shopId, accessToken, `{
+    metaobjectDefinitions(first: 50) { nodes { type name } }
+  }`);
+  const hasDef = (defRes?.data?.metaobjectDefinitions?.nodes ?? [])
     .some((d: { type: string }) => d.type.includes("vehicle_spec"));
 
   if (!hasDef) {
-    // Auto-create the metaobject definition
     console.log("[vehicle_pages] Creating metaobject definition...");
-    // MUST match vehicle-pages.server.ts definition EXACTLY — same 17 fields, same capabilities
-    const CREATE_DEF = `mutation {
+    const createDefRes = await shopifyGraphQL(shopId, accessToken, `mutation {
       metaobjectDefinitionCreate(definition: {
         type: "$app:vehicle_spec"
         name: "Vehicle Specification"
@@ -2300,59 +2774,69 @@ async function processVehiclePagesChunk(
         metaobjectDefinition { type }
         userErrors { field message }
       }
-    }`;
-    const createDefRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
-      body: JSON.stringify({ query: CREATE_DEF }),
-    });
-    const createDefJson = await createDefRes.json();
-    const defErrors = createDefJson?.data?.metaobjectDefinitionCreate?.userErrors;
+    }`);
+    const defErrors = createDefRes?.data?.metaobjectDefinitionCreate?.userErrors;
     if (defErrors?.length) {
-      // "TAKEN" means definition already exists — that's fine, continue
       const isTaken = defErrors.some((e: { code?: string; message: string }) => e.code === "TAKEN" || e.message?.includes("already been taken"));
       if (!isTaken) {
-        console.error("[vehicle_pages] Definition creation errors:", defErrors);
         return { processed: 0, hasMore: false, error: "Failed to create metaobject definition: " + defErrors.map((e: { message: string }) => e.message).join(", ") };
       }
-      console.log("[vehicle_pages] Definition already exists, continuing...");
     }
-    console.log("[vehicle_pages] Definition created successfully");
+    console.log("[vehicle_pages] Definition ready");
   }
 
   // DEDUP: Check which engines already have synced vehicle pages — skip those
-  const { data: existingSyncs } = await db
-    .from("vehicle_page_sync")
-    .select("engine_id")
-    .eq("shop_id", shopId)
-    .eq("sync_status", "synced")
-    .in("engine_id", specs.map((s: { id: string }) => s.id));
-  const alreadySyncedSet = new Set((existingSyncs ?? []).map((s: { engine_id: string }) => s.engine_id));
+  const alreadySyncedSet = new Set<string>();
+  let syncOffset = 0;
+  while (true) {
+    const { data: batch } = await db.from("vehicle_page_sync")
+      .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced")
+      .range(syncOffset, syncOffset + 999);
+    if (!batch || batch.length === 0) break;
+    for (const s of batch) alreadySyncedSet.add(s.engine_id);
+    syncOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
 
-  for (const spec of specs) {
-    // Skip engines that already have a synced vehicle page
-    if (alreadySyncedSet.has(spec.id)) {
-      processed++;
-      continue;
-    }
+  // Filter specs to only those not already synced
+  const unsyncedSpecs = specs.filter((s: { id: string }) => !alreadySyncedSet.has(s.id));
+  console.log(`[vehicle_pages] ${specs.length} total specs, ${alreadySyncedSet.size} already synced, ${unsyncedSpecs.length} to create`);
 
-    const rawSpecs = typeof spec.raw_specs === "string" ? JSON.parse(spec.raw_specs) : (spec.raw_specs ?? {});
-    const handle = `vehicle-specs-${(spec.make_name || "").toLowerCase().replace(/\s+/g, "-")}-${(spec.model_name || "").toLowerCase().replace(/\s+/g, "-")}-${(spec.variant || "").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.replace(/-+/g, "-").replace(/-$/, "").substring(0, 100);
+  if (unsyncedSpecs.length === 0) {
+    return { processed: 0, hasMore: false };
+  }
+
+  // Create metaobjects sequentially — each takes ~500ms.
+  // 200 × 500ms = 100s, well within 400s Edge Function timeout.
+  // Self-chain handles remaining batches for 1000+ page stores.
+  const PER_INVOCATION = 200;
+  const specsThisBatch = unsyncedSpecs.slice(0, PER_INVOCATION);
+  let created = 0;
+
+  console.log(`[vehicle_pages] Processing ${specsThisBatch.length} of ${unsyncedSpecs.length} unsynced specs (parallel)`);
+
+  // ── Parallel execution: process CONCURRENCY items at a time ──
+  // Each Shopify API call takes ~500ms. Sequential = 200 × 500ms = 100s.
+  // Parallel (5) = 200 / 5 × 500ms = 20s. 5x faster.
+  const CONCURRENCY = 5;
+
+  async function processOneSpec(spec: Record<string, unknown>): Promise<boolean> {
+    const rawSpecs = typeof spec.raw_specs === "string" ? JSON.parse(spec.raw_specs as string) : (spec.raw_specs ?? {});
+    const handle = `vehicle-specs-${(String(spec.make_name || "")).toLowerCase().replace(/\s+/g, "-")}-${(String(spec.model_name || "")).toLowerCase().replace(/\s+/g, "-")}-${(String(spec.variant || "")).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.replace(/-+/g, "-").replace(/-$/, "").substring(0, 100);
 
     const yearRange = spec.year_from && spec.year_to
-      ? `${spec.year_from}–${spec.year_to}`
+      ? `${spec.year_from}\u2013${spec.year_to}`
       : spec.year_from ? `${spec.year_from}+` : "";
 
-    // Field keys MUST match vehicle-pages.server.ts definition — 17 fields
     const displacementL = rawSpecs["Engine displacement"] || (rawSpecs["displacement_cc"] ? `${(Number(rawSpecs["displacement_cc"]) / 1000).toFixed(1)}L` : "");
     const powerStr = rawSpecs["Max. power"] || (rawSpecs["power_hp"] ? `${rawSpecs["power_hp"]} HP` : "");
     const torqueStr = rawSpecs["Max. torque"] || (rawSpecs["torque_nm"] ? `${rawSpecs["torque_nm"]} Nm` : "");
     const overview = `The ${spec.make_name} ${spec.model_name} ${spec.variant || ""} is powered by a ${displacementL} ${rawSpecs["Fuel type"] || rawSpecs["fuel_type"] || ""} engine producing ${powerStr} and ${torqueStr}. It features ${rawSpecs["Gearbox"] || rawSpecs["transmission"] || "a manual/automatic"} transmission with ${rawSpecs["Drive"] || rawSpecs["drive_type"] || "front/rear"} wheel drive.`.trim();
+
     const fields = [
-      { key: "make", value: spec.make_name || "" },
-      { key: "model", value: spec.model_name || "" },
-      { key: "generation", value: "" },
-      { key: "variant", value: spec.variant || "" },
+      { key: "make", value: String(spec.make_name || "") },
+      { key: "model", value: String(spec.model_name || "") },
+      { key: "variant", value: String(spec.variant || "") },
       { key: "year_range", value: yearRange },
       { key: "engine_code", value: rawSpecs["Engine code"] || rawSpecs["engine_code"] || "" },
       { key: "displacement", value: displacementL },
@@ -2368,73 +2852,89 @@ async function processVehiclePagesChunk(
     ].filter(f => f.value);
 
     try {
-      const createRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
-        body: JSON.stringify({
-          query: `mutation metaobjectCreate($metaobject: MetaobjectCreateInput!) {
-            metaobjectCreate(metaobject: $metaobject) {
-              metaobject { id handle }
-              userErrors { field message code }
-            }
-          }`,
-          variables: {
-            metaobject: {
-              type: "$app:vehicle_spec",
-              handle,
-              fields,
-              capabilities: { publishable: { status: "ACTIVE" } },
-            },
-          },
-        }),
+      const res = await shopifyGraphQL(shopId, accessToken, `mutation metaobjectCreate($metaobject: MetaobjectCreateInput!) {
+        metaobjectCreate(metaobject: $metaobject) {
+          metaobject { id handle }
+          userErrors { field message code }
+        }
+      }`, {
+        metaobject: {
+          type: "$app:vehicle_spec",
+          handle,
+          fields,
+          capabilities: { publishable: { status: "ACTIVE" } },
+        },
       });
 
-      const createJson = await createRes.json();
-      const metaobject = createJson?.data?.metaobjectCreate?.metaobject;
-      const errors = createJson?.data?.metaobjectCreate?.userErrors;
+      const metaobject = (res?.data as any)?.metaobjectCreate?.metaobject;
+      const errors = (res?.data as any)?.metaobjectCreate?.userErrors;
 
       if (metaobject) {
-        // Save sync record
         await db.from("vehicle_page_sync").upsert({
-          shop_id: shopId,
-          engine_id: spec.id,
-          metaobject_gid: metaobject.id,
-          metaobject_handle: metaobject.handle,
-          sync_status: "synced",
-          synced_at: new Date().toISOString(),
+          shop_id: shopId, engine_id: spec.id as string,
+          metaobject_gid: metaobject.id, metaobject_handle: metaobject.handle || handle,
+          sync_status: "synced", synced_at: new Date().toISOString(),
         }, { onConflict: "shop_id,engine_id" });
-        processed++;
+        return true;
       } else if (errors?.some((e: { code: string }) => e.code === "TAKEN")) {
-        // Handle already exists on Shopify — mark as synced in our DB too
+        // Handle collision — retry with displacement+fuel suffix for uniqueness
+        const suffix = [displacementL, rawSpecs["Fuel type"] || ""].filter(Boolean).join("-").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+        const altHandle = (handle + (suffix ? `-${suffix}` : `-${spec.id?.toString().slice(0, 8)}`)).substring(0, 100);
+        try {
+          const retryRes = await shopifyGraphQL(shopId, accessToken, `mutation metaobjectCreate($metaobject: MetaobjectCreateInput!) {
+            metaobjectCreate(metaobject: $metaobject) { metaobject { id handle } userErrors { field message code } }
+          }`, { metaobject: { type: "$app:vehicle_spec", handle: altHandle, fields, capabilities: { publishable: { status: "ACTIVE" } } } });
+          const retryObj = (retryRes?.data as any)?.metaobjectCreate?.metaobject;
+          if (retryObj) {
+            await db.from("vehicle_page_sync").upsert({
+              shop_id: shopId, engine_id: spec.id as string,
+              metaobject_gid: retryObj.id, metaobject_handle: retryObj.handle || altHandle,
+              sync_status: "synced", synced_at: new Date().toISOString(),
+            }, { onConflict: "shop_id,engine_id" });
+            console.log(`[vehicle_pages] Created with alt handle: ${altHandle}`);
+            return true;
+          }
+        } catch { /* retry failed — fall through to skipped */ }
         await db.from("vehicle_page_sync").upsert({
-          shop_id: shopId,
-          engine_id: spec.id,
-          metaobject_handle: handle,
-          sync_status: "synced",
+          shop_id: shopId, engine_id: spec.id as string,
+          sync_status: "skipped", error: "Handle collision — could not resolve",
           synced_at: new Date().toISOString(),
         }, { onConflict: "shop_id,engine_id" });
-        processed++;
+        return true;
       } else if (errors?.length) {
-        console.error(`[vehicle_pages] Error for ${handle}:`, errors);
-        processed++;
+        console.warn(`[vehicle_pages] userErrors for ${handle}:`, JSON.stringify(errors));
+        await db.from("vehicle_page_sync").upsert({
+          shop_id: shopId, engine_id: spec.id as string,
+          sync_status: "failed", error: errors.map((e: { message: string }) => e.message).join("; "),
+          synced_at: new Date().toISOString(),
+        }, { onConflict: "shop_id,engine_id" });
+        return true;
       }
-
-      await new Promise((r) => setTimeout(r, 500));
     } catch (err) {
-      console.error(`[vehicle_pages] Failed for ${handle}:`, err);
-      processed++;
+      console.error(`[vehicle_pages] Failed ${handle}:`, err);
     }
+    return false;
   }
 
-  // Always advance by full batch size to prevent infinite loops
-  // (some engine IDs may not have records in ymme_engines — skip them)
-  const batchAdvance = Math.max(processed, engineBatch.length);
-  const totalProcessedNow = alreadyProcessed + batchAdvance;
-  const hasMore = totalProcessedNow < uniqueEngineIds.length;
+  // Process in parallel chunks of CONCURRENCY
+  for (let i = 0; i < specsThisBatch.length; i += CONCURRENCY) {
+    const chunk = specsThisBatch.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(chunk.map(processOneSpec));
+    created += results.filter(Boolean).length;
 
-  console.log(`[vehicle_pages] Batch done: ${processed} created, ${batchAdvance} advanced, total ${totalProcessedNow}/${uniqueEngineIds.length}, hasMore=${hasMore}`);
+    // Update progress every chunk for real-time UI feedback
+    await db.from("sync_jobs").update({
+      processed_items: alreadyProcessed + created,
+      progress: Math.min(99, Math.round(((alreadyProcessed + created) / (job.total_items as number || 1)) * 100)),
+    }).eq("id", job.id);
+  }
 
-  return { processed: batchAdvance, hasMore };
+  // Check if more unsynced specs remain
+  const remainingUnsynced = unsyncedSpecs.length - specsThisBatch.length;
+  const hasMore = created > 0 && remainingUnsynced > 0;
+  console.log(`[vehicle_pages] Batch done: created ${created}/${specsThisBatch.length}, remaining=${remainingUnsynced}, hasMore=${hasMore}`);
+
+  return { processed: created, hasMore };
 }
 
 // ── Bulk Push processor ───────────────────────────────────
@@ -2904,7 +3404,272 @@ async function processBulkPush(
     }
   }
 
-  // Phase 2: If we already have operation IDs, poll for completion
+  // ── FAST PATH: Individual mutations (instant, no async bulk ops) ──
+  // Bulk operations are async and take 5-15+ minutes even for small batches.
+  // Individual mutations complete in seconds: 25 products ≈ 10s, 500 products ≈ 3min.
+  // Only fall through to bulk ops if a bulk operation was already started (resuming).
+  if (!meta.metafieldsOperationId && !meta.tagsOperationId && !meta._fastPathDone) {
+    console.log(`[bulk_push] Using fast path (individual mutations)...`);
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, phase: "fast_push", phaseLabel: "Pushing tags & metafields..." }),
+    }).eq("id", job.id);
+
+    // Ensure metafield definitions exist
+    const fastDefs = [
+      { name: "Vehicle Fitment Data", namespace: "$app:vehicle_fitment", key: "data", type: "json", filterable: false },
+      { name: "Vehicle Make", namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Model", namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Year", namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Engine", namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", filterable: true },
+      { name: "Vehicle Generation", namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel PCD", namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Diameter", namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Width", namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Center Bore", namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", filterable: true },
+      { name: "Wheel Offset", namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", filterable: true },
+    ];
+    for (const d of fastDefs) {
+      try {
+        const cr = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `mutation($def: MetafieldDefinitionInput!) { metafieldDefinitionCreate(definition: $def) { createdDefinition { id } userErrors { message code } } }`,
+          variables: { def: { name: d.name, namespace: d.namespace, key: d.key, type: d.type, ownerType: "PRODUCT", pin: true, access: { storefront: "PUBLIC_READ" }, ...(d.filterable ? { useAsCollectionCondition: true } : {}) } },
+        })});
+        const crj = await cr.json();
+        await handleThrottle(crj);
+        if (crj?.data?.metafieldDefinitionCreate?.userErrors?.some((e: { code: string }) => e.code === "TAKEN" || e.code === "ALREADY_EXISTS")) {
+          await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation($def: MetafieldDefinitionUpdateInput!) { metafieldDefinitionUpdate(definition: $def) { updatedDefinition { id } userErrors { message } } }`,
+            variables: { def: { namespace: d.namespace, key: d.key, ownerType: "PRODUCT", pin: true, ...(d.filterable ? { useAsCollectionCondition: true } : {}) } },
+          })});
+        }
+      } catch (_) { /* best effort */ }
+    }
+
+    // Load products + fitments (with resume + batch support)
+    const jobCreatedAt = (job.created_at as string) || new Date().toISOString();
+    const forceRepush = meta.forceRepush === true;
+
+    let productQuery = db.from("products")
+      .select("id, shopify_product_id, shopify_gid, image_url")
+      .eq("shop_id", shopId).neq("status", "staged")
+      .not("fitment_status", "eq", "unmapped")
+      .not("shopify_product_id", "is", null);
+
+    // RESUME: Skip products already pushed in this job (unless force re-push)
+    if (!forceRepush) {
+      productQuery = productQuery.or(`synced_at.is.null,synced_at.lt.${jobCreatedAt}`);
+    }
+
+    productQuery = productQuery.order("id").limit(200); // Batch of 200
+
+    const { data: fastProducts } = await productQuery;
+    const prodIds = (fastProducts ?? []).map(p => p.id);
+    // Paginated vehicle fitments fetch
+    const fastFitments: Array<Record<string, unknown>> = [];
+    let ffOffset = 0;
+    while (true) {
+      const { data: batch } = await db.from("vehicle_fitments")
+        .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
+        .eq("shop_id", shopId).range(ffOffset, ffOffset + 999);
+      if (!batch || batch.length === 0) break;
+      fastFitments.push(...batch);
+      ffOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
+    // Paginated wheel fitments fetch
+    const fastWheelFits: Array<Record<string, unknown>> = [];
+    let fwOffset = 0;
+    while (true) {
+      const { data: batch } = await db.from("wheel_fitments")
+        .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
+        .eq("shop_id", shopId).range(fwOffset, fwOffset + 999);
+      if (!batch || batch.length === 0) break;
+      fastWheelFits.push(...batch);
+      fwOffset += batch.length;
+      if (batch.length < 1000) break;
+    }
+
+    // Enrich engine names from YMME
+    const eIds = [...new Set((fastFitments ?? []).filter(f => f.ymme_engine_id && !f.engine).map(f => f.ymme_engine_id))];
+    const mIds = [...new Set((fastFitments ?? []).filter(f => f.ymme_model_id).map(f => f.ymme_model_id))];
+    const eMap = new Map<string, string>(), gMap = new Map<string, string>();
+    if (eIds.length > 0) {
+      for (let i = 0; i < eIds.length; i += 500) {
+        const { data: eb } = await db.from("ymme_engines").select("id, name").in("id", eIds.slice(i, i + 500));
+        for (const e of eb ?? []) if (e.name) eMap.set(e.id, e.name);
+      }
+    }
+    if (mIds.length > 0) {
+      for (let i = 0; i < mIds.length; i += 500) {
+        const { data: mb } = await db.from("ymme_models").select("id, generation").in("id", mIds.slice(i, i + 500));
+        for (const m of mb ?? []) if (m.generation && !m.generation.includes(" | ")) gMap.set(m.id, m.generation);
+      }
+    }
+    for (const f of fastFitments ?? []) {
+      if (f.ymme_engine_id && !f.engine) { const n = eMap.get(f.ymme_engine_id); if (n) f.engine = n; }
+    }
+
+    // Group fitments by product
+    const fMap = new Map<string, typeof fastFitments>();
+    for (const f of fastFitments ?? []) { const l = fMap.get(f.product_id) ?? []; l.push(f); fMap.set(f.product_id, l); }
+    const wMap = new Map<string, typeof fastWheelFits>();
+    for (const wf of fastWheelFits ?? []) { const l = wMap.get(wf.product_id) ?? []; l.push(wf); wMap.set(wf.product_id, l); }
+
+    // Push products with concurrency (3 at a time)
+    const PUSH_CONCURRENCY = 3;
+    let fastProcessed = 0;
+    const totalItems = (job.total_items as number) || fastProducts?.length || 1;
+    const pubId = (await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).maybeSingle())?.data?.online_store_publication_id;
+
+    async function pushOneProduct(p: any): Promise<boolean> {
+      const fits = fMap.get(p.id) || [];
+      const wheelFits = wMap.get(p.id) || [];
+      if (fits.length === 0 && wheelFits.length === 0) return true;
+      const gid = p.shopify_gid || `gid://shopify/Product/${p.shopify_product_id}`;
+
+      // Build metafields + tags (same logic as bulk path)
+      const makes = new Set<string>(), models = new Set<string>(), years = new Set<string>(), engines = new Set<string>(), gens = new Set<string>();
+      const tags = new Set<string>();
+      for (const f of fits) {
+        if (f.make) { makes.add(f.make); tags.add(`_autosync_${f.make}`); }
+        if (f.model) { models.add(f.model); tags.add(`_autosync_${f.model}`); }
+        if (f.engine) engines.add(f.engine);
+        if (f.engine_code) engines.add(f.engine_code);
+        if (f.ymme_model_id) { const g = gMap.get(f.ymme_model_id); if (g) gens.add(g); }
+        if (f.year_from) {
+          const end = f.year_to || new Date().getFullYear();
+          for (let y = f.year_from; y <= Math.min(end, f.year_from + 50); y++) years.add(String(y));
+          const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+          if (f.make && f.model) tags.add(`_autosync_${f.make}_${f.model}_${yr}`);
+        }
+      }
+
+      const mfs: Array<{ namespace: string; key: string; type: string; value: string; ownerId: string }> = [];
+      if (fits.length > 0 && makes.size > 0) {
+        mfs.push(
+          { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fits.map((f: any) => ({ make: f.make, model: f.model, year_from: f.year_from, year_to: f.year_to, engine: f.engine, engine_code: f.engine_code }))), ownerId: gid },
+          { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...makes].sort()), ownerId: gid },
+          { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...models].sort()), ownerId: gid },
+        );
+        if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
+        if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort().slice(0,128)), ownerId: gid });
+        if (gens.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...gens].sort().slice(0,128)), ownerId: gid });
+      }
+      // Wheel metafields
+      if (wheelFits.length > 0) {
+        const ps = new Set<string>(), ds = new Set<string>(), ws = new Set<string>(), cs = new Set<string>(), os = new Set<string>();
+        for (const wf of wheelFits) {
+          if (wf.pcd) { ps.add(String(wf.pcd)); tags.add(`_autosync_wheel_PCD_${wf.pcd}`); }
+          if (wf.diameter) { ds.add(String(wf.diameter)); tags.add(`_autosync_wheel_${wf.diameter}inch`); }
+          if (wf.width) { ws.add(String(wf.width)); tags.add(`_autosync_wheel_${wf.width}J`); }
+          if (wf.offset_min != null) { os.add(`ET${wf.offset_min}`); tags.add(`_autosync_wheel_ET${wf.offset_min}`); }
+          if (wf.offset_max != null && wf.offset_max !== wf.offset_min) { os.add(`ET${wf.offset_max}`); tags.add(`_autosync_wheel_ET${wf.offset_max}`); }
+          if (wf.center_bore) cs.add(String(wf.center_bore));
+        }
+        if (ps.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...ps].sort()), ownerId: gid });
+        if (ds.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...ds].sort()), ownerId: gid });
+        if (ws.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "width", type: "list.single_line_text_field", value: JSON.stringify([...ws].sort()), ownerId: gid });
+        if (cs.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "center_bore", type: "list.single_line_text_field", value: JSON.stringify([...cs].sort()), ownerId: gid });
+        if (os.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "offset", type: "list.single_line_text_field", value: JSON.stringify([...os].sort()), ownerId: gid });
+      }
+
+      try {
+        // Push metafields
+        if (mfs.length > 0) {
+          const mfr = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { key } userErrors { message } } }`,
+            variables: { metafields: mfs },
+          })});
+          const mfj = await mfr.json(); await handleThrottle(mfj);
+        }
+        // Push tags
+        if (tags.size > 0) {
+          const tr = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation tagsAdd($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { userErrors { message } } }`,
+            variables: { id: gid, tags: [...tags] },
+          })});
+          const tj = await tr.json(); await handleThrottle(tj);
+        }
+        // Publish to Online Store
+        if (pubId) {
+          await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }`,
+            variables: { id: gid, input: [{ publicationId: `gid://shopify/Publication/${pubId}` }] },
+          })});
+        }
+        // Push product image (if enabled and product has image_url)
+        if (meta.pushImages && p.image_url && gid) {
+          try {
+            await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+              query: `mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                productCreateMedia(productId: $productId, media: $media) {
+                  media { id }
+                  mediaUserErrors { message }
+                }
+              }`,
+              variables: {
+                productId: gid,
+                media: [{ originalSource: p.image_url, mediaContentType: "IMAGE" }]
+              },
+            })});
+          } catch (_) { /* non-critical */ }
+        }
+        // Mark synced
+        await db.from("products").update({ synced_at: new Date().toISOString() }).eq("id", p.id).eq("shop_id", shopId);
+      } catch (err) {
+        console.error(`[bulk_push fast] Error for ${p.shopify_product_id}:`, err);
+        return false;
+      }
+      return true;
+    }
+
+    // Process products in concurrent chunks of PUSH_CONCURRENCY
+    for (let i = 0; i < (fastProducts ?? []).length; i += PUSH_CONCURRENCY) {
+      const chunk = (fastProducts ?? []).slice(i, i + PUSH_CONCURRENCY);
+      const results = await Promise.all(chunk.map(pushOneProduct));
+      fastProcessed += results.filter(Boolean).length;
+
+      await db.from("sync_jobs").update({
+        processed_items: fastProcessed,
+        progress: Math.min(99, Math.round((fastProcessed / totalItems) * 100)),
+        metadata: JSON.stringify({ ...meta, phaseLabel: `Pushed ${fastProcessed}/${totalItems} products` }),
+      }).eq("id", job.id);
+    }
+
+    // Sync active makes
+    const uniqueMakes = new Set<string>();
+    for (const f of fastFitments ?? []) if (f.make) uniqueMakes.add(f.make);
+    // Clear old active makes and insert new ones
+    await db.from("tenant_active_makes").delete().eq("shop_id", shopId);
+    if (uniqueMakes.size > 0) {
+      const { data: ymMakes } = await db.from("ymme_makes").select("id, name").in("name", [...uniqueMakes]);
+      if (ymMakes && ymMakes.length > 0) {
+        await db.from("tenant_active_makes").insert(ymMakes.map(m => ({ shop_id: shopId, ymme_make_id: m.id })));
+      }
+    }
+
+    // Check if more products remain (for batched processing / resume)
+    if (!forceRepush) {
+      const remaining = await db.from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).neq("status", "staged")
+        .not("fitment_status", "eq", "unmapped")
+        .not("shopify_product_id", "is", null)
+        .or(`synced_at.is.null,synced_at.lt.${jobCreatedAt}`);
+
+      if ((remaining.count ?? 0) > 0) {
+        console.log(`[bulk_push] Batch done: ${fastProcessed} pushed, ${remaining.count} remaining — will self-chain`);
+        return { processed: fastProcessed, hasMore: true };
+      }
+    }
+
+    console.log(`[bulk_push] Fast path complete! ${fastProcessed} products pushed in single invocation`);
+    // Return processed=0 and hasMore=false — the main loop will handle completion
+    // (marking status=completed, updating tenant counts, etc.)
+    return { processed: 0, hasMore: false };
+  }
+
+  // Phase 2: If we already have operation IDs, poll for completion (resume existing bulk ops)
   if (meta.metafieldsOperationId || meta.tagsOperationId) {
     let totalObjects = 0;
 
@@ -3060,6 +3825,60 @@ async function processBulkPush(
         return { processed: 0, hasMore: true };
       }
       console.log(`[bulk_push] Images ${imgOp?.status}: ${imgOp?.objectCount} objects`);
+    }
+
+    // Phase 4: Publish all products to Online Store (ensures collections work)
+    // Fetch publication ID (not available from Phase 1 scope on subsequent invocations)
+    const { data: tenantPubPhase4 } = await db.from("tenants")
+      .select("online_store_publication_id").eq("shop_id", shopId).maybeSingle();
+    const publicationId = tenantPubPhase4?.online_store_publication_id || null;
+
+    if (!meta.publishDone && publicationId) {
+      if (meta.publishOpId) {
+        // Poll the publish bulk op
+        const pubRes = await shopifyGraphQL(shopId, accessToken,
+          `{ currentBulkOperation(type: MUTATION) { id status objectCount } }`);
+        const pubOp = pubRes?.data?.currentBulkOperation;
+        if (pubOp?.status === "RUNNING" || pubOp?.status === "CREATED") {
+          return { processed: 0, hasMore: true };
+        }
+        console.log(`[bulk_push] Publish ${pubOp?.status}: ${pubOp?.objectCount} products`);
+        meta.publishDone = true;
+        meta.publishOpId = null;
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, phaseLabel: "Finalizing..." }),
+        }).eq("id", job.id);
+      } else {
+        // Start publish bulk op
+        const pubLines: string[] = [];
+        let pubOffset = 0;
+        while (true) {
+          const { data: batch } = await db.from("products")
+            .select("shopify_product_id").eq("shop_id", shopId).neq("status", "staged")
+            .not("shopify_product_id", "is", null)
+            .range(pubOffset, pubOffset + 1000 - 1);
+          if (!batch || batch.length === 0) break;
+          for (const p of batch) {
+            pubLines.push(JSON.stringify({ id: `gid://shopify/Product/${p.shopify_product_id}`, input: [{ publicationId }] }));
+          }
+          if (batch.length < 1000) break;
+          pubOffset += batch.length;
+        }
+        if (pubLines.length > 0) {
+          console.log(`[bulk_push] Publishing ${pubLines.length} products to Online Store...`);
+          await db.from("sync_jobs").update({
+            metadata: JSON.stringify({ ...meta, phaseLabel: `Publishing ${pubLines.length} products to Online Store...` }),
+          }).eq("id", job.id);
+          const pubOpId = await startBulkOp(shopId, accessToken, pubLines.join("\n"),
+            `mutation call($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }`);
+          if (pubOpId) {
+            meta.publishOpId = pubOpId;
+            await db.from("sync_jobs").update({ metadata: JSON.stringify(meta) }).eq("id", job.id);
+            return { processed: 0, hasMore: true };
+          }
+        }
+        meta.publishDone = true;
+      }
     }
 
     // ALL operations complete
@@ -3234,14 +4053,20 @@ async function processBulkPush(
       }
     }
 
-    const mfs = [
-      { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fits.map(f => ({ make: f.make, model: f.model, year_from: f.year_from, year_to: f.year_to, engine: f.engine, engine_code: f.engine_code }))), ownerId: gid },
-      { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...makes].sort()), ownerId: gid },
-      { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...models].sort()), ownerId: gid },
-    ];
-    if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
-    if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort().slice(0,128)), ownerId: gid });
-    if (generations.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generations].sort().slice(0,128)), ownerId: gid });
+    const mfs: Array<{ namespace: string; key: string; type: string; value: string; ownerId: string }> = [];
+
+    // Only set vehicle_fitment metafields if the product has VEHICLE fitments
+    // Wheel-only products should NOT get vehicle_fitment.make/model/year/engine
+    if (fits.length > 0 && makes.size > 0) {
+      mfs.push(
+        { namespace: "$app:vehicle_fitment", key: "data", type: "json", value: JSON.stringify(fits.map(f => ({ make: f.make, model: f.model, year_from: f.year_from, year_to: f.year_to, engine: f.engine, engine_code: f.engine_code }))), ownerId: gid },
+        { namespace: "$app:vehicle_fitment", key: "make", type: "list.single_line_text_field", value: JSON.stringify([...makes].sort()), ownerId: gid },
+        { namespace: "$app:vehicle_fitment", key: "model", type: "list.single_line_text_field", value: JSON.stringify([...models].sort()), ownerId: gid },
+      );
+      if (years.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "year", type: "list.single_line_text_field", value: JSON.stringify([...years].sort((a,b)=>Number(a)-Number(b)).slice(0,128)), ownerId: gid });
+      if (engines.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "engine", type: "list.single_line_text_field", value: JSON.stringify([...engines].sort().slice(0,128)), ownerId: gid });
+      if (generations.size > 0) mfs.push({ namespace: "$app:vehicle_fitment", key: "generation", type: "list.single_line_text_field", value: JSON.stringify([...generations].sort().slice(0,128)), ownerId: gid });
+    }
 
     // ── Wheel spec metafields (from wheel_fitments table) ──
     if (wheelFits.length > 0) {
@@ -3257,6 +4082,8 @@ async function processBulkPush(
         if (wf.pcd) tags.add(`_autosync_wheel_PCD_${wf.pcd}`);
         if (wf.diameter) tags.add(`_autosync_wheel_${wf.diameter}inch`);
         if (wf.width) tags.add(`_autosync_wheel_${wf.width}J`);
+        if (wf.offset_min != null) tags.add(`_autosync_wheel_ET${wf.offset_min}`);
+        if (wf.offset_max != null && wf.offset_max !== wf.offset_min) tags.add(`_autosync_wheel_ET${wf.offset_max}`);
       }
       if (pcdSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...pcdSet].sort()), ownerId: gid });
       if (diamSet.size > 0) mfs.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
@@ -3329,6 +4156,233 @@ async function processBulkPush(
   return { processed: 0, hasMore: true };
 }
 
+// ── Bulk Publish ─────────────────────────────────────────────────────────────
+// Publishes ALL products to the Online Store sales channel via Shopify Bulk Operation.
+// Uses publishablePublish mutation with JSONL for maximum speed.
+
+async function processBulkPublish(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
+  const shopId = job.shop_id as string;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+
+  const { data: tenant } = await db.from("tenants")
+    .select("shopify_access_token, online_store_publication_id")
+    .eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No access token" };
+  const accessToken = tenant.shopify_access_token;
+  const publicationId = tenant.online_store_publication_id;
+  if (!publicationId) return { processed: 0, hasMore: false, error: "No publication ID" };
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
+
+  // If we already have a running bulk op, poll it
+  if (meta.publishOpId) {
+    const res = await shopifyGraphQL(shopId, accessToken,
+      `{ currentBulkOperation(type: MUTATION) { id status objectCount } }`);
+    const op = res?.data?.currentBulkOperation;
+    const status = op?.status ?? "NONE";
+    if (status === "COMPLETED") {
+      console.log(`[bulk_publish] Complete — ${op.objectCount} products published`);
+      return { processed: op.objectCount ?? 0, hasMore: false };
+    }
+    if (status === "FAILED" || status === "EXPIRED" || status === "CANCELED") {
+      return { processed: 0, hasMore: false, error: `Bulk publish ${status}` };
+    }
+    return { processed: 0, hasMore: true }; // Still running
+  }
+
+  // Build JSONL — one line per product
+  console.log(`[bulk_publish] Scanning all products for ${shopId}...`);
+  const publishLines: string[] = [];
+  let dbOffset = 0;
+  const DB_BATCH = 1000;
+  while (true) {
+    const { data: batch } = await db.from("products")
+      .select("shopify_product_id")
+      .eq("shop_id", shopId).neq("status", "staged")
+      .not("shopify_product_id", "is", null)
+      .range(dbOffset, dbOffset + DB_BATCH - 1);
+    if (!batch || batch.length === 0) break;
+    for (const p of batch) {
+      publishLines.push(JSON.stringify({
+        id: `gid://shopify/Product/${p.shopify_product_id}`,
+        input: [{ publicationId }],
+      }));
+    }
+    if (batch.length < DB_BATCH) break;
+    dbOffset += batch.length;
+  }
+
+  if (publishLines.length === 0) {
+    console.log(`[bulk_publish] No products to publish`);
+    return { processed: 0, hasMore: false };
+  }
+
+  console.log(`[bulk_publish] Starting bulk publish for ${publishLines.length} products`);
+  const jsonl = publishLines.join("\n");
+
+  // Stage upload
+  const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "publish.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+  })});
+  const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+  if (!target) return { processed: 0, hasMore: false, error: "Failed to create staged upload" };
+
+  const form = new FormData();
+  for (const p of target.parameters) form.append(p.name, p.value);
+  form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
+  await fetch(target.url, { method: "POST", body: form });
+
+  const opKey = target.parameters.find((p2: { name: string }) => p2.name === "key")?.value || "";
+  const opUrl = target.url + opKey;
+
+  const mutation = `mutation call($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { message } } }`;
+  const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+    query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+    variables: { mutation, stagedUploadPath: opUrl },
+  })});
+  const bulkJson = await bulkRes.json();
+  const opId = bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id;
+  const opErrors = bulkJson?.data?.bulkOperationRunMutation?.userErrors;
+  if (opErrors?.length > 0) console.warn(`[bulk_publish] Errors:`, opErrors);
+
+  if (!opId) return { processed: 0, hasMore: false, error: "Failed to start bulk publish operation" };
+
+  await db.from("sync_jobs").update({
+    total_items: publishLines.length,
+    metadata: JSON.stringify({ ...meta, publishOpId: opId }),
+  }).eq("id", job.id);
+
+  console.log(`[bulk_publish] Started: ${opId} (${publishLines.length} products)`);
+  return { processed: 0, hasMore: true };
+}
+
+// ── Sync After Delete ────────────────────────────────────────────────────────
+// Called by the PRODUCTS_DELETE webhook (debounced). Re-syncs tenant counts,
+// deactivates stale makes, identifies stale vehicle pages, and creates a
+// targeted Shopify cleanup job if stale data is detected.
+// Runs once — hasMore is always false.
+
+async function processSyncAfterDelete(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  try {
+    // 1. Recount tenant counts (products + vehicle fitments + wheel fitments)
+    const [productRes, fitmentRes, wheelFitRes] = await Promise.all([
+      db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+      db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+      db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    ]);
+    await db.from("tenants").update({
+      product_count: productRes.count ?? 0,
+      fitment_count: (fitmentRes.count ?? 0) + (wheelFitRes.count ?? 0),
+    }).eq("shop_id", shopId);
+
+    // 2. Deactivate makes that no longer have any fitments
+    // tenant_active_makes has ymme_make_id (UUID FK), vehicle_fitments has make (text)
+    const { data: activeMakes } = await db.from("tenant_active_makes")
+      .select("ymme_make_id, ymme_makes(name)")
+      .eq("shop_id", shopId);
+    if (activeMakes && activeMakes.length > 0) {
+      const { data: makesWithFitments } = await db.from("vehicle_fitments")
+        .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
+      const liveMakeNames = new Set((makesWithFitments ?? []).map((f: any) => f.make));
+      const staleMakeIds = activeMakes
+        .filter((m: any) => m.ymme_makes?.name && !liveMakeNames.has(m.ymme_makes.name))
+        .map((m: any) => m.ymme_make_id);
+      if (staleMakeIds.length > 0) {
+        await db.from("tenant_active_makes").delete()
+          .eq("shop_id", shopId).in("ymme_make_id", staleMakeIds);
+        const staleNames = activeMakes.filter((m: any) => staleMakeIds.includes(m.ymme_make_id)).map((m: any) => m.ymme_makes?.name);
+        console.log(`[sync_after_delete] Deactivated ${staleMakeIds.length} makes: ${staleNames.join(", ")}`);
+      }
+    }
+
+    // 3. Detect stale vehicle pages (engines with 0 products)
+    const { data: syncedPages } = await db.from("vehicle_page_sync")
+      .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced").limit(5000);
+    if (syncedPages && syncedPages.length > 0) {
+      const syncedEngineIds = syncedPages.map((s: any) => s.engine_id);
+      // Check in chunks of 500 to avoid PostgREST URL limits
+      const liveEngineIds = new Set<string>();
+      for (let i = 0; i < syncedEngineIds.length; i += 500) {
+        const chunk = syncedEngineIds.slice(i, i + 500);
+        const { data: enginesWithFitments } = await db.from("vehicle_fitments")
+          .select("ymme_engine_id").eq("shop_id", shopId)
+          .in("ymme_engine_id", chunk).not("ymme_engine_id", "is", null);
+        for (const f of enginesWithFitments ?? []) liveEngineIds.add(f.ymme_engine_id);
+      }
+      const staleEngineIds = syncedEngineIds.filter((id: string) => !liveEngineIds.has(id));
+      if (staleEngineIds.length > 0) {
+        // Mark stale vehicle pages for removal in chunks
+        for (let i = 0; i < staleEngineIds.length; i += 500) {
+          await db.from("vehicle_page_sync")
+            .update({ sync_status: "pending_delete" })
+            .eq("shop_id", shopId)
+            .in("engine_id", staleEngineIds.slice(i, i + 500));
+        }
+        console.log(`[sync_after_delete] Marked ${staleEngineIds.length} vehicle pages for deletion`);
+      }
+    }
+
+    // 4. Detect stale Shopify data (products that were synced but now have no fitments)
+    const { count: staleCount } = await db.from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged")
+      .in("fitment_status", ["no_match", "unmapped"])
+      .not("synced_at", "is", null);
+
+    if (staleCount && staleCount > 0) {
+      // Check if cleanup job already exists
+      const { data: existingCleanup } = await db.from("sync_jobs")
+        .select("id").eq("shop_id", shopId)
+        .eq("type", "cleanup")
+        .in("status", ["pending", "running"]).maybeSingle();
+
+      if (!existingCleanup) {
+        await db.from("sync_jobs").insert({
+          shop_id: shopId, type: "cleanup", status: "pending",
+          metadata: { phases: ["tags", "metafields"], current_phase: "tags",
+            trigger: "sync_after_delete", stale_products: staleCount },
+        });
+        console.log(`[sync_after_delete] Created cleanup job for ${staleCount} stale products`);
+      }
+    }
+
+    // 5. Check for stale collections (empty smart collections with 0 products)
+    // This is handled by the push system — when products are re-pushed, collections
+    // are recalculated. But if the store had collections for makes that are now empty,
+    // those collections will have 0 products. Create a cleanup_collections job.
+    if (activeMakes && activeMakes.length > 0) {
+      const { data: collectionMakes } = await db.from("collection_mappings")
+        .select("make").eq("shop_id", shopId).eq("type", "make").not("make", "is", null);
+      if (collectionMakes && collectionMakes.length > 0) {
+        const { data: makesWithProducts } = await db.from("vehicle_fitments")
+          .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
+        const liveCollectionMakes = new Set((makesWithProducts ?? []).map((f: any) => f.make));
+        const staleCollections = collectionMakes.filter((c: any) => !liveCollectionMakes.has(c.make));
+        if (staleCollections.length > 0) {
+          // Delete stale collection mappings from our DB
+          const staleNames = staleCollections.map((c: any) => c.make);
+          await db.from("collection_mappings").delete()
+            .eq("shop_id", shopId).in("make", staleNames);
+          console.log(`[sync_after_delete] Removed ${staleCollections.length} stale make collections: ${staleNames.join(", ")}`);
+        }
+      }
+    }
+
+    console.log(`[sync_after_delete] Complete for ${shopId}`);
+    return { processed: 1, hasMore: false };
+  } catch (err) {
+    console.error(`[sync_after_delete] Error:`, err);
+    return { processed: 0, hasMore: false, error: `sync_after_delete error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
 // ── Cleanup Job Handler ──────────────────────────────────────────────────────
 // Removes AutoSync tags, metafields, collections, and vehicle pages from Shopify.
 // Processes in batches — handles stores with millions of products.
@@ -3339,9 +4393,9 @@ async function processCleanupChunk(
 ): Promise<{ processed: number; hasMore: boolean; error?: string }> {
   const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : (job.metadata ?? {});
   const shopId = job.shop_id as string;
+  const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
 
   // Fetch access token from tenant record at execution time (NOT from job metadata)
-  // This avoids storing sensitive tokens in the sync_jobs table
   let accessToken = meta.access_token; // legacy fallback
   if (!accessToken) {
     const { data: tenant } = await db
@@ -3351,17 +4405,17 @@ async function processCleanupChunk(
       .maybeSingle();
     accessToken = tenant?.shopify_access_token;
   }
-
   if (!accessToken) {
     return { processed: 0, hasMore: false, error: "No access token for cleanup" };
   }
 
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
   const currentPhase = meta.current_phase ?? "tags";
+  const CLEANUP_BATCH = 250;
   const cursor = meta.cursor ?? null;
-  const CLEANUP_BATCH = 250; // Fetch 250 per page for speed
-  const PARALLEL = 10; // Process 10 concurrent Shopify API calls
+  const PARALLEL = 10;
 
-  // Helper: process array in parallel batches
+  // Helper: process array in parallel batches (for collections/vehicle pages — too few for bulk ops)
   async function parallelBatch<T>(items: T[], fn: (item: T) => Promise<number>): Promise<number> {
     let total = 0;
     for (let i = 0; i < items.length; i += PARALLEL) {
@@ -3372,113 +4426,238 @@ async function processCleanupChunk(
     return total;
   }
 
-  // Phase 1: Remove _autosync_ tags from products
-  // NOTE: Shopify search does NOT support wildcard tag queries like "tag:_autosync_*"
-  // We must fetch ALL products and filter client-side for _autosync_ prefixed tags
-  if (currentPhase === "tags") {
-    const searchQuery = `{
-      products(first: ${CLEANUP_BATCH}${cursor ? `, after: "${cursor}"` : ""}) {
-        edges { node { id tags } }
-        pageInfo { hasNextPage endCursor }
-      }
-    }`;
-
-    try {
-      const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
-      const edges = result?.data?.products?.edges ?? [];
-      const pageInfo = result?.data?.products?.pageInfo ?? {};
-
-      // Process tag removals in parallel batches of 10
-      const removed = await parallelBatch(edges, async ({ node }: { node: Record<string, unknown> }) => {
-        const autoTags = ((node.tags as string[]) ?? []).filter((t: string) => t.startsWith("_autosync_"));
-        if (autoTags.length === 0) return 0;
-        try {
-          await shopifyGraphQL(shopId, accessToken,
-            `mutation($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { message } } }`,
-            { id: node.id as string, tags: autoTags }
-          );
-          return autoTags.length;
-        } catch (_e) { return 0; }
-      });
-
-      if (pageInfo.hasNextPage) {
-        await db.from("sync_jobs").update({
-          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
-        }).eq("id", job.id);
-        return { processed: removed, hasMore: true };
-      }
-
-      // Phase 1 done — move to metafields
-      await db.from("sync_jobs").update({
-        metadata: JSON.stringify({ ...meta, current_phase: "metafields", cursor: null }),
-      }).eq("id", job.id);
-      return { processed: removed, hasMore: true };
-    } catch (err) {
-      return { processed: 0, hasMore: false, error: `Tag cleanup error: ${err instanceof Error ? err.message : String(err)}` };
-    }
+  // Helper: start a bulk mutation op (JSONL upload → server-side processing)
+  async function startCleanupBulkOp(jsonl: string, mutation: string): Promise<string | null> {
+    const stageRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `mutation { stagedUploadsCreate(input: [{ resource: BULK_MUTATION_VARIABLES, filename: "cleanup.jsonl", mimeType: "text/jsonl", httpMethod: POST }]) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
+    })});
+    const target = (await stageRes.json())?.data?.stagedUploadsCreate?.stagedTargets?.[0];
+    if (!target) return null;
+    const form = new FormData();
+    for (const p of target.parameters) form.append(p.name, p.value);
+    form.append("file", new Blob([jsonl], { type: "text/jsonl" }));
+    await fetch(target.url, { method: "POST", body: form });
+    const opKey = target.parameters.find((p2: { name: string }) => p2.name === "key")?.value || "";
+    const opUrl = target.url + opKey;
+    const bulkRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+      query: `mutation($mutation: String!, $stagedUploadPath: String!) { bulkOperationRunMutation(mutation: $mutation, stagedUploadPath: $stagedUploadPath) { bulkOperation { id status } userErrors { message } } }`,
+      variables: { mutation, stagedUploadPath: opUrl },
+    })});
+    const bulkJson = await bulkRes.json();
+    const opId = bulkJson?.data?.bulkOperationRunMutation?.bulkOperation?.id;
+    const opErrors = bulkJson?.data?.bulkOperationRunMutation?.userErrors;
+    if (opErrors?.length > 0) console.warn(`[cleanup] Bulk op errors:`, opErrors);
+    return opId ?? null;
   }
 
-  // Phase 2: Remove vehicle_fitment metafields from products
-  // Search by metafield existence (NOT by tags — tags may already be removed in phase 1)
-  // Clean BOTH app-owned ($app:vehicle_fitment) AND legacy (autosync_fitment) namespaces
-  if (currentPhase === "metafields") {
-    const searchQuery = `{
-      products(first: ${CLEANUP_BATCH}, ${cursor ? `after: "${cursor}"` : ""}, query: "metafield_namespace:vehicle_fitment OR metafield_namespace:autosync_fitment") {
-        edges {
-          node {
-            id
-            mfApp: metafields(first: 20, namespace: "$app:vehicle_fitment") {
-              edges { node { id namespace key } }
-            }
-            mfLegacy: metafields(first: 20, namespace: "autosync_fitment") {
-              edges { node { id namespace key } }
+  // Helper: poll a running bulk operation
+  async function pollBulkOp(): Promise<{ status: string; objectCount: number }> {
+    const res = await shopifyGraphQL(shopId, accessToken,
+      `{ currentBulkOperation(type: MUTATION) { id status objectCount } }`);
+    const op = res?.data?.currentBulkOperation;
+    return { status: op?.status ?? "NONE", objectCount: op?.objectCount ?? 0 };
+  }
+
+  // ── Phase 1: Remove _autosync_ tags via Bulk Operation ──
+  // Single-invocation scan: loop through ALL pages, build JSONL in memory, then upload.
+  // Edge Function has 400s wall clock — scanning 50K products at 250/page = 200 calls × ~0.5s = ~100s.
+  if (currentPhase === "tags") {
+    // If we already have a running bulk op, poll it
+    if (meta.tagsBulkOpId) {
+      const { status, objectCount } = await pollBulkOp();
+      if (status === "COMPLETED") {
+        console.log(`[cleanup] Tag bulk op complete — ${objectCount} products processed`);
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, current_phase: "metafields", tagsBulkOpId: null }),
+        }).eq("id", job.id);
+        return { processed: objectCount, hasMore: true };
+      }
+      if (status === "FAILED" || status === "EXPIRED" || status === "CANCELED") {
+        console.error(`[cleanup] Tag bulk op ${status} — falling through to metafields`);
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, current_phase: "metafields", tagsBulkOpId: null }),
+        }).eq("id", job.id);
+        return { processed: 0, hasMore: true };
+      }
+      // RUNNING / CREATED — wait for next poll cycle
+      return { processed: 0, hasMore: true };
+    }
+
+    // TARGETED scan: only remove tags from products that have NO fitments in our DB.
+    const tagLines: string[] = [];
+    const SCAN_BATCH = 250;
+
+    try {
+      // Build set of Shopify GIDs that still have fitments — KEEP their tags
+      const keepGids = new Set<string>();
+      let dbOffset = 0;
+      const DB_BATCH = 1000;
+      while (true) {
+        const { data: batch } = await db.from("products")
+          .select("shopify_product_id")
+          .eq("shop_id", shopId).neq("status", "staged")
+          .not("fitment_status", "in", '("unmapped","no_match")')
+          .not("shopify_product_id", "is", null)
+          .range(dbOffset, dbOffset + DB_BATCH - 1);
+        if (!batch || batch.length === 0) break;
+        for (const p of batch) keepGids.add(`gid://shopify/Product/${p.shopify_product_id}`);
+        if (batch.length < DB_BATCH) break;
+        dbOffset += batch.length;
+      }
+      console.log(`[cleanup] Tag scan: ${keepGids.size} products with active fitments (will keep tags)`);
+
+      // Scan ALL products for _autosync_ tags, only remove from stale ones
+      let scanCursor: string | null = null;
+      while (true) {
+        const result = await shopifyGraphQL(shopId, accessToken,
+          `{ products(first: ${SCAN_BATCH}${scanCursor ? `, after: "${scanCursor}"` : ""}) { edges { node { id tags } } pageInfo { hasNextPage endCursor } } }`);
+        const edges = result?.data?.products?.edges ?? [];
+        const pageInfo = result?.data?.products?.pageInfo ?? {};
+
+        for (const { node } of edges) {
+          // ONLY remove tags from products NOT in our active fitments set
+          if (!keepGids.has(node.id as string)) {
+            const autoTags = ((node.tags as string[]) ?? []).filter((t: string) => t.startsWith("_autosync_"));
+            if (autoTags.length > 0) {
+              tagLines.push(JSON.stringify({ id: node.id, tags: autoTags }));
             }
           }
         }
-        pageInfo { hasNextPage endCursor }
+
+        if (!pageInfo.hasNextPage || edges.length === 0) break;
+        scanCursor = pageInfo.endCursor;
       }
-    }`;
+    } catch (err) {
+      return { processed: 0, hasMore: false, error: `Tag scan error: ${err instanceof Error ? err.message : String(err)}` };
+    }
+
+    if (tagLines.length === 0) {
+      console.log(`[cleanup] No _autosync_ tags found — skipping to metafields`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "metafields" }),
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+
+    console.log(`[cleanup] Starting tag removal bulk op: ${tagLines.length} products (${Math.round(tagLines.join("\n").length / 1024)}KB JSONL)`);
+    const tagMutation = `mutation call($id: ID!, $tags: [String!]!) { tagsRemove(id: $id, tags: $tags) { userErrors { message } } }`;
+    const opId = await startCleanupBulkOp(tagLines.join("\n"), tagMutation);
+
+    if (!opId) {
+      console.error(`[cleanup] Failed to start tag bulk op — falling back to metafields`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "metafields" }),
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, tagsBulkOpId: opId }),
+    }).eq("id", job.id);
+    return { processed: tagLines.length, hasMore: true };
+  }
+
+  // ── Phase 2: Remove vehicle_fitment metafields via Bulk Operation ──
+  if (currentPhase === "metafields") {
+    // If we already have a running bulk op, poll it
+    if (meta.mfBulkOpId) {
+      const { status, objectCount } = await pollBulkOp();
+      if (status === "COMPLETED") {
+        console.log(`[cleanup] Metafield bulk op complete — ${objectCount} products processed`);
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, current_phase: "collections", mfBulkOpId: null }),
+        }).eq("id", job.id);
+        return { processed: objectCount, hasMore: true };
+      }
+      if (status === "FAILED" || status === "EXPIRED" || status === "CANCELED") {
+        console.error(`[cleanup] Metafield bulk op ${status} — falling through to collections`);
+        await db.from("sync_jobs").update({
+          metadata: JSON.stringify({ ...meta, current_phase: "collections", mfBulkOpId: null }),
+        }).eq("id", job.id);
+        return { processed: 0, hasMore: true };
+      }
+      return { processed: 0, hasMore: true };
+    }
+
+    // TARGETED cleanup: only remove metafields from products that have NO fitments in our DB.
+    // First get the set of Shopify product IDs that DO have fitments (keep these).
+    // Then scan Shopify for products with vehicle_fitment metafields and only delete from stale ones.
+    const mfLines: string[] = [];
+    const SCAN_BATCH = 250;
+    const MF_KEYS = ["data", "make", "model", "year", "engine", "generation"];
 
     try {
-      const result = await shopifyGraphQL(shopId, accessToken, searchQuery);
-      const edges = result?.data?.products?.edges ?? [];
-      const pageInfo = result?.data?.products?.pageInfo ?? {};
-      // Process metafield removals in parallel batches of 10
-      // Combine both app-owned and legacy metafields
-      const removed = await parallelBatch(edges, async ({ node }: { node: Record<string, unknown> }) => {
-        const appEdges = ((node?.mfApp as Record<string, unknown>)?.edges ?? []) as Array<Record<string, Record<string, string>>>;
-        const legacyEdges = ((node?.mfLegacy as Record<string, unknown>)?.edges ?? []) as Array<Record<string, Record<string, string>>>;
-        const allEdges = [...appEdges, ...legacyEdges];
-        if (allEdges.length === 0) return 0;
-        const metafields = allEdges.map((e) => ({
-          ownerId: node.id as string,
-          namespace: e.node.namespace,
-          key: e.node.key,
-        }));
-        try {
-          await shopifyGraphQL(shopId, accessToken,
-            `mutation($metafields: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $metafields) { deletedMetafields { key } userErrors { message } } }`,
-            { metafields }
-          );
-          return allEdges.length;
-        } catch (_e) { return 0; }
-      });
-
-      if (pageInfo.hasNextPage) {
-        await db.from("sync_jobs").update({
-          metadata: JSON.stringify({ ...meta, cursor: pageInfo.endCursor }),
-        }).eq("id", job.id);
-        return { processed: removed, hasMore: true };
+      // Build set of Shopify GIDs that still have fitments — KEEP these
+      const keepGids = new Set<string>();
+      let dbOffset = 0;
+      const DB_BATCH = 1000;
+      while (true) {
+        const { data: batch } = await db.from("products")
+          .select("shopify_product_id")
+          .eq("shop_id", shopId).neq("status", "staged")
+          .not("fitment_status", "in", '("unmapped","no_match")')
+          .not("shopify_product_id", "is", null)
+          .range(dbOffset, dbOffset + DB_BATCH - 1);
+        if (!batch || batch.length === 0) break;
+        for (const p of batch) keepGids.add(`gid://shopify/Product/${p.shopify_product_id}`);
+        if (batch.length < DB_BATCH) break;
+        dbOffset += batch.length;
       }
+      console.log(`[cleanup] Metafield scan: ${keepGids.size} products with active fitments (will keep metafields)`);
 
-      // Phase 2 done — move to collections
-      await db.from("sync_jobs").update({
-        metadata: JSON.stringify({ ...meta, current_phase: "collections", cursor: null }),
-      }).eq("id", job.id);
-      return { processed: removed, hasMore: true };
+      // Scan Shopify products that have metafields — only delete from stale ones
+      let scanCursor: string | null = null;
+      while (true) {
+        const result = await shopifyGraphQL(shopId, accessToken,
+          `{ products(first: ${SCAN_BATCH}, ${scanCursor ? `after: "${scanCursor}"` : ""}, query: "metafield_namespace:vehicle_fitment OR metafield_namespace:autosync_fitment") {
+            edges { node { id } }
+            pageInfo { hasNextPage endCursor }
+          } }`);
+        const edges = result?.data?.products?.edges ?? [];
+        const pageInfo = result?.data?.products?.pageInfo ?? {};
+
+        for (const { node } of edges) {
+          // ONLY delete metafields from products NOT in our active fitments set
+          if (!keepGids.has(node.id as string)) {
+            const metafields = [
+              ...MF_KEYS.map(k => ({ ownerId: node.id, namespace: "$app:vehicle_fitment", key: k })),
+              ...MF_KEYS.map(k => ({ ownerId: node.id, namespace: "autosync_fitment", key: k })),
+            ];
+            mfLines.push(JSON.stringify({ metafields }));
+          }
+        }
+
+        if (!pageInfo.hasNextPage || edges.length === 0) break;
+        scanCursor = pageInfo.endCursor;
+      }
     } catch (err) {
-      return { processed: 0, hasMore: false, error: `Metafield cleanup error: ${err instanceof Error ? err.message : String(err)}` };
+      return { processed: 0, hasMore: false, error: `Metafield scan error: ${err instanceof Error ? err.message : String(err)}` };
     }
+
+    if (mfLines.length === 0) {
+      console.log(`[cleanup] No metafields to remove — skipping to collections`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "collections" }),
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+
+    console.log(`[cleanup] Starting metafield removal bulk op: ${mfLines.length} products (${Math.round(mfLines.join("\n").length / 1024)}KB JSONL)`);
+    const mfMutation = `mutation call($metafields: [MetafieldIdentifierInput!]!) { metafieldsDelete(metafields: $metafields) { deletedMetafields { key } userErrors { message } } }`;
+    const opId = await startCleanupBulkOp(mfLines.join("\n"), mfMutation);
+
+    if (!opId) {
+      console.error(`[cleanup] Failed to start metafield bulk op — skipping to collections`);
+      await db.from("sync_jobs").update({
+        metadata: JSON.stringify({ ...meta, current_phase: "collections" }),
+      }).eq("id", job.id);
+      return { processed: 0, hasMore: true };
+    }
+
+    await db.from("sync_jobs").update({
+      metadata: JSON.stringify({ ...meta, mfBulkOpId: opId }),
+    }).eq("id", job.id);
+    return { processed: mfLines.length, hasMore: true };
   }
 
   // Phase 3: Delete AutoSync smart collections
@@ -3575,8 +4754,11 @@ async function processCleanupChunk(
         synced_at: null,
       }).eq("shop_id", shopId);
 
-      // Delete all fitments
-      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+      // Delete all fitments (vehicle + wheel)
+      await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+        db.from("wheel_fitments").delete().eq("shop_id", shopId),
+      ]);
 
       // Delete collection mappings
       await db.from("collection_mappings").delete().eq("shop_id", shopId);
@@ -3798,7 +4980,6 @@ async function processCleanupMetafields(
         })});
         totalRemoved++;
       }
-      if (toDelete.length > 0) totalProcessed++;
     }
     totalProcessed += edges.length;
 
@@ -3835,9 +5016,12 @@ async function processCleanupCollections(
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
 
-  // Get all our collection mappings
+  // Get ALL autosync collections — from BOTH our DB AND Shopify directly
+  // This catches orphaned Shopify collections that aren't in our DB
+  const collectionGidSet = new Set<string>();
+
+  // Source 1: Our DB
   let offset = 0;
-  const collectionGids: string[] = [];
   while (true) {
     const { data: batch } = await db.from("collection_mappings")
       .select("shopify_collection_id")
@@ -3845,19 +5029,45 @@ async function processCleanupCollections(
       .not("shopify_collection_id", "is", null)
       .range(offset, offset + 999);
     if (!batch || batch.length === 0) break;
-    for (const c of batch) { if (c.shopify_collection_id) collectionGids.push(c.shopify_collection_id); }
+    for (const c of batch) {
+      if (c.shopify_collection_id) {
+        const gid = String(c.shopify_collection_id).startsWith("gid://")
+          ? String(c.shopify_collection_id)
+          : `gid://shopify/Collection/${c.shopify_collection_id}`;
+        collectionGidSet.add(gid);
+      }
+    }
     offset += batch.length;
     if (batch.length < 1000) break;
   }
 
+  // Source 2: Shopify directly — find ALL collections with _autosync_ tag rules
+  let cursor: string | null = null;
+  while (true) {
+    const res = await shopifyGraphQL(shopId, accessToken,
+      `{ collections(first: 250${cursor ? `, after: "${cursor}"` : ""}) { edges { node { id ruleSet { rules { column condition } } } } pageInfo { hasNextPage endCursor } } }`
+    );
+    const edges = res?.data?.collections?.edges ?? [];
+    for (const edge of edges) {
+      const rules = (edge.node.ruleSet?.rules ?? []) as Array<{ column: string; condition: string }>;
+      const hasAutoSync = rules.some((r: any) => r.column === "TAG" && r.condition?.startsWith("_autosync_"));
+      if (hasAutoSync) collectionGidSet.add(edge.node.id);
+    }
+    const pi = res?.data?.collections?.pageInfo;
+    if (!pi?.hasNextPage) break;
+    cursor = pi.endCursor;
+  }
+
+  const collectionGids = [...collectionGidSet];
+
   await db.from("sync_jobs").update({ total_items: collectionGids.length }).eq("id", job.id);
 
   let deleted = 0;
-  for (const gid of collectionGids) {
+  for (const collectionGid of collectionGids) {
     try {
       await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
         query: `mutation($input: CollectionDeleteInput!) { collectionDelete(input: $input) { deletedCollectionId userErrors { message } } }`,
-        variables: { input: { id: gid } },
+        variables: { input: { id: collectionGid } },
       })});
       deleted++;
     } catch (_err) { /* continue */ }
@@ -3875,4 +5085,223 @@ async function processCleanupCollections(
 
   console.log(`[cleanup_collections] Deleted ${deleted} collections`);
   return { processed: deleted, hasMore: false };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Wheel Extract — Parse PCD/diameter/width/offset/bore from wheel product titles
+// Same logic as the old Vercel inline handler but runs on Edge Function
+// ─────────────────────────────────────────────────────────────────────
+async function processWheelExtract(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+
+  // Update job status to running
+  await db.from("sync_jobs").update({ status: "running" }).eq("id", job.id);
+
+  // Use SQL RPC for the entire extraction — pure SQL is reliable, JS client insert had issues
+  const { data: result, error: rpcError } = await db.rpc("extract_wheel_specs", { p_shop_id: shopId });
+
+  if (rpcError) {
+    console.error(`[wheel_extract] RPC error: ${rpcError.message}`);
+    return { processed: 0, hasMore: false, error: `Extraction failed: ${rpcError.message}` };
+  }
+
+  const stats = result as { fitments: number; mapped: number; no_match: number } | null;
+  const mapped = stats?.mapped ?? 0;
+  const fitments = stats?.fitments ?? 0;
+
+  console.log(`[wheel_extract] Done via RPC: ${fitments} fitments, ${mapped} mapped, ${stats?.no_match ?? 0} no-match`);
+  return { processed: mapped, hasMore: false };
+}
+
+// Legacy JS-based extraction kept for reference — replaced by extract_wheel_specs RPC above
+async function _legacyProcessWheelExtract(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+
+  const { data: wheelProducts } = await db
+    .from("products")
+    .select("id, title, description, raw_data")
+    .eq("shop_id", shopId)
+    .eq("product_category", "wheels")
+    .neq("status", "staged")
+    .eq("fitment_status", "unmapped")
+    .limit(10000);
+
+  if (!wheelProducts || wheelProducts.length === 0) {
+    return { processed: 0, hasMore: false };
+  }
+
+  await db.from("sync_jobs").update({
+    status: "running",
+    total_items: wheelProducts.length,
+    progress: 0,
+  }).eq("id", job.id);
+
+  const allInserts: Record<string, unknown>[] = [];
+  const mappedProductIds: string[] = [];
+  const noMatchProductIds: string[] = [];
+  let totalFitments = 0;
+
+  for (const product of wheelProducts) {
+    const raw = (product.raw_data as Record<string, string> | null) ?? {};
+    const titleText = product.title || "";
+    const descText = (product.description || "").replace(/<[^>]+>/g, " ");
+    const allText = `${titleText} ${descText}`;
+
+    // Extract PCD: "5x112", "5×114.3", "4x100"
+    let pcdStr = raw.pcd || raw.PCD || raw.bolt_pattern || "";
+    if (!pcdStr) {
+      const pcdMatches = allText.match(/\b(\d)[x×X](\d{3}(?:\.\d)?)\b/gi) || [];
+      pcdStr = pcdMatches.join(", ");
+    }
+    pcdStr = pcdStr.replace(/[×X]/g, "x");
+
+    if (!pcdStr) {
+      noMatchProductIds.push(product.id as string);
+      continue;
+    }
+
+    const pcds = pcdStr.split(",").map((p: string) => p.trim()).filter((p: string) => /^\d+x\d/.test(p));
+    if (pcds.length === 0) {
+      noMatchProductIds.push(product.id as string);
+      continue;
+    }
+
+    // Extract diameter: "18x8.5j", "18 inch"
+    let diameter: number | null = null;
+    const rawDiam = (raw.size || raw.diameter || raw.Diameter || "").replace(/[^0-9]/g, "");
+    if (rawDiam) {
+      diameter = parseInt(rawDiam);
+    } else {
+      const diamMatch = allText.match(/\b(\d{2})[x×X]\d/i) || allText.match(/\b(\d{2})\s*[?"″']\s*[x×X]/i) || allText.match(/\b(\d{2})\s*inch/i);
+      if (diamMatch) diameter = parseInt(diamMatch[1]);
+    }
+
+    // Extract width: "18x8.5j"
+    let width: number | null = null;
+    const rawWidth = (raw.width || raw.Width || "").replace(",", ".").replace(/[^0-9.]/g, "");
+    if (rawWidth) {
+      width = parseFloat(rawWidth);
+    } else {
+      const widthMatch = allText.match(/\d{2}[x×X](\d[\d.]*)\s*[jJ]?\b/i);
+      if (widthMatch) width = parseFloat(widthMatch[1]);
+    }
+
+    // Extract offset: "ET45", "ET 30"
+    let offsetMin: number | null = null;
+    let offsetMax: number | null = null;
+    const etStr = raw.et || raw.ET || raw.offset || "";
+    if (etStr) {
+      const etValues = etStr.split(",").map((v: string) => parseFloat(v.trim())).filter((v: number) => !isNaN(v));
+      offsetMin = etValues.length > 0 ? Math.min(...etValues) : null;
+      offsetMax = etValues.length > 0 ? Math.max(...etValues) : null;
+    } else {
+      const etMatch = allText.match(/ET\s*(\d{1,3})\b/i);
+      if (etMatch) {
+        offsetMin = parseInt(etMatch[1]);
+        offsetMax = offsetMin;
+      }
+    }
+
+    // Extract center bore: "(57.1CB)", "CB 57.1"
+    let centerBore: number | null = null;
+    const boreStr = (raw.center_bore || raw.centre_bore || raw.hub_bore || "").split(",")[0].trim();
+    if (boreStr) {
+      centerBore = parseFloat(boreStr);
+    } else {
+      const cbMatch = allText.match(/\((\d{2,3}(?:\.\d)?)\s*CB\)/i) || allText.match(/(\d{2,3}(?:\.\d)?)\s*(?:mm\s*)?CB\b/i) || allText.match(/CB\s*(\d{2,3}(?:\.\d)?)/i);
+      if (cbMatch) centerBore = parseFloat(cbMatch[1]);
+    }
+
+    // Collect fitment inserts
+    for (const pcd of pcds) {
+      allInserts.push({
+        product_id: product.id,
+        shop_id: shopId,
+        pcd,
+        diameter,
+        width,
+        offset_min: offsetMin,
+        offset_max: offsetMax,
+        center_bore: centerBore,
+      });
+    }
+    mappedProductIds.push(product.id as string);
+    totalFitments += pcds.length;
+  }
+
+  // Batch operations with error checking
+  if (mappedProductIds.length > 0) {
+    // 1. Delete existing fitments
+    for (let i = 0; i < mappedProductIds.length; i += 500) {
+      await db.from("wheel_fitments").delete()
+        .eq("shop_id", shopId)
+        .in("product_id", mappedProductIds.slice(i, i + 500));
+    }
+
+    // 2. Insert all new fitments — with error checking + individual fallback
+    let insertedCount = 0;
+    for (let i = 0; i < allInserts.length; i += 100) {
+      const batch = allInserts.slice(i, i + 100);
+      const { error: batchErr } = await db.from("wheel_fitments").insert(batch);
+      if (batchErr) {
+        console.error(`[wheel_extract] Batch insert failed at offset ${i}: ${batchErr.message}`);
+        // Fall back to individual inserts for this batch
+        for (const row of batch) {
+          const { error: singleErr } = await db.from("wheel_fitments").insert(row);
+          if (!singleErr) {
+            insertedCount++;
+          } else {
+            console.error(`[wheel_extract] Individual insert failed for product ${row.product_id}: ${singleErr.message}`);
+          }
+        }
+      } else {
+        insertedCount += batch.length;
+      }
+    }
+    console.log(`[wheel_extract] Inserted ${insertedCount}/${allInserts.length} fitments`);
+
+    // 3. Update mapped product statuses ONLY if fitments were actually created
+    if (insertedCount > 0) {
+      // Only mark products that actually have fitments
+      const { data: productsWithFitments } = await db.from("wheel_fitments")
+        .select("product_id")
+        .eq("shop_id", shopId)
+        .in("product_id", mappedProductIds);
+      const confirmedIds = [...new Set((productsWithFitments ?? []).map((r: any) => r.product_id))];
+
+      for (let i = 0; i < confirmedIds.length; i += 500) {
+        await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
+          .in("id", confirmedIds.slice(i, i + 500));
+      }
+      console.log(`[wheel_extract] Marked ${confirmedIds.length} products as auto_mapped`);
+    } else {
+      console.error("[wheel_extract] ZERO fitments inserted — not updating product statuses");
+    }
+  }
+
+  // 4. Mark no-match products
+  if (noMatchProductIds.length > 0) {
+    for (let i = 0; i < noMatchProductIds.length; i += 500) {
+      await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
+        .in("id", noMatchProductIds.slice(i, i + 500));
+    }
+  }
+
+  // 5. Update tenant fitment count
+  const { count: totalWheelFitments } = await db.from("wheel_fitments")
+    .select("id", { count: "exact", head: true }).eq("shop_id", shopId);
+  const { count: totalVehicleFitments } = await db.from("vehicle_fitments")
+    .select("id", { count: "exact", head: true }).eq("shop_id", shopId);
+  await db.from("tenants").update({
+    fitment_count: (totalVehicleFitments ?? 0) + (totalWheelFitments ?? 0),
+  }).eq("shop_id", shopId);
+
+  console.log(`[wheel_extract] Done: ${totalFitments} fitments from ${mappedProductIds.length} products, ${noMatchProductIds.length} no-match`);
+  return { processed: mappedProductIds.length, hasMore: false };
 }

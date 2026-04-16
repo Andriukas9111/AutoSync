@@ -35,6 +35,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .eq("shop_id", shopId)
     .eq("type", "bulk_push")
     .in("status", ["running", "pending"])
+    .limit(1)
     .maybeSingle();
 
   if (existingBulkJob) {

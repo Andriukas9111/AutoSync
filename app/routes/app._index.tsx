@@ -18,7 +18,6 @@ import {
 } from "@shopify/polaris";
 import {
   ProductIcon,
-  ConnectIcon,
   GaugeIcon,
   CollectionIcon,
   PackageIcon,
@@ -33,15 +32,15 @@ import {
   SearchIcon,
   AlertCircleIcon,
   CheckCircleIcon,
-  AlertTriangleIcon,
   ClockIcon,
   MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db, { paginatedSelect } from "../lib/db.server";
+import db from "../lib/db.server";
 import { getPlanLimits, getPlanConfigs, getEffectivePlan } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
+import { asPushStats } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
@@ -63,9 +62,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tenantResult,
     totalProductsResult,
     unmappedResult,
-    autoMappedResult,
-    smartMappedResult,
-    manualMappedResult,
+    pushStatsResult,  // RPC: auto/smart/manual/mapped_total/stale_push
     flaggedResult,
     noMatchResult,
     fitmentCountResult,
@@ -81,19 +78,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeEnginesResult,
     ymmeSpecsResult,
     syncedProductsResult,
+    anyPushedResult,
     wheelProductsResult,
     wheelMappedResult,
     wheelFitmentsResult,
   ] = await Promise.all([
     db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at").eq("shop_id", shopId).maybeSingle(),
-    // Product counts — exclude staged products (same filter as job-status API to prevent flash-to-zero)
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "manual_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match"),
+    // Vehicle part counts ONLY — exclude wheels (.neq is safe with NULL: NULL != 'wheels' is true in Supabase)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped").neq("product_category", "wheels"),
+    // Method-based counts: use same RPC as job-status.tsx for consistency (prevents flash-of-wrong-data)
+    // Returns {auto_mapped, smart_mapped, manual_mapped, mapped_total, stale_push} as COUNT(DISTINCT)
+    db.rpc("get_push_stats", { p_shop_id: shopId }),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match").neq("product_category", "wheels"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Top makes — cap at 50K rows (enough for accurate top 10, prevents OOM on huge shops)
@@ -113,8 +111,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
-    // Pushed products — MUST match job-status.tsx query (synced_at NOT NULL, NOT shopify_product_id)
-    // to prevent flash-of-wrong-data when poll replaces loader values
+    // Pushed vehicle parts ONLY — matches job-status.tsx (excludes wheels to prevent flash-of-wrong-data)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null).neq("product_category", "wheels"),
+    // hasPushed: ANY product pushed (includes wheels) — for onboarding checklist
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
     // Wheel counts — needed for initial render to prevent flash (useAppData defaults to 0)
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged"),
@@ -158,16 +157,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: (syncedProductsResult.count ?? 0) > 0, // Now checks for completed push JOBS, not synced_at
+    hasPushed: (anyPushedResult.count ?? 0) > 0, // ANY product pushed (vehicle or wheel) — for onboarding
     // Products — real counts for instant render, useAppData updates live
+    // Uses same RPC as job-status.tsx to guarantee identical numbers (zero flash)
     totalProducts: totalProductsResult.count ?? 0,
     unmapped: unmappedResult.count ?? 0,
-    autoMapped: autoMappedResult.count ?? 0,
-    smartMapped: smartMappedResult.count ?? 0,
-    manualMapped: manualMappedResult.count ?? 0,
+    ...(() => {
+      const p = asPushStats(pushStatsResult.data);
+      return {
+        autoMapped: p.auto_mapped,
+        smartMapped: p.smart_mapped,
+        manualMapped: p.manual_mapped,
+        mapped: p.mapped_total,
+      };
+    })(),
     flagged: flaggedResult.count ?? 0,
     noMatch: noMatchResult.count ?? 0,
-    mapped: (autoMappedResult.count ?? 0) + (smartMappedResult.count ?? 0) + (manualMappedResult.count ?? 0),
     // Fitments
     fitmentCount: fitmentCountResult.count ?? 0,
     topMakes,
@@ -382,17 +387,23 @@ export default function Dashboard() {
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
+  // CRITICAL: pass ALL fields that job-status.tsx returns to prevent flash-of-wrong-data.
+  // Any field NOT passed here defaults to 0 from DEFAULT_STATS, causing a visible jump
+  // when the first poll returns correct data after ~5 seconds.
   const { stats: liveData, jobs: liveJobs } = useAppData({
     total: totalProducts,
     unmapped,
+    mapped, // Distinct count — prevents sum fallback (autoMapped+smartMapped+manualMapped)
     autoMapped,
     smartMapped,
     manualMapped,
     flagged,
     noMatch: loaderNoMatch,
     fitments: fitmentCount,
+    vehicleCoverage: Math.round(fitmentCount * 8), // Same formula as job-status.tsx
     collections: collectionCount,
     pushedProducts: loaderPushedProducts,
+    needsPush: totalProducts - (loaderPushedProducts ?? 0), // Approximate — exact value comes from poll
     activeMakes: loaderActiveMakes,
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
@@ -406,14 +417,16 @@ export default function Dashboard() {
   // All live values from unified hook
   const s = liveData; // Short alias
   const { mapped: liveMapped, needsReview, notMapped, coverage, pendingPush, vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage } = computeFromStats(s);
-  const liveTotalProducts = s.total;
+  // Plan usage counts ALL products (vehicle + wheels) — not just vehicle parts
+  const liveTotalProducts = s.total + (s.wheelProducts ?? 0);
   const liveUnmapped = s.unmapped;
   const liveAutoMapped = s.autoMapped;
   const liveSmartMapped = s.smartMapped;
   const liveFlagged = s.flagged;
-  // Vehicle-only auto mapped (exclude wheel products from the count)
-  const vehicleAutoMapped = Math.max(0, liveAutoMapped - (s.wheelMapped ?? 0));
-  const liveFitmentCount = s.fitments;
+  // autoMapped is already vehicle-only from the API (wheels are excluded by .neq filter)
+  const vehicleAutoMapped = liveAutoMapped;
+  // Plan usage counts ALL fitments (vehicle + wheel)
+  const liveFitmentCount = s.fitments + (s.wheelFitments ?? 0);
   const liveCollectionCount = s.collections;
   const livePushedProducts = s.pushedProducts;
   const liveActiveMakes = s.activeMakes;
@@ -422,7 +435,9 @@ export default function Dashboard() {
   const liveUniqueModels = s.uniqueModels;
 
   const planLabel = planName;
-  const showOnboarding = liveTotalProducts < 1 || liveFitmentCount < 1;
+  // Always render OnboardingChecklist — the component itself decides when to hide
+  // (hides when 4+ steps are complete: fetch + map + push + collections)
+  const showOnboarding = true;
 
   const productUsagePercent =
     limits.products === Infinity ? 0 : Math.min(100, Math.round((liveTotalProducts / limits.products) * 100));
@@ -643,25 +658,23 @@ export default function Dashboard() {
               </Card>
             </InlineGrid>
 
-            {/* ─── Fitment Coverage — Hero Card ─── */}
+            {/* ─── Fitment Coverage — uses shared CoverageBar pattern ─── */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
+                <InlineStack align="space-between">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">Vehicle Fitment Coverage</Text>
                   </InlineStack>
-                  <InlineStack gap="300" blockAlign="center">
-                    <Text as="span" variant="heading2xl" fontWeight="bold">
-                      {`${vehicleCoverage}%`}
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {`${vehicleMapped.toLocaleString()} of ${vehicleTotal.toLocaleString()} vehicle parts mapped`}
-                    </Text>
-                  </InlineStack>
+                  <Text as="p" variant="headingMd" fontWeight="bold">
+                    {`${vehicleCoverage}%`}
+                  </Text>
                 </InlineStack>
 
-                <ProgressBar progress={vehicleCoverage} size="small" />
+                <ProgressBar progress={vehicleCoverage} size="medium" />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {`${vehicleMapped.toLocaleString()} of ${vehicleTotal.toLocaleString()} vehicle parts mapped`}
+                </Text>
 
                 {/* Compact status chips — unified icon style */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
@@ -873,7 +886,7 @@ export default function Dashboard() {
                             <Text as="span" variant="bodySm" tone="subdued">
                               {formatDate(job.completed_at ?? job.created_at)}
                               {job.total_items
-                                ? ` \u00B7 ${job.processed_items ?? 0}/${job.total_items}`
+                                ? ` \u00B7 ${Math.min(job.processed_items ?? 0, job.total_items)}/${job.total_items}`
                                 : ""}
                             </Text>
                           </BlockStack>

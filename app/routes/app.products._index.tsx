@@ -38,14 +38,16 @@ import {
   TargetIcon,
   AlertCircleIcon,
   MinusCircleIcon,
+  QuestionCircleIcon,
+  GaugeIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import db, { syncFitmentCount } from "../lib/db.server";
+import db, { syncAfterDelete } from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
-import { formatPrice } from "../lib/types";
+import { formatPrice, asPushStats } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 import { useAppData } from "../lib/use-app-data";
 import { autoFitGridStyle } from "../lib/design";
@@ -64,6 +66,7 @@ const STATUS_CONFIG: Record<
   manual_mapped: { tone: "success", label: "Manual Mapped" },
   partial: { tone: "warning", label: "Partial" },
   flagged: { tone: "critical", label: "Flagged" },
+  no_match: { tone: "warning", label: "No Match" },
 };
 
 const STATUS_OPTIONS = [
@@ -142,6 +145,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (status) {
     if (status.startsWith("cat_")) {
       query = query.eq("product_category", status.replace("cat_", ""));
+    } else if (status === "smart_mapped" || status === "manual_mapped" || status === "auto_mapped") {
+      // Filter by extraction method — finds products with ANY fitment of that type,
+      // even if the product also has fitments from other methods.
+      // e.g., filtering "Smart Mapped" finds products with 2 smart + 1 manual fitments.
+      const methodMap: Record<string, string> = {
+        smart_mapped: "smart",
+        manual_mapped: "manual",
+        auto_mapped: "auto",
+      };
+      const { data: methodProductIds } = await db
+        .from("vehicle_fitments")
+        .select("product_id")
+        .eq("shop_id", shopId)
+        .eq("extraction_method", methodMap[status]);
+      const uniqueIds = [...new Set((methodProductIds ?? []).map((r: any) => r.product_id))];
+      if (uniqueIds.length > 0) {
+        query = query.in("id", uniqueIds);
+      } else {
+        // No products match — use impossible filter to return empty
+        query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
     } else {
       query = query.eq("fitment_status", status);
     }
@@ -163,19 +187,67 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Products query error:", error);
   }
 
-  // Status breakdown for the header — use server-side counts (no row limit)
-  const statuses = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"] as const;
-  const statusResults = await Promise.all(
-    statuses.map((s) =>
+  // Status breakdown for the header — query shapes MUST match job-status.tsx so
+  // polling returns identical numbers and nothing flashes.
+  //
+  // Vehicle-parts use fitment_status counts (unmapped/flagged/partial/no_match) +
+  // method-based COUNT(DISTINCT) via the `get_push_stats` RPC for auto/smart/manual.
+  // Wheels get the same four fitment_status splits PLUS a head count for the total
+  // so the "Wheels" tile renders the real number instantly (auto_mapped wheels are
+  // not in the simple-status list so a sum would undercount).
+  const simpleStatuses = ["unmapped", "flagged", "partial", "no_match"] as const;
+  const [
+    vehicleTotalResult,
+    wheelTotalResult,
+    vehicleSimpleResults,
+    wheelSimpleResults,
+    pushStatsResult,
+  ] = await Promise.all([
+    // Vehicle-parts total (matches job-status `total`)
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    // Wheel-products total (matches job-status `wheelProducts`)
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged").eq("product_category", "wheels"),
+    Promise.all(simpleStatuses.map((s) =>
       db.from("products").select("id", { count: "exact", head: true })
-        .eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", s),
-    ),
-  );
+        .eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", s),
+    )),
+    Promise.all(simpleStatuses.map((s) =>
+      db.from("products").select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId).neq("status", "staged").eq("product_category", "wheels").eq("fitment_status", s),
+    )),
+    // Same RPC the dashboard + job-status use — guarantees identical auto/smart/manual numbers
+    db.rpc("get_push_stats", { p_shop_id: shopId }),
+  ]);
+  const pushStats = asPushStats(pushStatsResult.data);
   const breakdown: Record<string, number> = {};
-  statuses.forEach((s, i) => {
-    const c = statusResults[i].count ?? 0;
-    if (c > 0) breakdown[s] = c;
+  const wheelBreakdown: Record<string, number> = {};
+  simpleStatuses.forEach((s, i) => {
+    const vc = vehicleSimpleResults[i].count ?? 0;
+    const wc = wheelSimpleResults[i].count ?? 0;
+    if (vc > 0) breakdown[s] = vc;
+    if (wc > 0) wheelBreakdown[s] = wc;
   });
+  // Method counts come from the same RPC `job-status.tsx` uses so every page agrees.
+  if (pushStats.auto_mapped > 0) breakdown.auto_mapped = pushStats.auto_mapped;
+  if (pushStats.smart_mapped > 0) breakdown.smart_mapped = pushStats.smart_mapped;
+  if (pushStats.manual_mapped > 0) breakdown.manual_mapped = pushStats.manual_mapped;
+
+  // Load extraction methods for displayed products (for multi-badge display)
+  const productIds = (products ?? []).map((p: any) => p.id);
+  const productMethodsMap: Record<string, string[]> = {};
+  if (productIds.length > 0) {
+    const { data: methodRows } = await db
+      .from("vehicle_fitments")
+      .select("product_id, extraction_method")
+      .in("product_id", productIds);
+    for (const r of methodRows ?? []) {
+      const m = r.extraction_method || "manual";
+      if (!productMethodsMap[r.product_id]) productMethodsMap[r.product_id] = [];
+      if (!productMethodsMap[r.product_id].includes(m)) productMethodsMap[r.product_id].push(m);
+    }
+  }
 
   return {
     products: (products ?? []) as Product[],
@@ -183,6 +255,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currentPage: page,
     filters: { search, status, source, provider: providerId },
     statusBreakdown: breakdown,
+    wheelStatusBreakdown: wheelBreakdown,
+    // Real head counts — match job-status.tsx exactly so useAppData has no flash.
+    vehicleTotal: vehicleTotalResult.count ?? 0,
+    wheelTotal: wheelTotalResult.count ?? 0,
+    productMethods: productMethodsMap,
     queryError: error?.message || null,
   };
 };
@@ -213,14 +290,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "bulk-delete") {
     const ids = (formData.get("ids") as string).split(",").filter(Boolean);
     if (!ids.length) return data({ ok: false, message: "No products selected" });
-    // Delete fitments first, then products
-    await db.from("vehicle_fitments").delete().in("product_id", ids).eq("shop_id", shopId);
+    // Delete all fitments first (vehicle + wheel), then products
+    await Promise.all([
+      db.from("vehicle_fitments").delete().in("product_id", ids).eq("shop_id", shopId),
+      db.from("wheel_fitments").delete().in("product_id", ids).eq("shop_id", shopId),
+    ]);
     const { error } = await db.from("products").delete().in("id", ids).eq("shop_id", shopId);
     if (error) return data({ ok: false, message: error.message });
-    // Sync counters after delete
-    await syncFitmentCount(shopId);
-    const { count: prodCount } = await db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged");
-    await db.from("tenants").update({ product_count: prodCount ?? 0 }).eq("shop_id", shopId);
+    // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+    await syncAfterDelete(shopId);
     return data({ ok: true, message: `Deleted ${ids.length} products` });
   }
 
@@ -236,6 +314,10 @@ export default function Products() {
     currentPage,
     filters,
     statusBreakdown,
+    wheelStatusBreakdown,
+    vehicleTotal,
+    wheelTotal,
+    productMethods,
     queryError,
   } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -247,14 +329,32 @@ export default function Products() {
   const [dismissed, setDismissed] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Live stats via unified polling hook
-  const { stats: polledStats } = useAppData();
+  // Live stats via the unified polling hook. Every seed field MUST correspond to
+  // an identical query in `app.api.job-status.tsx` — otherwise polling changes
+  // the number after ~100ms and the user sees a flash.
+  const { stats: polledStats } = useAppData({
+    // Vehicle-parts side (all queries in job-status exclude product_category='wheels')
+    total: vehicleTotal,
+    unmapped: statusBreakdown.unmapped ?? 0,
+    flagged: statusBreakdown.flagged ?? 0,
+    noMatch: statusBreakdown.no_match ?? 0,
+    // Method counts come from the SAME get_push_stats RPC on both sides.
+    autoMapped: statusBreakdown.auto_mapped ?? 0,
+    smartMapped: statusBreakdown.smart_mapped ?? 0,
+    manualMapped: statusBreakdown.manual_mapped ?? 0,
+    mapped: (statusBreakdown.auto_mapped ?? 0) + (statusBreakdown.smart_mapped ?? 0) + (statusBreakdown.manual_mapped ?? 0),
+    // Wheel side — each one is a standalone head count in job-status.tsx.
+    wheelProducts: wheelTotal,
+    wheelUnmapped: wheelStatusBreakdown.unmapped ?? 0,
+    wheelFlagged: wheelStatusBreakdown.flagged ?? 0,
+    wheelNoMatch: wheelStatusBreakdown.no_match ?? 0,
+  });
   const activeBreakdown: Record<string, number> = {
-    unmapped: polledStats?.unmapped ?? statusBreakdown.unmapped ?? 0,
-    auto_mapped: polledStats?.autoMapped ?? statusBreakdown.auto_mapped ?? 0,
-    smart_mapped: polledStats?.smartMapped ?? statusBreakdown.smart_mapped ?? 0,
-    manual_mapped: polledStats?.manualMapped ?? statusBreakdown.manual_mapped ?? 0,
-    flagged: polledStats?.flagged ?? statusBreakdown.flagged ?? 0,
+    unmapped: polledStats.unmapped,
+    auto_mapped: polledStats.autoMapped,
+    smart_mapped: polledStats.smartMapped,
+    manual_mapped: polledStats.manualMapped,
+    flagged: polledStats.flagged,
   };
 
   const isFetching = fetcher.state !== "idle";
@@ -416,7 +516,19 @@ export default function Products() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <InlineStack gap="100" wrap={false}>
-            <Badge tone={badge.tone}>{badge.label}</Badge>
+            {(() => {
+              const methods = productMethods[product.id] || [];
+              if (methods.length === 0) {
+                // No fitments — show status badge (unmapped/flagged/no_match)
+                return <Badge tone={badge.tone}>{badge.label}</Badge>;
+              }
+              // Show a badge for each method present in this product's fitments
+              const methodBadges: { key: string; tone: "success" | "info" | "warning"; label: string }[] = [];
+              if (methods.includes("smart")) methodBadges.push({ key: "smart", tone: "success", label: "Smart" });
+              if (methods.includes("manual")) methodBadges.push({ key: "manual", tone: "info", label: "Manual" });
+              if (methods.includes("auto")) methodBadges.push({ key: "auto", tone: "warning", label: "Auto" });
+              return methodBadges.map((b) => <Badge key={b.key} tone={b.tone}>{b.label}</Badge>);
+            })()}
             {product.product_category === "wheels" && (
               <Badge tone="info">Wheels</Badge>
             )}
@@ -521,7 +633,7 @@ export default function Products() {
         },
       ]}
     >
-      <BlockStack gap="400">
+      <BlockStack gap="600">
         {/* How It Works */}
         <HowItWorks
           steps={[
@@ -592,16 +704,21 @@ export default function Products() {
         {/* ── Status Overview ── */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("120px", "var(--p-space-200)"),
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              // ALWAYS use global stats from polling — NOT the filtered page count
-              { key: "total", icon: ProductIcon, label: "Total", count: polledStats?.total ?? totalCount, critical: false },
-              { key: "flagged", icon: AlertCircleIcon, label: "Flagged", count: activeBreakdown["flagged"] ?? 0, critical: true },
-              { key: "no_match", icon: MinusCircleIcon, label: "No Match", count: polledStats?.noMatch ?? 0, critical: false },
+              // Products page shows BOTH categories — sum vehicle + wheel counts so the
+              // badge matches what the table lists. Otherwise wheel-only statuses (e.g.
+              // 5 no_match wheels) would show 0 because the polling API splits them.
+              { key: "total", icon: ProductIcon, label: "Total", count: (polledStats?.total ?? 0) + (polledStats?.wheelProducts ?? 0), critical: false },
+              { key: "unmapped", icon: QuestionCircleIcon, label: "Unmapped", count: (polledStats?.unmapped ?? 0) + (polledStats?.wheelUnmapped ?? 0), critical: false },
               { key: "auto_mapped", icon: WandIcon, label: "Auto", count: activeBreakdown["auto_mapped"] ?? 0, critical: false },
+              { key: "smart_mapped", icon: SearchIcon, label: "Smart", count: activeBreakdown["smart_mapped"] ?? 0, critical: false },
               { key: "manual_mapped", icon: TargetIcon, label: "Manual", count: activeBreakdown["manual_mapped"] ?? 0, critical: false },
+              { key: "flagged", icon: AlertCircleIcon, label: "Flagged", count: (polledStats?.flagged ?? 0) + (polledStats?.wheelFlagged ?? 0), critical: true },
+              { key: "no_match", icon: MinusCircleIcon, label: "No Match", count: (polledStats?.noMatch ?? 0) + (polledStats?.wheelNoMatch ?? 0), critical: false },
+              { key: "cat_wheels", icon: GaugeIcon, label: "Wheels", count: polledStats?.wheelProducts ?? 0, critical: false },
             ] as { key: string; icon: typeof ProductIcon; label: string; count: number; critical: boolean }[]).map((item, i) => {
               const isFilter = item.key !== "total";
               const isActive = isFilter && filters.status === item.key;
@@ -615,10 +732,10 @@ export default function Products() {
                   style={{
                     padding: "var(--p-space-400)",
                     cursor: isFilter ? "pointer" : "default",
-                    borderRight: i < 5 ? "1px solid var(--p-color-border-secondary)" : "none",
-                    background: isActive ? "var(--p-color-bg-surface-selected)" : "transparent",
+                    borderRight: i < 7 ? "1px solid var(--p-color-border-secondary)" : "none",
                     textAlign: "center",
                     transition: "background 0.15s",
+                    borderBottom: isActive ? "2px solid var(--p-color-border-emphasis)" : "2px solid transparent",
                   }}
                 >
                   <BlockStack gap="200" inlineAlign="center">
@@ -626,7 +743,7 @@ export default function Products() {
                     <Text as="p" variant="headingLg" fontWeight="bold" tone={item.critical && item.count > 0 ? "critical" : undefined}>
                       {item.count.toLocaleString()}
                     </Text>
-                    <Text as="p" variant="bodySm" tone="subdued">
+                    <Text as="p" variant="bodySm" tone={isActive ? undefined : "subdued"}>
                       {item.label}
                     </Text>
                   </BlockStack>

@@ -460,29 +460,31 @@ export async function action({ request }: ActionFunctionArgs) {
     if (provider.type === "ftp") {
       try {
         const config = typeof provider.config === "string" ? JSON.parse(provider.config) : (provider.config ?? {});
-        let password = config.ftp_password || "";
+        // Config keys match providers.new.tsx: host, port, username, password, remotePath, protocol
+        let password = config.password || "";
         if (password && isEncrypted(password)) password = await decrypt(password);
 
         const ftpResult = await fetchFromFtp({
-          host: config.ftp_host || "",
-          port: parseInt(config.ftp_port || "21", 10),
-          username: config.ftp_username || "",
+          host: config.host || "",
+          port: parseInt(config.port || "21", 10),
+          username: config.username || "",
           password,
-          remotePath: config.ftp_path || "/",
-          protocol: config.ftp_protocol || "ftp",
+          remotePath: config.remotePath || "/",
+          protocol: config.protocol || "ftp",
         });
 
         if (!ftpResult.content) return data({ error: "FTP fetch returned no data" }, { status: 500 });
 
-        const parsed = parseFile(ftpResult.content, ftpResult.fileName || "data.csv");
+        // parseFile is async — must await. Return type uses .format not .fileType
+        const parsed = await parseFile(ftpResult.content, ftpResult.filename || "data.csv");
         if (!parsed.rows || parsed.rows.length === 0) return data({ error: "Parsed file has no rows" }, { status: 500 });
 
         const result = await runProviderImport({
           shopId,
           providerId,
-          fileName: ftpResult.fileName || "ftp-refresh",
+          fileName: ftpResult.filename || "ftp-refresh",
           fileSize: ftpResult.content.length,
-          fileType: parsed.fileType || "csv",
+          fileType: parsed.format || "csv",
           mappings,
           duplicateStrategy,
           rows: parsed.rows,

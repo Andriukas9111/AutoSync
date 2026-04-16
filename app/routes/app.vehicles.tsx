@@ -1205,6 +1205,7 @@ export default function Vehicles() {
       title="Vehicle Database"
       subtitle="Browse and manage your YMME vehicle database"
     >
+      <BlockStack gap="600">
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
@@ -1320,6 +1321,7 @@ export default function Vehicles() {
           </BlockStack>
         </Layout.Section>
       </Layout>
+      </BlockStack>
 
       {/* Engine detail modal */}
       {renderEngineModal()}

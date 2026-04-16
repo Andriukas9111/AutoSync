@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { useLoaderData, useActionData, useNavigation, Form, useFetcher } from "react-router";
 import { data } from "react-router";
@@ -21,10 +21,11 @@ import {
   ProgressBar,
   List,
   Icon,
+  InlineGrid,
+  Box,
 } from "@shopify/polaris";
 import {
   ExportIcon,
-  PersonIcon,
   DatabaseIcon,
   AlertDiamondIcon,
   SearchIcon,
@@ -33,7 +34,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db, { triggerEdgeFunction } from "../lib/db.server";
+import db, { triggerEdgeFunction, syncAfterDelete } from "../lib/db.server";
 import { getTenant, getPlanLimits, getEffectivePlan, getSerializedPlanLimits } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
@@ -115,15 +116,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Save Settings ----
   if (_action === "save_settings") {
-    const autoPushTags = formData.get("auto_push_tags") === "true";
-    const autoPushMetafields = formData.get("auto_push_metafields") === "true";
-    const tagPrefix = (formData.get("tag_prefix") as string) || "_autosync_";
-    const notificationEmail =
-      (formData.get("notification_email") as string) || "";
+    // Push settings are managed on the Push page — NOT here
+    // Collection settings are managed on the Collections page — NOT here
     const hideWatermarkVal = formData.get("hide_watermark") === "true";
-
-    // Note: collection_strategy and auto_create_collections are managed
-    // on the Collections page only — not duplicated here
 
     const { data: existing } = await db
       .from("app_settings")
@@ -133,10 +128,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const settingsPayload: Record<string, unknown> = {
       shop_id: shopId,
-      tag_prefix: tagPrefix,
-      push_tags: autoPushTags,
-      push_metafields: autoPushMetafields,
-      notification_email: notificationEmail || null,
       hide_watermark: hideWatermarkVal,
       updated_at: new Date().toISOString(),
     };
@@ -191,14 +182,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Delete All Fitment Data (DB only) ----
   if (_action === "delete_fitments") {
-    const { error: fitmentError } = await db
-      .from("vehicle_fitments")
-      .delete()
-      .eq("shop_id", shopId);
+    const [{ error: fitmentError }, { error: wheelError }] = await Promise.all([
+      db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+      db.from("wheel_fitments").delete().eq("shop_id", shopId),
+    ]);
 
-    if (fitmentError) {
+    if (fitmentError || wheelError) {
       return data(
-        { error: "Failed to delete fitment data: " + fitmentError.message },
+        { error: "Failed to delete fitment data: " + (fitmentError?.message ?? wheelError?.message) },
         { status: 500 },
       );
     }
@@ -208,17 +199,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .update({ fitment_status: "unmapped" })
       .eq("shop_id", shopId);
 
-    // Reset fitment_count to 0 (was drifting — only incremented, never decremented)
-    await db
-      .from("tenants")
-      .update({ fitment_count: 0 })
-      .eq("shop_id", shopId);
-
-    // Also clean tenant_active_makes since fitments are gone
-    await db
-      .from("tenant_active_makes")
-      .delete()
-      .eq("shop_id", shopId);
+    // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+    await syncAfterDelete(shopId);
 
     return data({
       success: true,
@@ -228,14 +210,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // ---- Delete All Products from DB ----
   if (_action === "delete_products") {
-    // Delete fitments first (FK dependency)
-    await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+    // Delete all fitments first (FK dependency), then products
+    await Promise.all([
+      db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+      db.from("wheel_fitments").delete().eq("shop_id", shopId),
+    ]);
     const { error } = await db.from("products").delete().eq("shop_id", shopId);
     if (error)
       return data({ error: "Failed to delete products: " + error.message }, { status: 500 });
 
-    // Reset cached counters on tenant
-    await db.from("tenants").update({ product_count: 0, fitment_count: 0 }).eq("shop_id", shopId);
+    // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+    await syncAfterDelete(shopId);
 
     return data({
       success: true,
@@ -258,9 +243,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // 1. Don't timeout (Edge has 150s vs Vercel 60s)
   // 2. Continue if user closes the browser
   // 3. Show progress via job polling
-  if (_action === "remove_shopify_tags" || _action === "remove_shopify_metafields" || _action === "remove_shopify_collections") {
+  if (_action === "remove_shopify_tags" || _action === "remove_shopify_metafields" || _action === "remove_shopify_collections" || _action === "remove_vehicle_pages") {
     const cleanupType = _action === "remove_shopify_tags" ? "cleanup_tags"
       : _action === "remove_shopify_metafields" ? "cleanup_metafields"
+      : _action === "remove_vehicle_pages" ? "delete_vehicle_pages"
       : "cleanup_collections";
 
     const { data: cleanupJob, error: jobErr } = await db
@@ -286,6 +272,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const label = _action === "remove_shopify_tags" ? "Tag removal"
       : _action === "remove_shopify_metafields" ? "Metafield removal"
+      : _action === "remove_vehicle_pages" ? "Vehicle page removal"
       : "Collection removal";
 
     return data({
@@ -318,7 +305,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await db.from("products").update({ fitment_status: "unmapped", synced_at: null }).eq("shop_id", shopId);
     await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
 
-    // 2. Create Shopify cleanup job for Edge Function
+    // 2. Duplicate job prevention — don't allow simultaneous cleanup jobs
+    const { data: existingCleanup } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .in("type", ["cleanup", "cleanup_tags", "cleanup_metafields", "cleanup_collections"])
+      .in("status", ["pending", "running"])
+      .maybeSingle();
+    if (existingCleanup) {
+      return data({ error: "A cleanup job is already running. Please wait for it to complete." }, { status: 409 });
+    }
+
+    // Create Shopify cleanup job for Edge Function
     // Edge Function fetches access_token from tenants table at execution time (no secrets in metadata)
     const { data: cleanupJob } = await db.from("sync_jobs").insert({
       shop_id: shopId,
@@ -431,21 +430,15 @@ function DangerAction({
           <p>{result.error}</p>
         </Banner>
       )}
-      <InlineStack align="space-between" blockAlign="center" wrap={false}>
-        <BlockStack gap="100">
-          <Text as="p" variant="bodyMd" fontWeight="semibold">
-            {title}
-          </Text>
-          <Text as="p" variant="bodySm" tone="subdued">
-            {description}
-          </Text>
-        </BlockStack>
-        <div style={{ flexShrink: 0 }}>
-          <Button tone="critical" onClick={() => setOpen(true)} loading={isLoading}>
+      <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+        <BlockStack gap="200">
+          <Text as="p" variant="bodyMd" fontWeight="semibold">{title}</Text>
+          <Text as="p" variant="bodySm" tone="subdued">{description}</Text>
+          <Button tone="critical" size="slim" onClick={() => setOpen(true)} loading={isLoading} fullWidth>
             {buttonLabel}
           </Button>
-        </div>
-      </InlineStack>
+        </BlockStack>
+      </Box>
 
       <Modal
         open={open}
@@ -488,6 +481,11 @@ const STOREFRONT_FILTERS = [
   { name: "Vehicle Model", description: "Filter products by model (e.g. 3 Series, Focus)", requiredPlans: ["growth", "professional", "business", "enterprise"], badgeLabel: "Growth+" },
   { name: "Vehicle Year", description: "Filter products by year range", requiredPlans: ["growth", "professional", "business", "enterprise"], badgeLabel: "Growth+" },
   { name: "Engine / Generation", description: "Filter by engine type or generation", requiredPlans: ["professional", "business", "enterprise"], badgeLabel: "Professional+" },
+  { name: "Wheel PCD", description: "Filter wheels by bolt pattern (e.g. 5x112)", requiredPlans: ["business", "enterprise"], badgeLabel: "Business+" },
+  { name: "Wheel Diameter", description: "Filter wheels by size (e.g. 18 inch)", requiredPlans: ["business", "enterprise"], badgeLabel: "Business+" },
+  { name: "Wheel Width", description: "Filter wheels by width (e.g. 8.5J)", requiredPlans: ["business", "enterprise"], badgeLabel: "Business+" },
+  { name: "Wheel Offset", description: "Filter wheels by ET offset", requiredPlans: ["business", "enterprise"], badgeLabel: "Business+" },
+  { name: "Wheel Center Bore", description: "Filter wheels by hub center bore", requiredPlans: ["business", "enterprise"], badgeLabel: "Business+" },
 ];
 
 function isFilterAvailable(plan: string, requiredPlans: string[]): boolean {
@@ -498,7 +496,12 @@ export default function Settings() {
   const { plan, limits, allLimits, shopId, appSettings, counts: loaderCounts } = useLoaderData<typeof loader>();
 
   // Live stats polling — updates data counts every 5 seconds
-  const { stats: polledStats } = useAppData();
+  const { stats: polledStats } = useAppData({
+    total: loaderCounts.products,
+    fitments: loaderCounts.fitments,
+    collections: loaderCounts.collections,
+    providers: loaderCounts.providers,
+  });
 
   const counts = {
     products: polledStats?.total ?? loaderCounts.products,
@@ -512,24 +515,25 @@ export default function Settings() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  // Form state — Push Settings (respect plan limits — force OFF if feature not available)
-  const [autoPushTags, setAutoPushTags] = useState(
-    limits.features.pushTags ? (appSettings?.push_tags ?? false) : false,
-  );
-  const [autoPushMetafields, setAutoPushMetafields] = useState(
-    limits.features.pushMetafields ? (appSettings?.push_metafields ?? false) : false,
-  );
-  // Tag prefix is locked to "_autosync_" — used system-wide, never user-configurable
+  // Push settings are managed on the Push to Shopify page — not duplicated here
+  // Collection settings are managed on the Collections page — not duplicated here
 
-  // Form state — Notifications
-  const [notificationEmail, setNotificationEmail] = useState(
-    appSettings?.notification_email ?? "",
-  );
+  // Notifications removed — no email service connected. Will add when we integrate a provider.
 
-  // Form state — Widget branding
+  // Form state — Widget branding (auto-saves on toggle)
   const [hideWatermark, setHideWatermark] = useState(
     appSettings?.hide_watermark ?? false,
   );
+  const settingsFetcher = useFetcher();
+  const isFirstRender = useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    const fd = new FormData();
+    fd.set("_action", "save_settings");
+    fd.set("hide_watermark", String(hideWatermark));
+    settingsFetcher.submit(fd, { method: "POST" });
+  }, [hideWatermark]);
 
   const showSuccess =
     actionData && "success" in actionData && actionData.success;
@@ -537,6 +541,7 @@ export default function Settings() {
 
   return (
     <Page fullWidth title="Settings">
+      <BlockStack gap="600">
       <Layout>
         {/* How It Works */}
         <Layout.Section>
@@ -565,120 +570,25 @@ export default function Settings() {
           </Layout.Section>
         )}
 
-        {/* Main Settings Form */}
-        <Layout.Section>
-          <Form method="post">
-            <input type="hidden" name="_action" value="save_settings" />
-            <input type="hidden" name="auto_push_tags" value={String(autoPushTags)} />
-            <input
-              type="hidden"
-              name="auto_push_metafields"
-              value={String(autoPushMetafields)}
-            />
-            <input type="hidden" name="tag_prefix" value="_autosync_" />
-            {/* Collection settings managed on Collections page */}
-            <input type="hidden" name="notification_email" value={notificationEmail} />
-            <input type="hidden" name="hide_watermark" value={String(hideWatermark)} />
-
-            <BlockStack gap="500">
-              {/* Push Settings — gated behind Starter+ */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Push Settings
-                    </Text>
-                  </InlineStack>
-                  {limits.features.pushTags ? (
-                    <>
-                      <Text as="p" variant="bodyMd" tone="subdued">
-                        Configure how fitment data is pushed to your Shopify store.
-                      </Text>
-                      <FormLayout>
-                        <Checkbox
-                          label="Auto-push tags on fitment mapping"
-                          helpText="Automatically push _autosync_ tags to Shopify when a product is mapped"
-                          checked={autoPushTags}
-                          onChange={setAutoPushTags}
-                        />
-                        <Checkbox
-                          label="Auto-push metafields on fitment mapping"
-                          helpText="Automatically set app-owned vehicle metafields on products"
-                          checked={autoPushMetafields}
-                          onChange={setAutoPushMetafields}
-                        />
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Tag prefix: <Text as="span" fontWeight="semibold">_autosync_</Text> (e.g. _autosync_BMW). This prefix is used system-wide and cannot be changed.
-                        </Text>
-                      </FormLayout>
-                    </>
-                  ) : (
-                    <PlanGate
-                      feature="pushTags"
-                      currentPlan={plan}
-                      limits={limits}
-                      allLimits={allLimits}
-                    >
-                      <div />
-                    </PlanGate>
-                  )}
-                </BlockStack>
-              </Card>
-
-              {/* Collection settings are on the Collections page — no duplication */}
-
-              {/* Notifications */}
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={PersonIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Notifications
-                    </Text>
-                  </InlineStack>
-                  <FormLayout>
-                    <TextField
-                      label="Notification email"
-                      type="email"
-                      value={notificationEmail}
-                      onChange={setNotificationEmail}
-                      helpText="Receive notifications for sync completions and errors"
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                    />
-                  </FormLayout>
-                </BlockStack>
-              </Card>
-
-              {/* Widget Branding — Full+ customisation tiers can hide watermark */}
-              {(limits.features.widgetCustomisation === "full" || limits.features.widgetCustomisation === "full_css") && (
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">Widget Branding</Text>
-                    </InlineStack>
-                    <FormLayout>
-                      <Checkbox
-                        label="Hide AutoSync branding on storefront widgets"
-                        helpText="Remove the 'Powered by AutoSync' watermark from all widget blocks"
-                        checked={hideWatermark}
-                        onChange={setHideWatermark}
-                      />
-                    </FormLayout>
-                  </BlockStack>
-                </Card>
-              )}
-
-              <InlineStack align="start">
-                <Button variant="primary" submit loading={isSubmitting}>
-                  Save Settings
-                </Button>
-              </InlineStack>
-            </BlockStack>
-          </Form>
-        </Layout.Section>
+        {/* Widget Branding — auto-saves on toggle */}
+        {(limits.features.widgetCustomisation === "full" || limits.features.widgetCustomisation === "full_css") && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ExportIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">Widget Branding</Text>
+                </InlineStack>
+                <Checkbox
+                  label="Hide AutoSync branding on storefront widgets"
+                  helpText="Remove the 'Powered by AutoSync' watermark from all widget blocks"
+                  checked={hideWatermark}
+                  onChange={setHideWatermark}
+                />
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        )}
 
         {/* ─── Storefront Filters ──────────────────────────────────── */}
         <Layout.Section>
@@ -743,14 +653,13 @@ export default function Settings() {
                         <InlineStack gap="200" blockAlign="center" wrap={false}>
                           <IconBadge
                             icon={available ? CheckSmallIcon : LockIcon}
-                            bg={available ? "var(--p-color-bg-fill-success-secondary)" : "var(--p-color-bg-fill-critical-secondary)"}
-                            color={available ? "var(--p-color-icon-success)" : "var(--p-color-icon-critical)"}
+                            color="var(--p-color-icon-emphasis)"
                             size={24}
                           />
                           <BlockStack gap="050">
                             <InlineStack gap="200" blockAlign="center">
                               <Text as="p" variant="bodyMd" fontWeight="semibold">{filter.name}</Text>
-                              <Badge tone={available ? "success" : "info"} size="small">
+                              <Badge tone={available ? "info" : undefined} size="small">
                                 {available ? "Active" : filter.badgeLabel}
                               </Badge>
                             </InlineStack>
@@ -766,143 +675,58 @@ export default function Settings() {
           </Card>
         </Layout.Section>
 
-        {/* ─── Data Management ─────────────────────────────────────── */}
+        {/* ─── Data Management — Compact Grid Layout ───────────────── */}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
                 <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">
-                  Data Management
-                </Text>
+                <Text as="h2" variant="headingMd">Data Management</Text>
+                <Badge tone="info">{`${counts.products} products · ${counts.fitments} fitments · ${counts.collections} collections`}</Badge>
               </InlineStack>
-              <Text as="p" variant="bodyMd" tone="subdued">
-                Current data: {counts.products} products, {counts.fitments} fitments,{" "}
-                {counts.collections} collections, {counts.providers} providers.
-              </Text>
+
+              {/* Shopify Cleanup — 2x2 grid */}
+              <Text as="h3" variant="headingSm">Shopify Store Cleanup</Text>
+              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
+                <DangerAction title="Tags" description={`Remove _autosync_ tags`} buttonLabel="Remove Tags" actionName="remove_shopify_tags" modalTitle="Remove All Tags?" modalBody="Remove every _autosync_ prefixed tag from your Shopify products." />
+                <DangerAction title="Metafields" description={`Remove vehicle metafields`} buttonLabel="Remove Metafields" actionName="remove_shopify_metafields" modalTitle="Remove All Metafields?" modalBody="Delete all vehicle fitment metafields from your Shopify products." />
+                <DangerAction title="Collections" description={`Delete smart collections`} buttonLabel="Remove Collections" actionName="remove_shopify_collections" modalTitle="Remove All Collections?" modalBody="Delete all smart collections that AutoSync created from your Shopify store." />
+                <DangerAction title="Vehicle Pages" description={`Delete vehicle spec pages`} buttonLabel="Remove Pages" actionName="remove_vehicle_pages" modalTitle="Remove All Vehicle Pages?" modalBody="Delete all vehicle specification pages (metaobjects) from your storefront." />
+              </InlineGrid>
 
               <Divider />
 
-              <BlockStack gap="200">
-                <Text as="h3" variant="headingSm">
-                  Shopify Store Cleanup
-                </Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Remove data that AutoSync pushed to your Shopify store. This does not
-                  delete data from AutoSync&apos;s database.
-                </Text>
-              </BlockStack>
-
-              <DangerAction
-                title="Remove All AutoSync Tags"
-                description="Remove all _autosync_ prefixed tags from your Shopify products."
-                buttonLabel="Remove Tags"
-                actionName="remove_shopify_tags"
-                modalTitle="Remove All AutoSync Tags?"
-                modalBody="This will scan all your products and remove every tag starting with _autosync_. Your products will no longer be grouped by smart collections based on these tags."
-              />
-
-              <Divider />
-
-              <DangerAction
-                title="Remove All AutoSync Metafields"
-                description="Remove all autosync_fitment.* metafields from your Shopify products."
-                buttonLabel="Remove Metafields"
-                actionName="remove_shopify_metafields"
-                modalTitle="Remove All AutoSync Metafields?"
-                modalBody="This will delete all vehicle fitment metafields (autosync_fitment.*) from your Shopify products. Storefront widgets will stop showing vehicle data until you re-push."
-              />
-
-              <Divider />
-
-              <DangerAction
-                title="Remove All AutoSync Collections"
-                description="Delete all smart collections created by AutoSync from your Shopify store."
-                buttonLabel="Remove Collections"
-                actionName="remove_shopify_collections"
-                modalTitle="Remove All AutoSync Collections?"
-                modalBody="This will delete all smart collections that AutoSync created from your Shopify store. Your collection mappings in AutoSync will also be cleared."
-              />
-
-              <Divider />
-
-              <Banner tone="warning">
-                <Text as="p" variant="bodySm" fontWeight="semibold">
-                  Database cleanup — removes data from AutoSync only. Your Shopify store is not affected.
-                </Text>
-              </Banner>
-
-              <DangerAction
-                title="Delete All Fitment Data"
-                description={`Remove all ${counts.fitments} vehicle fitment mappings and reset products to unmapped.`}
-                buttonLabel="Delete Fitments"
-                actionName="delete_fitments"
-                modalTitle="Delete All Fitment Data?"
-                modalBody="This will permanently delete all vehicle fitment mappings and reset all product statuses to unmapped. Products, providers, and settings remain intact."
-              />
-
-              <Divider />
-
-              <DangerAction
-                title="Delete All Products"
-                description={`Remove all ${counts.products} products and their fitments from AutoSync's database.`}
-                buttonLabel="Delete Products"
-                actionName="delete_products"
-                modalTitle="Delete All Products?"
-                modalBody="This will permanently delete all products and their fitment mappings from AutoSync's database. Your Shopify products are NOT affected — only our internal records. You can re-sync products from Shopify at any time."
-              />
-
-              <Divider />
-
-              <DangerAction
-                title="Delete All Providers"
-                description={`Remove all ${counts.providers} data providers.`}
-                buttonLabel="Delete Providers"
-                actionName="delete_providers"
-                modalTitle="Delete All Providers?"
-                modalBody="This will permanently delete all provider configurations. You will need to re-create them to import fitment data."
-              />
+              {/* Database Cleanup — 3-column grid */}
+              <InlineStack gap="200" blockAlign="center">
+                <Text as="h3" variant="headingSm">Database Cleanup</Text>
+                <Badge tone="warning">AutoSync only</Badge>
+              </InlineStack>
+              <InlineGrid columns={{ xs: 1, sm: 3 }} gap="300">
+                <DangerAction title="Fitments" description={`${counts.fitments} fitment mappings`} buttonLabel="Delete Fitments" actionName="delete_fitments" modalTitle="Delete All Fitments?" modalBody="Permanently delete all vehicle fitment mappings and reset products to unmapped." />
+                <DangerAction title="Products" description={`${counts.products} products`} buttonLabel="Delete Products" actionName="delete_products" modalTitle="Delete All Products?" modalBody="Delete all products and fitments from AutoSync. Shopify products are NOT affected." />
+                <DangerAction title="Providers" description={`${counts.providers} providers`} buttonLabel="Delete Providers" actionName="delete_providers" modalTitle="Delete All Providers?" modalBody="Delete all provider configurations. You will need to re-create them." />
+              </InlineGrid>
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* ─── Danger Zone ─────────────────────────────────────────── */}
+        {/* ─── Danger Zone — compact ──────────────────────────────── */}
         <Layout.Section>
           <Card>
-            <BlockStack gap="400">
+            <BlockStack gap="300">
               <InlineStack gap="200" blockAlign="center">
                 <IconBadge icon={AlertDiamondIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
-                <Text as="h2" variant="headingMd" tone="critical">
-                  Danger Zone
-                </Text>
-                <Badge tone="critical">Destructive</Badge>
+                <Text as="h2" variant="headingMd" tone="critical">Danger Zone</Text>
               </InlineStack>
-
-              <Divider />
-
-              <DangerAction
-                title="Full Cleanup — Shopify + Database"
-                description="Remove all AutoSync tags, metafields, and collections from Shopify AND clear all fitment data from our database."
-                buttonLabel="Full Cleanup"
-                actionName="full_cleanup"
-                modalTitle="Full Cleanup — Shopify + Database?"
-                modalBody="This will: (1) Remove all _autosync_ tags from Shopify products, (2) Delete all autosync_fitment metafields, (3) Delete all AutoSync smart collections, (4) Clear all fitment mappings from our database. Products and providers remain intact."
-              />
-
-              <Divider />
-
-              <DangerAction
-                title="Disconnect Store"
-                description="Remove ALL AutoSync data — from Shopify AND our database. Deletes products, fitments, providers, collections, settings — everything."
-                buttonLabel="Disconnect Store"
-                actionName="disconnect_store"
-                modalTitle="Disconnect Store — Remove Everything?"
-                modalBody="This is the nuclear option. It will remove ALL AutoSync data from your Shopify store (tags, metafields, collections) AND delete ALL data from our database (products, fitments, providers, settings, sync history). Your tenant will be marked as uninstalled."
-              />
+              <InlineGrid columns={{ xs: 1, sm: 2 }} gap="300">
+                <DangerAction title="Full Cleanup" description="Shopify + Database — remove all tags, metafields, collections, and fitments" buttonLabel="Full Cleanup" actionName="full_cleanup" modalTitle="Full Cleanup?" modalBody="Remove ALL AutoSync data from Shopify (tags, metafields, collections) AND clear all fitments from the database. Products and providers remain." />
+                <DangerAction title="Disconnect Store" description="Remove ALL data — Shopify AND database" buttonLabel="Disconnect Store" actionName="disconnect_store" modalTitle="Disconnect Store?" modalBody="Remove ALL AutoSync data from Shopify and delete ALL data from our database. This cannot be undone." />
+              </InlineGrid>
             </BlockStack>
           </Card>
         </Layout.Section>
       </Layout>
+      </BlockStack>
     </Page>
   );
 }

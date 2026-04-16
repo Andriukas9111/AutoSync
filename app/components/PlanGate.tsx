@@ -54,7 +54,7 @@ export const FEATURE_NAMES: Record<keyof PlanLimits["features"], string> = {
 };
 
 const PLAN_ORDER: PlanTier[] = [
-  "free", "starter", "growth", "professional", "business", "enterprise",
+  "free", "starter", "growth", "professional", "business", "enterprise", "custom",
 ];
 
 export function findMinPlan(
@@ -124,25 +124,75 @@ export function PlanGate({
   const highlights = PLAN_HIGHLIGHTS[requiredPlan] ?? [];
 
   return (
+    <GateCard
+      label={featureLabel}
+      message={`Available on the ${requiredPlanName} plan (${price}). Upgrade to unlock this feature.`}
+      requiredPlanName={requiredPlanName}
+      highlights={highlights}
+      id={`plangate-${feature}`}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LimitGate — same visual as PlanGate but for count-based limits (fitments, products)
+// ---------------------------------------------------------------------------
+
+interface LimitGateProps {
+  label: string;
+  message: string;
+  currentPlan: PlanTier;
+  allLimits?: Record<PlanTier, PlanLimits>;
+}
+
+export function LimitGate({ label, message, currentPlan, allLimits }: LimitGateProps) {
+  const nextPlanIdx = PLAN_ORDER.indexOf(currentPlan) + 1;
+  const nextPlan = nextPlanIdx < PLAN_ORDER.length ? PLAN_ORDER[nextPlanIdx] : "enterprise";
+  const nextPlanName = PLAN_NAMES[nextPlan];
+  const highlights = PLAN_HIGHLIGHTS[nextPlan] ?? [];
+
+  return (
+    <GateCard
+      label={label}
+      message={message}
+      requiredPlanName={nextPlanName}
+      highlights={highlights}
+      id={`limitgate-${currentPlan}`}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GateCard — shared visual for both PlanGate and LimitGate
+// ---------------------------------------------------------------------------
+
+function GateCard({ label, message, requiredPlanName, highlights, id }: {
+  label: string;
+  message: string;
+  requiredPlanName: string;
+  highlights: string[];
+  id: string;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  return (
     <Card>
       <BlockStack gap="300">
-        {/* Row 1: Lock icon + Feature name + Plan badge */}
         <InlineStack gap="200" blockAlign="center" wrap={false}>
           <IconBadge icon={LockIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
           <Text as="span" variant="bodyMd" fontWeight="semibold">
-            {featureLabel}
+            {label}
           </Text>
           <Badge size="small" tone="info">
             {`${requiredPlanName}+`}
           </Badge>
         </InlineStack>
 
-        {/* Row 2: Description */}
         <Text as="p" variant="bodySm" tone="subdued">
-          {`Available on the ${requiredPlanName} plan (${price}). Upgrade to unlock this feature.`}
+          {message}
         </Text>
 
-        {/* Row 3: Action buttons */}
         <InlineStack gap="300" blockAlign="center">
           <Button size="slim" onClick={() => navigate("/app/plans")}>
             {`Upgrade to ${requiredPlanName}`}
@@ -159,9 +209,8 @@ export function PlanGate({
           )}
         </InlineStack>
 
-        {/* Collapsible benefits */}
         {highlights.length > 0 && (
-          <Collapsible open={open} id={`plangate-${feature}`} transition={collapsibleTransition}>
+          <Collapsible open={open} id={id} transition={collapsibleTransition}>
             <Box paddingBlockStart="200">
               <BlockStack gap="150">
                 <Text as="p" variant="bodySm" fontWeight="semibold">

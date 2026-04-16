@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useFetcher, useSearchParams, Link } from "react-router";
+import { useLoaderData, useActionData, useSubmit, useNavigation, useNavigate, useFetcher, useSearchParams } from "react-router";
 import {
   Page,
   Layout,
@@ -39,14 +39,16 @@ import {
   ChevronUpIcon,
   AutomationIcon,
   TargetIcon,
+  ChevronLeftIcon,
   ChevronRightIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { syncAfterDelete } from "../lib/db.server";
 import { assertFitmentLimit, BillingGateError } from "../lib/billing.server";
-import type { FitmentStatus } from "../lib/types";
+import type { FitmentStatus, PlanTier, PlanLimits } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 import { formatPrice } from "../lib/types";
+import { PLAN_NAMES, LimitGate } from "../components/PlanGate";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
 import { SuggestionCard } from "../components/SuggestionCard";
@@ -177,24 +179,37 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     .eq("shop_id", shopId);
 
   // Queue mode: also fetch progress stats and next product (exclude staged)
+  // Queue mode is for vehicle parts only — wheels don't use YMME fitment mapping
   const totalQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged")
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
     : null;
   const unmappedQuery = isQueueMode
-    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"])
+    ? db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").in("fitment_status", ["unmapped", "flagged", "no_match"])
     : null;
-  const nextQuery = isQueueMode
-    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["unmapped", "flagged", "no_match"]).gt("id", productId).order("id", { ascending: true }).limit(1).maybeSingle()
+  // Next unmapped product: try forward first, then wrap around to beginning
+  const nextQueryForward = isQueueMode
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").in("fitment_status", ["unmapped", "flagged", "no_match"]).gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle()
+    : null;
+  const nextQueryWrap = isQueueMode
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").in("fitment_status", ["unmapped", "flagged", "no_match"]).neq("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle()
+    : null;
+  // Previous product: any product (including mapped) so user can review what they just did
+  const prevQuery = isQueueMode
+    ? db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").lt("id", productId).order("id", { ascending: false }).limit(1).maybeSingle()
     : null;
 
-  const [productResult, fitmentsResult, wheelFitmentsResult, totalResult, unmappedResult, nextResult] = await Promise.all([
+  const [productResult, fitmentsResult, wheelFitmentsResult, totalResult, unmappedResult, nextForwardResult, nextWrapResult, prevResult] = await Promise.all([
     productQuery,
     fitmentsQuery,
     wheelFitmentsQuery,
     totalQuery ?? Promise.resolve({ count: 0 }),
     unmappedQuery ?? Promise.resolve({ count: 0 }),
-    nextQuery ?? Promise.resolve({ data: null }),
+    nextQueryForward ?? Promise.resolve({ data: null }),
+    nextQueryWrap ?? Promise.resolve({ data: null }),
+    prevQuery ?? Promise.resolve({ data: null }),
   ]);
+  // Use forward result first, fall back to wrap-around (catches products with earlier UUIDs)
+  const nextResult = (nextForwardResult as any)?.data ? nextForwardResult : nextWrapResult;
 
   if (productResult.error || !productResult.data) {
     throw new Response("Product not found", { status: 404 });
@@ -229,14 +244,24 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   // Queue mode data
-  let queueData: { totalProducts: number; unmappedCount: number; nextProductId: string | null } | null = null;
+  let queueData: { totalProducts: number; unmappedCount: number; nextProductId: string | null; prevProductId: string | null } | null = null;
   if (isQueueMode) {
     queueData = {
       totalProducts: (totalResult as { count: number | null }).count ?? 0,
       unmappedCount: (unmappedResult as { count: number | null }).count ?? 0,
       nextProductId: (nextResult as { data: { id: string } | null }).data?.id ?? null,
+      prevProductId: (prevResult as { data: { id: string } | null }).data?.id ?? null,
     };
   }
+
+  // Get plan limits + fitment count for limit checking
+  const { getTenant, getPlanLimits, getEffectivePlan } = await import("../lib/billing.server");
+  const { getSerializedPlanLimits } = await import("../lib/billing.server");
+  const tenant = await getTenant(shopId);
+  const plan = getEffectivePlan(tenant) as PlanTier;
+  const limits = getPlanLimits(plan);
+  const { count: currentFitmentCount } = await db.from("vehicle_fitments")
+    .select("id", { count: "exact", head: true }).eq("shop_id", shopId);
 
   return {
     product: productResult.data as Product,
@@ -244,8 +269,38 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     wheelFitments: (wheelFitmentsResult.data ?? []) as WheelFitment[],
     shopDomain: shopId,
     queueData,
+    plan,
+    limits,
+    allLimits: getSerializedPlanLimits(),
+    currentFitmentCount: currentFitmentCount ?? 0,
   };
 };
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Recalculate fitment_status from actual fitments — majority method wins */
+async function recalcFitmentStatus(productId: string, shopId: string): Promise<string> {
+  const { data: fitments } = await db
+    .from("vehicle_fitments")
+    .select("extraction_method")
+    .eq("product_id", productId)
+    .eq("shop_id", shopId);
+
+  if (!fitments || fitments.length === 0) return "unmapped";
+
+  let smart = 0, manual = 0, auto = 0;
+  for (const f of fitments) {
+    const m = f.extraction_method || "manual";
+    if (m === "smart") smart++;
+    else if (m === "auto") auto++;
+    else manual++;
+  }
+
+  // Majority wins; tiebreaker priority: smart > manual > auto
+  if (smart >= manual && smart >= auto) return "smart_mapped";
+  if (manual > smart && manual >= auto) return "manual_mapped";
+  return "auto_mapped";
+}
 
 // ── Action ────────────────────────────────────────────────────────────────────
 
@@ -283,6 +338,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return { error: "Make and Model are required" };
     }
 
+    // YMME database IDs — links this fitment to the canonical vehicle database
+    const ymmeMakeId = (formData.get("ymme_make_id") as string) || null;
+    const ymmeModelId = (formData.get("ymme_model_id") as string) || null;
+    const ymmeEngineId = (formData.get("ymme_engine_id") as string) || null;
+
     const { error: insertError } = await db.from("vehicle_fitments").insert({
       product_id: productId,
       shop_id: shopId,
@@ -292,6 +352,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       engine_code: engineCode, fuel_type: fuelType,
       extraction_method: method,
       confidence_score: confidence,
+      ymme_make_id: ymmeMakeId,
+      ymme_model_id: ymmeModelId,
+      ymme_engine_id: ymmeEngineId,
     });
 
     if (insertError) {
@@ -299,20 +362,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return { error: "Failed to add fitment" };
     }
 
-    const { data: currentProduct } = await db
-      .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
-
-    // Update fitment_status: manual mapping always sets manual_mapped,
-    // other methods set auto_mapped if currently unmapped
-    const newStatus = method === "manual" ? "manual_mapped" :
-      (currentProduct?.fitment_status === "unmapped" ? "auto_mapped" : currentProduct?.fitment_status);
-
-    if (newStatus && newStatus !== currentProduct?.fitment_status) {
-      await db.from("products")
-        .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", productId).eq("shop_id", shopId);
-    }
+    // Recalculate fitment_status from ALL fitments (majority method wins)
+    const newStatus = await recalcFitmentStatus(productId as string, shopId);
+    await db.from("products")
+      .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
+      .eq("id", productId).eq("shop_id", shopId);
 
     // Update tenant fitment count from actual DB count
     const { count: fitmentCount } = await db
@@ -323,11 +377,17 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .update({ fitment_count: fitmentCount ?? 0, updated_at: new Date().toISOString() })
       .eq("shop_id", shopId);
 
-    // Find next unmapped product AFTER the current one (exclude staged)
-    const { data: nextAfterAdd } = await db.from("products")
-      .select("id").eq("shop_id", shopId).neq("status", "staged")
+    // Find next unmapped product — try forward, then wrap around
+    let { data: nextAfterAdd } = await db.from("products")
+      .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
       .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
+    if (!nextAfterAdd) {
+      ({ data: nextAfterAdd } = await db.from("products")
+        .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
+        .in("fitment_status", ["unmapped", "flagged", "no_match"])
+        .neq("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle());
+    }
 
     return { success: true, message: "Fitment added", nextProductId: nextAfterAdd?.id ?? null };
   }
@@ -375,21 +435,23 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       return { error: "Failed to add suggested fitment" };
     }
 
-    const { data: currentProduct } = await db
-      .from("products").select("fitment_status")
-      .eq("id", productId).eq("shop_id", shopId).maybeSingle();
+    // Recalculate fitment_status from ALL fitments (majority method wins)
+    const suggestStatus = await recalcFitmentStatus(productId as string, shopId);
+    await db.from("products")
+      .update({ fitment_status: suggestStatus, updated_at: new Date().toISOString() })
+      .eq("id", productId).eq("shop_id", shopId);
 
-    if (currentProduct?.fitment_status === "unmapped" || currentProduct?.fitment_status === "flagged") {
-      await db.from("products")
-        .update({ fitment_status: "smart_mapped", updated_at: new Date().toISOString() })
-        .eq("id", productId).eq("shop_id", shopId);
-    }
-
-    // Find next unmapped product AFTER the current one (exclude staged)
-    const { data: nextAfterSuggest } = await db.from("products")
-      .select("id").eq("shop_id", shopId).neq("status", "staged")
+    // Find next unmapped product — try forward, then wrap around
+    let { data: nextAfterSuggest } = await db.from("products")
+      .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
       .in("fitment_status", ["unmapped", "flagged", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
+    if (!nextAfterSuggest) {
+      ({ data: nextAfterSuggest } = await db.from("products")
+        .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
+        .in("fitment_status", ["unmapped", "flagged", "no_match"])
+        .neq("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle());
+    }
 
     return { success: true, message: "Suggestion accepted", nextProductId: nextAfterSuggest?.id ?? null };
   }
@@ -404,15 +466,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     if (deleteError) return { error: "Failed to delete fitment" };
 
-    const { count } = await db
-      .from("vehicle_fitments").select("*", { count: "exact", head: true })
-      .eq("product_id", productId).eq("shop_id", shopId);
+    // Recalculate fitment_status from remaining fitments
+    const deleteStatus = await recalcFitmentStatus(productId as string, shopId);
+    await db.from("products")
+      .update({ fitment_status: deleteStatus, updated_at: new Date().toISOString() })
+      .eq("id", productId).eq("shop_id", shopId);
 
-    if (count === 0) {
-      await db.from("products")
-        .update({ fitment_status: "unmapped", updated_at: new Date().toISOString() })
-        .eq("id", productId).eq("shop_id", shopId);
-    }
+    // Sync counts + active makes (lightweight — only runs full cleanup if fitment count dropped to 0)
+    await syncAfterDelete(shopId);
 
     return { success: true, message: "Fitment deleted" };
   }
@@ -423,10 +484,16 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .update({ fitment_status: "flagged", updated_at: new Date().toISOString() })
       .eq("id", productId).eq("shop_id", shopId);
 
-    const { data: nextProduct } = await db.from("products")
-      .select("id").eq("shop_id", shopId).neq("status", "staged")
-      .in("fitment_status", ["unmapped", "flagged", "no_match"])
+    let { data: nextProduct } = await db.from("products")
+      .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
+      .in("fitment_status", ["unmapped", "no_match"])
       .gt("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle();
+    if (!nextProduct) {
+      ({ data: nextProduct } = await db.from("products")
+        .select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels")
+        .in("fitment_status", ["unmapped", "no_match"])
+        .neq("id", productId as string).order("id", { ascending: true }).limit(1).maybeSingle());
+    }
 
     return { success: true, message: "Product skipped", skipped: true, nextProductId: nextProduct?.id ?? null };
   }
@@ -515,7 +582,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ProductDetails() {
-  const { product, fitments, wheelFitments, shopDomain, queueData } = useLoaderData<typeof loader>();
+  const { product, fitments, wheelFitments, shopDomain, queueData, plan, limits, allLimits, currentFitmentCount } = useLoaderData<typeof loader>();
+  const fitmentLimitReached = currentFitmentCount >= (limits as PlanLimits).fitments;
   const rawActionData = useActionData<typeof action>();
   const actionData = rawActionData as { error?: string; message?: string; success?: boolean; skipped?: boolean; nextProductId?: string } | undefined;
   const submit = useSubmit();
@@ -580,11 +648,11 @@ export default function ProductDetails() {
   const handleVehicleChange = useCallback(
     (selection: VehicleSelection) => {
       setVehicleSelection(selection);
-      // Auto-populate year range from the selected year
-      if (selection.year) {
-        setYearFrom(String(selection.year));
-        setYearTo(String(selection.year));
-      }
+      // Year range comes ONLY from YMME database — no manual input
+      const from = selection.engineYearFrom ?? selection.year;
+      const to = selection.engineYearTo ?? selection.year;
+      if (from) setYearFrom(String(from));
+      if (to) setYearTo(String(to));
     },
     [],
   );
@@ -595,17 +663,34 @@ export default function ProductDetails() {
     formData.set("_action", "add_fitment");
     formData.set("make", vehicleSelection.makeName);
     formData.set("model", vehicleSelection.modelName);
-    if (yearFrom) formData.set("year_from", yearFrom);
-    if (yearTo) formData.set("year_to", yearTo);
+    // Years from YMME — no manual override possible
+    const yrFrom = vehicleSelection.engineYearFrom ?? vehicleSelection.year;
+    const yrTo = vehicleSelection.engineYearTo ?? vehicleSelection.year;
+    if (yrFrom) formData.set("year_from", String(yrFrom));
+    if (yrTo) formData.set("year_to", String(yrTo));
     if (vehicleSelection.engineName) formData.set("engine", vehicleSelection.engineName);
+    // Engine details from YMME — same fields as smart mapping stores
+    if (vehicleSelection.engineCode) formData.set("engine_code", vehicleSelection.engineCode);
+    if (vehicleSelection.fuelType) formData.set("fuel_type", vehicleSelection.fuelType);
+    // YMME database IDs — critical for vehicle pages, collections, and YMME widget
+    formData.set("ymme_make_id", vehicleSelection.makeId);
+    formData.set("ymme_model_id", vehicleSelection.modelId);
+    if (vehicleSelection.engineId) formData.set("ymme_engine_id", vehicleSelection.engineId);
     submit(formData, { method: "POST" });
     setVehicleSelection(null);
     setYearFrom("");
     setYearTo("");
   }, [vehicleSelection, yearFrom, yearTo, submit]);
 
+  const [showLimitGate, setShowLimitGate] = useState(false);
+
   const handleAcceptSuggestion = useCallback(
     (suggestion: SuggestedFitment) => {
+      // Check fitment limit client-side BEFORE submitting
+      if (fitmentLimitReached) {
+        setShowLimitGate(true);
+        return; // Don't submit, don't remove from suggestions
+      }
       const formData = new FormData();
       formData.set("_action", "add_suggestion");
       formData.set("make", suggestion.make.name);
@@ -706,19 +791,20 @@ export default function ProductDetails() {
 
     // Also check if any existing fitment matches this suggestion by make+model+engine
     const alreadyMapped = fitments.some((f: any) => {
-      // Exact match on ymme_engine_id if both exist
-      if (f.ymme_engine_id && s.engine?.id && f.ymme_engine_id === s.engine.id) return true;
-      // Name-based match: make + model
+      // Best match: exact ymme_engine_id (unique per engine variant)
+      if (f.ymme_engine_id && s.engine?.id) return f.ymme_engine_id === s.engine.id;
+      // Fallback: name-based match (make + model + engine NAME)
+      // Engine CODE alone is NOT enough — different engine tunes share the same code
+      // (e.g., BMW S55B30A is used by M2 Competition 410hp AND M2 CS 450hp)
       const makeMatch = f.make?.toLowerCase() === s.make.name?.toLowerCase();
       const modelMatch = f.model?.toLowerCase() === (s.model?.name || "").toLowerCase();
       if (!makeMatch || !modelMatch) return false;
-      // If suggestion has no engine, make+model match is enough
-      if (!s.engine?.name && !s.engine?.code) return true;
-      // If suggestion has engine, check engine match too
-      const engineMatch =
-        (f.engine_code && s.engine?.code && f.engine_code.toLowerCase() === s.engine.code.toLowerCase()) ||
-        (f.engine && s.engine?.name && f.engine.toLowerCase() === s.engine.name.toLowerCase());
-      return engineMatch;
+      if (!s.engine?.name && !s.engine?.code) return true; // make+model only suggestion
+      // Match by engine NAME (unique per variant, unlike engine code)
+      if (f.engine && s.engine?.name) {
+        return f.engine.toLowerCase() === s.engine.name.toLowerCase();
+      }
+      return false;
     });
     return !alreadyMapped;
   });
@@ -731,6 +817,7 @@ export default function ProductDetails() {
     ? Math.round((queueMapped / queueData.totalProducts) * 100)
     : 0;
   const nextProductId = queueData?.nextProductId ?? actionData?.nextProductId ?? null;
+  const prevProductId = queueData?.prevProductId ?? null;
 
   return (
     <Page
@@ -753,22 +840,11 @@ export default function ProductDetails() {
         icon: CheckCircleIcon,
         onAction: () => submit({ _action: "approve_to_catalog" }, { method: "POST" }),
       } : undefined}
-      secondaryActions={isQueueMode ? [
-        {
-          content: "Skip",
-          onAction: handleSkip,
-          destructive: true,
-          disabled: isSubmitting,
-        },
-        ...(nextProductId ? [{
-          content: "Next Product",
-          icon: ChevronRightIcon,
-          onAction: () => navigate(`/app/products/${nextProductId}?from=fitment`),
-        }] : []),
-      ] : undefined}
+      secondaryActions={undefined}
     >
+      <BlockStack gap="600">
       <Layout>
-        {/* Queue mode: progress bar */}
+        {/* Queue mode: navigation + progress bar — always visible */}
         {isQueueMode && queueData && (
           <Layout.Section>
             <Card>
@@ -776,11 +852,33 @@ export default function ProductDetails() {
                 <InlineStack align="space-between" blockAlign="center">
                   <Text as="p" variant="headingSm">{`${queueMapped} of ${queueData.totalProducts} mapped`}</Text>
                   <InlineStack gap="200">
-                    <Badge tone={queuePercentage === 100 ? "success" : "info"}>{`${queuePercentage}%`}</Badge>
-                    <Badge tone="warning">{`${queueData.unmappedCount} remaining`}</Badge>
+                    {prevProductId && (
+                      <Button
+                        icon={ChevronLeftIcon}
+                        onClick={() => navigate(`/app/products/${prevProductId}?from=fitment`)}
+                      >Previous</Button>
+                    )}
+                    <Button
+                      tone="critical"
+                      onClick={handleSkip}
+                      disabled={isSubmitting}
+                    >Skip</Button>
+                    {nextProductId && (
+                      <Button
+                        icon={ChevronRightIcon}
+                        variant="primary"
+                        onClick={() => navigate(`/app/products/${nextProductId}?from=fitment`)}
+                      >Next</Button>
+                    )}
                   </InlineStack>
                 </InlineStack>
-                <ProgressBar progress={queuePercentage} size="small" />
+                <InlineStack align="space-between" blockAlign="center">
+                  <ProgressBar progress={queuePercentage} size="small" />
+                </InlineStack>
+                <InlineStack align="end" gap="200">
+                  <Badge tone={queuePercentage === 100 ? "success" : "info"}>{`${queuePercentage}%`}</Badge>
+                  <Badge tone="warning">{`${queueData.unmappedCount} remaining`}</Badge>
+                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.Section>
@@ -794,23 +892,7 @@ export default function ProductDetails() {
             </Banner>
           </Layout.Section>
         )}
-        {actionData && "success" in actionData && actionData.message && !(actionData?.skipped) && (
-          <Layout.Section>
-            <Banner tone="success">
-              <p>
-                {actionData?.message}
-                {isQueueMode && actionData?.nextProductId && (
-                  <>
-                    {" "}
-                    <Link to={`/app/products/${actionData?.nextProductId}?from=fitment`}>
-                      Map next product
-                    </Link>
-                  </>
-                )}
-              </p>
-            </Banner>
-          </Layout.Section>
-        )}
+        {/* Success messages shown inline — no banner to avoid layout shift during rapid accepts */}
 
         {/* ── Main Column ── */}
         <Layout.Section>
@@ -1158,6 +1240,16 @@ export default function ProductDetails() {
 
                 <Divider />
 
+                {/* Fitment limit reached — show upgrade card */}
+                {(fitmentLimitReached || showLimitGate) && (
+                  <LimitGate
+                    label="Fitment Limit Reached"
+                    message={`You have ${currentFitmentCount.toLocaleString()} of ${(limits as PlanLimits).fitments.toLocaleString()} fitments on your ${PLAN_NAMES[plan as PlanTier]} plan. Upgrade to add more vehicle fitments.`}
+                    currentPlan={plan as PlanTier}
+                    allLimits={allLimits as Record<PlanTier, PlanLimits>}
+                  />
+                )}
+
                 {suggestionsLoading ? (
                   <Box padding="400">
                     <BlockStack gap="200" inlineAlign="center">
@@ -1319,41 +1411,13 @@ export default function ProductDetails() {
                     <Divider />
                     <VehicleSelector onChange={handleVehicleChange} />
 
-                    <BlockStack gap="200">
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Year range — auto-filled from your selection. Adjust if this part fits multiple years.
-                      </Text>
-                      <InlineStack gap="300">
-                        <div style={{ maxWidth: "140px" }}>
-                          <TextField
-                            label="From"
-                            type="number"
-                            value={yearFrom}
-                            onChange={setYearFrom}
-                            autoComplete="off"
-                            placeholder="e.g. 2010"
-                          />
-                        </div>
-                        <div style={{ maxWidth: "140px" }}>
-                          <TextField
-                            label="To"
-                            type="number"
-                            value={yearTo}
-                            onChange={setYearTo}
-                            autoComplete="off"
-                            placeholder="e.g. 2023"
-                          />
-                        </div>
-                      </InlineStack>
-                    </BlockStack>
-
                     {vehicleSelection && (
                       <Banner tone="info">
                         <Text as="span" variant="bodySm">
-                          Selected: {vehicleSelection.makeName} {vehicleSelection.modelName}
+                          {vehicleSelection.makeName} {vehicleSelection.modelName}
                           {vehicleSelection.engineName ? ` — ${vehicleSelection.engineName}` : ""}
                           {yearFrom ? ` (${yearFrom}` : ""}
-                          {yearFrom && yearTo ? `–${yearTo})` : yearFrom ? "+)" : ""}
+                          {yearFrom && yearTo && yearFrom !== yearTo ? `–${yearTo})` : yearFrom ? ")" : ""}
                         </Text>
                       </Banner>
                     )}
@@ -1576,6 +1640,7 @@ export default function ProductDetails() {
           </BlockStack>
         </Card>
       )}
+      </BlockStack>
     </Page>
   );
 }

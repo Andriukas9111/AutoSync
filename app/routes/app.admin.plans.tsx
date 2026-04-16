@@ -162,6 +162,7 @@ const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critic
   professional: "attention",
   business: "warning",
   enterprise: "critical",
+  custom: "critical",
 };
 
 // ---------------------------------------------------------------------------

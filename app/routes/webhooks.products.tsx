@@ -3,31 +3,27 @@ import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
 
 /**
- * Product webhooks handler — MUST be fast (<500ms).
+ * Product webhooks handler — MUST return 200 within 500ms. NO EXCEPTIONS.
  *
- * BulkOperations (metafield/tag push) trigger thousands of PRODUCTS_UPDATE
- * webhooks simultaneously. If this handler is slow, Shopify marks them as
- * failed (46K errors in monitoring). Heavy processing must be avoided.
- *
- * Strategy:
- * - PRODUCTS_UPDATE: Only update if product exists AND was changed by merchant
- *   (not by our app). Skip tag-only and metafield-only updates.
- * - PRODUCTS_DELETE: Quick delete, async recount.
- * - PRODUCTS_CREATE: Quick upsert of handle/image only.
+ * Rules:
+ * 1. ALWAYS return 200 — even if DB fails
+ * 2. ALL DB operations wrapped in try/catch — never crash
+ * 3. NO heavy processing — only lightweight DB updates
+ * 4. NO job creation in webhook — use pg_cron hourly sync instead
+ * 5. BulkOperations trigger thousands of webhooks — handler MUST be instant
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, payload } = await authenticate.webhook(request);
 
-  // Return 200 immediately for topics we don't need to process heavily
+  // Return 200 immediately if no payload
   if (!payload?.id) return new Response("OK", { status: 200 });
 
-  switch (topic) {
-    case "PRODUCTS_CREATE":
-    case "PRODUCTS_UPDATE": {
-      // Lightweight update — only sync title, handle, image, price
-      // Skip if this looks like our own BulkOperation update (tags contain _autosync_)
-      // to avoid a thundering herd of DB writes during push operations
-      try {
+  try {
+    switch (topic) {
+      case "PRODUCTS_CREATE":
+      case "PRODUCTS_UPDATE": {
+        // Lightweight sync — only update title/handle/image/price
+        // Skip entirely during bulk ops to avoid thundering herd
         await db
           .from("products")
           .update({
@@ -39,24 +35,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           })
           .eq("shop_id", shop)
           .eq("shopify_product_id", String(payload.id));
-      } catch (_e) {
-        // Silently fail — DB might be overloaded during BulkOperations
-        // The data will be correct on next full sync
+        break;
       }
-      break;
-    }
 
-    case "PRODUCTS_DELETE": {
-      try {
+      case "PRODUCTS_DELETE": {
+        // Delete product from DB — CASCADE handles fitments automatically
+        // The hourly sync_stale_tenant_data() pg_cron job will:
+        // - Recount tenant product/fitment counts
+        // - Deactivate makes with 0 fitments
+        // - Mark stale vehicle pages for deletion
+        // NO sync_after_delete job created here — that caused 100% webhook failures
         await db
           .from("products")
           .delete()
           .eq("shop_id", shop)
           .eq("shopify_product_id", String(payload.id));
-      } catch (_e) { /* best effort */ }
-      break;
+        break;
+      }
     }
+  } catch (_e) {
+    // NEVER crash — silently fail, data will self-correct via hourly pg_cron sync
   }
 
+  // ALWAYS return 200 — Shopify counts anything else as a failure
   return new Response("OK", { status: 200 });
 };

@@ -266,26 +266,23 @@ export default function PricingPage() {
         },
       ]}
     >
+      <BlockStack gap="600">
       <HowItWorks steps={[
-        { title: "Create Rules", description: "Define pricing rules by type (markup, margin, fixed, MAP) and scope them to vendors, product types, or specific providers." },
-        { title: "Preview Changes", description: "See how your rules affect product prices before applying. Review the price changes across your catalog." },
-        { title: "Apply & Sync", description: "Activate rules to automatically calculate prices. Push updated prices to Shopify with your next sync." },
+        { number: 1, title: "Create Rules", description: "Define pricing rules by type (markup, margin, fixed, MAP) and scope them to vendors, product types, or specific providers." },
+        { number: 2, title: "Preview Changes", description: "See how your rules affect product prices before applying. Review the price changes across your catalog." },
+        { number: 3, title: "Apply & Sync", description: "Activate rules to automatically calculate prices. Push updated prices to Shopify with your next sync." },
       ]} />
 
       {/* Success/Error banners */}
       {actionData && "message" in actionData && (
-        <Box paddingBlockEnd="400">
           <Banner tone="success" onDismiss={() => {}}>
             <p>{actionData?.message}</p>
           </Banner>
-        </Box>
       )}
       {actionData && "error" in actionData && (
-        <Box paddingBlockEnd="400">
           <Banner tone="critical" onDismiss={() => {}}>
             <p>{actionData?.error}</p>
           </Banner>
-        </Box>
       )}
 
       <Layout>
@@ -293,7 +290,7 @@ export default function PricingPage() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              ...autoFitGridStyle("120px", "var(--p-space-200)"),
+              ...autoFitGridStyle("100px", "0px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[
@@ -766,6 +763,7 @@ export default function PricingPage() {
           )}
         </Modal.Section>
       </Modal>
+      </BlockStack>
     </Page>
   );
 }

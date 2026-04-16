@@ -16,7 +16,7 @@ async function resolveSubscriptionPlan(subscriptionName: string): Promise<PlanTi
 
   // 1. Try DB lookup — matches admin-customized plan names
   const { data: configs } = await db
-    .from("plan_configs")
+    .from("plan_configurations")
     .select("tier, name")
     .order("tier");
 

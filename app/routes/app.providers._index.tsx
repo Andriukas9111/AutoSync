@@ -183,8 +183,10 @@ export default function ProvidersIndex() {
   const revalidator = useRevalidator();
 
   // Live stats polling — updates provider/product counts every 5 seconds
-  const { stats: polledStats } = useAppData();
-  const providerCount = polledStats?.providers ?? loaderProviderCount;
+  const { stats: polledStats } = useAppData({
+    providers: loaderProviderCount,
+  });
+  const providerCount = polledStats.providers;
 
   // Auto-revalidate loader data when product count changes (keeps provider cards fresh)
   const lastTotal = useRef(polledStats?.total);
@@ -227,7 +229,7 @@ export default function ProvidersIndex() {
           disabled: atLimit || providerLimit === 0,
         }}
       >
-        <BlockStack gap="400">
+        <BlockStack gap="600">
           {/* When provider limit is 0, show upgrade prompt — no empty state */}
           {providerLimit === 0 ? (
             <Card>
@@ -285,7 +287,7 @@ export default function ProvidersIndex() {
         disabled: atLimit,
       }}
     >
-      <BlockStack gap="400">
+      <BlockStack gap="600">
         {/* How It Works */}
         <HowItWorks
           steps={[
@@ -297,7 +299,8 @@ export default function ProvidersIndex() {
 
         {/* Stats Dashboard */}
         {(() => {
-          const providerTotalProducts = polledStats?.total ?? providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
+          // ALL products from all providers (not vehicle-only — providers page is about the full catalog)
+          const providerTotalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
           const totalImports = providers.reduce((sum, p) => sum + (p.import_count || 0), 0);
           const sourceTypeCount = new Set(providers.map(p => p.type)).size;
           const statItems = [
@@ -309,7 +312,7 @@ export default function ProvidersIndex() {
           return (
             <Card padding="0">
               <div style={{
-                ...autoFitGridStyle("120px", "8px"),
+                ...autoFitGridStyle("100px", "0px"),
                 borderBottom: "1px solid var(--p-color-border-secondary)",
               }}>
                 {statItems.map((item, i) => (

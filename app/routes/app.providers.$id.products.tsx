@@ -38,7 +38,7 @@ import {
 import { IconBadge } from "../components/IconBadge";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { syncAfterDelete } from "../lib/db.server";
 import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { useAppData } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
@@ -224,6 +224,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .eq("id", providerId)
       .eq("shop_id", shopId);
 
+    // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+    await syncAfterDelete(shopId);
+
     return data({ success: true, deleted: ids.length });
   }
 
@@ -243,6 +246,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .update({ product_count: 0, updated_at: new Date().toISOString() })
       .eq("id", providerId)
       .eq("shop_id", shopId);
+
+    // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+    await syncAfterDelete(shopId);
 
     return data({ success: true, deletedAll: true });
   }

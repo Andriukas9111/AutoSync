@@ -68,54 +68,6 @@ export const dataTableCellStyle: CSSProperties = { padding: "8px 12px", textAlig
 export const dataTableFooterRowStyle: CSSProperties = { borderTop: "2px solid var(--p-color-border-secondary)", fontWeight: 600 };
 export const dataTableFooterStyle: CSSProperties = { padding: "8px 12px" };
 
-// ─── Onboarding Step Styles ──────────────────────────────────────
-// Used in: OnboardingChecklist
-export const onboardingStepStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "flex-start",
-  gap: "12px",
-  padding: "12px",
-  borderRadius: "var(--p-border-radius-200)",
-  cursor: "pointer",
-  transition: "background 0.15s ease",
-};
-export const onboardingCheckStyle = (done: boolean): CSSProperties => ({
-  width: "28px",
-  height: "28px",
-  borderRadius: "50%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  flexShrink: 0,
-  background: done ? "var(--p-color-bg-fill-success)" : "var(--p-color-bg-surface-secondary)",
-  color: done ? "var(--p-color-text-inverse)" : "var(--p-color-text-subdued)",
-  fontSize: "12px",
-  fontWeight: 600,
-});
-
-// ─── Suggestion Card Styles ──────────────────────────────────────
-// Used in: SuggestionCard
-export const suggestionOverlayStyle: CSSProperties = {
-  padding: "12px",
-  opacity: 0.6,
-};
-
-// ─── Status Dot (small colored circle for status indicators) ───────
-export const statusDotStyle = (status: string): CSSProperties => ({
-  width: "8px",
-  height: "8px",
-  borderRadius: "50%",
-  flexShrink: 0,
-  background:
-    status === "completed"
-      ? "var(--p-color-bg-fill-success)"
-      : status === "failed"
-        ? "var(--p-color-bg-fill-critical)"
-        : status === "running"
-          ? "var(--p-color-bg-fill-info)"
-          : "var(--p-color-bg-fill-secondary)",
-});
-
 // ─── Collapsible Transition ────────────────────────────────────────
 // Used in: HowItWorks, any collapsible section
 export const collapsibleTransition = {
@@ -141,73 +93,6 @@ export const cardRowStyle: CSSProperties = {
   padding: "12px 16px",
   borderRadius: "var(--p-border-radius-300)",
   background: "var(--p-color-bg-surface-secondary)",
-};
-
-// ─── Flex helpers ────────────────────────────────────────────────
-export const flexRowStyle = (gap = "12px"): CSSProperties => ({
-  display: "flex",
-  alignItems: "center",
-  gap,
-  flexWrap: "wrap" as const,
-});
-
-export const flexColumnStyle = (gap = 6): CSSProperties => ({
-  display: "flex",
-  flexDirection: "column",
-  gap: `${gap}px`,
-});
-
-export const flexWrapStyle = (gap = 16): CSSProperties => ({
-  display: "flex",
-  flexWrap: "wrap",
-  gap: `${gap}px`,
-});
-
-// ─── Horizontal Bar Chart (Analytics) ─────────────────────────────
-// Used in: Analytics page for Popular Makes, Popular Models, any bar visualization
-export const barChartRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-};
-
-export const barChartLabelStyle = (width: number): CSSProperties => ({
-  width: `${width}px`,
-  flexShrink: 0,
-  textAlign: "right" as const,
-});
-
-export const barChartTrackStyle: CSSProperties = {
-  flex: 1,
-  background: "var(--p-color-bg-surface-secondary)",
-  borderRadius: "var(--p-border-radius-100)",
-  height: "24px",
-  overflow: "hidden",
-};
-
-export const barChartFillStyle = (percent: number): CSSProperties => ({
-  width: `${percent}%`,
-  height: "100%",
-  background: "var(--p-color-bg-fill-emphasis)",
-  borderRadius: "var(--p-border-radius-100)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  paddingRight: "8px",
-  minWidth: "40px",
-  transition: "width 0.3s ease",
-});
-
-export const barChartValueStyle: CSSProperties = {
-  color: "var(--p-color-text-inverse)",
-  fontSize: "12px",
-  fontWeight: 600,
-};
-
-export const barChartSuffixStyle: CSSProperties = {
-  width: "60px",
-  textAlign: "right" as const,
-  flexShrink: 0,
 };
 
 // ─── Badge Tone Mappings ───────────────────────────────────────────
@@ -237,69 +122,29 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   extract: "Auto Extraction",
   push: "Push to Shopify",
   bulk_push: "Push to Shopify",
+  bulk_publish: "Publishing Products",
   collections: "Creating Collections",
   vehicle_pages: "Vehicle Pages",
   sync: "Product Sync",
+  fetch: "Fetching Products",
   provider_import: "Provider Import",
   provider_refresh: "Refreshing Products",
   cleanup: "Cleanup",
   cleanup_tags: "Removing Tags",
   cleanup_metafields: "Removing Metafields",
+  cleanup_collections: "Removing Collections",
+  sync_after_delete: "Syncing After Delete",
   delete_vehicle_pages: "Deleting Vehicle Pages",
-};
-
-// ─── Fitment Status Labels ─────────────────────────────────────────
-// "Needs Review" = unmapped + flagged (user-facing, unified across app)
-export const FITMENT_STATUS_LABELS: Record<string, string> = {
-  unmapped: "Unmapped",
-  flagged: "Flagged",
-  auto_mapped: "Auto Mapped",
-  smart_mapped: "Smart Mapped",
-  manual_mapped: "Manual Mapped",
-  needs_review: "Needs Review", // Combined unmapped + flagged
-};
-
-// ─── Icon Mapping ──────────────────────────────────────────────────
-// One icon per data type — consistent across ALL pages
-// Import these icons from @shopify/polaris-icons where needed
-export const ICON_MAP = {
-  products: "ProductIcon",
-  fitments: "ConnectIcon",
-  collections: "CollectionIcon",
-  vehicles: "SearchIcon",
-  vehiclePages: "PageIcon",
-  providers: "PackageIcon",
-  analytics: "ChartVerticalIcon",
-  settings: "SettingsIcon",
-  plan: "StarFilledIcon",
-  coverage: "GaugeIcon",
-  makes: "TargetIcon",
-  database: "DatabaseIcon",
-  clock: "ClockIcon",
-  info: "InfoIcon",
-  export: "ExportIcon",
-  import: "ImportIcon",
-  check: "CheckCircleIcon",
-  alert: "AlertCircleIcon",
-  warning: "AlertTriangleIcon",
-  wand: "WandIcon",
-} as const;
-
-// ─── Fuel Badge Tones ──────────────────────────────────────────────
-export const FUEL_BADGE_TONES: Record<string, "success" | "warning" | "info" | "critical" | undefined> = {
-  Petrol: "warning",
-  Diesel: "info",
-  Electric: "success",
-  Hybrid: "success",
-  "Plug-in Hybrid": "success",
-  CNG: undefined,
-  LPG: undefined,
+  wheel_extract: "Extracting Wheel Specs",
+  wheel_push: "Pushing Wheels",
+  provider_auto_fetch: "Auto-Fetching Products",
 };
 
 // ─── Formatting Helpers ────────────────────────────────────────────
 
 export function formatJobType(type: string): string {
-  return JOB_TYPE_LABELS[type] || type.charAt(0).toUpperCase() + type.slice(1);
+  // Known labels first, then auto-format: "cleanup_collections" → "Cleanup Collections"
+  return JOB_TYPE_LABELS[type] || type.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
 export function formatElapsed(startedAt: string | null | undefined): string {
@@ -406,11 +251,6 @@ export function dismissBanner(key: string): void {
   try { localStorage.setItem(`autosync_banner_${key}`, "1"); } catch { /* SSR-safe */ }
 }
 
-/** Clear a dismissed banner (e.g., when a new job completes) */
-export function clearBannerDismissal(key: string): void {
-  try { localStorage.removeItem(`autosync_banner_${key}`); } catch { /* SSR-safe */ }
-}
-
 /** CSS grid that forces all children (Cards) to stretch to equal height */
 export const equalHeightGridStyle = (cols: number, gap = "16px"): CSSProperties => ({
   display: "grid",
@@ -458,18 +298,6 @@ export const selectableCardStyle = (selected: boolean, disabled = false): CSSPro
   position: "relative" as const,
 });
 
-// ─── Format Badge (small pill for file formats) ─────────────────────────────
-export const formatBadgeStyle: CSSProperties = {
-  display: "inline-block",
-  padding: "2px 8px",
-  borderRadius: "var(--p-border-radius-100)",
-  background: "var(--p-color-bg-surface-secondary)",
-  fontSize: "11px",
-  fontWeight: 500,
-  color: "var(--p-color-text-secondary)",
-  lineHeight: "18px",
-};
-
 // ─── Auto-fit Grid (responsive grid that wraps naturally) ──────────────────
 export const autoFitGridStyle = (minWidth = "250px", gap = "16px"): CSSProperties => ({
   display: "grid",
@@ -477,95 +305,36 @@ export const autoFitGridStyle = (minWidth = "250px", gap = "16px"): CSSPropertie
   gap,
 });
 
-// ─── FTP File Card ─────────────────────────────────────────────────────────
-export const ftpFileCardStyle = (selected: boolean): CSSProperties => ({
-  padding: "10px 14px",
-  borderRadius: "var(--p-border-radius-200)",
-  border: selected
-    ? "2px solid var(--p-color-border-emphasis)"
-    : "1px solid var(--p-color-border)",
-  background: selected
-    ? "var(--p-color-bg-surface-secondary)"
-    : "var(--p-color-bg-surface)",
-  cursor: "pointer",
-  transition: "border-color 120ms ease, background 120ms ease",
-});
-
-// ─── Variant Table (product detail page) ───────────────────────────────────
-export const variantTableStyle: CSSProperties = {
-  width: "100%",
-  borderCollapse: "collapse",
-  fontSize: "13px",
-};
-
-export const variantTableHeaderStyle: CSSProperties = {
-  textAlign: "left" as const,
-  padding: "8px 10px",
-  borderBottom: "2px solid var(--p-color-border)",
-  fontWeight: 600,
-  fontSize: "12px",
-  color: "var(--p-color-text-secondary)",
-};
-
-export const variantTableCellStyle: CSSProperties = {
-  padding: "8px 10px",
-  borderBottom: "1px solid var(--p-color-border-secondary)",
-};
-
-export const variantTableRowStyle = (isLast: boolean): CSSProperties => ({
-  borderBottom: isLast ? "none" : undefined,
-});
-
 export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
   starter: [
-    "Up to 500 products & 2,500 fitments",
+    "Up to 250 products & 1,000 fitments",
     "Push tags & metafields to Shopify",
     "YMME search widget & fitment badge",
   ],
   growth: [
-    "Up to 5,000 products & 25,000 fitments",
+    "Up to 1,000 products & 5,000 fitments",
     "Auto fitment extraction from titles",
     "Smart collections by make",
     "Compatibility table widget",
   ],
   professional: [
-    "Up to 50,000 products & 250,000 fitments",
+    "Up to 3,000 products & 15,000 fitments",
     "API integration & custom vehicles",
-    "My Garage & collections by model",
-    "Competitive pricing engine",
+    "Collections by make & model",
+    "Smart suggestions engine",
   ],
   business: [
-    "Up to 200,000 products & 1M fitments",
+    "Up to 10,000 products & 50,000 fitments",
     "FTP import & Wheel Finder widget",
-    "Collection SEO images",
+    "Collection SEO & images",
     "Priority support",
   ],
   enterprise: [
-    "Unlimited products & fitments",
+    "Up to 50,000 products & 250,000 fitments",
     "DVLA plate lookup & VIN decode",
     "Full CSS widget customisation",
     "Vehicle specification pages",
   ],
-};
-
-// ─── Table Cell Styles (shared across plan comparison, fitment, admin) ──
-// Replaces ~80 hardcoded px values across multiple files
-
-export const tableCellStyle: CSSProperties = {
-  textAlign: "center",
-  padding: "var(--p-space-200) var(--p-space-200)",
-  borderBottom: "1px solid var(--p-color-border-secondary)",
-};
-
-export const tableHeaderCellStyle: CSSProperties = {
-  ...tableCellStyle,
-  fontWeight: 600,
-  fontSize: "13px",
-  background: "var(--p-color-bg-surface-secondary)",
-};
-
-export const tableRowStyle: CSSProperties = {
-  padding: "var(--p-space-200) var(--p-space-300)",
 };
 
 // ─── Pill/Badge Style (feature pills, status indicators) ──────────────
@@ -584,22 +353,37 @@ export const featurePillStyle: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-// ─── Quick Action Card Style ──────────────────────────────────────────
+// ─── Status Dot (small colored circle for job status in activity lists) ────
+export const statusDotStyle = (status: string): CSSProperties => ({
+  width: "8px",
+  height: "8px",
+  borderRadius: "50%",
+  flexShrink: 0,
+  background:
+    status === "completed"
+      ? "var(--p-color-bg-fill-success)"
+      : status === "failed"
+        ? "var(--p-color-bg-fill-critical)"
+        : status === "running"
+          ? "var(--p-color-bg-fill-info)"
+          : "var(--p-color-bg-fill-secondary)",
+});
 
-export const quickActionCardStyle: CSSProperties = {
+// ─── Horizontal Bar Chart (admin overview) ─────────────────────────────
+export const barChartRowStyle: CSSProperties = {
   display: "flex",
-  flexDirection: "column",
-  gap: "var(--p-space-200)",
-  padding: "var(--p-space-300) var(--p-space-400)",
-  borderRadius: "var(--p-border-radius-300)",
-  border: "var(--p-border-width-025) solid var(--p-color-border)",
-  cursor: "pointer",
-  transition: "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+  alignItems: "center",
+  gap: "8px",
 };
 
-// ─── Comparison Table Highlight ───────────────────────────────────────
-
-export const tableHighlightCellStyle: CSSProperties = {
-  ...tableCellStyle,
-  backgroundColor: "var(--p-color-bg-surface-secondary)",
+// ─── Format Badge (small pill for file format indicators) ──────────────
+export const formatBadgeStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "2px 8px",
+  borderRadius: "var(--p-border-radius-100)",
+  background: "var(--p-color-bg-surface-secondary)",
+  fontSize: "11px",
+  fontWeight: 500,
+  color: "var(--p-color-text-secondary)",
+  lineHeight: "18px",
 };

@@ -51,6 +51,7 @@ export async function action({ request }: ActionFunctionArgs) {
     .eq("shop_id", shopId)
     .in("type", ["push", "bulk_push", "cleanup"])
     .in("status", ["running", "pending", "processing"])
+    .limit(1)
     .maybeSingle();
 
   if (conflictingJob) {
@@ -60,13 +61,14 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: msg }, { status: 409 });
   }
 
-  // Get the total count of pushable products (must match Edge Function worker predicate)
-  // Worker uses: .not("fitment_status", "eq", "unmapped") — so we use the same filter
+  // Get the total count of pushable products — only products with REAL fitments
+  // Exclude: unmapped (no fitments), no_match (extraction found nothing), flagged (needs review)
   const { count: mappedCount } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
-    .not("fitment_status", "eq", "unmapped");
+    .neq("status", "staged")
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"]);
 
   // Auto-select bulk push for plans that support it (Growth+)
   // Bulk operations are 10-20x faster for large catalogs

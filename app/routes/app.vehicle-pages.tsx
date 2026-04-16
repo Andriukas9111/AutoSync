@@ -162,6 +162,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
       db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "pending"),
       db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "failed"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "skipped"),
     ]),
 
     // 2. Count unique engine IDs from fitments (for "Total Available")
@@ -209,13 +210,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   // Aggregate sync stats from head-only count queries
-  const [syncedCount, pendingCount, failedCount] = syncStatsResult as unknown as [
-    { count: number | null }, { count: number | null }, { count: number | null }
+  const [syncedCount, pendingCount, failedCount, skippedCount] = syncStatsResult as unknown as [
+    { count: number | null }, { count: number | null }, { count: number | null }, { count: number | null }
   ];
   const syncStats = {
     synced: syncedCount.count ?? 0,
     pending: pendingCount.count ?? 0,
     failed: failedCount.count ?? 0,
+    skipped: skippedCount?.count ?? 0,
   };
 
   // Count unique vehicles — use the engine IDs from availableResult
@@ -335,7 +337,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const engineMap = vehicleMap;
 
   // Sort by make, then model, then engine name — take first 50
-  const vehicles = Array.from(engineMap.values())
+  let vehicles = Array.from(engineMap.values())
     .sort((a, b) => {
       const makeCompare = a.makeName.localeCompare(b.makeName);
       if (makeCompare !== 0) return makeCompare;
@@ -349,6 +351,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const syncedEngineIds = (syncedResult.data ?? []).map(
     (r: any) => r.engine_id as string,
   );
+
+  // Exclude skipped vehicles from the browser (handle collisions, duplicates)
+  // Query is cheap (head-only was already counted, now fetch the IDs)
+  const { data: skippedRows } = await db
+    .from("vehicle_page_sync")
+    .select("engine_id")
+    .eq("shop_id", shopId)
+    .eq("sync_status", "skipped");
+  const skippedEngineIdSet = new Set((skippedRows ?? []).map((r: any) => r.engine_id as string));
+  // Remove skipped from the vehicles array
+  vehicles = vehicles.filter((v: VehicleRow) => !skippedEngineIdSet.has(v.engineId));
 
   // Total linked products: count distinct products with fitments linked to synced vehicle pages
   const syncedEngineIdSet = new Set(syncedEngineIds);
@@ -366,7 +379,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     limits,
     allLimits: getSerializedPlanLimits(),
     syncStats,
-    availableVehicles: uniqueVehicleKeys.size,
+    availableVehicles: Math.max(0, uniqueVehicleKeys.size - syncStats.skipped),
     vehicles,
     syncedEngineIds,
     vehiclePagesEnabled: settingsResult.data?.vehicle_pages_enabled ?? false,
@@ -395,6 +408,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "push_all") {
+    // Duplicate job prevention
+    const { data: existingVpJob } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("type", "vehicle_pages")
+      .in("status", ["pending", "running"])
+      .maybeSingle();
+    if (existingVpJob) {
+      return data({ error: "Vehicle pages job is already running. Please wait for it to complete." }, { status: 409 });
+    }
+
     const { data: vpJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
@@ -424,6 +449,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "delete_all") {
+    // Duplicate job prevention
+    const { data: existingDelJob } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .in("type", ["delete_vehicle_pages", "vehicle_pages"])
+      .in("status", ["pending", "running"])
+      .maybeSingle();
+    if (existingDelJob) {
+      return data({ error: "A vehicle pages job is already running. Please wait for it to complete." }, { status: 409 });
+    }
+
     // Create a delete job — processed by Edge Function (NOT Vercel)
     // This ensures delete continues even if the user closes the browser
     const { data: deleteJob, error: deleteJobError } = await db
@@ -557,7 +594,11 @@ export default function VehiclePages() {
   } = loaderData;
 
   // Live stats polling — updates vehicle page counts every 5 seconds
-  const { stats: polledStats } = useAppData();
+  const { stats: polledStats } = useAppData({
+    vehiclePagesSynced: loaderSyncStats.synced,
+    vehiclePagesPending: loaderSyncStats.pending,
+    vehiclePagesFailed: loaderSyncStats.failed,
+  });
 
   // Use polled stats when available, fall back to loader data
   const syncStats = {
@@ -773,7 +814,7 @@ export default function VehiclePages() {
         {/* ── Section 2: Stats Dashboard ── */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("120px", "8px"),
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[

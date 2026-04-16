@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import {
@@ -36,12 +36,14 @@ import { authenticate } from "../shopify.server";
 import db, { paginatedSelect } from "../lib/db.server";
 import { getTenant, getPlanLimits, getMinimumPlanForFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
+import { CoverageBar } from "../components/CoverageBar";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
 import { equalHeightGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
+import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,7 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .is("fitment_status", null)
     .then(() => {}).catch(() => {});
 
-  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged"];
+  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged", "no_match"];
 
   const [
     totalCountResult,
@@ -102,17 +104,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakesResult,
     ...statusCountResults
   ] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").or("product_category.eq.vehicle_parts,product_category.is.null"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     // Get recently mapped products (last 20 products that have fitments) — vehicle parts only
     db.from("products")
       .select("id, title, fitment_status, updated_at")
       .eq("shop_id", shopId)
       .neq("status", "staged")
-      .or("product_category.eq.vehicle_parts,product_category.is.null")
+      .neq("product_category", "wheels")
       .not("fitment_status", "eq", "unmapped")
       .order("updated_at", { ascending: false })
-      .limit(20),
+      .limit(100),
     getTenant(shopId),
     // Top makes by fitment count — cap at 50K rows to prevent OOM
     db.from("vehicle_fitments").select("make, model")
@@ -122,7 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
         .neq("status", "staged")
-        .or("product_category.eq.vehicle_parts,product_category.is.null")
+        .neq("product_category", "wheels")
         .eq("fitment_status", s)
     ),
   ]);
@@ -277,7 +279,7 @@ export default function Fitment() {
   const [extractDismissed, setExtractDismissed] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
-  const ACTIVITY_PAGE_SIZE = 10;
+  const ACTIVITY_PAGE_SIZE = 20;
 
   // Live polling — use polled data with loader fallback
   const { stats, activeJobs } = useAppData({
@@ -287,14 +289,22 @@ export default function Fitment() {
     smartMapped: getCount(statusCounts, "smart_mapped"),
     manualMapped: getCount(statusCounts, "manual_mapped"),
     flagged: getCount(statusCounts, "flagged"),
+    noMatch: getCount(statusCounts, "no_match"),
     fitments: totalFitments,
+    vehicleCoverage: Math.round(totalFitments * 8),
   });
 
   const isExtracting = extractFetcher.state !== "idle";
   const extractResult = extractFetcher.data as
-    | { success: true; processed: number; autoMapped: number; flagged: number; unmapped: number }
+    | { started: true; jobId: string; totalItems: number }
+    | { chunk: true; done: boolean; processed: number; autoMapped: number; flagged: number; unmapped: number; newFitments: number; remaining: number }
+    | { done: true; reason: string }
     | { error: string; requiredPlan?: string }
     | undefined;
+
+  // Track the active extraction job ID for chunk polling
+  const [extractJobId, setExtractJobId] = useState<string | null>(null);
+  const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleRunExtract = useCallback(() => {
     const fd = new FormData();
@@ -306,9 +316,49 @@ export default function Fitment() {
     setExtractDismissed(false);
   }, [extractFetcher]);
 
+  // When the start action returns a jobId, begin chunk polling
+  useEffect(() => {
+    if (extractResult && "started" in extractResult && extractResult.started && extractResult.jobId) {
+      setExtractJobId(extractResult.jobId);
+    }
+  }, [extractResult]);
+
+  // Chunk polling — automatically process next batch when job is running
+  useEffect(() => {
+    if (!extractJobId) return;
+
+    const pollChunk = () => {
+      if (extractFetcher.state !== "idle") return; // Wait for current request to finish
+      const fd = new FormData();
+      fd.set("_action", "chunk");
+      fd.set("jobId", extractJobId);
+      extractFetcher.submit(fd, { method: "POST", action: "/app/api/auto-extract" });
+    };
+
+    // Check if extraction is done
+    if (extractResult && "done" in extractResult && extractResult.done) {
+      setExtractJobId(null);
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+      return;
+    }
+    if (extractResult && "error" in extractResult) {
+      setExtractJobId(null);
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+      return;
+    }
+
+    // Schedule next chunk after a brief delay (let UI breathe)
+    chunkTimerRef.current = setTimeout(pollChunk, 500);
+
+    return () => {
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+    };
+  }, [extractJobId, extractResult, extractFetcher]);
+
   // Use vehicle-only stats (exclude wheel products from fitment page)
   const computed = computeFromStats(stats);
-  const autoMapped = Math.max(0, stats.autoMapped - (stats.wheelMapped ?? 0));
+  // autoMapped is already vehicle-only from the API (wheels excluded by .neq filter)
+  const autoMapped = stats.autoMapped;
   const smartMapped = stats.smartMapped;
   const manualMapped = stats.manualMapped;
   const flagged = stats.flagged;
@@ -345,26 +395,30 @@ export default function Fitment() {
           ]}
         />
 
+        {/* Active Operations — mirrors dashboard progress panel */}
+        <ActiveJobsPanel navigate={navigate} jobs={activeJobs} stats={stats} />
+
         {/* Stats Overview — single card, consistent grid */}
         <Card padding="0">
           <div style={{
-            ...autoFitGridStyle("120px", "8px"),
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { icon: ProductIcon, label: "Total", count: liveTotal },
+              { icon: ProductIcon, label: "Vehicle Parts", count: liveTotal },
               { icon: ConnectIcon, label: "Fitments", count: liveFitments },
               { icon: ConnectIcon, label: "Coverage", count: stats.vehicleCoverage ?? Math.round(liveFitments * 8) },
-              { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
-              { icon: MinusCircleIcon, label: "No Match", count: stats.noMatch, critical: false as boolean },
-              { icon: WandIcon, label: "Auto", count: autoMapped },
+              { icon: WandIcon, label: "Auto Mapped", count: autoMapped },
+              { icon: SearchIcon, label: "Smart", count: stats.smartMapped ?? 0 },
               { icon: TargetIcon, label: "Manual", count: manualMapped },
+              { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
+              { icon: MinusCircleIcon, label: "No Match", count: stats.noMatch ?? 0, critical: false as boolean },
             ]).map((item, i) => (
               <div
                 key={item.label}
                 style={{
                   padding: "var(--p-space-400)",
-                  borderRight: i < 6 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  borderRight: i < 7 ? "1px solid var(--p-color-border-secondary)" : "none",
                   textAlign: "center",
                 }}
               >
@@ -382,25 +436,12 @@ export default function Fitment() {
           </div>
         </Card>
 
-        {/* Coverage Progress */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between">
-              <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">Fitment Coverage</Text>
-              </InlineStack>
-              <Text as="p" variant="headingMd" fontWeight="bold">
-                {coveragePercent}%
-              </Text>
-            </InlineStack>
-            <ProgressBar progress={coveragePercent} size="medium" />
-            <Text as="p" variant="bodySm" tone="subdued">
-              {totalMapped.toLocaleString()} of {liveTotal.toLocaleString()} products have
-              fitment data · Average {totalMapped > 0 ? (liveFitments / totalMapped).toFixed(1) : "0"} fitments per product
-            </Text>
-          </BlockStack>
-        </Card>
+        {/* Coverage Progress — shared component */}
+        <CoverageBar
+          title="Fitment Coverage"
+          percent={coveragePercent}
+          description={`${totalMapped.toLocaleString()} of ${liveTotal.toLocaleString()} products have fitment data · Average ${totalMapped > 0 ? (liveFitments / totalMapped).toFixed(1) : "0"} fitments per product`}
+        />
 
         {/* CTA Cards — CSS grid for equal-height columns */}
         <div style={equalHeightGridStyle(2)}>
