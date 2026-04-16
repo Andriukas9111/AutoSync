@@ -69,7 +69,11 @@ export async function syncFitmentCount(shopId: string): Promise<void> {
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
-  await db.from("tenants").update({ fitment_count: (vCount ?? 0) + (wCount ?? 0) }).eq("shop_id", shopId);
+  const { error } = await db
+    .from("tenants")
+    .update({ fitment_count: (vCount ?? 0) + (wCount ?? 0) })
+    .eq("shop_id", shopId);
+  if (error) console.error(`[syncFitmentCount] tenants update failed for ${shopId}: ${error.message}`);
 }
 
 /**
@@ -94,10 +98,11 @@ export async function syncAfterDelete(shopId: string): Promise<void> {
       db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
       db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     ]);
-    await db.from("tenants").update({
+    const { error: countErr } = await db.from("tenants").update({
       product_count: productRes.count ?? 0,
       fitment_count: (fitmentRes.count ?? 0) + (wheelFitRes.count ?? 0),
     }).eq("shop_id", shopId);
+    if (countErr) console.error(`[syncAfterDelete] tenants count update failed for ${shopId}: ${countErr.message}`);
 
     // 2. Deactivate makes that no longer have any fitments
     // tenant_active_makes has ymme_make_id (UUID FK to ymme_makes)
@@ -146,10 +151,11 @@ export async function syncAfterDelete(shopId: string): Promise<void> {
       if (staleEngineIds.length > 0) {
         // Mark stale vehicle pages for removal — next vehicle pages push will clean them
         for (let i = 0; i < staleEngineIds.length; i += 500) {
-          await db.from("vehicle_page_sync")
+          const { error: vpsErr } = await db.from("vehicle_page_sync")
             .update({ sync_status: "pending_delete" })
             .eq("shop_id", shopId)
             .in("engine_id", staleEngineIds.slice(i, i + 500));
+          if (vpsErr) console.error(`[syncAfterDelete] vehicle_page_sync pending_delete failed: ${vpsErr.message}`);
         }
         console.log(`[syncAfterDelete] Marked ${staleEngineIds.length} vehicle pages for deletion (engines with 0 fitments)`);
       }

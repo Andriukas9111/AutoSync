@@ -66,10 +66,11 @@ export async function fetchProductsFromShopify({
   const pageSize = 250; // Max allowed by Shopify
 
   // Update job status to running
-  await db
+  const { error: startErr } = await db
     .from("sync_jobs")
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", jobId);
+  if (startErr) console.error(`[fetch] Failed to mark job ${jobId} as running: ${startErr.message}`);
 
   let limitReached = false;
 
@@ -183,10 +184,11 @@ export async function fetchProductsFromShopify({
     }
 
     // Update tenant product count
-    await db
+    const { error: pcErr } = await db
       .from("tenants")
       .update({ product_count: fetched })
       .eq("shop_id", shopId);
+    if (pcErr) console.error(`[fetch] tenants.product_count update failed for ${shopId}: ${pcErr.message}`);
 
     // Mark job as completed
     await db

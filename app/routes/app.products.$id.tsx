@@ -373,9 +373,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       .from("vehicle_fitments")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId);
-    await db.from("tenants")
-      .update({ fitment_count: fitmentCount ?? 0, updated_at: new Date().toISOString() })
+    // updated_at auto-bumped by tenants_bump_updated_at trigger (migration 036)
+    const { error: fcErr } = await db.from("tenants")
+      .update({ fitment_count: fitmentCount ?? 0 })
       .eq("shop_id", shopId);
+    if (fcErr) console.error(`[products.$id] fitment_count update failed for ${shopId}: ${fcErr.message}`);
 
     // Find next unmapped product — try forward, then wrap around
     let { data: nextAfterAdd } = await db.from("products")

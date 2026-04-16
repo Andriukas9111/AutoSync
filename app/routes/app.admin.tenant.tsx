@@ -286,7 +286,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       // Reset all products to unmapped
-      await db.from("products").update({ fitment_status: "unmapped" }).eq("shop_id", shopId);
+      const { error: resetErr } = await db.from("products")
+        .update({ fitment_status: "unmapped" })
+        .eq("shop_id", shopId);
+      if (resetErr) {
+        console.error(`[admin.tenant] Failed to reset products for ${shopId}: ${resetErr.message}`);
+        return data({ ok: false, message: `Fitments purged but product reset failed: ${resetErr.message}` });
+      }
       // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
       await syncAfterDelete(shopId);
 

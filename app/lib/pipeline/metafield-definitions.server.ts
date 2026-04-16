@@ -144,10 +144,14 @@ export async function ensureMetafieldDefinitions(
 
   // Mark as created in tenant record
   if (result.errors.length === 0) {
-    await db
+    const { error: flagErr } = await db
       .from("tenants")
       .update({ metafield_definitions_created: true })
       .eq("shop_id", shopId);
+    if (flagErr) {
+      // Don't fail the push — but log so we know the flag isn't sticking.
+      console.error(`[ensureMetafieldDefinitions] Failed to persist metafield_definitions_created for ${shopId}: ${flagErr.message}`);
+    }
   }
 
   return result;

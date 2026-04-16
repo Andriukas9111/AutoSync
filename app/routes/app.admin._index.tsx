@@ -434,15 +434,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!validPlans.includes(newPlan)) return data({ ok: false, intent: "change-plan", message: `Invalid plan: ${newPlan}` });
       const { error } = await db.from("tenants").update({ plan: newPlan }).eq("shop_id", shopId);
       if (error) return data({ ok: false, intent: "change-plan", message: error.message });
-      // Log admin activity
-      try {
-        await db.from("admin_activity_log").insert({
-          admin_shop_id: session.shop,
-          action: "change_plan",
-          target_shop_id: shopId,
-          details: { new_plan: newPlan },
-        });
-      } catch { /* graceful */ }
+      // Log admin activity (best-effort — failures don't block the plan change response)
+      const { error: logErr } = await db.from("admin_activity_log").insert({
+        admin_shop_id: session.shop,
+        action: "change_plan",
+        target_shop_id: shopId,
+        details: { new_plan: newPlan },
+      });
+      if (logErr) console.warn(`[admin] activity log insert failed: ${logErr.message}`);
       return data({ ok: true, intent: "change-plan", message: `Plan changed to ${cap(newPlan)}.` });
     }
 
@@ -467,22 +466,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       }
 
-      // Database cleanup
-      await db.from("vehicle_fitments").delete().eq("shop_id", targetShop);
-      await db.from("tenant_active_makes").delete().eq("shop_id", targetShop);
-      await db.from("collection_mappings").delete().eq("shop_id", targetShop);
-      await db.from("app_settings").delete().eq("shop_id", targetShop);
-      await db.from("products").delete().eq("shop_id", targetShop);
-      await db.from("providers").delete().eq("shop_id", targetShop);
-      await db.from("sync_jobs").delete().eq("shop_id", targetShop);
-      await db.from("vehicle_page_sync").delete().eq("shop_id", targetShop);
-      await db.from("tenants").update({ fitment_count: 0, product_count: 0 }).eq("shop_id", targetShop);
-      try {
-        await db.from("admin_activity_log").insert({
-          admin_shop_id: session.shop, action: "purge_tenant", target_shop_id: targetShop, details: {},
-        });
-      } catch { /* graceful */ }
-      return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.${shopifyCleanupMsg}` });
+      // Database cleanup — run in parallel; collect any failures so we can surface them.
+      const purgeResults = await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", targetShop).then(r => ({ table: "vehicle_fitments", error: r.error })),
+        db.from("wheel_fitments").delete().eq("shop_id", targetShop).then(r => ({ table: "wheel_fitments", error: r.error })),
+        db.from("tenant_active_makes").delete().eq("shop_id", targetShop).then(r => ({ table: "tenant_active_makes", error: r.error })),
+        db.from("collection_mappings").delete().eq("shop_id", targetShop).then(r => ({ table: "collection_mappings", error: r.error })),
+        db.from("app_settings").delete().eq("shop_id", targetShop).then(r => ({ table: "app_settings", error: r.error })),
+        db.from("products").delete().eq("shop_id", targetShop).then(r => ({ table: "products", error: r.error })),
+        db.from("providers").delete().eq("shop_id", targetShop).then(r => ({ table: "providers", error: r.error })),
+        db.from("sync_jobs").delete().eq("shop_id", targetShop).then(r => ({ table: "sync_jobs", error: r.error })),
+        db.from("vehicle_page_sync").delete().eq("shop_id", targetShop).then(r => ({ table: "vehicle_page_sync", error: r.error })),
+      ]);
+      const purgeErrors = purgeResults.filter(r => r.error).map(r => `${r.table}: ${r.error?.message}`);
+      if (purgeErrors.length > 0) {
+        console.error(`[admin] purge errors for ${targetShop}:`, purgeErrors);
+      }
+      const { error: resetErr } = await db.from("tenants")
+        .update({ fitment_count: 0, product_count: 0 })
+        .eq("shop_id", targetShop);
+      if (resetErr) console.error(`[admin] tenant reset counts failed for ${targetShop}: ${resetErr.message}`);
+      const { error: purgeLogErr } = await db.from("admin_activity_log").insert({
+        admin_shop_id: session.shop, action: "purge_tenant", target_shop_id: targetShop,
+        details: { errors: purgeErrors.length > 0 ? purgeErrors : null },
+      });
+      if (purgeLogErr) console.warn(`[admin] purge activity log insert failed: ${purgeLogErr.message}`);
+      const errSuffix = purgeErrors.length > 0 ? ` (${purgeErrors.length} tables failed — check logs)` : "";
+      return data({ ok: true, intent: "admin-purge-tenant", message: `All data purged for ${targetShop}.${shopifyCleanupMsg}${errSuffix}` });
     }
     case "admin-purge-fitments": {
       const targetShop = formData.get("shop_id") as string;

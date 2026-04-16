@@ -629,11 +629,15 @@ export async function createBillingSubscription(
   // Free plan: cancel existing subscription
   if (newPlan === "free") {
     await cancelBillingSubscription(admin, shopId);
-    // Update tenant plan immediately for downgrades to free
-    await db
+    // Update tenant plan immediately for downgrades to free.
+    // updated_at auto-maintained by the tenants_bump_updated_at trigger (migration 036).
+    const { error: planErr } = await db
       .from("tenants")
-      .update({ plan: "free", plan_status: "active", updated_at: new Date().toISOString() })
+      .update({ plan: "free", plan_status: "active" })
       .eq("shop_id", shopId);
+    if (planErr) {
+      console.error(`[billing] Downgrade to free failed for ${shopId}: ${planErr.message}`);
+    }
     return { cancelled: true };
   }
 
@@ -716,14 +720,16 @@ export async function createBillingSubscription(
   }
 
   // Store the pending plan change so we can activate it on callback
-  await db
+  const { error: pendingErr } = await db
     .from("tenants")
     .update({
       pending_plan: newPlan,
       billing_subscription_id: result.appSubscription?.id ?? null,
-      updated_at: new Date().toISOString(),
     })
     .eq("shop_id", shopId);
+  if (pendingErr) {
+    console.error(`[billing] Failed to stage pending plan for ${shopId}: ${pendingErr.message}`);
+  }
 
   return { confirmationUrl: result.confirmationUrl };
 }
@@ -756,14 +762,14 @@ async function cancelBillingSubscription(
     { variables: { id: tenant.billing_subscription_id } },
   );
 
-  // Clear the subscription ID
-  await db
+  // Clear the subscription ID (updated_at bumped by DB trigger)
+  const { error: clearErr } = await db
     .from("tenants")
-    .update({
-      billing_subscription_id: null,
-      updated_at: new Date().toISOString(),
-    })
+    .update({ billing_subscription_id: null })
     .eq("shop_id", shopId);
+  if (clearErr) {
+    console.error(`[billing] Failed to clear subscription ID for ${shopId}: ${clearErr.message}`);
+  }
 }
 
 /**
@@ -817,17 +823,20 @@ export async function confirmBillingSubscription(
     return { plan: "free" };
   }
 
-  // Activate the plan
-  await db
+  // Activate the plan (updated_at bumped by DB trigger)
+  const { error: activateErr } = await db
     .from("tenants")
     .update({
       plan: newPlan,
       plan_status: "active",
       pending_plan: null,
       billing_charge_id: chargeId,
-      updated_at: new Date().toISOString(),
     })
     .eq("shop_id", shopId);
+  if (activateErr) {
+    console.error(`[billing] Plan activation failed for ${shopId}: ${activateErr.message}`);
+    throw new Error(`Plan activation failed: ${activateErr.message}`);
+  }
 
   return { plan: newPlan };
 }

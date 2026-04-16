@@ -196,7 +196,13 @@ async function getPublicationIds(
         (p: { name: string }) => p.name === "Online Store"
       );
       if (onlineStore?.id) {
-        await db.from("tenants").update({ online_store_publication_id: onlineStore.id }).eq("shop_id", shopId);
+        const { error: pubErr } = await db
+          .from("tenants")
+          .update({ online_store_publication_id: onlineStore.id })
+          .eq("shop_id", shopId);
+        if (pubErr) {
+          console.error(`[publications] Failed to persist publication_id for ${shopId}: ${pubErr.message}`);
+        }
       }
     }
 
@@ -943,11 +949,14 @@ Deno.serve(async (req) => {
           db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
           db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
         ]);
-        await db.from("tenants").update({
+        const { error: countErr } = await db.from("tenants").update({
           product_count: productRes.count ?? 0,
           fitment_count: (fitmentRes.count ?? 0) + (wheelFitRes.count ?? 0),
         }).eq("shop_id", shopId);
-      } catch (_e) { /* non-critical */ }
+        if (countErr) console.warn(`[process-jobs] tenant counts update failed for ${shopId}: ${countErr.message}`);
+      } catch (countErr) {
+        console.warn(`[process-jobs] tenant counts update threw for job ${job.id}:`, countErr);
+      }
     } else {
       // More work to do — release lock and self-invoke for the next chunk.
       // This eliminates the 30s pg_cron delay between chunks.
@@ -965,10 +974,12 @@ Deno.serve(async (req) => {
 
       // Self-chain: invoke next chunk immediately. MUST await to prevent Deno
       // runtime from cancelling the request when the response is sent.
+      // IMPORTANT: check the HTTP status so a silent 401/5xx is logged — otherwise
+      // the job would sit waiting for the 30s pg_cron safety net every time.
       try {
         const chainCtrl = new AbortController();
         const chainTimeout = setTimeout(() => chainCtrl.abort(), 8000);
-        await fetch(`${SUPABASE_URL}/functions/v1/process-jobs`, {
+        const chainRes = await fetch(`${SUPABASE_URL}/functions/v1/process-jobs`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
@@ -978,9 +989,27 @@ Deno.serve(async (req) => {
           signal: chainCtrl.signal,
         });
         clearTimeout(chainTimeout);
-      } catch (_e) {
-        // Expected: AbortError from timeout, or network error — pg_cron safety net handles it
-        console.log("[process-jobs] Self-chain sent (may have timed out — next batch will pick up via pg_cron)");
+        if (!chainRes.ok) {
+          // 401 / 5xx / etc. — chain didn't kick off. Log loudly so we know it's
+          // falling back to the 30s cron instead of the instant chain path.
+          let bodyPreview = "";
+          try { bodyPreview = (await chainRes.text()).slice(0, 200); } catch { /* ignore */ }
+          console.warn(
+            `[process-jobs] Self-chain HTTP ${chainRes.status} for job ${job.id} (${job.type}). ` +
+            `Falling back to pg_cron. Body: ${bodyPreview}`,
+          );
+        }
+      } catch (chainErr) {
+        // AbortError from 8s timeout is EXPECTED — the child invocation keeps running
+        // server-side, we just don't wait for its response. Other errors (DNS, refused)
+        // mean the chain genuinely didn't start — log them.
+        const msg = chainErr instanceof Error ? chainErr.message : String(chainErr);
+        const isTimeout = msg.includes("abort") || msg.includes("AbortError");
+        if (isTimeout) {
+          console.log(`[process-jobs] Self-chain dispatched for job ${job.id} (awaiting child response timed out — expected)`);
+        } else {
+          console.error(`[process-jobs] Self-chain failed for job ${job.id}: ${msg}`);
+        }
       }
     }
 

@@ -328,12 +328,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         + findAddon(CUSTOM_PLAN_TIERS.providers, customConfig.providers)
         + findAddon(CUSTOM_PLAN_TIERS.fitments, customConfig.fitments)
         + findAddon(CUSTOM_PLAN_TIERS.scheduledFetches, customConfig.scheduledFetches);
-      await db.from("tenants").update({
+      const { error: customErr } = await db.from("tenants").update({
         custom_plan_config: customConfig,
         custom_price: customPrice,
         pending_plan: "custom",
-        updated_at: new Date().toISOString(),
       }).eq("shop_id", shopId);
+      if (customErr) {
+        console.error(`[plans] Failed to stage custom plan for ${shopId}: ${customErr.message}`);
+        return data({ error: "Failed to save custom plan. Try again." }, { status: 500 });
+      }
     }
 
     const appUrl = process.env.SHOPIFY_APP_URL || `https://${request.headers.get("host")}`;
