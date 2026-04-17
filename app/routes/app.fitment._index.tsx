@@ -282,7 +282,12 @@ export default function Fitment() {
   const ACTIVITY_PAGE_SIZE = 20;
 
   // Live polling — use polled data with loader fallback
-  const { stats, activeJobs } = useAppData({
+  const {
+    stats,
+    activeJobs,
+    topMakes: polledTopMakes,
+    recentActivity: polledRecentActivity,
+  } = useAppData({
     total: totalProducts,
     unmapped: getCount(statusCounts, "unmapped"),
     autoMapped: getCount(statusCounts, "auto_mapped"),
@@ -293,6 +298,23 @@ export default function Fitment() {
     fitments: totalFitments,
     vehicleCoverage: Math.round(totalFitments * 8),
   });
+
+  // Swap loader values for polled values once the first poll arrives.
+  // Loader data still renders pre-hydration to avoid a 0-flash.
+  const liveTopMakes: TopMakeStat[] =
+    polledTopMakes.length > 0
+      ? polledTopMakes.map((m) => ({ make: m.make, count: m.count, models: m.models }))
+      : topMakes;
+
+  const liveProductFitmentGroups: ProductFitmentGroup[] =
+    polledRecentActivity.length > 0
+      ? polledRecentActivity.map((r) => ({
+          product_id: r.product_id,
+          product_title: r.product_title,
+          fitment_status: r.fitment_status,
+          fitments: (r.fitments as FitmentRow[]) ?? [],
+        }))
+      : productFitmentGroups;
 
   const isExtracting = extractFetcher.state !== "idle";
   const extractResult = extractFetcher.data as
@@ -503,7 +525,7 @@ export default function Fitment() {
         </div>
 
         {/* Top Makes by Fitment */}
-        {topMakes.length > 0 && (
+        {liveTopMakes.length > 0 && (
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
@@ -517,7 +539,7 @@ export default function Fitment() {
                     <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
                     <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
                   </tr></thead>
-                  <tbody>{topMakes.map((m) => (
+                  <tbody>{liveTopMakes.map((m) => (
                     <tr key={m.make} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                       <td style={{ padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
                       <td style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
@@ -541,18 +563,18 @@ export default function Fitment() {
                 </Text>
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                {productFitmentGroups.length} recently mapped products
+                {liveProductFitmentGroups.length} recently mapped products
               </Text>
             </InlineStack>
 
-            {productFitmentGroups.length === 0 ? (
+            {liveProductFitmentGroups.length === 0 ? (
               <Text as="p" variant="bodySm" tone="subdued">
                 No fitment activity yet. Start by running auto extraction or mapping
                 products manually.
               </Text>
             ) : (
               <BlockStack gap="0">
-                {productFitmentGroups
+                {liveProductFitmentGroups
                   .slice((activityPage - 1) * ACTIVITY_PAGE_SIZE, activityPage * ACTIVITY_PAGE_SIZE)
                   .map((group, idx, arr) => {
                   const isExpanded = expandedProduct === group.product_id;
@@ -646,14 +668,14 @@ export default function Fitment() {
               </BlockStack>
             )}
 
-            {productFitmentGroups.length > ACTIVITY_PAGE_SIZE && (
+            {liveProductFitmentGroups.length > ACTIVITY_PAGE_SIZE && (
               <InlineStack align="center" blockAlign="center">
                 <Pagination
                   hasPrevious={activityPage > 1}
-                  hasNext={activityPage * ACTIVITY_PAGE_SIZE < productFitmentGroups.length}
+                  hasNext={activityPage * ACTIVITY_PAGE_SIZE < liveProductFitmentGroups.length}
                   onPrevious={() => setActivityPage((p) => p - 1)}
                   onNext={() => setActivityPage((p) => p + 1)}
-                  label={`${activityPage} of ${Math.ceil(productFitmentGroups.length / ACTIVITY_PAGE_SIZE)}`}
+                  label={`${activityPage} of ${Math.ceil(liveProductFitmentGroups.length / ACTIVITY_PAGE_SIZE)}`}
                 />
               </InlineStack>
             )}

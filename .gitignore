@@ -46,3 +46,4 @@ scripts/*.cjs
 
 # Claude Code local settings (per-developer overrides)
 .claude/settings.local.json
+supabase/.temp/

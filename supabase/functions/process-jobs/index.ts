@@ -25,10 +25,23 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET") || SUPABASE_SERVICE_ROLE_KEY;
 // Products per Edge Function invocation. Each product does 2-3 Shopify GraphQL
 // calls (tags, metafields, maybe create) + 200ms throttle delay. Observed
-// wall-clock with 100: >=150s → 504 Gateway Timeout (chunks die mid-push,
-// synced_at/tags get orphaned). Supabase Edge Functions cap at ~150s. Halved
-// to 50 to leave headroom for slow Shopify responses + rate limits.
-const BATCH_SIZE = 50;
+// Products per push chunk. Now that we run work inside EdgeRuntime.waitUntil
+// the HTTP response returns in ~5ms and the worker keeps the Deno runtime alive
+// up to the wall-clock ceiling:
+//   Free   : 150s
+//   Paid   : 400s  (our production plan is Pro)
+//
+// Measured cost per product in push: ~1.2–2.0s (tag add + metafields set +
+// optional Shopify rate-limit delay). 100 × ~2s = 200s, comfortably under the
+// 400s ceiling even if Shopify is slow. Self-chain kicks off the next chunk
+// from inside the background task — no HTTP-timeout pressure.
+const BATCH_SIZE = 100;
+
+// Hard ceiling in ms. If a chunk approaches this it stops early, checkpoints
+// progress, and self-chains. Set a safe 320s (80s of headroom under the 400s
+// wall clock). The guard fires between products/collections, so the current
+// unit still finishes cleanly instead of being killed mid-write.
+const MAX_CHUNK_MS = 320_000;
 const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
@@ -574,20 +587,24 @@ function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string
   return result;
 }
 
-Deno.serve(async (req) => {
+// ── EdgeRuntime.waitUntil typing ────────────────────────────────────────────
+// Supabase Edge Functions (Deno Deploy) expose a global `EdgeRuntime` with a
+// `waitUntil(promise)` helper. The worker process stays alive until the promise
+// resolves, up to the wall-clock ceiling (150s Free / 400s Paid). We use this
+// so the HTTP response returns in ~5ms (well under the 150s idle timeout that
+// cannot be raised on any plan) while the heavy chunk keeps grinding in the
+// background for up to 400s on Pro. Self-chain runs from inside the background
+// task, so the full pipeline works within a single 400s window.
+// Ref: https://supabase.com/docs/guides/functions/background-tasks
+declare global {
+  // deno-lint-ignore no-var
+  var EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void } | undefined;
+}
+
+async function processJobInBackground(targetJobId: string | null): Promise<void> {
   let currentJobId: string | null = null;
   try {
     const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Support direct invocation with a specific job_id (from Vercel API routes)
-    // or poll for the next pending job (from pg_cron / self-chain)
-    let targetJobId: string | null = null;
-    try {
-      const body = await req.json();
-      targetJobId = body?.job_id ?? null;
-    } catch {
-      // No body or invalid JSON — fall through to queue-based claim
-    }
 
     const staleLockCutoff = new Date(Date.now() - 5 * 60000).toISOString();
     const lockTime = new Date().toISOString();
@@ -746,33 +763,35 @@ Deno.serve(async (req) => {
 
       if (candidateError) {
         console.error("[process-jobs] Job query error:", candidateError.message);
-        return new Response(JSON.stringify({ error: candidateError.message }), { status: 500 });
+        return;
       }
       candidate = found;
     }
 
     if (!candidate) {
-      return new Response(JSON.stringify({ status: "idle", message: "No running jobs" }));
+      console.log("[process-jobs] Idle: no running jobs");
+      return;
     }
 
-    // Step 2: Claim the job — set locked_at and status to running
-    // For direct invocation (targetJobId), skip the stale lock check since we trust the caller
-    if (targetJobId) {
-      // Direct invocation — just lock it unconditionally
-      await db.from("sync_jobs")
-        .update({ locked_at: lockTime, status: "running" })
-        .eq("id", candidate.id);
-    } else {
-      // Queue-based — only claim if not already locked by another worker
-      const { data: lockResult } = await db.from("sync_jobs")
-        .update({ locked_at: lockTime, status: "running" })
-        .eq("id", candidate.id)
-        .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
-        .select("id")
-        .maybeSingle();
-      if (!lockResult) {
-        return new Response(JSON.stringify({ status: "idle", message: "Job already claimed" }));
-      }
+    // Step 2: Claim the job — conditional UPDATE acts as our mutex. This is
+    // CRITICAL for multi-tenant safety: two triggers (sync_job_instant_invoke
+    // + trg_notify_process_jobs) both fire on the same INSERT, so two Edge
+    // Function instances race to claim the exact same job. The conditional
+    // WHERE (locked_at IS NULL OR locked_at < staleCutoff) means only ONE
+    // worker wins — the other gets lockResult === null and returns idle.
+    // Previously the direct-invocation path did an UNCONDITIONAL update, so
+    // both workers "won" and processed the same chunk concurrently, which
+    // could duplicate Shopify writes (Shopify rate-limit burn, user saw
+    // duplicate tags/metafields on products).
+    const { data: lockResult } = await db.from("sync_jobs")
+      .update({ locked_at: lockTime, status: "running" })
+      .eq("id", candidate.id)
+      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+      .select("id")
+      .maybeSingle();
+    if (!lockResult) {
+      console.log(`[process-jobs] Idle: job ${candidate.id} already claimed (targetJobId=${targetJobId ? 'yes' : 'no'})`);
+      return;
     }
 
     // Fetch the full job record
@@ -784,7 +803,7 @@ Deno.serve(async (req) => {
 
     if (lockError || !claimedJob) {
       console.error("[process-jobs] Job fetch error:", lockError?.message);
-      return new Response(JSON.stringify({ error: "Failed to fetch job" }), { status: 500 });
+      return;
     }
 
     const job = claimedJob;
@@ -808,7 +827,8 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
         locked_at: null,
       }).eq("id", job.id);
-      return new Response(JSON.stringify({ status: "cancelled", reason: "tenant_invalid" }));
+      console.log(`[process-jobs] Cancelled job ${job.id} — tenant_invalid`);
+      return;
     }
 
     // ── Plan limit enforcement ──────────────────────────────────────
@@ -844,7 +864,8 @@ Deno.serve(async (req) => {
         completed_at: new Date().toISOString(),
         locked_at: null,
       }).eq("id", job.id);
-      return new Response(JSON.stringify({ status: "blocked", reason: "plan_limit", feature: requiredFeature }));
+      console.log(`[process-jobs] Blocked job ${job.id} — plan "${planTier}" missing feature "${requiredFeature}"`);
+      return;
     }
 
     // Check product/fitment count limits for relevant job types
@@ -1025,14 +1046,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({
-      status: "processed",
-      jobId: job.id,
-      type: job.type,
-      processed: result.processed,
-      totalProcessed: newProcessed,
-      hasMore: result.hasMore,
-    }));
+    console.log(`[process-jobs] Finished chunk for job ${job.id}: processed=${result.processed} totalProcessed=${newProcessed} hasMore=${result.hasMore}`);
+    return;
 
   } catch (err) {
     console.error("[process-jobs] Fatal error:", err);
@@ -1052,8 +1067,41 @@ Deno.serve(async (req) => {
     } catch (_unlockErr) {
       console.error("[process-jobs] Failed to mark job as failed after fatal error");
     }
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+    return;
   }
+}
+
+// ── HTTP entry point ─────────────────────────────────────────────────────────
+// Thin wrapper: parse the job_id out of the request body, hand the chunk to the
+// background worker via EdgeRuntime.waitUntil, and return 202 Accepted in ~5ms.
+// Because the response returns almost instantly, we NEVER hit the 150s idle
+// timeout — the ONLY timeout we need to respect is the 400s wall-clock ceiling
+// on Pro (150s on Free). Caller (pg_net, self-chain, or INSERT trigger) gets
+// a fast acknowledgement and doesn't tie up its own connection.
+Deno.serve(async (req) => {
+  let targetJobId: string | null = null;
+  try {
+    const body = await req.json();
+    targetJobId = body?.job_id ?? null;
+  } catch {
+    // No body or invalid JSON — fall through to queue-based claim
+  }
+
+  // Start the actual work as a background task. EdgeRuntime is provided by the
+  // Supabase Edge Function runtime (Deno Deploy); in local `deno test` it's
+  // undefined, so fall back to a plain async call in that case.
+  const work = processJobInBackground(targetJobId);
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+    EdgeRuntime.waitUntil(work);
+  } else {
+    // Local/CI: await to surface errors, but production path never hits this.
+    work.catch((e) => console.error("[process-jobs] Background task error:", e));
+  }
+
+  return new Response(
+    JSON.stringify({ accepted: true, job_id: targetJobId }),
+    { status: 202, headers: { "Content-Type": "application/json" } },
+  );
 });
 
 // ── Extract processor ──────────────────────────────────────
@@ -1073,6 +1121,17 @@ async function processExtractChunk(
     .eq("fitment_status", "unmapped");
 
   if (!unmappedCount || unmappedCount === 0) return { processed: 0, hasMore: false };
+
+  // Set total_items on the first chunk so the UI progress bar renders. Without
+  // this, ActiveJobsPanel falls through to the "waiting" branch (no bar) even
+  // though work is clearly happening. total = already processed + still to do.
+  const currentTotal = (job.total_items as number | null) ?? 0;
+  if (!currentTotal || currentTotal <= 0) {
+    const alreadyProcessed = (job.processed_items as number | null) ?? 0;
+    const computedTotal = alreadyProcessed + unmappedCount;
+    await db.from("sync_jobs").update({ total_items: computedTotal }).eq("id", job.id);
+    (job as { total_items?: number }).total_items = computedTotal;
+  }
 
   // Delegate extraction to the Vercel auto-extract API — it has the FULL smart mapping engine
   // (same buildVehicleProfile + scoreByProfile used for manual smart mapping)
@@ -1323,8 +1382,15 @@ async function processPushChunk(
 
   let processed = 0;
   const activeMakes = new Set<string>();
+  const chunkStartedAt = Date.now();
 
   for (const product of products) {
+    // Wall-clock safety: bail before the 400s worker ceiling kills us mid-write.
+    // Self-chain picks up at alreadyProcessed + processed so no work is lost.
+    if (Date.now() - chunkStartedAt > MAX_CHUNK_MS) {
+      console.log(`[push] MAX_CHUNK_MS reached after ${processed} products — self-chaining remainder`);
+      break;
+    }
     const productFitments = fitmentsByProduct.get(product.id);
     const hasFitments = productFitments && productFitments.length > 0;
     const productWheelFitments = wheelFitmentsByProduct.get(product.id);
@@ -1750,12 +1816,15 @@ async function processPushChunk(
 // ── Collections processor ──────────────────────────────────
 
 // Collections per Edge Function invocation.
-// Each collection: ~1.5s (create + publish + DB). Supabase Edge Function hard
-// timeout is 150s — 200 × 1.5s = 300s blew the ceiling (verified via 504s on
-// job 5d6afae2). 50 × 1.5s = 75s leaves headroom for the Shopify pre-scan on
-// the first invocation plus normal GraphQL throttle. Self-chain handles the
-// remaining batches with no perceptible gap thanks to the direct HTTP invoke.
-const COLLECTION_BATCH_SIZE = 50;
+// Each collection: ~1.5s (create + publish + DB).
+//
+// Previously this was 50 because we were hitting the 150s idle timeout (the
+// response couldn't be sent in time). Now the chunk runs inside
+// EdgeRuntime.waitUntil so the HTTP response returns instantly and only the
+// 400s wall clock matters. 200 × 1.5s = 300s, fits comfortably under 400s
+// even with the first-invocation Shopify pre-scan overhead. The MAX_CHUNK_MS
+// guard inside the loop bails early and self-chains if a chunk runs long.
+const COLLECTION_BATCH_SIZE = 200;
 
 async function processCollectionsChunk(
   db: ReturnType<typeof createClient>,
@@ -2009,6 +2078,13 @@ async function processCollectionsChunk(
   }
 
   let created = 0;
+  const collectionsChunkStart = Date.now();
+  // Stop the chunk when EITHER the batch budget is hit OR the wall-clock guard
+  // fires. Self-chain picks up from `existingSet` (seeded from DB mappings) so
+  // no collection is recreated and no progress is lost.
+  const shouldStopChunk = (): boolean =>
+    created >= COLLECTION_BATCH_SIZE ||
+    Date.now() - collectionsChunkStart > MAX_CHUNK_MS;
   const COLLECTION_CREATE_MUTATION = `
     mutation collectionCreate($input: CollectionInput!) {
       collectionCreate(input: $input) {
@@ -2162,14 +2238,14 @@ async function processCollectionsChunk(
     }
 
     // Limit per invocation to stay within Edge Function timeout
-    if (created >= COLLECTION_BATCH_SIZE) break;
+    if (shouldStopChunk()) break;
   }
 
   // Create model-level collections if strategy includes models
-  if ((strategy === "make_model" || strategy === "make_model_year") && created < COLLECTION_BATCH_SIZE) {
+  if ((strategy === "make_model" || strategy === "make_model_year") && !shouldStopChunk()) {
     for (const key of uniqueMakeModels) {
       if (existingSet.has(key)) continue;
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
 
       const [make, model] = key.split("|||");
       const title = `${make} ${model} Parts`;
@@ -2276,7 +2352,7 @@ async function processCollectionsChunk(
   }
 
   // Create year-range collections if strategy is make_model_year
-  if (strategy === "make_model_year" && created < COLLECTION_BATCH_SIZE) {
+  if (strategy === "make_model_year" && !shouldStopChunk()) {
     // Get year ranges from fitments (paginated to avoid 1000-row limit)
     const yearCombos = new Set<string>();
     let yrOffset = 0;
@@ -2300,7 +2376,7 @@ async function processCollectionsChunk(
     console.log(`[collections] Found ${yearCombos.size} unique year combos`);
 
     for (const combo of yearCombos) {
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
       const [make, model, yearRange] = combo.split("|||");
       const yearKey = `${make}|||${model}|||${yearRange}`;
       if (existingSet.has(yearKey)) continue;
@@ -2411,7 +2487,7 @@ async function processCollectionsChunk(
   // Creates collections like "5x112 Wheels", "5x120 Wheels" etc.
   if (created < COLLECTION_BATCH_SIZE && uniquePcds.size > 0) {
     for (const pcd of uniquePcds) {
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
       const pcdTitle = `${pcd} Wheels`;
       if (existingSet.has(pcdTitle)) continue;
 
@@ -2513,7 +2589,7 @@ async function processCollectionsChunk(
   if (created < COLLECTION_BATCH_SIZE && uniqueDiameters.size > 0) {
     const sortedDiameters = [...uniqueDiameters].sort((a, b) => a - b);
     for (const diameter of sortedDiameters) {
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
       const diaTitle = `${diameter} Inch Wheels`;
       if (existingSet.has(diaTitle)) continue;
 
@@ -2621,7 +2697,7 @@ async function processCollectionsChunk(
     }
 
     for (const w of uniqueWidths) {
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
       const widthTitle = `${w}J Wheels`;
       if (existingSet.has(widthTitle)) continue;
       const { count: wExists } = await db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("title", widthTitle);
@@ -2667,7 +2743,7 @@ async function processCollectionsChunk(
     }
 
     for (const et of uniqueOffsets) {
-      if (created >= COLLECTION_BATCH_SIZE) break;
+      if (shouldStopChunk()) break;
       const etTitle = `ET${et} Wheels`;
       if (existingSet.has(etTitle)) continue;
       const { count: etExists } = await db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("title", etTitle);

@@ -70,10 +70,29 @@ export interface AppJob {
   metadata?: Record<string, unknown> | null;
 }
 
+/** Top make-by-fitment-count aggregate used by the Fitment page widget. */
+export interface TopMakeEntry {
+  make: string;
+  count: number;
+  models: number;
+}
+
+/** One recently-mapped product with its fitments flattened for the Recent
+ *  Activity widget. Kept generic here so the consumer page owns the full
+ *  typing of the nested fitments array. */
+export interface RecentActivityEntry {
+  product_id: string;
+  product_title: string;
+  fitment_status: string;
+  fitments: Array<Record<string, unknown>>;
+}
+
 export interface AppData {
   stats: AppStats;
   jobs: AppJob[];
   activeJobs: AppJob[];
+  topMakes: TopMakeEntry[];
+  recentActivity: RecentActivityEntry[];
   isLoading: boolean;
 }
 
@@ -97,6 +116,8 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
   const [stats, setStats] = useState<AppStats>({ ...DEFAULT_STATS, ...loaderStats });
   const [jobs, setJobs] = useState<AppJob[]>([]);
   const [activeJobs, setActiveJobs] = useState<AppJob[]>([]);
+  const [topMakes, setTopMakes] = useState<TopMakeEntry[]>([]);
+  const [recentActivity, setRecentActivity] = useState<RecentActivityEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -113,6 +134,12 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
         }
         if (result.activeJobs) {
           setActiveJobs(result.activeJobs);
+        }
+        if (Array.isArray(result.topMakes)) {
+          setTopMakes(result.topMakes);
+        }
+        if (Array.isArray(result.recentActivity)) {
+          setRecentActivity(result.recentActivity);
         }
         setIsLoading(false);
       }
@@ -166,6 +193,8 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
     },
     jobs,
     activeJobs,
+    topMakes,
+    recentActivity,
     isLoading,
   };
 }

@@ -118,6 +118,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // RPC: returns {auto_mapped, smart_mapped, manual_mapped, mapped_total, stale_push} in ONE query
     // Replaces 4 heavy queries (3 full-row fetches + 1 10K-row stale push check)
     pushStatsRes,
+    // Fitment-page live panels (also cheap enough to include in every poll):
+    //   - Top Makes by Fitment count (server-side GROUP BY via RPC, not 50k rows)
+    //   - Recent Fitment Activity (10 latest mapped products + their fitments)
+    // These make the fitment page's "Top Makes" and "Recent Activity" panels
+    // refresh every 5s during active extraction — previously loader-only → stale.
+    topMakesRes,
+    recentActivityRes,
   ] = await Promise.all([
     // 20 recent jobs — enough to populate every page's "history" table in real time
     // (push page shows up to 10, dashboard shows 5). Used by useAppData().jobs on every tab.
@@ -146,6 +153,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "no_match"),
     // Efficient RPC: COUNT(DISTINCT) + column comparison done in SQL, returns 5 numbers
     db.rpc("get_push_stats", { p_shop_id: shopId }),
+    // Server-side GROUP BY — returns at most 10 rows regardless of tenant size
+    db.rpc("get_top_makes", { p_shop_id: shopId, p_limit: 10 }),
+    // Server-side latest-N + fitment aggregation — returns at most 10 rows
+    db.rpc("get_recent_fitment_activity", { p_shop_id: shopId, p_limit: 10 }),
   ]);
 
   // ── Extract counts ──
@@ -179,10 +190,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
     j.type === "push" && j.status === "completed"
   );
 
+  // Shape the RPC rows into the same format the fitment page loader used,
+  // so the page can swap loader fallback for polled values with zero refactor.
+  type TopMakeRow = { make: string; fitment_count: number | string; model_count: number | string };
+  type RecentActivityRow = {
+    product_id: string;
+    product_title: string | null;
+    fitment_status: string | null;
+    updated_at: string;
+    fitments: Array<Record<string, unknown>> | null;
+  };
+  const topMakes = ((topMakesRes.data as TopMakeRow[] | null) ?? []).map((row) => ({
+    make: row.make,
+    count: Number(row.fitment_count),
+    models: Number(row.model_count),
+  }));
+  const recentActivity = ((recentActivityRes.data as RecentActivityRow[] | null) ?? []).map((row) => ({
+    product_id: row.product_id,
+    product_title: row.product_title ?? "Untitled",
+    fitment_status: row.fitment_status ?? "unmapped",
+    fitments: row.fitments ?? [],
+  }));
+
   return data({
     jobs,
     activeJob: activeJobs.length > 0 ? activeJobs[0] : null,
     activeJobs,
+    topMakes,
+    recentActivity,
     stats: {
       // Product counts (from single query)
       total,
