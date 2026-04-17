@@ -429,6 +429,35 @@
   min-width: 150px !important;
 }
 
+/* Vertical layout — stack fields in a column instead of a row. Previously
+   this setting existed in schema but had no CSS, so selecting "vertical"
+   did nothing. */
+.autosync-ymme--vertical .autosync-ymme__fields {
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  gap: 12px !important;
+}
+.autosync-ymme--vertical .autosync-ymme__field {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.autosync-ymme--vertical .autosync-ymme__field--button {
+  width: 100% !important;
+}
+.autosync-ymme--vertical .autosync-ymme__search-btn {
+  width: 100% !important;
+}
+
+/* Container width classes — previously only `full`, `contained`, `narrow`
+   had rules. The schema also exposes `1400`, `1200`, `1000`, `800`. Map
+   them all to explicit max-widths so the setting responds in every place. */
+.autosync-ymme--width-1400 { max-width: 1400px; margin-left: auto; margin-right: auto; }
+.autosync-ymme--width-1200 { max-width: 1200px; margin-left: auto; margin-right: auto; }
+.autosync-ymme--width-1000 { max-width: 1000px; margin-left: auto; margin-right: auto; }
+.autosync-ymme--width-800  { max-width: 800px;  margin-left: auto; margin-right: auto; }
+
 .autosync-ymme__field label {
   display: block !important;
   font-size: 13px !important;
