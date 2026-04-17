@@ -1327,12 +1327,20 @@
     var tbody = container.querySelector('[data-autosync-compat-body]');
     if (!tbody) return;
 
+    // Respect the merchant's show_years / show_engine settings from the block.
+    // Previously the JS always rendered these columns, so toggling the
+    // settings in the theme editor did nothing on the rendered table.
+    var showYears = (tbody.dataset.showYears || 'true') !== 'false';
+    var showEngine = (tbody.dataset.showEngine || 'true') !== 'false';
+    // Column count matches the thead: 2 (make+model) + years? + engine?
+    var colCount = 2 + (showYears ? 1 : 0) + (showEngine ? 1 : 0);
+
     clearChildren(tbody);
 
     if (!metaVehicles) {
       var emptyRow = document.createElement('tr');
       var emptyCell = document.createElement('td');
-      emptyCell.setAttribute('colspan', '4');
+      emptyCell.setAttribute('colspan', String(colCount));
       emptyCell.textContent = 'No compatibility data available';
       emptyRow.appendChild(emptyCell);
       tbody.appendChild(emptyRow);
@@ -1344,7 +1352,7 @@
       if (!Array.isArray(vehicles) || vehicles.length === 0) {
         var noRow = document.createElement('tr');
         var noCell = document.createElement('td');
-        noCell.setAttribute('colspan', '4');
+        noCell.setAttribute('colspan', String(colCount));
         noCell.textContent = 'No vehicles listed';
         noRow.appendChild(noCell);
         tbody.appendChild(noRow);
@@ -1362,20 +1370,24 @@
         tdModel.textContent = escapeText(v.model);
         tr.appendChild(tdModel);
 
-        var tdYears = document.createElement('td');
-        tdYears.textContent = (v.year_from || '') + (v.year_to ? '\u2013' + v.year_to : '+');
-        tr.appendChild(tdYears);
+        if (showYears) {
+          var tdYears = document.createElement('td');
+          tdYears.textContent = (v.year_from || '') + (v.year_to ? '\u2013' + v.year_to : '+');
+          tr.appendChild(tdYears);
+        }
 
-        var tdEngine = document.createElement('td');
-        tdEngine.textContent = v.engine ? escapeText(v.engine) : '\u2014';
-        tr.appendChild(tdEngine);
+        if (showEngine) {
+          var tdEngine = document.createElement('td');
+          tdEngine.textContent = v.engine ? escapeText(v.engine) : '\u2014';
+          tr.appendChild(tdEngine);
+        }
 
         tbody.appendChild(tr);
       });
     } catch (e) {
       var errRow = document.createElement('tr');
       var errCell = document.createElement('td');
-      errCell.setAttribute('colspan', '4');
+      errCell.setAttribute('colspan', String(colCount));
       errCell.textContent = 'Error parsing compatibility data';
       errRow.appendChild(errCell);
       tbody.appendChild(errRow);
