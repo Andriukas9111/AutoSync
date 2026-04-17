@@ -417,6 +417,29 @@ export default function Push() {
   }, 3000);
   const activeJob = activeJobs.find((j) => j.type === "push" || j.type === "bulk_push" || j.type === "collections") ?? null;
   const completedPush = allJobs.find((j) => j.type === "push" && j.status === "completed") ?? null;
+
+  // Push History — unified live view.
+  // Seed with the loader's 10 rows so the table renders instantly, then overlay
+  // the live feed from useAppData.jobs (polled every 3s via job-status). Same
+  // pattern every other page uses for "real-time everywhere" — no separate
+  // fetcher, no extra endpoint, just the single job-status polling channel.
+  const PUSH_HISTORY_TYPES = new Set([
+    "push", "bulk_push", "collections",
+    "vehicle_pages", "delete_vehicle_pages",
+    "cleanup", "cleanup_tags", "cleanup_metafields", "cleanup_collections",
+  ]);
+  const livePushHistory = (() => {
+    const byId = new Map<string, typeof pushHistory[number]>();
+    // Loader rows first (initial paint)
+    for (const j of pushHistory) byId.set(j.id, j);
+    // Overlay / upsert with live rows (includes status / processed_items changes)
+    for (const j of allJobs) {
+      if (PUSH_HISTORY_TYPES.has(j.type)) byId.set(j.id, j as typeof pushHistory[number]);
+    }
+    return [...byId.values()].sort((a, b) =>
+      String(b.created_at).localeCompare(String(a.created_at)),
+    );
+  })();
   // Use job-specific key so dismissing one push doesn't suppress future ones
   const completedPushKey = completedPush ? `push_complete_${completedPush.id}` : "push_complete";
   const [dismissedCompletionBanner, setDismissedCompletionBanner] = useState(() => isBannerDismissed(completedPushKey));
@@ -699,8 +722,8 @@ export default function Push() {
           </Card>
         </Layout.Section>
 
-        {/* Push History card */}
-        {pushHistory.length > 0 && (
+        {/* Push History card — live-updating via useAppData.jobs */}
+        {livePushHistory.length > 0 && (
           <Layout.Section>
             <Card>
               <BlockStack gap="400">
@@ -710,7 +733,7 @@ export default function Push() {
                 </InlineStack>
                 <IndexTable
                   resourceName={{ singular: "job", plural: "jobs" }}
-                  itemCount={pushHistory.length}
+                  itemCount={livePushHistory.length}
                   headings={[
                     { title: "Date" },
                     { title: "Type" },
@@ -719,7 +742,7 @@ export default function Push() {
                   ]}
                   selectable={false}
                 >
-                  {pushHistory.map((job: any, index: number) => {
+                  {livePushHistory.map((job: any, index: number) => {
                     const statusBadge = JOB_STATUS_BADGES[job.status] ?? {
                       tone: undefined as undefined,
                       label: job.status,

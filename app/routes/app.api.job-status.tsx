@@ -119,7 +119,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Replaces 4 heavy queries (3 full-row fetches + 1 10K-row stale push check)
     pushStatsRes,
   ] = await Promise.all([
-    jobQuery.limit(5),
+    // 20 recent jobs — enough to populate every page's "history" table in real time
+    // (push page shows up to 10, dashboard shows 5). Used by useAppData().jobs on every tab.
+    jobQuery.limit(20),
     productCountQueries.total,
     productCountQueries.unmapped,
     productCountQueries.flagged,
