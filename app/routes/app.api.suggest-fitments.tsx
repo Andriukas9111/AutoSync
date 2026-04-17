@@ -1249,23 +1249,30 @@ export function buildSearchPatterns(profile: VehicleProfile): string[] {
 // ── Main action ──────────────────────────────────────────────
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  // Support internal Edge Function calls via X-Internal-Key header
-  // This allows the auto-extract system to call suggest-fitments directly
-  const internalKey = request.headers.get("X-Internal-Key");
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Support internal Edge Function calls via X-Internal-Key header.
+  // Accept multiple candidate secrets — Supabase Pro has rotating key formats
+  // (legacy JWT, new sb_secret_*) and comparing to only SUPABASE_SERVICE_ROLE_KEY
+  // caused silent 401s whenever the Edge Function's Deno-injected key differed.
+  const internalKey = request.headers.get("X-Internal-Key") ?? "";
   let _shopId: string;
 
-  if (internalKey && serviceKey && internalKey.length === serviceKey.length) {
+  if (internalKey.length > 0) {
+    const candidates = [
+      process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+      process.env.SUPABASE_SECRET_KEY ?? "",
+      process.env.INTERNAL_API_SECRET ?? "",
+    ].filter(k => k.length > 0);
     const crypto = await import("crypto");
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(internalKey),
-      Buffer.from(serviceKey),
-    );
-    if (isValid) {
-      _shopId = request.headers.get("X-Shop-Id") || "";
-    } else {
+    const isValid = candidates.some((expected) => {
+      if (expected.length !== internalKey.length) return false;
+      try { return crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expected)); }
+      catch { return false; }
+    });
+    if (!isValid) {
+      console.warn(`[suggest-fitments] Internal call rejected: keyLen=${internalKey.length}, candidateLens=[${candidates.map(c => c.length).join(",")}]`);
       return data({ error: "Invalid internal key" }, { status: 401 });
     }
+    _shopId = request.headers.get("X-Shop-Id") || "";
   } else {
     const { session } = await authenticate.admin(request);
     _shopId = session.shop;

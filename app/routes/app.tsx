@@ -15,14 +15,23 @@ import { PageFooter } from "../components/PageFooter";
 import type { PlanTier, Tenant } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  // Internal Edge Function bypass — skip full auth for API-only calls with valid service key
-  // This allows the auto-extract system to call suggest-fitments without Shopify session
-  const internalKey = request.headers.get("X-Internal-Key");
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (internalKey && serviceKey && internalKey.length === serviceKey.length) {
+  // Internal Edge Function bypass — skip full auth for API-only calls with a valid
+  // service key. Accept multiple candidates so rotated / new-format secrets still match.
+  const internalKey = request.headers.get("X-Internal-Key") ?? "";
+  if (internalKey.length > 0) {
+    const candidates = [
+      process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+      process.env.SUPABASE_SECRET_KEY ?? "",
+      process.env.INTERNAL_API_SECRET ?? "",
+    ].filter(k => k.length > 0);
     try {
       const crypto = await import("crypto");
-      if (crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(serviceKey))) {
+      const isValid = candidates.some((expected) => {
+        if (expected.length !== internalKey.length) return false;
+        try { return crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expected)); }
+        catch { return false; }
+      });
+      if (isValid) {
         return { apiKey: process.env.SHOPIFY_API_KEY || "", isAdmin: false, plan: "enterprise" as PlanTier, tenant: null as Tenant | null };
       }
     } catch { /* fall through to normal auth */ }

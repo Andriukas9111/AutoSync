@@ -69,15 +69,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // ── Action: chunked extraction ─────────────────────────────────
 
 export async function action({ request }: ActionFunctionArgs) {
-  // Support internal calls from Edge Function (no Shopify session needed for extraction)
-  // The Edge Function sends X-Internal-Key header with the service role key
+  // Support internal calls from Edge Function (no Shopify session needed for extraction).
+  // The Edge Function sends X-Internal-Key. We accept any key that matches one of the
+  // Supabase service-role secrets we know about — Supabase Pro has multiple key formats
+  // (legacy JWT `eyJ...`, new `sb_secret_...`, `SUPABASE_SECRET_KEY`) and the Edge Function
+  // may send whichever its Deno env auto-provisioned. Previously we only compared to
+  // SUPABASE_SERVICE_ROLE_KEY — if the Edge Function's injected key was a different
+  // format/rotation, timingSafeEqual silently failed and we fell through to
+  // `authenticate.admin()` which returns a 302 redirect. Vercel logs show 302s every 30s
+  // for 4 hours during the recent extract run — all chunks failed to auth, zero progress.
   const internalKey = request.headers.get("X-Internal-Key") ?? "";
   const internalShopId = request.headers.get("X-Shop-Id");
-  const expectedKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-  // Use timing-safe comparison to prevent side-channel attacks (consistent with proxy.tsx HMAC check)
-  const keyMatch = internalKey.length === expectedKey.length && expectedKey.length > 0 &&
-    crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expectedKey));
-  const isInternalCall = keyMatch && internalShopId;
+  const candidates = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+    process.env.SUPABASE_SECRET_KEY ?? "",
+    process.env.INTERNAL_API_SECRET ?? "",
+  ].filter(k => k.length > 0);
+
+  const keyMatch = internalKey.length > 0 && candidates.some((expected) => {
+    if (expected.length !== internalKey.length) return false;
+    try {
+      return crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expected));
+    } catch {
+      return false;
+    }
+  });
+  const isInternalCall = keyMatch && !!internalShopId;
+
+  if (internalKey && !isInternalCall) {
+    // Log when an internal call reached us but didn't match any candidate — avoids the
+    // silent fall-through-to-redirect that made this bug invisible for so long.
+    console.warn(
+      `[auto-extract] Internal call rejected: keyLen=${internalKey.length}, shopHeader=${internalShopId ?? "missing"}, candidateLens=[${candidates.map(c => c.length).join(",")}]`,
+    );
+  }
 
   let shopId: string;
   if (isInternalCall) {
