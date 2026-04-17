@@ -1202,6 +1202,117 @@ export function scoreByProfile(engine: EngineRow, profile: VehicleProfile): { sc
   return { score: Math.min(1.0, Math.max(0, score)), matchedHints };
 }
 
+// ── Unified engine-to-suggestion pipeline ─────────────────────────────────
+//
+// Both the manual Smart Suggestions API (/app/api/suggest-fitments) and the
+// automated extraction runner (/app/api/auto-extract) must use IDENTICAL
+// scoring semantics. Previously each route had its own copy of the scope-lock
+// + score + pattern-fallback loop, which drifted apart (the auto-extract
+// version was missing the scope lock, so product "Ford Focus ST 280" got
+// mapped to Ford Edge and Explorer because they happen to have 280hp engines
+// — product 650ed8f5-5c30-4a97-8e1d-ed93b109a6fb in autosync-9.myshopify.com).
+//
+// scoreEnginesToSuggestions is the single source of truth. Both routes must
+// go through it — any future scoring change lands in both automatically.
+//
+//   engines            — the candidate pool already filtered at the DB layer
+//   profile            — buildVehicleProfile(text) output, same for both
+//   modelNameMatchIds  — model IDs that matched directly in the text
+//   searchPatterns     — buildSearchPatterns(profile) output
+//   opts.minScore      — drop engines scoring below this (default 0.15 —
+//                        matches the current inline loop threshold)
+//
+// Returns scored suggestions, pre-dedup, pre-normalization. Callers still
+// run deduplicateSuggestions + normalizeConfidence + their own min-confidence
+// filter (those are business decisions per route, not scoring decisions).
+export interface ScoreEnginesOptions {
+  minScore?: number;
+}
+
+export function scoreEnginesToSuggestions(
+  engines: EngineRow[],
+  profile: VehicleProfile,
+  modelNameMatchIds: string[],
+  searchPatterns: string[],
+  opts: ScoreEnginesOptions = {},
+): SuggestedFitment[] {
+  const minScore = opts.minScore ?? 0.15;
+  const suggestions: SuggestedFitment[] = [];
+
+  for (const engineRow of engines) {
+    // ── SCOPE LOCK ──
+    // ACES industry standard: if the product explicitly names one or more
+    // models, reject engines from other models regardless of score. This
+    // catches the "Ford Focus ST 280" → Edge/Explorer bug and every variant
+    // of it. Multi-model products work fine because profile.modelNames
+    // accumulates every resolved model.
+    if (profile.modelNames.length > 0) {
+      const engineModelName = engineRow.model?.name || "";
+      const inScope = profile.modelNames.some((m: string) =>
+        m.toLowerCase() === engineModelName.toLowerCase()
+      );
+      if (!inScope) continue;
+    }
+
+    let { score, matchedHints } = scoreByProfile(engineRow, profile);
+
+    // Boost engines whose model was detected directly in the text
+    if (modelNameMatchIds.includes(engineRow.model.id)) {
+      score = Math.min(1.0, score + 0.25);
+      if (!matchedHints.includes(engineRow.model.name)) {
+        matchedHints.push(engineRow.model.name);
+      }
+    }
+
+    // Pattern-fallback rescue: engines whose name contains a search pattern
+    // (e.g. "%2.0 TSI%", "%280%") get a floor of 0.50 to stay in the pool.
+    // This runs AFTER the scope lock, so it can never promote a wrong-model
+    // engine past the -0.80 penalty — the lock hard-rejects those earlier.
+    if (score < 0.20) {
+      const ln = (engineRow.name || "").toLowerCase();
+      for (const pat of searchPatterns) {
+        const clean = pat.replace(/%/g, "").toLowerCase();
+        if (clean.length >= 3 && ln.includes(clean)) {
+          score = Math.max(score, 0.50);
+          matchedHints.push("pattern:" + clean);
+          break;
+        }
+      }
+    }
+
+    if (score < minScore) continue;
+
+    const displayName = (engineRow.name || "Unknown Engine").replace(/\s*\[[0-9a-f]{8}\]$/i, "");
+    suggestions.push({
+      make: { id: engineRow.model.make.id, name: engineRow.model.make.name },
+      model: {
+        id: engineRow.model.id,
+        name: engineRow.model.name,
+        generation: engineRow.model.generation,
+      },
+      engine: {
+        id: engineRow.id,
+        code: engineRow.code || "",
+        name: displayName,
+        displayName,
+        displacementCc: engineRow.displacement_cc,
+        fuelType: engineRow.fuel_type,
+        powerHp: engineRow.power_hp,
+        aspiration: engineRow.aspiration,
+        cylinders: engineRow.cylinders,
+        cylinderConfig: engineRow.cylinder_config,
+      },
+      yearFrom: engineRow.year_from,
+      yearTo: engineRow.year_to,
+      confidence: score,
+      source: "vehicle-profile",
+      matchedHints,
+    });
+  }
+
+  return suggestions;
+}
+
 // ── Build search patterns from profile ────────────────────────
 
 export function buildSearchPatterns(profile: VehicleProfile): string[] {
@@ -1650,76 +1761,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       diagnostics.push(`Found ${String(engines.length)} candidate engines for ${makeName} (patterns: ${String(searchPatterns.length)}, modelIds: ${String(makeModelIds.length)})`);
 
-      // Step 5: Score each engine against the FULL profile
-      let scoreDebugCount = 0;
-      for (const engineRow of engines) {
-        // ── SCOPE LOCK: If models were detected, HARD REJECT engines from wrong models ──
-        // This is the ACES industry standard: explicit model name = explicit fitment claim
-        // Engine codes/displacement/tech are qualifiers within the model, not expanders across models
-        if (profile.modelNames.length > 0) {
-          const engineModelName = engineRow.model?.name || "";
-          const isInScope = profile.modelNames.some((m: string) =>
-            m.toLowerCase() === engineModelName.toLowerCase()
-          );
-          if (!isInScope) continue; // Skip — model not in scope
-        }
-
-        let { score, matchedHints } = scoreByProfile(engineRow, profile);
-
-        // Boost engines from model name matches (e.g., "Golf" found in text)
-        if (modelNameMatchIds.includes(engineRow.model.id)) {
-          score = Math.min(1.0, score + 0.25);
-          if (!matchedHints.includes(engineRow.model.name)) {
-            matchedHints.push(engineRow.model.name);
-          }
-        }
-
-        // Debug: log first 3 engine scores
-        if (scoreDebugCount < 3) {
-          diagnostics.push(`Score ${engineRow.name?.substring(0, 30)}: ${score.toFixed(2)} [${matchedHints.join(",")}]`);
-          scoreDebugCount++;
-        }
-
-        // Engines found by the search query matched at least one pattern
-        // Give a minimum boost since the DB query already filtered relevant engines
-        if (score < 0.20) {
-          // Check if any search pattern appears in the engine name
-          const lowerName = (engineRow.name || "").toLowerCase();
-          for (const pat of searchPatterns) {
-            const clean = pat.replace(/%/g, "").toLowerCase();
-            if (clean.length >= 3 && lowerName.includes(clean)) {
-              score = Math.max(score, 0.50); // Minimum 50% for pattern-matched engines
-              matchedHints.push("pattern:" + clean);
-              break;
-            }
-          }
-        }
-        if (score < 0.15) continue;
-
-        // Strip any UUID hash suffixes like [cc46c88f] from engine names
-        const displayName = (engineRow.name || "Unknown Engine").replace(/\s*\[[0-9a-f]{8}\]$/i, "");
-        suggestions.push({
-          make: { id: engineRow.model.make.id, name: engineRow.model.make.name },
-          model: { id: engineRow.model.id, name: engineRow.model.name, generation: engineRow.model.generation },
-          engine: {
-            id: engineRow.id,
-            code: engineRow.code || "",
-            name: displayName,
-            displayName,
-            displacementCc: engineRow.displacement_cc,
-            fuelType: engineRow.fuel_type,
-            powerHp: engineRow.power_hp,
-            aspiration: engineRow.aspiration,
-            cylinders: engineRow.cylinders,
-            cylinderConfig: engineRow.cylinder_config,
-          },
-          yearFrom: engineRow.year_from,
-          yearTo: engineRow.year_to,
-          confidence: score,
-          source: "vehicle-profile",
-          matchedHints,
-        });
+      // Step 5: Shared scoring — identical logic drives /app/api/auto-extract
+      const scored = scoreEnginesToSuggestions(
+        engines,
+        profile,
+        modelNameMatchIds,
+        searchPatterns,
+        { minScore: 0.15 },
+      );
+      // Diagnostics: show the top 3 scored engines (post scope lock + rescue)
+      for (let i = 0; i < Math.min(3, scored.length); i++) {
+        const s = scored[i];
+        diagnostics.push(
+          `Score ${s.engine?.name?.substring(0, 30) ?? "?"}: ${s.confidence.toFixed(2)} [${s.matchedHints.join(",")}]`,
+        );
       }
+      suggestions.push(...scored);
     }
 
     // Step 6: Deduplicate and limit
