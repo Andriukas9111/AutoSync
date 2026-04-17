@@ -1548,19 +1548,19 @@ async function processPushChunk(
       }
     }
 
-    // If the product already existed on Shopify (i.e. gid came from DB, not
-    // from a fresh productCreate), push core fields we might have corrected
-    // since last sync (vendor especially — we had a bug importing Forge that
-    // saved "/manufacturers/5.json" as vendor; backfilled in DB but Shopify's
-    // copy stays wrong until we explicitly update it). Only include fields
-    // we actually own — NEVER overwrite merchant edits to title/description.
-    const productGidForUpdate = (product as Record<string, unknown>).shopify_gid || (product as Record<string, unknown>).shopify_product_id;
+    // If the product already existed on Shopify, sync core fields we might have
+    // corrected since last sync (vendor especially — the Forge import bug
+    // stored "/manufacturers/5.json"). ONLY fires when:
+    //   - product already on Shopify (not newly created), AND
+    //   - current vendor looks real (not URL/empty), AND
+    //   - synced_at is NULL (unsynced = we're explicitly pushing now; tags/
+    //     metafields will also run in this same iteration)
+    // Skipping when synced_at is non-null prevents re-sending vendor on every
+    // poll/push for products that are already up-to-date.
     const currentVendor = ((product as Record<string, unknown>).vendor as string | null | undefined) || "";
     const isNewlyCreated = !((product as Record<string, unknown>).shopify_gid) && !((product as Record<string, unknown>).shopify_product_id);
-    if (!isNewlyCreated && currentVendor && !/^\/|^https?:/.test(currentVendor)) {
-      // Fire-and-forget; skip the await-cost for products whose vendor is
-      // already good on Shopify — we can't know that cheaply, so update
-      // every time but keep the query small (vendor field only).
+    const alreadySynced = !!((product as Record<string, unknown>).synced_at);
+    if (!isNewlyCreated && !alreadySynced && currentVendor && !/^\/|^https?:/.test(currentVendor)) {
       try {
         const updRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
           method: "POST",
@@ -1582,7 +1582,7 @@ async function processPushChunk(
         }
       } catch (e) {
         console.warn(`[push] productUpdate failed for ${gid}:`, e instanceof Error ? e.message : e);
-        // Continue — tags/metafields still need to push. Vendor will retry on next push.
+        // Non-fatal: tags/metafields still push. Vendor retries on next re-queue.
       }
     }
 
