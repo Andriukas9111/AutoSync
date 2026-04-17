@@ -264,13 +264,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (existingColJob) {
       // Skip silently — collections job already in progress
     } else {
-    // Estimate total collections needed for the progress bar
-    const { count: existingCollections } = await db
-      .from("collection_mappings")
-      .select("id", { count: "exact", head: true })
-      .eq("shop_id", shopId);
-    const estimatedTotal = (existingCollections ?? 0) + 50;
-
+    // Let the Edge Function calculate the exact total on first invocation.
+    // Previous behaviour: `existing + 50` — a bogus heuristic that caused the
+    // job to declare "done" after only 200 collections, so year-level
+    // collections (which run last) never got created. Setting total_items=0
+    // triggers the real recalculation in processCollectionsChunk.
     const { data: colJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
@@ -278,7 +276,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         type: "collections",
         status: "pending",
         progress: 0,
-        total_items: estimatedTotal,
+        total_items: 0,
         processed_items: 0,
         started_at: new Date().toISOString(),
         metadata: JSON.stringify({

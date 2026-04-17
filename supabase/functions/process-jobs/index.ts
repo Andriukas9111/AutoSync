@@ -1833,19 +1833,25 @@ async function processCollectionsChunk(
     return { processed: 0, hasMore: false };
   }
 
-  // ── SYNC: Clear stale DB records and rebuild from Shopify's actual state ──
-  // This handles cases where collections were deleted directly from Shopify admin.
-  // We wipe our DB records and rebuild existingSet from what actually exists on Shopify.
-  // Only wipe on first invocation — subsequent self-chain continuations should NOT wipe
-  if ((job.processed_items ?? 0) === 0) {
-    await db.from("collection_mappings").delete().eq("shop_id", shopId);
-  }
-
+  // ── Build existingSet from BOTH sources: DB records + Shopify scan ──
+  //
+  // CRITICAL: we used to DELETE all collection_mappings on first invocation
+  // "to handle cases where collections were deleted from Shopify admin".
+  // That caused massive duplicates because the DB lost every shopify_collection_id
+  // link, so each re-run had to re-discover existing Shopify collections via
+  // single-title searches (unreliable under load) — when those searches missed,
+  // we'd CREATE the same title again. The user saw Citroen DS3 Parts, C5 X Parts,
+  // C4 X Parts appear 2-3 times each.
+  //
+  // Fixed approach:
+  //   1. NEVER wipe collection_mappings here. Stale rows are cheap; duplicates are not.
+  //   2. On every invocation, load DB rows into existingSet (make, make|model, year, wheel keys).
+  //   3. On the FIRST invocation, also scan Shopify to add any collections that exist
+  //      there but aren't in our DB. This catches the "deleted and re-added by
+  //      merchant" case without wiping anything.
   const existingSet = new Set<string>();
-  // On first invocation (processed_items === 0), DB was just cleared — nothing to read.
-  // On self-chain invocations (processed_items > 0), DB has records from prior batches — read them.
   const isFirstInvocation = (job.processed_items ?? 0) === 0;
-  if (!isFirstInvocation) {
+  {
     let exOffset = 0;
     while (true) {
       const { data: batch } = await db
@@ -1855,16 +1861,12 @@ async function processCollectionsChunk(
         .range(exOffset, exOffset + 999);
       if (!batch || batch.length === 0) break;
       for (const e of batch) {
-        // Add make key
         if (e.make && !e.model) existingSet.add(e.make);
-        // Add make|||model key
-        if (e.make && e.model) existingSet.add(`${e.make}|||${e.model}`);
-        // Add year key from title (e.g., "BMW 3 Series 2019-2022 Parts" → extract year range)
+        if (e.make && e.model && e.type === "make_model") existingSet.add(`${e.make}|||${e.model}`);
         if (e.type === "make_model_year" && e.title) {
           const yrMatch = e.title.match(/(\d{4}[-+]\d{0,4})\s+Parts$/);
-          if (yrMatch) existingSet.add(`${e.make}|||${e.model}|||${yrMatch[1]}`);
+          if (yrMatch && e.make && e.model) existingSet.add(`${e.make}|||${e.model}|||${yrMatch[1]}`);
         }
-        // Add ALL wheel collection titles (PCD, diameter, width, offset)
         if ((e.type === "wheel_pcd" || e.type === "wheel_diameter" || e.type === "wheel_width" || e.type === "wheel_offset") && e.title) {
           existingSet.add(e.title);
         }
@@ -1872,13 +1874,70 @@ async function processCollectionsChunk(
       exOffset += batch.length;
       if (batch.length < 1000) break;
     }
-    console.log(`[collections] Loaded ${existingSet.size} existing collections into memory`);
+    console.log(`[collections] Loaded ${existingSet.size} existing mappings from DB`);
   }
 
-  // Shopify scan REMOVED — the shopifyCollectionExists() check before EACH creation
-  // is the atomic dedup. The Shopify scan was causing a bug: it found old collections
-  // → added to existingSet → skipped creation → but never inserted into DB.
-  // Now: DB cleared above, existingSet is empty, each creation checks Shopify directly.
+  // On FIRST invocation, also scan Shopify for every collection title so we
+  // never re-create something that already exists there — even if our DB
+  // doesn't remember it. We only do this once per job; self-chain chunks
+  // reuse existingSet + fresh DB state.
+  //
+  // Strategy: collect all shopify titles, then match against our known
+  // make / make_model / year combinations (uniqueMakes, uniqueMakeModels, and
+  // the fitments table). Exact-string matching is reliable; fuzzy regex on
+  // "X Y Z Parts" is not because makes/models contain spaces.
+  if (isFirstInvocation) {
+    try {
+      const shopifyTitles = new Set<string>();
+      let cursor: string | null = null;
+      let scanned = 0;
+      while (scanned < 5000) { // hard ceiling — 5k collections is already massive
+        const afterArg: string = cursor ? `, after: "${cursor}"` : "";
+        const scanRes = await shopifyGraphQL(shopId, accessToken,
+          `{ collections(first: 250${afterArg}) { pageInfo { hasNextPage endCursor } edges { node { title } } } }`,
+        );
+        const coll = (scanRes?.data as any)?.collections;
+        const edges = coll?.edges ?? [];
+        for (const e of edges) {
+          const t: string = e.node?.title ?? "";
+          if (t) { shopifyTitles.add(t); existingSet.add(t); }
+        }
+        scanned += edges.length;
+        if (!coll?.pageInfo?.hasNextPage) break;
+        cursor = coll.pageInfo.endCursor;
+      }
+      // Exact-match against known combos — what THIS app creates.
+      for (const make of uniqueMakes) {
+        if (shopifyTitles.has(`${make} Parts`)) existingSet.add(make);
+      }
+      for (const mm of uniqueMakeModels) {
+        const [mk, md] = mm.split("|");
+        if (mk && md && shopifyTitles.has(`${mk} ${md} Parts`)) existingSet.add(`${mk}|||${md}`);
+      }
+      if (strategy === "make_model_year") {
+        // Build list of known year combos from fitments.
+        let ycOff = 0;
+        while (true) {
+          const { data: batch } = await db.from("vehicle_fitments")
+            .select("make, model, year_from, year_to")
+            .eq("shop_id", shopId)
+            .not("make", "is", null).not("model", "is", null).not("year_from", "is", null)
+            .range(ycOff, ycOff + 999);
+          if (!batch || batch.length === 0) break;
+          for (const f of batch) {
+            const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+            const title = `${f.make} ${f.model} ${yr} Parts`;
+            if (shopifyTitles.has(title)) existingSet.add(`${f.make}|||${f.model}|||${yr}`);
+          }
+          ycOff += batch.length;
+          if (batch.length < 1000) break;
+        }
+      }
+      console.log(`[collections] Scanned ${scanned} Shopify collections (${shopifyTitles.size} unique titles); existingSet size now ${existingSet.size}`);
+    } catch (scanErr) {
+      console.warn("[collections] Shopify pre-scan failed:", scanErr instanceof Error ? scanErr.message : scanErr);
+    }
+  }
 
   // Calculate and set total_items so progress bar works
   // For make_model_year, we need to count year combos too
