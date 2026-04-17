@@ -1737,9 +1737,12 @@ async function processPushChunk(
 // ── Collections processor ──────────────────────────────────
 
 // Collections per Edge Function invocation.
-// Each collection: ~1.5s (create + publish + DB). Edge Function timeout = 400s.
-// 200 × 1.5s = 300s — safe margin within 400s. Self-chain handles remaining batches.
-const COLLECTION_BATCH_SIZE = 200;
+// Each collection: ~1.5s (create + publish + DB). Supabase Edge Function hard
+// timeout is 150s — 200 × 1.5s = 300s blew the ceiling (verified via 504s on
+// job 5d6afae2). 50 × 1.5s = 75s leaves headroom for the Shopify pre-scan on
+// the first invocation plus normal GraphQL throttle. Self-chain handles the
+// remaining batches with no perceptible gap thanks to the direct HTTP invoke.
+const COLLECTION_BATCH_SIZE = 50;
 
 async function processCollectionsChunk(
   db: ReturnType<typeof createClient>,
@@ -1850,7 +1853,18 @@ async function processCollectionsChunk(
   //      there but aren't in our DB. This catches the "deleted and re-added by
   //      merchant" case without wiping anything.
   const existingSet = new Set<string>();
-  const isFirstInvocation = (job.processed_items ?? 0) === 0;
+  // "First invocation" = have we scanned Shopify yet for this job? Checking
+  // processed_items was wrong because it only bumps on chunk COMPLETION — so a
+  // chunk that 504s never checkpoints and every retry re-scans. Track an
+  // explicit flag in job.metadata.shopify_scanned instead (set after the scan
+  // finishes below).
+  let jobMetaParsed: Record<string, unknown> = {};
+  try {
+    jobMetaParsed = typeof job.metadata === "string"
+      ? JSON.parse(job.metadata)
+      : (job.metadata as Record<string, unknown>) ?? {};
+  } catch { /* keep empty */ }
+  const isFirstInvocation = !jobMetaParsed.shopify_scanned;
   {
     let exOffset = 0;
     while (true) {
@@ -1934,6 +1948,10 @@ async function processCollectionsChunk(
         }
       }
       console.log(`[collections] Scanned ${scanned} Shopify collections (${shopifyTitles.size} unique titles); existingSet size now ${existingSet.size}`);
+      // Persist the flag so subsequent self-chain invocations skip the scan
+      // even if processed_items hasn't advanced yet (this chunk may 504).
+      const newMeta = { ...jobMetaParsed, shopify_scanned: true };
+      await db.from("sync_jobs").update({ metadata: JSON.stringify(newMeta) }).eq("id", job.id);
     } catch (scanErr) {
       console.warn("[collections] Shopify pre-scan failed:", scanErr instanceof Error ? scanErr.message : scanErr);
     }
