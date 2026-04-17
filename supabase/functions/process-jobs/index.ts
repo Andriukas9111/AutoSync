@@ -2901,15 +2901,15 @@ async function processCollectionsChunk(
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId);
 
-  // Determine if more work remains:
-  // - If we created 0 collections this batch, STOP — all remaining already exist
-  //   (dedup checked DB + Shopify). The user can trigger another collections job later
-  //   if new fitments are added.
-  // - If we created >0, continue only if DB count < target (more remain)
-  // Recount existing collections after this batch to check if more are needed
+  // Determine if more work remains based PURELY on count: if DB has fewer
+  // than totalNeeded, continue. Previous heuristic `created > 0` bailed out
+  // when a whole chunk was spent dedup-skipping existing collections — but
+  // the chunk could SKIP 80 existing then hit the batch budget without ever
+  // reaching the missing 709 year combos. Self-chain must continue until
+  // DB count catches up to totalNeeded.
   const { count: newExistingCount } = await db.from("collection_mappings")
     .select("id", { count: "exact", head: true }).eq("shop_id", shopId);
-  const hasMore = (newExistingCount ?? 0) < totalNeeded && created > 0;
+  const hasMore = (newExistingCount ?? 0) < totalNeeded;
 
   console.log(`[collections] Created ${created}, total ${newExistingCount}/${totalNeeded}, hasMore=${hasMore}`);
 
