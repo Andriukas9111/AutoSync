@@ -2583,7 +2583,18 @@ async function processCollectionsChunk(
 
   // ── Wheel PCD Collections ──
   // Creates collections like "5x112 Wheels", "5x120 Wheels" etc.
-  if (created < COLLECTION_BATCH_SIZE && uniquePcds.size > 0) {
+  // BUG FIX: previously gated by `created < COLLECTION_BATCH_SIZE`, but
+  // make/year collections always filled the budget first, so wheel
+  // collections NEVER ran. Storefront wheel-finder then 404'd because it
+  // redirects to /collections/{pcd}-wheels. Wheel collections total ~N
+  // distinct-PCDs (usually 5-20) which is trivially small, so we only
+  // check the wall-clock guard — not the batch-size gate.
+  // Wheel collections are tiny (typically 5-20 total), so we only check the
+  // wall-clock guard — never the batch-size guard that shouldStopChunk() adds.
+  // Without this, a chunk that hits COLLECTION_BATCH_SIZE on year collections
+  // would skip wheel creation forever and the storefront wheel-finder 404s.
+  const wheelTimeOk = () => Date.now() - collectionsChunkStart < MAX_CHUNK_MS;
+  if (uniquePcds.size > 0 && wheelTimeOk()) {
     for (const pcd of uniquePcds) {
       if (shouldStopChunk()) break;
       const pcdTitle = `${pcd} Wheels`;
@@ -2684,7 +2695,9 @@ async function processCollectionsChunk(
 
   // ── Wheel Diameter Collections ──
   // Creates collections like "18 Inch Wheels", "19 Inch Wheels" etc.
-  if (created < COLLECTION_BATCH_SIZE && uniqueDiameters.size > 0) {
+  // Same rationale as PCD: small count, must always run regardless of how
+  // many year collections were created this chunk.
+  if (uniqueDiameters.size > 0 && wheelTimeOk()) {
     const sortedDiameters = [...uniqueDiameters].sort((a, b) => a - b);
     for (const diameter of sortedDiameters) {
       if (shouldStopChunk()) break;
@@ -2783,7 +2796,8 @@ async function processCollectionsChunk(
   }
 
   // ── Wheel Width Collections (e.g., "8.5J Wheels", "9J Wheels") ──
-  if (created < COLLECTION_BATCH_SIZE) {
+  // Same rationale as PCD/diameter: small count, don't starve on batch gate.
+  if (wheelTimeOk()) {
     const uniqueWidths = new Set<string>();
     let uwOffset = 0;
     while (true) {
@@ -2829,7 +2843,8 @@ async function processCollectionsChunk(
   }
 
   // ── Wheel Offset Collections (e.g., "ET45 Wheels", "ET30 Wheels") ──
-  if (created < COLLECTION_BATCH_SIZE) {
+  // Same rationale as PCD/diameter/width: small count, don't starve.
+  if (wheelTimeOk()) {
     const uniqueOffsets = new Set<string>();
     let uoOffset = 0;
     while (true) {
