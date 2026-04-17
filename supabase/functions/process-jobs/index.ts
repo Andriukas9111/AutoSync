@@ -908,6 +908,24 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
       case "collections":
         result = await processCollectionsChunk(db, job);
         break;
+      case "collections_dedupe": {
+        // Dedicated safety-net sweep. Can be queued manually, by a UI button,
+        // or by a pg_cron schedule. Runs ONLY the dupe deletion step — does
+        // not create new collections. Caps at 200 deletions per invocation;
+        // self-chains if more remain.
+        const { data: tenantRow } = await db
+          .from("tenants")
+          .select("shopify_access_token")
+          .eq("shop_id", job.shop_id)
+          .maybeSingle();
+        if (!tenantRow?.shopify_access_token) {
+          result = { processed: 0, hasMore: false, error: "No Shopify token" };
+          break;
+        }
+        const swept = await sweepCollectionDuplicates(job.shop_id as string, tenantRow.shopify_access_token as string, db, 200);
+        result = { processed: swept, hasMore: swept >= 200 };
+        break;
+      }
       case "vehicle_pages":
         result = await processVehiclePagesChunk(db, job);
         break;
@@ -2159,18 +2177,33 @@ async function processCollectionsChunk(
     }
   `;
 
-  // ── Dedup helper: check Shopify for existing collection by exact title ──
-  // This is the ATOMIC check that prevents ALL duplicates regardless of DB/cache state
+  // ── Dedup helper: check Shopify for existing collection by title or handle ──
+  // This is the ATOMIC check that prevents ALL duplicates regardless of DB/cache state.
+  // Previously we only checked by title, which Shopify's search indexes with delay
+  // (eventual consistency), so a concurrent collections job or slow index would
+  // create a second collection. Shopify then auto-appends "-1" to the handle.
+  // Now we ALSO check by the canonical handle (a deterministic slug from the title)
+  // which is effectively a unique key — this catches the dupe race.
+  function titleToHandle(t: string): string {
+    return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
   async function shopifyCollectionExists(title: string): Promise<string | null> {
-    // Escape both double quotes and single quotes for Shopify's search query syntax
     const escaped = title.replace(/"/g, '\\"').replace(/'/g, "\\'");
+    const handle = titleToHandle(title);
     const res = await shopifyGraphQL(shopId, accessToken,
-      `{ collections(first: 1, query: "title:'${escaped}'") { edges { node { id title } } } }`
+      `{
+        byTitle: collections(first: 5, query: "title:'${escaped}'") { edges { node { id title handle } } }
+        byHandle: collectionByHandle(handle: "${handle}") { id title handle }
+      }`
     );
-    const edges = res?.data?.collections?.edges ?? [];
+    // Prefer title match (could be an older dupe created manually)
+    const edges = res?.data?.byTitle?.edges ?? [];
     for (const e of edges) {
       if (e.node.title === title) return e.node.id;
     }
+    // Fall back to exact handle match (catches race-condition dupes that slipped
+    // through title search). Handles are globally unique in Shopify.
+    if (res?.data?.byHandle?.id) return res.data.byHandle.id;
     return null;
   }
 
@@ -2859,7 +2892,106 @@ async function processCollectionsChunk(
 
   console.log(`[collections] Created ${created}, total ${newExistingCount}/${totalNeeded}, hasMore=${hasMore}`);
 
+  // Safety sweep at end of final chunk: remove any "-N" suffix duplicates.
+  // Race conditions + eventual-consistent title search can cause Shopify to
+  // create a second collection with "-1" appended. We scan for these and
+  // delete any whose base handle we already own.
+  if (!hasMore) {
+    try {
+      const swept = await sweepCollectionDuplicates(shopId, accessToken, db, 50);
+      if (swept > 0) console.log(`[collections.sweep] Deleted ${swept} duplicate collections`);
+    } catch (e) {
+      console.warn("[collections.sweep] Non-fatal error:", e instanceof Error ? e.message : e);
+    }
+  }
+
   return { processed: created, hasMore };
+}
+
+// ── Automatic duplicate collection sweeper ──────────────────────────────
+// Detects and removes Shopify collections whose handle ends with "-N" when
+// the base handle also exists and is owned by us (present in our
+// collection_mappings table). Safe by construction: only deletes collections
+// we know we created. Called at the end of every collections chunk and on
+// the dedicated `collections_dedupe` job.
+async function sweepCollectionDuplicates(
+  shopIdArg: string,
+  accessTokenArg: string,
+  dbArg: ReturnType<typeof createClient>,
+  maxDeletes: number = 50,
+): Promise<number> {
+  const apiUrl = `https://${shopIdArg}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
+  const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessTokenArg };
+
+  // Collect handles we own — used as allowlist for "base" when evaluating dupes.
+  const ourHandles = new Set<string>();
+  let dbOffset = 0;
+  while (true) {
+    const { data: page } = await dbArg
+      .from("collection_mappings")
+      .select("handle")
+      .eq("shop_id", shopIdArg)
+      .range(dbOffset, dbOffset + 999);
+    if (!page || page.length === 0) break;
+    for (const row of page) ourHandles.add(row.handle as string);
+    dbOffset += page.length;
+    if (page.length < 1000) break;
+  }
+  if (ourHandles.size === 0) return 0;
+
+  // Walk Shopify collections and collect "-N" suffix candidates whose base
+  // handle is in our allowlist. Bounded to maxDeletes per invocation.
+  const toDelete: Array<{ id: string; handle: string }> = [];
+  let cursor: string | null = null;
+  while (toDelete.length < maxDeletes) {
+    const afterClause = cursor ? `, after: "${cursor}"` : "";
+    const queryStr = `{ collections(first: 250${afterClause}) { edges { node { id handle } cursor } pageInfo { hasNextPage endCursor } } }`;
+    const res = await shopifyFetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: queryStr }),
+    });
+    if (!res.ok) break;
+    const json = await res.json();
+    const page = json?.data?.collections;
+    if (!page) break;
+    for (const edge of page.edges) {
+      const { id, handle } = edge.node;
+      const m = /^(.+)-(\d+)$/.exec(handle);
+      if (!m) continue;
+      const baseHandle = m[1];
+      if (ourHandles.has(baseHandle)) {
+        toDelete.push({ id, handle });
+        if (toDelete.length >= maxDeletes) break;
+      }
+    }
+    if (!page.pageInfo.hasNextPage) break;
+    cursor = page.pageInfo.endCursor;
+  }
+  if (toDelete.length === 0) return 0;
+
+  let deleted = 0;
+  const deleteMutation = "mutation($id: ID!) { collectionDelete(input: { id: $id }) { deletedCollectionId userErrors { field message } } }";
+  for (const c of toDelete) {
+    try {
+      const delRes = await shopifyFetch(apiUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query: deleteMutation, variables: { id: c.id } }),
+      });
+      if (delRes.ok) {
+        const dj = await delRes.json();
+        const errs = dj?.data?.collectionDelete?.userErrors ?? [];
+        if (errs.length === 0) deleted++;
+        else console.warn(`[collections.sweep] Delete ${c.handle} errors:`, JSON.stringify(errs));
+      }
+      // Throttle to respect Shopify GraphQL cost budget
+      await new Promise((r) => setTimeout(r, 120));
+    } catch (e) {
+      console.warn(`[collections.sweep] Delete ${c.handle} threw:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return deleted;
 }
 
 // ── Vehicle Pages processor (Bulk Operations) ─────────────
