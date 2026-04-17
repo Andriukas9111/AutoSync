@@ -1115,25 +1115,30 @@ async function handlePlateLookup(params: URLSearchParams, body: string | null, r
       debugInfo.searchError = errMsg;
     }
 
-    // Track plate lookup for analytics (non-blocking)
+    // Track plate lookup for analytics (non-blocking). Wrapped in Promise.resolve()
+    // because Supabase builders return a custom PromiseLike without .catch(),
+    // so the original .then().catch() chain would throw at runtime if the
+    // builder itself (not the insert) rejected. Promise.resolve() normalises it.
     if (shop) {
-      db.from("plate_lookups").insert({
-        shop_id: shop,
-        plate: process.env.PLATE_HASH_PEPPER
-          ? crypto.createHash("sha256").update(registration.toUpperCase() + process.env.PLATE_HASH_PEPPER).digest("hex").substring(0, 16)
-          : crypto.createHash("sha256").update(registration.toUpperCase()).digest("hex").substring(0, 16),
-        make: vehicle.make,
-        model: vehicle.model,
-        year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,
-        fuel_type: vehicle.fuelType,
-        colour: vehicle.colour,
-        source: "dvla",
-        resolved_make_id: resolved?.makeId || null,
-        resolved_model_id: resolved?.modelId || null,
-        resolved_engine_id: resolved?.engineId || null,
-      }).then(({ error }) => {
-        if (error) console.warn(`[proxy] plate_lookups insert failed: ${error.message}`);
-      }).catch((err) => {
+      Promise.resolve(
+        db.from("plate_lookups").insert({
+          shop_id: shop,
+          plate: process.env.PLATE_HASH_PEPPER
+            ? crypto.createHash("sha256").update(registration.toUpperCase() + process.env.PLATE_HASH_PEPPER).digest("hex").substring(0, 16)
+            : crypto.createHash("sha256").update(registration.toUpperCase()).digest("hex").substring(0, 16),
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.yearOfManufacture ? Number(vehicle.yearOfManufacture) : null,
+          fuel_type: vehicle.fuelType,
+          colour: vehicle.colour,
+          source: "dvla",
+          resolved_make_id: resolved?.makeId || null,
+          resolved_model_id: resolved?.modelId || null,
+          resolved_engine_id: resolved?.engineId || null,
+        })
+      ).then((res) => {
+        if (res?.error) console.warn(`[proxy] plate_lookups insert failed: ${res.error.message}`);
+      }).catch((err: unknown) => {
         console.warn(`[proxy] plate_lookups insert error:`, err);
       });
     }
@@ -1913,7 +1918,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     : path.includes("fitment") || path.includes("badge") ? "fitment-check"
     : "search";
   if (!checkRateLimit(shop, rateLimitEndpoint)) {
-    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
+    // Previously passed { status, headers } as the 2nd arg, but json()
+    // signature is json(body, statusNumber, request). The object coerced
+    // to NaN, so rate-limited requests returned 200 OK instead of 429.
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, 429, request);
   }
 
   switch (path) {
@@ -2018,7 +2026,10 @@ export async function action({ request }: ActionFunctionArgs) {
     : path === "vin-decode" ? "vin-decode"
     : "track";
   if (!checkRateLimit(shop, rateLimitEndpoint)) {
-    return json({ error: "Rate limit exceeded. Please try again in a moment." }, { status: 429, headers: getCorsHeaders(request) });
+    // Previously passed { status, headers } as the 2nd arg, but json()
+    // signature is json(body, statusNumber, request). The object coerced
+    // to NaN, so rate-limited requests returned 200 OK instead of 429.
+    return json({ error: "Rate limit exceeded. Please try again in a moment." }, 429, request);
   }
 
   const body = await request.text();
