@@ -3084,6 +3084,40 @@ async function processVehiclePagesChunk(
 
   console.log(`[vehicle_pages] Processing ${specsThisBatch.length} of ${unsyncedSpecs.length} unsynced specs (parallel)`);
 
+  // ── Build engine → products map for THIS batch only ─────────────────────
+  // Previously we never populated `linked_products` on the metaobject, so the
+  // storefront showed empty "Products for this Vehicle" sections and the admin
+  // dashboard showed `1173 Products Linked` from a different counting path.
+  // Fix: fetch fitments whose ymme_engine_id ∈ this batch, join to products
+  // (only synced products with a shopify handle), and store handles by engine.
+  const batchEngineIds = specsThisBatch.map(s => String(s.id));
+  const engineToProducts = new Map<string, { handles: string[]; gids: string[] }>();
+  // Chunk .in() by 200 to respect PostgREST URL length limits (~8KB).
+  for (let i = 0; i < batchEngineIds.length; i += 200) {
+    const chunk = batchEngineIds.slice(i, i + 200);
+    const { data: fitmentRows } = await db
+      .from("vehicle_fitments")
+      .select("ymme_engine_id, products!inner(handle, shopify_product_id)")
+      .eq("shop_id", shopId)
+      .in("ymme_engine_id", chunk)
+      .not("ymme_engine_id", "is", null);
+    for (const row of (fitmentRows || []) as Array<{ ymme_engine_id: string; products: { handle?: string; shopify_product_id?: string } }>) {
+      const eid = row.ymme_engine_id;
+      const p = row.products;
+      if (!p?.handle || !p?.shopify_product_id) continue;
+      let bucket = engineToProducts.get(eid);
+      if (!bucket) { bucket = { handles: [], gids: [] }; engineToProducts.set(eid, bucket); }
+      // de-dupe on handle so one product appearing in multiple fitments for the
+      // same engine (different year_from/year_to rows) only shows up once.
+      if (!bucket.handles.includes(p.handle)) {
+        bucket.handles.push(p.handle);
+        bucket.gids.push(p.shopify_product_id);
+      }
+    }
+  }
+  const totalLinks = [...engineToProducts.values()].reduce((n, b) => n + b.handles.length, 0);
+  console.log(`[vehicle_pages] Pre-built product links: ${engineToProducts.size} engines → ${totalLinks} product links`);
+
   // ── Parallel execution: process CONCURRENCY items at a time ──
   // Each Shopify API call takes ~500ms. Sequential = 200 × 500ms = 100s.
   // Parallel (5) = 200 / 5 × 500ms = 20s. 5x faster.
@@ -3091,7 +3125,25 @@ async function processVehiclePagesChunk(
 
   async function processOneSpec(spec: Record<string, unknown>): Promise<boolean> {
     const rawSpecs = typeof spec.raw_specs === "string" ? JSON.parse(spec.raw_specs as string) : (spec.raw_specs ?? {});
-    const handle = `vehicle-specs-${(String(spec.make_name || "")).toLowerCase().replace(/\s+/g, "-")}-${(String(spec.model_name || "")).toLowerCase().replace(/\s+/g, "-")}-${(String(spec.variant || "")).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`.replace(/-+/g, "-").replace(/-$/, "").substring(0, 100);
+    // Shopify handle rules: lowercase, alphanumeric + hyphens only, max 255 chars.
+    // Previous bug: make/model were only whitespace-stripped, so "Cee'd", "Up!",
+    // "Grandeur/Azera", "F-Series F-100/F-150", "ID.UNYX", "X 1/9", "Pro Cee'd"
+    // all produced invalid handles and hit "Handle is invalid" from Shopify.
+    // Fix: aggressively strip non-alphanumerics everywhere, then collapse hyphens.
+    const slug = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    // Include engine id fragment in handle to guarantee uniqueness for edge-case
+    // engines where make+model+variant all collapse to the same slug (common for
+    // legacy/Cyrillic-only models). Prevents Handle is invalid AND TAKEN errors.
+    const idFrag = String(spec.id ?? "").slice(0, 6);
+    let handle = `vehicle-specs-${slug(spec.make_name)}-${slug(spec.model_name)}-${slug(spec.variant)}`
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .substring(0, 90);
+    // Guard against all-empty slug (model and variant stripped to nothing):
+    // fall back to engine id so we NEVER produce an empty or trailing handle.
+    if (!handle || handle === "vehicle-specs" || /^vehicle-specs-*$/.test(handle)) {
+      handle = `vehicle-specs-${idFrag}`;
+    }
 
     const yearRange = spec.year_from && spec.year_to
       ? `${spec.year_from}\u2013${spec.year_to}`
@@ -3101,6 +3153,12 @@ async function processVehiclePagesChunk(
     const powerStr = rawSpecs["Max. power"] || (rawSpecs["power_hp"] ? `${rawSpecs["power_hp"]} HP` : "");
     const torqueStr = rawSpecs["Max. torque"] || (rawSpecs["torque_nm"] ? `${rawSpecs["torque_nm"]} Nm` : "");
     const overview = `The ${spec.make_name} ${spec.model_name} ${spec.variant || ""} is powered by a ${displacementL} ${rawSpecs["Fuel type"] || rawSpecs["fuel_type"] || ""} engine producing ${powerStr} and ${torqueStr}. It features ${rawSpecs["Gearbox"] || rawSpecs["transmission"] || "a manual/automatic"} transmission with ${rawSpecs["Drive"] || rawSpecs["drive_type"] || "front/rear"} wheel drive.`.trim();
+
+    // Pull product handles for this engine from the pre-built map.
+    // Empty array is fine — Shopify accepts `[]` for a json field, and the
+    // storefront renderer can decide whether to render the section or not.
+    const linkedBucket = engineToProducts.get(String(spec.id)) ?? { handles: [], gids: [] };
+    const linkedHandles = linkedBucket.handles;
 
     const fields = [
       { key: "make", value: String(spec.make_name || "") },
@@ -3118,7 +3176,10 @@ async function processVehiclePagesChunk(
       { key: "hero_image_url", value: rawSpecs["hero_image_url"] || "" },
       { key: "overview", value: overview },
       { key: "full_specs", value: JSON.stringify(rawSpecs) },
-    ].filter(f => f.value);
+      // Always emit linked_products — empty array renders "no products yet".
+      // Stringified handle array (string[]), matches the metaobject json schema.
+      { key: "linked_products", value: JSON.stringify(linkedHandles) },
+    ].filter(f => f.value !== undefined && f.value !== null && f.value !== "");
 
     try {
       const res = await shopifyGraphQL(shopId, accessToken, `mutation metaobjectCreate($metaobject: MetaobjectCreateInput!) {
@@ -3143,6 +3204,8 @@ async function processVehiclePagesChunk(
           shop_id: shopId, engine_id: spec.id as string,
           metaobject_gid: metaobject.id, metaobject_handle: metaobject.handle || handle,
           sync_status: "synced", synced_at: new Date().toISOString(),
+          // Persist count so the admin "Products Linked" stat reflects reality.
+          linked_product_count: linkedHandles.length,
         }, { onConflict: "shop_id,engine_id" });
         return true;
       } else if (errors?.some((e: { code: string }) => e.code === "TAKEN")) {
@@ -3159,6 +3222,7 @@ async function processVehiclePagesChunk(
               shop_id: shopId, engine_id: spec.id as string,
               metaobject_gid: retryObj.id, metaobject_handle: retryObj.handle || altHandle,
               sync_status: "synced", synced_at: new Date().toISOString(),
+              linked_product_count: linkedHandles.length,
             }, { onConflict: "shop_id,engine_id" });
             console.log(`[vehicle_pages] Created with alt handle: ${altHandle}`);
             return true;

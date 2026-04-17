@@ -82,10 +82,25 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
           const order: Record<string, number> = { extract: 0, push: 1, collections: 2, vehicle_pages: 3 };
           return (order[a.type] ?? 5) - (order[b.type] ?? 5);
         }).map((job, i) => {
-          // For collection jobs, show actual created count from live stats
+          // Decide which "processed" number to show.
+          // Many jobs self-chain across invocations; `processed_items` is only the
+          // count created in the LAST invocation (e.g. vehicle_pages=195) not the
+          // cumulative synced state (2,807). If we naively trusted processed_items
+          // the UI says "195 / 2,828 (100%)" which is contradictory. Fix: for
+          // self-chaining job types use the cumulative counter from stats.
           const isCollectionJob = job.type === "collections";
-          const rawProcessed = isCollectionJob ? (stats.collections ?? job.processed_items ?? 0) : (job.processed_items ?? 0);
+          const isVehiclePagesJob = job.type === "vehicle_pages";
+          const isPushJob = job.type === "push" || job.type === "bulk_push";
+          let rawProcessed: number;
+          if (isCollectionJob) rawProcessed = stats.collections ?? job.processed_items ?? 0;
+          else if (isVehiclePagesJob) rawProcessed = stats.vehiclePagesSynced ?? job.processed_items ?? 0;
+          else if (isPushJob) rawProcessed = stats.pushedProducts ?? job.processed_items ?? 0;
+          else rawProcessed = job.processed_items ?? 0;
           let total = job.total_items ?? 0;
+          // For vehicle pages, total_items can drift from the actual total (fitments
+          // added since the job started). Trust stats.vehiclePages as the authoritative
+          // total when available.
+          if (isVehiclePagesJob && (stats.vehiclePages ?? 0) > total) total = stats.vehiclePages!;
           // Guard against wrong total (product count leaked into collection job)
           if (isCollectionJob && total > 0 && rawProcessed > 0 && total > rawProcessed * 2.5) {
             total = rawProcessed + 50;
@@ -93,7 +108,10 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
           // Cap processed at total — prevents "111/101" from double-counting bugs
           const processed = total > 0 ? Math.min(rawProcessed, total) : rawProcessed;
           const rawPercent = total > 0 ? Math.round((processed / total) * 100) : 0;
-          const percent = job.status === "completed" ? 100 : Math.min(rawPercent, 99);
+          // A "completed" job with processed < total is a self-chained batch that
+          // finished ONE batch, not the whole workload. Don't lie with 100%; show
+          // the real ratio and let the next batch's job take over the spinner.
+          const percent = job.status === "completed" && processed >= total ? 100 : Math.min(rawPercent, 99);
           const isPending = job.status === "pending";
           const isRunning = job.status === "running" || isPending;
           const isComplete = job.status === "completed";
@@ -152,7 +170,9 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
                     </Text>
                   )}
                   {isComplete && (
-                    <ProgressBar progress={100} size="small" tone="success" />
+                    // Use the REAL percent, not hardcoded 100 — a self-chained
+                    // batch that only did 195/2828 shouldn't paint a full bar.
+                    <ProgressBar progress={percent} size="small" tone="success" />
                   )}
 
                   {job.error && (
