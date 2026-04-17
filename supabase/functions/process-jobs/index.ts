@@ -4917,6 +4917,20 @@ async function processCleanupChunk(
 
   // Phase 5: Clean database tables
   if (currentPhase === "database") {
+    // SAFETY GATE: the database phase is a full tenant wipe — it resets every
+    // product to "unmapped", drops every vehicle_fitment + wheel_fitment,
+    // every collection_mapping, every tenant_active_make. Only the
+    // user-initiated "Full Cleanup" button may run this. The hourly
+    // sync_after_delete cron creates a cleanup job too (trigger="sync_after_delete"),
+    // but it must NEVER reach the database wipe — otherwise a single stale
+    // product would wipe 13k+ fitments. Verified live on autosync-9:
+    //   sync_after_delete -> cleanup (trigger=sync_after_delete)
+    //     -> database phase wiped 13,157 fitments + 219 collection_mappings.
+    // Gate on the trigger: anything other than the UI button completes here.
+    if (meta.trigger === "sync_after_delete") {
+      console.log(`[cleanup] Skipping database wipe (trigger=sync_after_delete). Targeted tags+metafields phases already ran.`);
+      return { processed: 0, hasMore: false };
+    }
     try {
       console.log(`[cleanup] Phase 5: Cleaning database for ${shopId}`);
       // Reset all products to unmapped and clear synced_at
