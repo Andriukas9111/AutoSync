@@ -3195,9 +3195,15 @@ async function processVehiclePagesChunk(
     }).eq("id", job.id);
   }
 
-  // Check if more unsynced specs remain
+  // Check if more unsynced specs remain.
+  // Previously said `created > 0 && remainingUnsynced > 0` — but if a whole
+  // batch failed (Shopify error, transient network, metaobject validation
+  // issue) the job marked complete at 200/2828 even though 2628 engines
+  // remained. Observed live on autosync-9 today. Use the remaining count
+  // alone; if a batch really hits a fatal error the Edge Function returns
+  // error and the outer loop marks failed, which is visible in the UI.
   const remainingUnsynced = unsyncedSpecs.length - specsThisBatch.length;
-  const hasMore = created > 0 && remainingUnsynced > 0;
+  const hasMore = remainingUnsynced > 0;
   console.log(`[vehicle_pages] Batch done: created ${created}/${specsThisBatch.length}, remaining=${remainingUnsynced}, hasMore=${hasMore}`);
 
   return { processed: created, hasMore };
