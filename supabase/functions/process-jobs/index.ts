@@ -1310,16 +1310,19 @@ async function processPushChunk(
     .maybeSingle();
   const publicationId = tenantPub?.online_store_publication_id || null;
 
-  // Pick the next BATCH_SIZE unsynced products. Filters on synced_at IS NULL
-  // instead of offset-walking so we never skip a product that just got mapped
-  // and never re-push a product that's already synced. Loops until no rows
-  // come back.
+  // Pick the next BATCH_SIZE unsynced MAPPED products.
+  // Only auto_mapped, smart_mapped, manual products have fitments worth pushing
+  // to Shopify. no_match and flagged products have no fitments, so the push
+  // inner loop early-returns at `if (!hasFitments && !hasWheelFitments) continue`
+  // which skips the synced_at update — that's how the same 983 no-fitment
+  // products kept getting re-selected on every chunk. Fix: only pick products
+  // that actually have something to push.
   const { data: products } = await db
     .from("products")
     .select("id, title, description, sku, price, compare_at_price, vendor, product_type, image_url, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
-    .not("fitment_status", "eq", "unmapped")
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual"])
     .is("synced_at", null)
     .order("id")
     .limit(BATCH_SIZE);
