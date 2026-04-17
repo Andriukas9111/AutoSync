@@ -16,7 +16,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BATCH_SIZE = 100; // Products per Edge Function invocation (Supabase Pro: 400s wall clock)
+// Products per Edge Function invocation. Each product does 2-3 Shopify GraphQL
+// calls (tags, metafields, maybe create) + 200ms throttle delay. Observed
+// wall-clock with 100: >=150s → 504 Gateway Timeout (chunks die mid-push,
+// synced_at/tags get orphaned). Supabase Edge Functions cap at ~150s. Halved
+// to 50 to leave headroom for slow Shopify responses + rate limits.
+const BATCH_SIZE = 50;
 const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
@@ -1474,6 +1479,14 @@ async function processPushChunk(
       }
     }
 
+    // Track whether each Shopify write actually succeeded. Previously the loop
+    // set `synced_at` unconditionally, so a 504/5xx or GraphQL userError would
+    // leave the product looking "pushed" in the DB with no tags/metafields on
+    // Shopify. That's why the Products page now shows blank Tags + blank
+    // Metafields for many auto_mapped products.
+    let tagsOk = true;
+    let metafieldsOk = true;
+
     try {
       // Push tags
       if (pushTags && tags.length > 0) {
@@ -1487,11 +1500,14 @@ async function processPushChunk(
         });
         if (!tagRes.ok) {
           console.error(`[push] Tag HTTP error ${tagRes.status} for ${product.shopify_product_id}`);
+          tagsOk = false;
         } else {
           const tagJson = await tagRes.json();
           await handleThrottle(tagJson);
-          if (tagJson?.data?.tagsAdd?.userErrors?.length) {
-            console.error(`[push] Tag errors for ${product.shopify_product_id}:`, tagJson.data.tagsAdd.userErrors);
+          const tagErrors = tagJson?.data?.tagsAdd?.userErrors;
+          if (tagErrors && tagErrors.length > 0) {
+            console.error(`[push] Tag errors for ${product.shopify_product_id}:`, tagErrors);
+            tagsOk = false;
           }
         }
       }
@@ -1589,22 +1605,51 @@ async function processPushChunk(
         });
         if (!mfRes.ok) {
           console.error(`[push] Metafield HTTP error ${mfRes.status} for ${product.shopify_product_id}`);
+          metafieldsOk = false;
         } else {
           const mfJson = await mfRes.json();
           await handleThrottle(mfJson);
-          if (mfJson?.data?.metafieldsSet?.userErrors?.length) {
-            console.error(`[push] Metafield errors for ${product.shopify_product_id}:`, mfJson.data.metafieldsSet.userErrors);
+          const mfErrors = mfJson?.data?.metafieldsSet?.userErrors;
+          if (mfErrors && mfErrors.length > 0) {
+            console.error(`[push] Metafield errors for ${product.shopify_product_id}:`, mfErrors);
+            metafieldsOk = false;
           }
         }
       }
 
-      // Mark product as synced
-      await db.from("products")
-        .update({ synced_at: new Date().toISOString() })
-        .eq("id", product.id)
-        .eq("shop_id", shopId);
+      // Only mark product as synced when every enabled write succeeded.
+      // Partial failures (tags OR metafields) leave synced_at NULL so the next
+      // push picks the product up again and retries — instead of a silent
+      // "success" that leaves Shopify without tags / filters.
+      const shouldMarkSynced =
+        (!pushTags || tagsOk) && (!pushMetafields || metafieldsOk);
+      if (shouldMarkSynced) {
+        await db.from("products")
+          .update({ synced_at: new Date().toISOString() })
+          .eq("id", product.id)
+          .eq("shop_id", shopId);
+      } else {
+        console.warn(
+          `[push] Skipping synced_at for ${product.id} — tagsOk=${tagsOk} metafieldsOk=${metafieldsOk}. ` +
+            `Product will be retried on next push.`,
+        );
+      }
 
       processed++;
+
+      // Checkpoint progress every 10 products so the UI progress bar advances
+      // mid-chunk. Previously processed_items only updated at chunk end, so
+      // when chunks 504'd the bar stayed at 0% even though products were being
+      // written to Shopify. Cheap PATCH — one UPDATE row every ~2-4 seconds.
+      if (processed % 10 === 0) {
+        const totalSoFar = alreadyProcessed + processed;
+        const totalItems = (job.total_items as number | null) ?? 0;
+        const progressPct = totalItems > 0 ? Math.min(99, Math.round((totalSoFar / totalItems) * 100)) : null;
+        await db.from("sync_jobs").update({
+          processed_items: totalSoFar,
+          ...(progressPct !== null ? { progress: progressPct } : {}),
+        }).eq("id", job.id);
+      }
 
       // Small delay to respect Shopify rate limits
       await new Promise((r) => setTimeout(r, 200));
