@@ -40,7 +40,11 @@ const BATCH_SIZE = 60;
 // with 30s of headroom. If the EdgeRuntime.waitUntil background-task path
 // starts working on this project, raise this to ~370s (30s under Pro's 400s
 // wall clock).
-const MAX_CHUNK_MS = 120_000;
+// Supabase Pro gives us up to 400s wall-clock on the Edge Function runtime.
+// We target 320s (80s safety margin under the 400s ceiling) so the chunk can
+// make serious progress on large stores without hitting the ceiling mid-write.
+// Previously capped at 120s targeting the free-tier 150s idle timeout.
+const MAX_CHUNK_MS = 320_000;
 const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
