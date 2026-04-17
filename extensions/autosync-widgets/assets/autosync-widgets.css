@@ -12,19 +12,58 @@
   font-family: inherit !important;
   -webkit-font-smoothing: antialiased !important;
 }
-/* Prevent theme from blowing up our SVG/img elements */
+/* Prevent theme from blowing up our IMG elements (but not SVG — SVGs have
+   explicit width/height attrs which we must preserve on themes that add
+   global svg { height: auto }). */
 [class^="autosync-"] img,
-[class^="autosync-"] svg,
 [class^="apl-"] img,
-[class^="apl-"] svg,
 [class^="avs-"] img,
-[class^="avs-"] svg,
 [class^="avd-"] img,
-[class^="avd-"] svg,
-[class^="avsd-"] img,
-[class^="avsd-"] svg {
+[class^="avsd-"] img {
   max-width: 100% !important;
   height: auto !important;
+}
+/* SVG icons: themes like Minimog/Dawn/Nexvo sometimes apply width:100% or
+   height:auto globally to <svg>, which collapses our inline-sized icons.
+   Lock SVGs with explicit width/height attributes to their attribute size,
+   and never stretch. attr() in width/height isn't supported by browsers, so
+   we target common icon sizes with explicit pixel rules below. */
+[class^="autosync-"] svg,
+[class^="apl-"] svg,
+[class^="avs-"] svg,
+[class^="avd-"] svg,
+[class^="avsd-"] svg {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+  fill: none;
+}
+/* Common icon sizes — explicit pixel values so themes can't collapse them.
+   Covers all sizes used across widgets: 12, 14, 16, 18, 20, 24. */
+[class^="autosync-"] svg[width="12"], [class^="apl-"] svg[width="12"],
+[class^="avs-"] svg[width="12"], [class^="avd-"] svg[width="12"], [class^="avsd-"] svg[width="12"] {
+  width: 12px !important; height: 12px !important; min-width: 12px !important; min-height: 12px !important;
+}
+[class^="autosync-"] svg[width="14"], [class^="apl-"] svg[width="14"],
+[class^="avs-"] svg[width="14"], [class^="avd-"] svg[width="14"], [class^="avsd-"] svg[width="14"] {
+  width: 14px !important; height: 14px !important; min-width: 14px !important; min-height: 14px !important;
+}
+[class^="autosync-"] svg[width="16"], [class^="apl-"] svg[width="16"],
+[class^="avs-"] svg[width="16"], [class^="avd-"] svg[width="16"], [class^="avsd-"] svg[width="16"] {
+  width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important;
+}
+[class^="autosync-"] svg[width="18"], [class^="apl-"] svg[width="18"],
+[class^="avs-"] svg[width="18"], [class^="avd-"] svg[width="18"], [class^="avsd-"] svg[width="18"] {
+  width: 18px !important; height: 18px !important; min-width: 18px !important; min-height: 18px !important;
+}
+[class^="autosync-"] svg[width="20"], [class^="apl-"] svg[width="20"],
+[class^="avs-"] svg[width="20"], [class^="avd-"] svg[width="20"], [class^="avsd-"] svg[width="20"] {
+  width: 20px !important; height: 20px !important; min-width: 20px !important; min-height: 20px !important;
+}
+[class^="autosync-"] svg[width="24"], [class^="apl-"] svg[width="24"],
+[class^="avs-"] svg[width="24"], [class^="avd-"] svg[width="24"], [class^="avsd-"] svg[width="24"] {
+  width: 24px !important; height: 24px !important; min-width: 24px !important; min-height: 24px !important;
 }
 /* Icons inside our widgets — never bigger than their container */
 [class^="autosync-"] img[width],
@@ -32,9 +71,7 @@
 [class^="avs-"] img[width],
 [class^="avd-"] img[width],
 [class^="avsd-"] img[width] {
-  width: attr(width px) !important;
   max-width: none !important;
-  height: attr(height px) !important;
 }
 /* Make logos in YMME dropdowns stay at correct size */
 [class^="autosync-"] img[width="24"],
