@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useFetcher, Outlet, useLocation } from "react-router";
+import { useLoaderData, useNavigate, useFetcher, Outlet, useLocation, useRevalidator } from "react-router";
 import { data, redirect } from "react-router";
 import {
   Page, Card, InlineStack, InlineGrid, BlockStack, Text,
@@ -316,31 +316,31 @@ export default function ProviderDetail() {
     message: string;
   } | null>(null);
 
-  // Real-time product count — polls every 3s to show import progress
-  const [liveProductCount, setLiveProductCount] = useState(provider.product_count ?? 0);
-  const prevCountRef = useRef(provider.product_count ?? 0);
+  // Live product count. Replaced a 3s-interval fetch to /app/api/provider-fetch
+  // (which ran forever per open tab — polling storm in Vercel logs) with a much
+  // cheaper pattern:
+  //   • Default: trust the loader value (fresh on every navigation).
+  //   • While a refresh action is in flight, revalidate the loader at 5s with
+  //     visibility pause. Stops automatically when the action returns.
+  // Same cadence as `useAppData` — no second independent polling loop.
+  const revalidator = useRevalidator();
 
   useEffect(() => {
-    // Reset when provider changes
-    setLiveProductCount(provider.product_count ?? 0);
-    prevCountRef.current = provider.product_count ?? 0;
-
-    const poll = setInterval(async () => {
-      try {
-        const res = await fetch(`/app/api/provider-fetch`, {
-          method: "POST",
-          body: new URLSearchParams({ _action: "count", provider_id: provider.id }),
-        });
-        if (!res.ok) return;
-        const result = await res.json();
-        if (typeof result.productCount === "number") {
-          setLiveProductCount(result.productCount);
-        }
-      } catch { /* ignore */ }
-    }, 3000);
-
-    return () => clearInterval(poll);
-  }, [provider.id, provider.product_count]);
+    if (!refreshing) return;
+    let stopped = false;
+    const tick = () => {
+      if (stopped || document.hidden) return;
+      if (revalidator.state === "idle") revalidator.revalidate();
+    };
+    const timer = setInterval(tick, 5000);
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [refreshing, revalidator]);
 
   // Settings form state
   const [name, setName] = useState(provider.name);
@@ -378,7 +378,8 @@ export default function ProviderDetail() {
   const isSubmitting = fetcher.state !== "idle";
   const fetcherData = fetcher.data as { success: true; message: string } | { error: string } | undefined;
   const type = provider.type;
-  const totalProducts = liveProductCount;
+  // Loader is revalidated during refresh (see useEffect above), so provider.product_count is always live.
+  const totalProducts = provider.product_count ?? 0;
 
   const handleTestConnection = useCallback(async () => {
     setTestingConnection(true);
