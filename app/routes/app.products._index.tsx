@@ -45,6 +45,7 @@ import {
 import { authenticate } from "../shopify.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
+import { FilterBar } from "../components/FilterBar";
 import db, { syncAfterDelete } from "../lib/db.server";
 import type { FitmentStatus } from "../lib/types";
 import { formatPrice, asPushStats } from "../lib/types";
@@ -754,62 +755,37 @@ export default function Products() {
         </Card>
 
         {/* ── Filters Row ── */}
-        <Card padding="400">
-          <BlockStack gap="400">
-          <InlineStack gap="200" blockAlign="center">
-            <IconBadge icon={FilterIcon} color="var(--p-color-icon-emphasis)" />
-            <Text as="h2" variant="headingMd">Filters</Text>
-          </InlineStack>
-          <InlineStack gap="300" align="start" blockAlign="end" wrap>
-            <div style={{ flexGrow: 1, maxWidth: "400px" }}>
-              <TextField
-                label="Search products"
-                labelHidden
-                value={searchValue}
-                onChange={setSearchValue}
-                placeholder="Search by title or handle..."
-                clearButton
-                onClearButtonClick={handleSearchClear}
-                autoComplete="off"
-                onBlur={handleSearchSubmit}
-                prefix={
-                  <Icon source={SearchIcon} />
-                }
-              />
-            </div>
-            <Button onClick={handleSearchSubmit} variant="secondary">Search</Button>
-            <div style={{ minWidth: "170px" }}>
-              <Select
-                label="Status"
-                labelHidden
-                options={STATUS_OPTIONS}
-                value={filters.status}
-                onChange={(v) => updateFilters("status", v)}
-              />
-            </div>
-            <div style={{ minWidth: "150px" }}>
-              <Select
-                label="Source"
-                labelHidden
-                options={SOURCE_OPTIONS}
-                value={filters.source}
-                onChange={(v) => updateFilters("source", v)}
-              />
-            </div>
-            {hasActiveFilters && (
-              <Button
-                onClick={() => {
+        <FilterBar
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          onSearchSubmit={handleSearchSubmit}
+          onSearchClear={handleSearchClear}
+          placeholder="Search by title or handle..."
+          selects={[
+            {
+              label: "Status",
+              value: filters.status,
+              options: STATUS_OPTIONS,
+              onChange: (v) => updateFilters("status", v),
+              minWidth: 170,
+            },
+            {
+              label: "Source",
+              value: filters.source,
+              options: SOURCE_OPTIONS,
+              onChange: (v) => updateFilters("source", v),
+              minWidth: 150,
+            },
+          ]}
+          onClearAll={
+            hasActiveFilters
+              ? () => {
                   setSearchValue("");
                   setSearchParams(new URLSearchParams());
-                }}
-                variant="plain"
-              >
-                Clear all
-              </Button>
-            )}
-          </InlineStack>
-          </BlockStack>
-        </Card>
+                }
+              : undefined
+          }
+        />
 
         {/* ── Products Table ── */}
         {products.length === 0 && hasActiveFilters ? (

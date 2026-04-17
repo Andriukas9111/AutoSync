@@ -55,6 +55,7 @@ import { useAppData } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
 import { detectWheelProduct } from "../lib/wheel-detect";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
+import { FilterBar } from "../components/FilterBar";
 
 export function ErrorBoundary() {
   return <RouteError />;
@@ -524,53 +525,32 @@ export default function WheelsPage() {
           </Layout.Section>
         </Layout>
 
-        {/* ── Filters Row — same pattern as Products page ── */}
-        <Card padding="400">
-          <BlockStack gap="400">
-            <InlineStack gap="200" blockAlign="center">
-              <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
-              <Text as="h2" variant="headingMd">Filters</Text>
-            </InlineStack>
-            <InlineStack gap="300" align="start" blockAlign="end" wrap>
-              <div style={{ flexGrow: 1, maxWidth: "400px" }}>
-                <TextField
-                  label="Search wheels"
-                  labelHidden
-                  value={searchValue}
-                  onChange={setSearchValue}
-                  placeholder="Search by title or vendor..."
-                  clearButton
-                  onClearButtonClick={() => { setSearchValue(""); updateFilters("search", ""); }}
-                  autoComplete="off"
-                  onBlur={() => updateFilters("search", searchValue)}
-                  prefix={<Icon source={SearchIcon} />}
-                />
-              </div>
-              <Button onClick={() => updateFilters("search", searchValue)} variant="secondary">Search</Button>
-              <div style={{ minWidth: "170px" }}>
-                <Select
-                  label="Status"
-                  labelHidden
-                  options={[
-                    { label: "All Statuses", value: "" },
-                    { label: "Unmapped", value: "unmapped" },
-                    { label: "Mapped", value: "auto_mapped" },
-                  ]}
-                  value={filters.status}
-                  onChange={(v) => updateFilters("status", v)}
-                />
-              </div>
-              {(filters.search || filters.status) && (
-                <Button
-                  onClick={() => { setSearchValue(""); setSearchParams(new URLSearchParams()); }}
-                  variant="plain"
-                >
-                  Clear all
-                </Button>
-              )}
-            </InlineStack>
-          </BlockStack>
-        </Card>
+        {/* ── Filters Row — unified FilterBar component ── */}
+        <FilterBar
+          searchValue={searchValue}
+          onSearchChange={setSearchValue}
+          onSearchSubmit={() => updateFilters("search", searchValue)}
+          onSearchClear={() => { setSearchValue(""); updateFilters("search", ""); }}
+          placeholder="Search by title or vendor..."
+          selects={[
+            {
+              label: "Status",
+              value: filters.status,
+              options: [
+                { label: "All Statuses", value: "" },
+                { label: "Unmapped", value: "unmapped" },
+                { label: "Mapped", value: "auto_mapped" },
+              ],
+              onChange: (v) => updateFilters("status", v),
+              minWidth: 170,
+            },
+          ]}
+          onClearAll={
+            (filters.search || filters.status)
+              ? () => { setSearchValue(""); setSearchParams(new URLSearchParams()); }
+              : undefined
+          }
+        />
 
         {/* ── Wheel Products Table — same pattern as Products page ── */}
         <Card padding="0">

@@ -378,6 +378,40 @@ export default function App() {
               max-width: 1200px !important;
               box-sizing: border-box !important;
             }
+            /* ── Unified filter bar ──
+               Forces every Polaris Select, TextField, and Button inside a
+               .as-filter-bar to share the same 36px height so the search
+               button lines up with its field AND with adjacent dropdowns.
+               Also restores a visible border on the native <select> picker
+               inside the Polaris trigger (Polaris only styles the trigger;
+               on some Chromium builds the focus ring only renders on one
+               side, which is what users were seeing). */
+            .as-filter-bar .Polaris-Select__Backdrop,
+            .as-filter-bar .Polaris-TextField__Backdrop {
+              border-radius: var(--p-border-radius-200);
+            }
+            .as-filter-bar select,
+            .as-filter-bar input[type="text"],
+            .as-filter-bar input[type="search"] {
+              min-height: 36px !important;
+            }
+            /* When the trigger gets focus, give the full dropdown backdrop a
+               consistent border so it never renders as a bare list. */
+            .as-filter-bar .Polaris-Select__Content:focus-within + .Polaris-Select__Backdrop,
+            .as-filter-bar select:focus {
+              outline: 2px solid var(--p-color-border-focus);
+              outline-offset: 1px;
+            }
+            /* Search button in a filter bar — match sibling TextField height */
+            .as-filter-bar .Polaris-Button {
+              min-height: 36px;
+            }
+            /* Opened <select> option list — add a visible border so it never
+               looks floating/unstyled. Only applies inside .as-filter-bar. */
+            .as-filter-bar select[size],
+            .as-filter-bar select:focus-visible {
+              box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            }
           `}</style>
           <div className="as-app-container">
             {/* Global announcements from admin — uses Polaris Banner */}
