@@ -3659,11 +3659,27 @@ async function processBulkPush(
     }
   }
 
-  // ── FAST PATH: Individual mutations (instant, no async bulk ops) ──
-  // Bulk operations are async and take 5-15+ minutes even for small batches.
-  // Individual mutations complete in seconds: 25 products ≈ 10s, 500 products ≈ 3min.
-  // Only fall through to bulk ops if a bulk operation was already started (resuming).
-  if (!meta.metafieldsOperationId && !meta.tagsOperationId && !meta._fastPathDone) {
+  // ── FAST PATH ONLY: NEVER use Shopify bulkOperationRunMutation for tags/metafields ──
+  // Verified in production 2026-04-17: Shopify bulk ops for tagsAdd/metafieldsSet
+  // entered "RUNNING" state and stayed there for 2+ hours with processed_items
+  // climbing into tens of thousands of poll-count ticks while synced_at never
+  // updated on the products. Killing the job and resuming immediately started
+  // syncing again — proving the fast path works and bulk ops don't.
+  //
+  // Force-clear any legacy bulk-op IDs left over from an earlier failed job so
+  // we always re-enter the fast path. This is the user-facing safety: a merchant
+  // clicking Retry from the UI will NEVER get stuck on a resurrected bulk op.
+  if (meta.metafieldsOperationId || meta.tagsOperationId || meta.imagesOperationId || meta.publishOpId) {
+    console.log(`[bulk_push] Clearing legacy bulk-op IDs — forcing fast path`);
+    meta.metafieldsOperationId = null;
+    meta.tagsOperationId = null;
+    meta.imagesOperationId = null;
+    meta.publishOpId = null;
+    meta._fastPathDone = false;
+    await db.from("sync_jobs").update({ metadata: JSON.stringify(meta) }).eq("id", job.id);
+  }
+
+  if (!meta._fastPathDone) {
     console.log(`[bulk_push] Using fast path (individual mutations)...`);
     await db.from("sync_jobs").update({
       metadata: JSON.stringify({ ...meta, phase: "fast_push", phaseLabel: "Pushing tags & metafields..." }),
@@ -3903,25 +3919,29 @@ async function processBulkPush(
       }
     }
 
-    // Check if more products remain (for batched processing / resume)
+    // Check if more products remain. Previous version used PostgREST .or() with
+    // a timestamp value which silently returned count=0 on this runtime even
+    // when products remained — causing the job to terminate at ~400 synced and
+    // collections to render empty. Use a simple synced_at IS NULL check; a
+    // fresh push always starts with synced_at cleared for affected products,
+    // and forceRepush callers explicitly reset synced_at before inserting.
     if (!forceRepush) {
-      const remaining = await db.from("products")
+      const { count: remaining } = await db.from("products")
         .select("id", { count: "exact", head: true })
-        .eq("shop_id", shopId).neq("status", "staged")
+        .eq("shop_id", shopId)
+        .neq("status", "staged")
         .not("fitment_status", "eq", "unmapped")
         .not("shopify_product_id", "is", null)
-        .or(`synced_at.is.null,synced_at.lt.${jobCreatedAt}`);
+        .is("synced_at", null);
 
-      if ((remaining.count ?? 0) > 0) {
-        console.log(`[bulk_push] Batch done: ${fastProcessed} pushed, ${remaining.count} remaining — will self-chain`);
+      if ((remaining ?? 0) > 0) {
+        console.log(`[bulk_push] Batch done: ${fastProcessed} pushed, ${remaining} remaining — self-chain`);
         return { processed: fastProcessed, hasMore: true };
       }
     }
 
-    console.log(`[bulk_push] Fast path complete! ${fastProcessed} products pushed in single invocation`);
-    // Return processed=0 and hasMore=false — the main loop will handle completion
-    // (marking status=completed, updating tenant counts, etc.)
-    return { processed: 0, hasMore: false };
+    console.log(`[bulk_push] Fast path complete! ${fastProcessed} products pushed in this invocation`);
+    return { processed: fastProcessed, hasMore: false };
   }
 
   // Phase 2: If we already have operation IDs, poll for completion (resume existing bulk ops)
