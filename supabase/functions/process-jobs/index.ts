@@ -1486,6 +1486,23 @@ async function processPushChunk(
       }
     }
 
+    // Wheel spec tags — MUST be built before tagsAdd mutation below.
+    // (Previously these were pushed to `tags` INSIDE the pushMetafields block,
+    // i.e. AFTER the tagsAdd call had already fired, so wheel products ended
+    // up with no _autosync_wheel_* tags on Shopify. Now they run first, so
+    // both vehicle tags AND wheel tags land in the same tagsAdd mutation.)
+    if (hasWheelFitments) {
+      for (const wf of productWheelFitments!) {
+        if (wf.pcd) tags.push(`_autosync_wheel_PCD_${wf.pcd}`);
+        if (wf.diameter) tags.push(`_autosync_wheel_${wf.diameter}inch`);
+        if (wf.width) tags.push(`_autosync_wheel_${wf.width}J`);
+        if (wf.offset_min != null) tags.push(`_autosync_wheel_ET${wf.offset_min}`);
+        if (wf.offset_max != null && wf.offset_max !== wf.offset_min) {
+          tags.push(`_autosync_wheel_ET${wf.offset_max}`);
+        }
+      }
+    }
+
     // Track whether each Shopify write actually succeeded. Previously the loop
     // set `synced_at` unconditionally, so a 504/5xx or GraphQL userError would
     // leave the product looking "pushed" in the DB with no tags/metafields on
@@ -1575,6 +1592,8 @@ async function processPushChunk(
         }
 
         // ── Wheel spec metafields (from batch-queried wheel_fitments) ──
+        // (Wheel TAGS are built earlier, before the tagsAdd mutation, so they
+        // actually land on Shopify. Only metafield rows live here now.)
         if (hasWheelFitments) {
           const wheelFits = productWheelFitments!;
           const pcdSet = new Set<string>();
@@ -1588,12 +1607,6 @@ async function processPushChunk(
             if (wf.center_bore) cbSet.add(String(wf.center_bore));
             if (wf.offset_min != null) offsetSet.add(`ET${wf.offset_min}`);
             if (wf.offset_max != null && wf.offset_max !== wf.offset_min) offsetSet.add(`ET${wf.offset_max}`);
-            // Add wheel-specific tags
-            if (wf.pcd) tags.push(`_autosync_wheel_PCD_${wf.pcd}`);
-            if (wf.diameter) tags.push(`_autosync_wheel_${wf.diameter}inch`);
-            if (wf.width) tags.push(`_autosync_wheel_${wf.width}J`);
-            if (wf.offset_min != null) tags.push(`_autosync_wheel_ET${wf.offset_min}`);
-            if (wf.offset_max != null && wf.offset_max !== wf.offset_min) tags.push(`_autosync_wheel_ET${wf.offset_max}`);
           }
           if (pcdSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "pcd", type: "list.single_line_text_field", value: JSON.stringify([...pcdSet].sort()), ownerId: gid });
           if (diamSet.size > 0) metafields.push({ namespace: "$app:wheel_spec", key: "diameter", type: "list.single_line_text_field", value: JSON.stringify([...diamSet].sort()), ownerId: gid });
