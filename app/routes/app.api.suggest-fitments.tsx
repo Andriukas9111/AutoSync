@@ -989,7 +989,7 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
     };
     // Also handle misspellings
     const MISSPELL_TO_MAKE: Record<string, string> = {
-      Reanult: "Renault", Renualt: "Renault", Renualt: "Renault",
+      Reanult: "Renault", Renualt: "Renault", Renalt: "Renault",
       Porshe: "Porsche", Porche: "Porsche",
       Mercedez: "Mercedes-Benz", "Mercedes Benz": "Mercedes-Benz",
       Volkswagon: "Volkswagen",

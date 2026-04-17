@@ -146,7 +146,25 @@
 
     trigger.addEventListener('click', function(e) {
       e.preventDefault();
-      e.stopPropagation();
+      // Close every other open custom dropdown on the page FIRST, before
+      // opening this one. Previously we used e.stopPropagation() to stop
+      // bubbling to the document listener — but that ALSO stopped the
+      // document listener on OTHER dropdowns from firing, so clicking
+      // trigger B left A's popup stuck on screen. Manual close-others is
+      // more reliable.
+      if (!isOpen) {
+        var allOpen = document.querySelectorAll('.autosync-ymme__custom-select--open');
+        for (var i = 0; i < allOpen.length; i++) {
+          var other = allOpen[i];
+          if (other !== wrapper) {
+            var otherDropdown = other.querySelector('.autosync-ymme__select-dropdown');
+            if (otherDropdown) otherDropdown.style.display = 'none';
+            var otherTrigger = other.querySelector('.autosync-ymme__select-trigger');
+            if (otherTrigger) otherTrigger.setAttribute('aria-expanded', 'false');
+            other.classList.remove('autosync-ymme__custom-select--open');
+          }
+        }
+      }
       isOpen ? closeDD() : openDD();
     });
 
@@ -165,10 +183,14 @@
     parent.insertBefore(wrapper, selectEl);
     wrapper.appendChild(selectEl);
 
-    // Watch for external changes to the select (JS updates)
+    // Watch for external changes to the select (JS updates). When the native
+    // select's options list is replaced (e.g. Width cascade after Diameter
+    // changes), we must also re-render the custom dropdown's option list IF
+    // it is currently open, otherwise the user sees the old/empty options.
     var observer = new MutationObserver(function() {
       display.textContent = selectEl.options[selectEl.selectedIndex]?.text || 'Select...';
       trigger.disabled = selectEl.disabled;
+      if (isOpen) renderOptions();
     });
     observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
 

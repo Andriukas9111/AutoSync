@@ -3,9 +3,19 @@
     font-family: inherit !important;
     color: var(--avs-text, #1a1a2e) !important;
     background: var(--avs-bg, #ffffff) !important;
-    margin: 0 auto;
+    /* Horizontal margins keep the widget off the page scrollbar and any
+       sticky theme edges. Previously `margin: 0 auto` alone meant the
+       widget's right edge sat directly against the viewport scrollbar on
+       1200-1220px viewports, which made the cards look like they were
+       colliding with the scrollbar. */
     margin-top: var(--as-section-gap-top, 0px);
     margin-bottom: var(--as-section-gap, 0px);
+    margin-left: auto;
+    margin-right: auto;
+    /* Width calc leaves 16px on each side (total 32px) so the widget never
+       touches the page's vertical scrollbar even when the viewport width
+       equals the widget's max-width. */
+    width: calc(100% - 16px);
     border: 1px solid var(--avs-border, #e5e7eb) !important;
     border-radius: var(--avs-radius, 8px) !important;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
@@ -382,23 +392,37 @@
   }
 
   /* ── Scroll Wrapper (scrollable container) ──────── */
+  /* Previously the scrollbar sat right on the container's rounded border
+     and overlapped the right-most card. Added:
+     - padding-right so cards never collide with the scrollbar track
+     - scrollbar-gutter: stable so the layout doesn't jitter when scroll
+       appears/disappears
+     - contained border-radius via overflow:hidden on the PARENT (we set
+       rounding here but NOT overflow, otherwise sticky elements inside
+       would break) */
   .avs-scroll-wrap {
     position: relative;
     scroll-behavior: smooth;
     border-radius: var(--avs-radius, 8px);
+    padding-right: 8px;
+    scrollbar-gutter: stable;
   }
   .avs-scroll-wrap::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
   }
   .avs-scroll-wrap::-webkit-scrollbar-track {
     background: transparent;
+    margin: 8px 0; /* don't paint the track all the way to the rounded corners */
   }
   .avs-scroll-wrap::-webkit-scrollbar-thumb {
     background: var(--avs-border, #e5e7eb);
-    border-radius: 3px;
+    border-radius: 4px;
+    border: 2px solid transparent; /* creates inner-edge breathing room */
+    background-clip: padding-box;
   }
   .avs-scroll-wrap::-webkit-scrollbar-thumb:hover {
-    background: var(--avs-muted, #6b7280);
+    background-color: var(--avs-muted, #6b7280);
+    background-clip: padding-box;
   }
 
   /* ── Load More Button ── */
