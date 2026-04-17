@@ -898,8 +898,12 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
         result = await processExtractChunk(db, job);
         break;
       case "push":
-        // Use bulk operations for product creation, then auto-transitions to bulk_push
-        result = await processBulkProductCreate(db, job);
+        // SIMPLE inline push — deprecates the bulk_push pipeline which had
+        // multiple unreliable phases (linking → bulk_create → fast_push → bulk
+        // ops polling → images). We route both push types to processPushChunk
+        // which is a simple loop: for each unsynced product, write tags +
+        // metafields, mark synced_at, self-chain.
+        result = await processPushChunk(db, job);
         break;
       case "collections":
         result = await processCollectionsChunk(db, job);
@@ -914,7 +918,9 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
         result = await processWheelExtract(db, job);
         break;
       case "bulk_push":
-        result = await processBulkPush(db, job);
+        // Legacy type — route to the simple inline path. Old bulk_push
+        // pipeline is kept as dead code below in case we need to revisit.
+        result = await processPushChunk(db, job);
         break;
       case "cleanup":
         result = await processCleanupChunk(db, job);
@@ -1304,20 +1310,25 @@ async function processPushChunk(
     .maybeSingle();
   const publicationId = tenantPub?.online_store_publication_id || null;
 
-  // Get products with fitments — use OFFSET to skip already-processed ones
-  // Include products WITHOUT shopify_product_id — we'll create them on Shopify
+  // Pick the next BATCH_SIZE unsynced products. Filters on synced_at IS NULL
+  // instead of offset-walking so we never skip a product that just got mapped
+  // and never re-push a product that's already synced. Loops until no rows
+  // come back.
   const { data: products } = await db
     .from("products")
     .select("id, title, description, sku, price, compare_at_price, vendor, product_type, image_url, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
     .not("fitment_status", "eq", "unmapped")
+    .is("synced_at", null)
     .order("id")
-    .range(alreadyProcessed, alreadyProcessed + BATCH_SIZE - 1);
+    .limit(BATCH_SIZE);
 
   if (!products || products.length === 0) {
+    console.log(`[push] No unsynced products remain — job complete`);
     return { processed: 0, hasMore: false };
   }
+  console.log(`[push] Processing ${products.length} unsynced products in this chunk`);
 
   // Get fitments for these products
   const productIds = products.map((p: { id: string }) => p.id);
