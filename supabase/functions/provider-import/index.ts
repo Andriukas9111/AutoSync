@@ -38,6 +38,68 @@ Deno.serve(async (req) => {
 
   const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  // ── Smart field fallback ──────────────────────────────────────
+  // Applied when the provider has NO saved column_mappings (e.g. Forge
+  // Motorsport on autosync-9 had 2,076 products imported with mapping_count=0,
+  // leading to 99.4% of them landing with price=0 because neither the flattened
+  // `price.normal` key nor the hardcoded `price_normal` fallback matched).
+  //
+  // pickField tries each candidate against the FLATTENED item (dot-path keys
+  // like "price.normal" after flattenObject). Skips empty strings AND zero-like
+  // prices so a "0.00" special-offer doesn't override a real normal price.
+  const pickField = (
+    item: Record<string, unknown>,
+    candidates: string[],
+    { skipZero = false }: { skipZero?: boolean } = {},
+  ): string | null => {
+    for (const key of candidates) {
+      const raw = item[key];
+      if (raw === undefined || raw === null) continue;
+      const v = String(raw).trim();
+      if (!v) continue;
+      if (skipZero) {
+        const n = parseFloat(v);
+        if (!isNaN(n) && n === 0) continue;
+      }
+      return v;
+    }
+    return null;
+  };
+
+  // Price candidate keys — Forge uses nested {price: {normal, special_offer}},
+  // Shopify uses variant_price, WooCommerce uses regular_price, etc. The
+  // flattener already converts nested → dotpath, so we can check BOTH naming
+  // conventions. Order matters: prefer the "current asking price" fields.
+  const PRICE_KEYS = [
+    "price.normal", "price_normal", "normal_price",
+    "price", "variant_price",
+    "regular_price", "_regular_price",
+    "base_price", "retail_price", "selling_price",
+    "rrp", "msrp", "list_price", "unit_price",
+  ];
+  const COST_PRICE_KEYS = [
+    "cost_price", "cost", "wholesale_price", "trade_price",
+    "buy_price", "purchase_price", "supplier_price", "dealer_price",
+    "your_price", "nett_price", "cost_per_item",
+  ];
+  const COMPARE_AT_KEYS = [
+    "compare_at_price", "_compare_at_price", "variant_compare_at_price",
+    "price.special_offer", "price_special_offer",
+    "was_price", "original_price", "before_price", "old_price",
+    "sale_price", "_sale_price", "offer_price", "special_price", "special_offer",
+  ];
+  const IMAGE_KEYS = [
+    "image_url", "image", "images.0", "image_src", "main_image",
+    "featured_image", "thumbnail", "photo", "picture",
+  ];
+  const WEIGHT_KEYS = [
+    "weight", "weight_grams", "package_weight", "shipping_weight",
+  ];
+  const VENDOR_KEYS = [
+    "vendor", "manufacturer", "brand", "manufacturer.name", "brand.name",
+    "supplier",
+  ];
+
   try {
     const body: ImportRequest = await req.json();
     const {
@@ -226,6 +288,22 @@ Deno.serve(async (req) => {
       // Inherit product_category from provider (e.g., "wheels" or "vehicle_parts")
       const providerCategory = provider.product_category || "vehicle_parts";
 
+      // Smart fallback — applied per field ONLY when the explicit column
+      // mapping didn't populate it. Handles providers imported without
+      // auto-mapping (like Forge Motorsport's nested price.normal).
+      const fallbackPrice = pickField(item, PRICE_KEYS, { skipZero: true });
+      const fallbackCost = pickField(item, COST_PRICE_KEYS, { skipZero: true });
+      const fallbackCompare = pickField(item, COMPARE_AT_KEYS, { skipZero: true });
+      const fallbackImage = pickField(item, IMAGE_KEYS);
+      const fallbackWeight = pickField(item, WEIGHT_KEYS);
+      const fallbackVendor = pickField(item, VENDOR_KEYS);
+
+      const toFloat = (v: string | null | undefined): number | null => {
+        if (v === null || v === undefined || v === "") return null;
+        const n = parseFloat(String(v));
+        return isNaN(n) ? null : n;
+      };
+
       return {
         shop_id,
         provider_id,
@@ -234,14 +312,14 @@ Deno.serve(async (req) => {
         handle,
         sku: sku || null,
         provider_sku: sku || null,
-        price: mapped.price ? parseFloat(mapped.price) : (item.price_normal ? parseFloat(String(item.price_normal)) : null),
-        cost_price: mapped.cost_price ? parseFloat(mapped.cost_price) : null,
-        compare_at_price: mapped.compare_at_price ? parseFloat(mapped.compare_at_price) : null,
-        vendor: mapped.vendor || null,
+        price: toFloat(mapped.price) ?? toFloat(fallbackPrice),
+        cost_price: toFloat(mapped.cost_price) ?? toFloat(fallbackCost),
+        compare_at_price: toFloat(mapped.compare_at_price) ?? toFloat(fallbackCompare),
+        vendor: mapped.vendor || fallbackVendor || null,
         product_type: mapped.product_type || null,
         description,
-        image_url: mapped.image_url || String(item.image || "") || null,
-        weight: mapped.weight || (item.weight ? String(item.weight) : null),
+        image_url: mapped.image_url || fallbackImage || null,
+        weight: mapped.weight || fallbackWeight || null,
         source: "api",
         product_category: providerCategory,
         fitment_status: "unmapped",
