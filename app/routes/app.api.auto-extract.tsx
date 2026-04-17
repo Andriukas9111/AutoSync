@@ -599,6 +599,28 @@ export async function action({ request }: ActionFunctionArgs) {
 
           // Score
           for (const engineRow of engines) {
+            // ── SCOPE LOCK (mirrors suggest-fitments line ~1659) ──
+            // If the product explicitly names one or more models (e.g. "Focus"
+            // in "Ford Focus ST 280 Brake Lines"), HARD REJECT engines from
+            // OTHER models regardless of score. Path B's search-pattern query
+            // legitimately pulls engines across every model that matches the
+            // power/tech pattern (e.g. every Ford engine with "280" in the
+            // name — Edge 3.5 V6 280Hp, Explorer 2.3 EcoBoost 280Hp, Focus ST
+            // 2.3 EcoBoost 280Hp) and the scoreByProfile model-mismatch
+            // penalty gets overridden by the Math.max(score, 0.50) pattern
+            // fallback below, so wrong-model engines slipped through with
+            // confidence=1.0 (verified live on product 650ed8f5-5c30-4a97-8e1d-ed93b109a6fb).
+            // Matches ACES industry standard: explicit model name = explicit
+            // fitment claim. Multi-model products ("996/997 & S4") still
+            // work — profile.modelNames contains every resolved model.
+            if (profile.modelNames.length > 0) {
+              const engineModelName = engineRow.model?.name || "";
+              const inScope = profile.modelNames.some((m: string) =>
+                m.toLowerCase() === engineModelName.toLowerCase()
+              );
+              if (!inScope) continue;
+            }
+
             let { score, matchedHints } = scoreByProfile(engineRow, profile);
             if (modelNameMatchIds.includes(engineRow.model.id)) {
               score = Math.min(1.0, score + 0.25);
