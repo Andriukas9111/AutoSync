@@ -274,8 +274,13 @@ const MAKE_ALIASES: Record<string, string> = {
   "Lambo": "Lamborghini",
   // Porsche misspellings
   "Porshe": "Porsche", "Porche": "Porsche",
-  // Citroën
-  "Citroen": "Citroën",
+  // Citroën — canonical DB name is "Citroen" (no umlaut), so map BOTH spellings
+  // that appear in product text onto the canonical DB name. Previously this was
+  // "Citroen": "Citroën" (backwards — mapped onto a non-existent DB key), which
+  // meant products titled "Citroën Xantia Turbo Valve Kit" never picked up the
+  // make, so extraction marked them no_match.
+  "Citroën": "Citroen",
+  "Citroen": "Citroen",
   // Nissan/Infiniti
   "Datsun": "Nissan",
   // Vauxhall/Opel
@@ -431,7 +436,21 @@ const CHASSIS_TO_MODEL: Record<string, { make: string; models: string[] }> = {
 
 // ── Profile Parser ─────────────────────────────────────────────
 
+// Strip combining diacritics so "Citroën" matches "Citroen", "Škoda" matches
+// "Skoda", "Citroën" matches the DB's ASCII form. We search against BOTH the
+// original and the stripped text so either spelling in the title still hits.
+// Uses Unicode NFD decomposition then strips the combining marks range.
+function stripDiacritics(s: string): string {
+  try {
+    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  } catch {
+    return s;
+  }
+}
+
 export function buildVehicleProfile(text: string, knownMakes: string[]): VehicleProfile {
+  // Use BOTH original and diacritic-stripped text for matching.
+  const asciiText = stripDiacritics(text);
   const profile: VehicleProfile = {
     makeGroup: [],
     directMakes: [],
@@ -466,7 +485,11 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
   // ─── 2. Direct makes found in text ──────────────────────────
   // First check aliases (multi-word and non-obvious mappings)
   for (const [alias, dbName] of Object.entries(MAKE_ALIASES)) {
-    if (new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)) {
+    const re = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    // Test BOTH original text (for precomposed ë, é, ñ, etc.) and diacritic-
+    // stripped ASCII text (so "Citroën" in the title still matches the "Citroen"
+    // alias). Without this, Forge's UTF-8 product titles leak through as no_match.
+    if (re.test(text) || re.test(asciiText)) {
       if (knownMakes.includes(dbName) && !profile.directMakes.includes(dbName) && !profile.makeGroup.includes(dbName)) {
         profile.directMakes.push(dbName);
       }
@@ -499,7 +522,8 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
 
     // For 3-char makes, require word boundary match (not substring)
     if (makeUpper.length <= 3) {
-      if (new RegExp(`\\b${makeUpper}\\b`, "i").test(text)) {
+      const re3 = new RegExp(`\\b${makeUpper}\\b`, "i");
+      if (re3.test(text) || re3.test(asciiText)) {
         if (!profile.directMakes.includes(make) && !profile.makeGroup.includes(make)) {
           profile.directMakes.push(make);
         }
@@ -509,7 +533,9 @@ export function buildVehicleProfile(text: string, knownMakes: string[]): Vehicle
 
     // For 4+ char makes, use word boundary match to avoid partial matches
     // e.g., "Mini" should match "Mini Cooper" but not "minimum" or "administration"
-    if (new RegExp(`\\b${makeUpper.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(text)) {
+    // Also check diacritic-stripped text: "Škoda" in title matches "SKODA" canonical.
+    const reN = new RegExp(`\\b${makeUpper.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (reN.test(text) || reN.test(asciiText)) {
       if (!profile.directMakes.includes(make) && !profile.makeGroup.includes(make)) {
         profile.directMakes.push(make);
       }
