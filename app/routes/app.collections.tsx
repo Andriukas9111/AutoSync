@@ -59,7 +59,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
     // Make/model counts — run in parallel instead of sequential
     db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000),
-    db.from("vehicle_fitments").select("make, model").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
+    // Include year_from + year_to so the Expected count for the "By Make, Model
+    // & Year" strategy reflects actual year combos, not just make+model pairs.
+    // Previously year_combos = make_model count because year fields weren't
+    // selected, so the UI's Expected stat under-counted by ~400 year collections.
+    db.from("vehicle_fitments").select("make, model, year_from, year_to").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
     // Fitment count for the stat bar — prevents flash-of-zero before first poll.
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
@@ -74,13 +78,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const makesData = (makesResult.data ?? []) as { make: string }[];
   const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
 
-  const makeModelData = (makeModelResult.data ?? []) as { make: string; model: string }[];
+  const makeModelData = (makeModelResult.data ?? []) as { make: string; model: string; year_from: number | null; year_to: number | null }[];
   const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
-  // For year combos, reuse the makeModel data (already paginated)
+  // Year combos: include the actual year_from/year_to so we count distinct
+  // model+year_range collections (matches the make_model_year collection
+  // type written by the Edge Function). Previously keyed only on make|model
+  // so this count equalled uniqueMakeModelCount, making Expected under-count.
   const uniqueMakeModelYears = [...new Set(
     makeModelData
-      .filter((f) => f.make && f.model)
-      .map((f) => `${f.make}|${f.model}`)
+      .filter((f) => f.make && f.model && (f.year_from != null || f.year_to != null))
+      .map((f) => `${f.make}|${f.model}|${f.year_from ?? ""}|${f.year_to ?? ""}`)
   )];
 
   return {

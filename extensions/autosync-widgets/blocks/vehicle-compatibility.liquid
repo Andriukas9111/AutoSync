@@ -19,7 +19,13 @@
   data-autosync-compat-table
   data-proxy-url="{{ shop.url }}/apps/autosync"
   data-product-id="{{ product.id }}"
-  data-metafield-vehicles='{{ product.metafields.autosync_fitment.vehicles.value | json }}'
+  {%- comment -%}
+    Read from the app-owned $app:vehicle_fitment.data metafield that the push
+    pipeline actually writes. Previously this read product.metafields.autosync_fitment.vehicles
+    — a completely different namespace/key that no code writes — so the widget
+    always showed "No vehicles listed" even for products with hundreds of fitments.
+  {%- endcomment -%}
+  data-metafield-vehicles='{{ product.metafields["$app:vehicle_fitment"].data.value | json }}'
   data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
   id="autosync-compat-{{ block.id }}"
   style="

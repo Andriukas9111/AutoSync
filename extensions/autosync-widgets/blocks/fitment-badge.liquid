@@ -20,8 +20,15 @@
   data-proxy-url="{{ shop.url }}/apps/autosync"
   data-product-id="{{ product.id }}"
   data-product-tags="{{ product.tags | join: ',' | escape }}"
-  data-product-metafield-make="{{ product.metafields.autosync_fitment.make_names.value | json }}"
-  data-product-metafield-model="{{ product.metafields.autosync_fitment.model_names.value | json }}"
+  {%- comment -%}
+    Read from the app-owned $app:vehicle_fitment.{make,model} metafields
+    that the push pipeline actually writes. Previously this read
+    product.metafields.autosync_fitment.make_names which doesn't exist
+    anywhere, so the badge couldn't do an offline fitment check and always
+    fell back to the proxy call (slow + used rate limit quota).
+  {%- endcomment -%}
+  data-product-metafield-make='{{ product.metafields["$app:vehicle_fitment"].make.value | json }}'
+  data-product-metafield-model='{{ product.metafields["$app:vehicle_fitment"].model.value | json }}'
   id="autosync-fitment-badge-{{ block.id }}"
   style="
     --autosync-badge-success: {{ block.settings.success_color }};
