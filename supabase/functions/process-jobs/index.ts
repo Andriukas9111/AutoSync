@@ -772,25 +772,34 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
       return;
     }
 
-    // Step 2: Claim the job — conditional UPDATE acts as our mutex. This is
-    // CRITICAL for multi-tenant safety: two triggers (sync_job_instant_invoke
-    // + trg_notify_process_jobs) both fire on the same INSERT, so two Edge
-    // Function instances race to claim the exact same job. The conditional
-    // WHERE (locked_at IS NULL OR locked_at < staleCutoff) means only ONE
-    // worker wins — the other gets lockResult === null and returns idle.
-    // Previously the direct-invocation path did an UNCONDITIONAL update, so
-    // both workers "won" and processed the same chunk concurrently, which
-    // could duplicate Shopify writes (Shopify rate-limit burn, user saw
-    // duplicate tags/metafields on products).
-    const { data: lockResult } = await db.from("sync_jobs")
-      .update({ locked_at: lockTime, status: "running" })
-      .eq("id", candidate.id)
-      .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
-      .select("id")
-      .maybeSingle();
-    if (!lockResult) {
-      console.log(`[process-jobs] Idle: job ${candidate.id} already claimed (targetJobId=${targetJobId ? 'yes' : 'no'})`);
-      return;
+    // Step 2: Claim the job. Direct invocation (trigger with job_id) locks
+    // unconditionally — it's already targeting THIS specific job, so racing
+    // with another worker on a different job isn't possible. Queue-based
+    // polling uses the conditional WHERE clause so two pollers can't both
+    // grab the same job.
+    //
+    // Race between trg_notify_process_jobs + sync_job_instant_invoke (both
+    // fire on INSERT with the same job_id): both invocations will set
+    // locked_at=now and status=running. The worker that RE-READS the job
+    // second proceeds; the first one's work may duplicate Shopify writes.
+    // Accept this for now — the alternative (PostgREST .or() with ISO
+    // timestamp) consistently returned zero rows in this runtime, so nothing
+    // was being processed. Single-work integrity > dedup race.
+    if (targetJobId) {
+      await db.from("sync_jobs")
+        .update({ locked_at: lockTime, status: "running" })
+        .eq("id", candidate.id);
+    } else {
+      const { data: lockResult } = await db.from("sync_jobs")
+        .update({ locked_at: lockTime, status: "running" })
+        .eq("id", candidate.id)
+        .or("locked_at.is.null,locked_at.lt." + staleLockCutoff)
+        .select("id")
+        .maybeSingle();
+      if (!lockResult) {
+        console.log(`[process-jobs] Idle: job ${candidate.id} already claimed`);
+        return;
+      }
     }
 
     // Fetch the full job record
