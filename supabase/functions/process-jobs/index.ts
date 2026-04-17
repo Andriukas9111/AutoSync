@@ -3726,9 +3726,16 @@ async function processBulkPush(
       .not("fitment_status", "eq", "unmapped")
       .not("shopify_product_id", "is", null);
 
-    // RESUME: Skip products already pushed in this job (unless force re-push)
+    // Product selection: only pick unsynced products unless force re-push.
+    // Was using PostgREST .or("synced_at.is.null,synced_at.lt." + ISO_DATE)
+    // which silently matched zero rows on this runtime — the push then kept
+    // re-selecting the same first-200 synced products on every chunk. Verified
+    // live on autosync-9 where synced_last_10min=379 while the synced pool
+    // stayed flat at 400. Replaced with a direct IS NULL filter; forceRepush
+    // callers explicitly reset synced_at before inserting so they pick up
+    // everything on the next scan.
     if (!forceRepush) {
-      productQuery = productQuery.or(`synced_at.is.null,synced_at.lt.${jobCreatedAt}`);
+      productQuery = productQuery.is("synced_at", null);
     }
 
     productQuery = productQuery.order("id").limit(200); // Batch of 200
