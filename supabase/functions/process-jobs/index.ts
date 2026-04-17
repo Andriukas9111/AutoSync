@@ -2923,21 +2923,36 @@ async function sweepCollectionDuplicates(
   const apiUrl = `https://${shopIdArg}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessTokenArg };
 
-  // Collect handles we own — used as allowlist for "base" when evaluating dupes.
+  // Collect handles AND titles we own — used as allowlist for "base" when
+  // evaluating dupes. Titles are included because legacy collections may not
+  // have handle entries in our mappings (earlier app versions wrote only
+  // the title) but we still own them.
   const ourHandles = new Set<string>();
+  const ourTitles = new Set<string>();
   let dbOffset = 0;
   while (true) {
     const { data: page } = await dbArg
       .from("collection_mappings")
-      .select("handle")
+      .select("handle, title")
       .eq("shop_id", shopIdArg)
       .range(dbOffset, dbOffset + 999);
     if (!page || page.length === 0) break;
-    for (const row of page) ourHandles.add(row.handle as string);
+    for (const row of page) {
+      if (row.handle) ourHandles.add(row.handle as string);
+      if (row.title) ourTitles.add(String(row.title).toLowerCase().trim());
+    }
     dbOffset += page.length;
     if (page.length < 1000) break;
   }
-  if (ourHandles.size === 0) return 0;
+  // Generate "expected" handles by slugifying every title we own. This catches
+  // dupes whose base collection was created by a pre-mapping-tracking version
+  // of the app but whose title we know (e.g. "Audi RS5 Parts").
+  const derivedHandles = new Set<string>();
+  for (const t of ourTitles) {
+    const h = t.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    if (h) derivedHandles.add(h);
+  }
+  if (ourHandles.size === 0 && derivedHandles.size === 0) return 0;
 
   // Walk Shopify collections and collect "-N" suffix candidates whose base
   // handle is in our allowlist. Bounded to maxDeletes per invocation.
@@ -2960,7 +2975,9 @@ async function sweepCollectionDuplicates(
       const m = /^(.+)-(\d+)$/.exec(handle);
       if (!m) continue;
       const baseHandle = m[1];
-      if (ourHandles.has(baseHandle)) {
+      // Owned if: base handle explicitly tracked in mappings, OR base matches
+      // what our title-to-handle slugger would produce (legacy collections).
+      if (ourHandles.has(baseHandle) || derivedHandles.has(baseHandle)) {
         toDelete.push({ id, handle });
         if (toDelete.length >= maxDeletes) break;
       }
