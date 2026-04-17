@@ -2916,7 +2916,92 @@ async function processVehiclePagesChunk(
   const unsyncedIds = uniqueEngineIds.filter(id => !alreadySyncedSet2.has(id));
   const batchIds = unsyncedIds.slice(0, 200);
 
+  // ── Early-run relink pass when no new creates needed ─────────────────────
+  // If everything is already synced, we still want to run the relink pass
+  // so existing metaobjects get their linked_products field backfilled.
+  // This is the most common steady-state for long-lived stores.
   if (batchIds.length === 0) {
+    const EARLY_RELINK_PER_INVOCATION = 100;
+    let earlyRelinked = 0;
+    try {
+      const { data: relinkRows } = await db
+        .from("vehicle_page_sync")
+        .select("engine_id, metaobject_gid")
+        .eq("shop_id", shopId)
+        .eq("sync_status", "synced")
+        .not("metaobject_gid", "is", null)
+        .is("linked_products_synced_at", null)
+        .limit(EARLY_RELINK_PER_INVOCATION);
+
+      if (relinkRows && relinkRows.length > 0) {
+        // Build the engine->handles map for just these rows
+        const relinkIds = relinkRows.map((r: { engine_id: string }) => r.engine_id);
+        const earlyMap = new Map<string, string[]>();
+        for (let i = 0; i < relinkIds.length; i += 200) {
+          const chunk = relinkIds.slice(i, i + 200);
+          const { data: fitmentRows } = await db
+            .from("vehicle_fitments")
+            .select("ymme_engine_id, products!inner(handle, shopify_product_id)")
+            .eq("shop_id", shopId)
+            .in("ymme_engine_id", chunk)
+            .not("ymme_engine_id", "is", null);
+          for (const row of (fitmentRows || []) as Array<{ ymme_engine_id: string; products: { handle?: string; shopify_product_id?: string } }>) {
+            const p = row.products;
+            if (!p?.handle || !p?.shopify_product_id) continue;
+            const list = earlyMap.get(row.ymme_engine_id) ?? [];
+            if (!list.includes(p.handle)) list.push(p.handle);
+            earlyMap.set(row.ymme_engine_id, list);
+          }
+        }
+
+        const EARLY_CONCURRENCY = 5;
+        for (let i = 0; i < relinkRows.length; i += EARLY_CONCURRENCY) {
+          const chunk = relinkRows.slice(i, i + EARLY_CONCURRENCY);
+          await Promise.all(chunk.map(async (row: { engine_id: string; metaobject_gid: string }) => {
+            const handles = earlyMap.get(row.engine_id) ?? [];
+            try {
+              const updRes = await shopifyGraphQL(shopId, accessToken, `mutation metaobjectUpdate($id: ID!, $fields: [MetaobjectFieldInput!]!) {
+                metaobjectUpdate(id: $id, metaobject: { fields: $fields }) {
+                  metaobject { id }
+                  userErrors { field message }
+                }
+              }`, {
+                id: row.metaobject_gid,
+                fields: [{ key: "linked_products", value: JSON.stringify(handles) }],
+              });
+              const ok = !!(updRes?.data as any)?.metaobjectUpdate?.metaobject;
+              if (ok) {
+                await db.from("vehicle_page_sync").update({
+                  linked_product_count: handles.length,
+                  linked_products_synced_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                }).eq("shop_id", shopId).eq("engine_id", row.engine_id);
+                earlyRelinked++;
+              }
+            } catch (e) {
+              console.warn(`[vehicle_pages.relink-early] failed for engine ${row.engine_id}:`, e instanceof Error ? e.message : e);
+            }
+          }));
+          // Throttle update to sync_jobs for UI progress
+          await db.from("sync_jobs").update({
+            processed_items: alreadyProcessed + earlyRelinked,
+          }).eq("id", job.id);
+        }
+        console.log(`[vehicle_pages.relink-early] Relinked ${earlyRelinked} metaobjects; ${relinkRows.length - earlyRelinked} failed`);
+
+        // Self-chain while more rows need relinking
+        const { count: remaining } = await db
+          .from("vehicle_page_sync")
+          .select("*", { count: "exact", head: true })
+          .eq("shop_id", shopId)
+          .eq("sync_status", "synced")
+          .not("metaobject_gid", "is", null)
+          .is("linked_products_synced_at", null);
+        return { processed: earlyRelinked, hasMore: (remaining ?? 0) > 0 };
+      }
+    } catch (e) {
+      console.warn("[vehicle_pages.relink-early] skipped:", e instanceof Error ? e.message : e);
+    }
     return { processed: 0, hasMore: false };
   }
 
@@ -3071,9 +3156,10 @@ async function processVehiclePagesChunk(
   const unsyncedSpecs = specs.filter((s: { id: string }) => !alreadySyncedSet.has(s.id));
   console.log(`[vehicle_pages] ${specs.length} total specs, ${alreadySyncedSet.size} already synced, ${unsyncedSpecs.length} to create`);
 
-  if (unsyncedSpecs.length === 0) {
-    return { processed: 0, hasMore: false };
-  }
+  // NOTE: We used to early-return here when unsyncedSpecs was empty, but that
+  // skipped the relink pass below. Now we fall through: the create loop just
+  // no-ops and we go straight to relinking existing metaobjects that still
+  // need their linked_products field backfilled.
 
   // Create metaobjects sequentially — each takes ~500ms.
   // 200 × 500ms = 100s, well within 400s Edge Function timeout.
