@@ -16,6 +16,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Shared secret used on `X-Internal-Key` when calling back into Vercel routes
+// (auto-extract, suggest-fitments). We USED to send SUPABASE_SERVICE_ROLE_KEY,
+// but Supabase Pro rotated the key format and it no longer matched Vercel's
+// copy — every call was silently redirecting with HTTP 302 for hours.
+// Prefer the explicit shared secret; fall back to service-role key so existing
+// installs keep working until they set it.
+const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET") || SUPABASE_SERVICE_ROLE_KEY;
 // Products per Edge Function invocation. Each product does 2-3 Shopify GraphQL
 // calls (tags, metafields, maybe create) + 200ms throttle delay. Observed
 // wall-clock with 100: >=150s → 504 Gateway Timeout (chunks die mid-push,
@@ -1084,7 +1091,7 @@ async function processExtractChunk(
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "X-Internal-Key": SUPABASE_SERVICE_ROLE_KEY,
+        "X-Internal-Key": INTERNAL_API_SECRET,
         "X-Shop-Id": shopId,
       },
       redirect: "follow",
