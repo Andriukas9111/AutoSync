@@ -211,10 +211,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // ── Announcements ──
   // ── Announcements, activity log, scrape changelog — ALL in parallel ──
+  // Supabase builders return a PromiseLike that does NOT have .catch() —
+  // calling .then().catch() directly would throw a TypeError if the builder
+  // itself rejected (not the query). Wrap with Promise.resolve() to get real
+  // Promise semantics so the admin page never crashes on a transient DB blip.
   const [annResult, actResult, clResult] = await Promise.all([
-    db.from("announcements").select("*").order("created_at", { ascending: false }).then(r => r.data ?? []).catch(() => []),
-    db.from("admin_activity_log").select("*").order("created_at", { ascending: false }).limit(20).then(r => r.data ?? []).catch(() => []),
-    db.from("scrape_changelog").select("*").order("created_at", { ascending: false }).limit(500).then(r => r.data ?? []).catch(() => []),
+    Promise.resolve(db.from("announcements").select("*").order("created_at", { ascending: false })).then(r => r.data ?? []).catch(() => []),
+    Promise.resolve(db.from("admin_activity_log").select("*").order("created_at", { ascending: false }).limit(20)).then(r => r.data ?? []).catch(() => []),
+    Promise.resolve(db.from("scrape_changelog").select("*").order("created_at", { ascending: false }).limit(500)).then(r => r.data ?? []).catch(() => []),
   ]);
   const announcements = annResult as Array<Record<string, unknown>>;
   const adminActivityLog = actResult as Array<Record<string, unknown>>;

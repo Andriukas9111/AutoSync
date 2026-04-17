@@ -185,13 +185,24 @@ export async function action({ request }: ActionFunctionArgs) {
         }
       }
 
+      // Previously used .select("id", { count: "exact", head: true }) after
+      // .update() — but Supabase's update().select() signature does not
+      // accept the { count, head } options object, so this threw a TypeError
+      // at runtime on some Supabase-js versions and silently dropped the
+      // count otherwise. Count matching rows BEFORE the update instead.
       const { count } = await db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .neq("status", "staged")
+        .eq("fitment_status", trimmed);
+
+      await db
         .from("products")
         .update({ fitment_status: "unmapped", updated_at: new Date().toISOString() })
         .eq("shop_id", shopId)
         .neq("status", "staged")
-        .eq("fitment_status", trimmed)
-        .select("id", { count: "exact", head: true });
+        .eq("fitment_status", trimmed);
 
       totalReset += count ?? 0;
     }

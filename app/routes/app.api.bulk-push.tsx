@@ -73,12 +73,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     .maybeSingle();
 
   try {
-    // Run bulk push (generates JSONL, uploads, starts operations)
+    // Run bulk push (generates JSONL, uploads, starts operations).
+    // Previously passed pushTags + pushMetafields, but BulkPushOptions only
+    // exposes shopId + accessToken — the extra options were silently dropped
+    // and caused a TS compile warning. Settings are read from app_settings
+    // inside the pipeline itself, so removing them changes nothing at runtime.
     const result = await runBulkPush({
       shopId,
       accessToken: tenant.shopify_access_token,
-      pushTags: true,
-      pushMetafields: true,
     });
 
     if (result.errors && result.errors.length > 0) {
