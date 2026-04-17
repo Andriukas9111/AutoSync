@@ -1317,12 +1317,17 @@ async function processPushChunk(
   // which skips the synced_at update — that's how the same 983 no-fitment
   // products kept getting re-selected on every chunk. Fix: only pick products
   // that actually have something to push.
+  // Keep this status list in sync with app/routes/app.api.job-status.tsx (needsPush),
+  // app/routes/app.api.push.tsx, app/routes/app.push.tsx, app/lib/pipeline/push.server.ts,
+  // supabase/migrations/038_get_push_stats_uses_fitment_status.sql. Previously had
+  // "manual" here (missing _mapped suffix) — manually mapped products were
+  // silently skipped on push. Unified on manual_mapped.
   const { data: products } = await db
     .from("products")
     .select("id, title, description, sku, price, compare_at_price, vendor, product_type, image_url, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
-    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual"])
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"])
     .is("synced_at", null)
     .order("id")
     .limit(BATCH_SIZE);
@@ -1540,6 +1545,44 @@ async function processPushChunk(
         console.error(`[push] Product creation error for ${product.id}:`, err);
         processed++;
         continue;
+      }
+    }
+
+    // If the product already existed on Shopify (i.e. gid came from DB, not
+    // from a fresh productCreate), push core fields we might have corrected
+    // since last sync (vendor especially — we had a bug importing Forge that
+    // saved "/manufacturers/5.json" as vendor; backfilled in DB but Shopify's
+    // copy stays wrong until we explicitly update it). Only include fields
+    // we actually own — NEVER overwrite merchant edits to title/description.
+    const productGidForUpdate = (product as Record<string, unknown>).shopify_gid || (product as Record<string, unknown>).shopify_product_id;
+    const currentVendor = ((product as Record<string, unknown>).vendor as string | null | undefined) || "";
+    const isNewlyCreated = !((product as Record<string, unknown>).shopify_gid) && !((product as Record<string, unknown>).shopify_product_id);
+    if (!isNewlyCreated && currentVendor && !/^\/|^https?:/.test(currentVendor)) {
+      // Fire-and-forget; skip the await-cost for products whose vendor is
+      // already good on Shopify — we can't know that cheaply, so update
+      // every time but keep the query small (vendor field only).
+      try {
+        const updRes = await shopifyFetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken },
+          body: JSON.stringify({
+            query: `mutation productUpdate($product: ProductUpdateInput!) {
+              productUpdate(product: $product) { product { id } userErrors { field message } }
+            }`,
+            variables: { product: { id: gid, vendor: currentVendor } },
+          }),
+        });
+        if (updRes.ok) {
+          const updJson = await updRes.json();
+          await handleThrottle(updJson);
+          const updErrs = updJson?.data?.productUpdate?.userErrors;
+          if (updErrs && updErrs.length > 0) {
+            console.warn(`[push] productUpdate userErrors for ${gid}:`, JSON.stringify(updErrs));
+          }
+        }
+      } catch (e) {
+        console.warn(`[push] productUpdate failed for ${gid}:`, e instanceof Error ? e.message : e);
+        // Continue — tags/metafields still need to push. Vendor will retry on next push.
       }
     }
 

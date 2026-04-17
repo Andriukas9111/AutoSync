@@ -50,17 +50,25 @@ Deno.serve(async (req) => {
   const pickField = (
     item: Record<string, unknown>,
     candidates: string[],
-    { skipZero = false }: { skipZero?: boolean } = {},
+    { skipZero = false, skipObject = false, skipUrlPath = false }: { skipZero?: boolean; skipObject?: boolean; skipUrlPath?: boolean } = {},
   ): string | null => {
     for (const key of candidates) {
       const raw = item[key];
       if (raw === undefined || raw === null) continue;
+      // Skip object/array values — they stringify to "[object Object]"
+      // or comma-joined members, which is never useful for a text field.
+      if (skipObject && typeof raw === "object") continue;
       const v = String(raw).trim();
       if (!v) continue;
       if (skipZero) {
         const n = parseFloat(v);
         if (!isNaN(n) && n === 0) continue;
       }
+      // Skip URL-path values. Forge's `manufacturer` object has
+      // `href: "/manufacturers/5.json"` which flattens to `manufacturer_href`;
+      // if the raw object accidentally stringifies to that path, we'd store
+      // it as the vendor name. Require real names, not paths.
+      if (skipUrlPath && (v.startsWith("/") || v.startsWith("http://") || v.startsWith("https://"))) continue;
       return v;
     }
     return null;
@@ -95,9 +103,16 @@ Deno.serve(async (req) => {
   const WEIGHT_KEYS = [
     "weight", "weight_grams", "package_weight", "shipping_weight",
   ];
+  // NOTE on ordering: use flat-underscore keys FIRST (manufacturer_name,
+  // brand_name) because the flattener emits those from nested objects. The
+  // bare `manufacturer` key still exists in the flattened output (as the
+  // original object), but `String(object)` gives "[object Object]" which
+  // we reject via skipObject below.
   const VENDOR_KEYS = [
-    "vendor", "manufacturer", "brand", "manufacturer.name", "brand.name",
-    "supplier",
+    "vendor",
+    "manufacturer_name", "brand_name", "supplier_name",
+    "manufacturer.name", "brand.name",
+    "manufacturer", "brand", "supplier",
   ];
 
   try {
@@ -296,7 +311,9 @@ Deno.serve(async (req) => {
       const fallbackCompare = pickField(item, COMPARE_AT_KEYS, { skipZero: true });
       const fallbackImage = pickField(item, IMAGE_KEYS);
       const fallbackWeight = pickField(item, WEIGHT_KEYS);
-      const fallbackVendor = pickField(item, VENDOR_KEYS);
+      // Vendor: reject object values (would stringify to "[object Object]")
+      // and URL paths (Forge's /manufacturers/N.json href).
+      const fallbackVendor = pickField(item, VENDOR_KEYS, { skipObject: true, skipUrlPath: true });
 
       const toFloat = (v: string | null | undefined): number | null => {
         if (v === null || v === undefined || v === "") return null;
