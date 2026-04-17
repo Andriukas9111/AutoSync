@@ -17,13 +17,13 @@ endif
     <!-- Left: Text content (shown initially, replaced by vehicle result on lookup) -->
     <div class="apl-content" data-apl-content>
       {% if block.settings.heading != blank %}
-      <h2 class="apl-heading">{{ block.settings.heading }}</h2>
+      <h2 class="apl-heading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.heading }}</h2>
       {% endif %}
       {% if block.settings.subheading != blank %}
-      <p class="apl-subheading">{{ block.settings.subheading }}</p>
+      <p class="apl-subheading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.subheading }}</p>
       {% endif %}
       {% if block.settings.description_text != blank %}
-      <p class="apl-description">{{ block.settings.description_text }}</p>
+      <p class="apl-description" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.description_text }}</p>
       {% endif %}
     </div>
     <!-- Right: Form + History -->

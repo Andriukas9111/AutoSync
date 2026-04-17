@@ -58,15 +58,17 @@ padding-bottom: {{ block.settings.padding_bottom }}px;
 <tr>
 <th scope="col">Make</th>
 <th scope="col">Model</th>
+{% if block.settings.show_years %}
 <th scope="col">Years</th>
-          {% if block.settings.show_engine %}
+{% endif %}
+{% if block.settings.show_engine %}
 <th scope="col">Engine</th>
-          {% endif %}
+{% endif %}
 </tr>
 </thead>
-<tbody data-autosync-compat-body>
+<tbody data-autosync-compat-body data-show-years="{{ block.settings.show_years | default: true }}" data-show-engine="{{ block.settings.show_engine | default: true }}">
 <tr>
-<td colspan="{% if block.settings.show_engine %}4{% else %}3{% endif %}">
+<td colspan="{% assign cols = 2 %}{% if block.settings.show_years %}{% assign cols = cols | plus: 1 %}{% endif %}{% if block.settings.show_engine %}{% assign cols = cols | plus: 1 %}{% endif %}{{ cols }}">
 Loading compatibility data...
 </td>
 </tr>

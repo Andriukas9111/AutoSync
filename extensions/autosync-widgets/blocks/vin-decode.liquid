@@ -57,10 +57,10 @@
     <!-- Text content side -->
     <div class="avd-content" data-avd-content>
       {% if block.settings.heading != blank %}
-        <h2 class="avd-heading">{{ block.settings.heading }}</h2>
+        <h2 class="avd-heading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.heading }}</h2>
       {% endif %}
       {% if block.settings.subheading != blank %}
-        <p class="avd-subheading">{{ block.settings.subheading }}</p>
+        <p class="avd-subheading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.subheading }}</p>
       {% endif %}
       {% if block.settings.description_text != blank %}
         <p class="avd-description">{{ block.settings.description_text }}</p>

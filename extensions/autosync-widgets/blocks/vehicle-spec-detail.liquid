@@ -55,7 +55,11 @@
     --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}18px{% when 'large' %}28px{% else %}22px{% endcase %};
     padding-top: {{ block.settings.padding_top | default: 0 }}px;
     padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
+    padding-left: {{ block.settings.container_padding | default: 24 }}px;
+    padding-right: {{ block.settings.container_padding | default: 24 }}px;
     max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
+    margin-left: auto;
+    margin-right: auto;
   "
 >
   <!-- Loading State -->
