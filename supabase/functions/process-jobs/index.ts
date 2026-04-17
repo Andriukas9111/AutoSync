@@ -3206,6 +3206,8 @@ async function processVehiclePagesChunk(
           sync_status: "synced", synced_at: new Date().toISOString(),
           // Persist count so the admin "Products Linked" stat reflects reality.
           linked_product_count: linkedHandles.length,
+          // Mark as linked — metaobject was just created with linked_products field.
+          linked_products_synced_at: new Date().toISOString(),
         }, { onConflict: "shop_id,engine_id" });
         return true;
       } else if (errors?.some((e: { code: string }) => e.code === "TAKEN")) {
@@ -3223,6 +3225,7 @@ async function processVehiclePagesChunk(
               metaobject_gid: retryObj.id, metaobject_handle: retryObj.handle || altHandle,
               sync_status: "synced", synced_at: new Date().toISOString(),
               linked_product_count: linkedHandles.length,
+              linked_products_synced_at: new Date().toISOString(),
             }, { onConflict: "shop_id,engine_id" });
             console.log(`[vehicle_pages] Created with alt handle: ${altHandle}`);
             return true;
@@ -3262,7 +3265,88 @@ async function processVehiclePagesChunk(
     }).eq("id", job.id);
   }
 
-  // Check if more unsynced specs remain.
+  // ── Relink pass: backfill linked_products on existing metaobjects ────────
+  // For stores that synced before this fix was deployed, the metaobject was
+  // created WITHOUT a linked_products field — so storefront vehicle pages
+  // render no products. This pass updates up to RELINK_PER_INVOCATION already-
+  // synced rows whose metaobject exists on Shopify but whose linked_products
+  // hasn't been written yet (tracked via linked_products_synced_at IS NULL).
+  //
+  // We cap time strictly: we already spent up to 100s creating, so only do
+  // relink if we have budget. Each update is ~300ms; 50 × 300ms = 15s max.
+  const RELINK_PER_INVOCATION = 50;
+  let relinked = 0;
+  try {
+    // Pick rows needing relink: synced + have metaobject + NULL relink timestamp.
+    const { data: relinkCandidates } = await db
+      .from("vehicle_page_sync")
+      .select("engine_id, metaobject_gid")
+      .eq("shop_id", shopId)
+      .eq("sync_status", "synced")
+      .not("metaobject_gid", "is", null)
+      .is("linked_products_synced_at", null)
+      .limit(RELINK_PER_INVOCATION);
+
+    if (relinkCandidates && relinkCandidates.length > 0) {
+      const relinkEngineIds = relinkCandidates.map((r: { engine_id: string }) => r.engine_id);
+      // Build a fresh product map for this relink batch
+      const relinkMap = new Map<string, string[]>();
+      for (let i = 0; i < relinkEngineIds.length; i += 200) {
+        const chunk = relinkEngineIds.slice(i, i + 200);
+        const { data: fitmentRows } = await db
+          .from("vehicle_fitments")
+          .select("ymme_engine_id, products!inner(handle, shopify_product_id)")
+          .eq("shop_id", shopId)
+          .in("ymme_engine_id", chunk)
+          .not("ymme_engine_id", "is", null);
+        for (const row of (fitmentRows || []) as Array<{ ymme_engine_id: string; products: { handle?: string; shopify_product_id?: string } }>) {
+          const p = row.products;
+          if (!p?.handle || !p?.shopify_product_id) continue;
+          const list = relinkMap.get(row.ymme_engine_id) ?? [];
+          if (!list.includes(p.handle)) list.push(p.handle);
+          relinkMap.set(row.ymme_engine_id, list);
+        }
+      }
+
+      const RELINK_CONCURRENCY = 5;
+      for (let i = 0; i < relinkCandidates.length; i += RELINK_CONCURRENCY) {
+        const chunk = relinkCandidates.slice(i, i + RELINK_CONCURRENCY);
+        await Promise.all(chunk.map(async (row: { engine_id: string; metaobject_gid: string }) => {
+          const handles = relinkMap.get(row.engine_id) ?? [];
+          try {
+            const updRes = await shopifyGraphQL(shopId, accessToken, `mutation metaobjectUpdate($id: ID!, $fields: [MetaobjectFieldInput!]!) {
+              metaobjectUpdate(id: $id, metaobject: { fields: $fields }) {
+                metaobject { id }
+                userErrors { field message }
+              }
+            }`, {
+              id: row.metaobject_gid,
+              fields: [{ key: "linked_products", value: JSON.stringify(handles) }],
+            });
+            const ok = !!(updRes?.data as any)?.metaobjectUpdate?.metaobject;
+            if (ok) {
+              // Mark relinked with the explicit column.
+              await db.from("vehicle_page_sync").update({
+                linked_product_count: handles.length,
+                linked_products_synced_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }).eq("shop_id", shopId).eq("engine_id", row.engine_id);
+              relinked++;
+            }
+          } catch (e) {
+            // Best-effort — log and continue. Next invocation will retry.
+            console.warn(`[vehicle_pages.relink] failed for engine ${row.engine_id}:`, e instanceof Error ? e.message : e);
+          }
+        }));
+      }
+      console.log(`[vehicle_pages.relink] Relinked ${relinked} existing metaobjects (of ${relinkCandidates.length} candidates)`);
+    }
+  } catch (e) {
+    // Never let the relink step break the main pipeline — it's additive work.
+    console.warn("[vehicle_pages.relink] skipped due to error:", e instanceof Error ? e.message : e);
+  }
+
+  // Check if more unsynced specs remain OR more relinks needed.
   // Previously said `created > 0 && remainingUnsynced > 0` — but if a whole
   // batch failed (Shopify error, transient network, metaobject validation
   // issue) the job marked complete at 200/2828 even though 2628 engines
@@ -3270,10 +3354,10 @@ async function processVehiclePagesChunk(
   // alone; if a batch really hits a fatal error the Edge Function returns
   // error and the outer loop marks failed, which is visible in the UI.
   const remainingUnsynced = unsyncedSpecs.length - specsThisBatch.length;
-  const hasMore = remainingUnsynced > 0;
-  console.log(`[vehicle_pages] Batch done: created ${created}/${specsThisBatch.length}, remaining=${remainingUnsynced}, hasMore=${hasMore}`);
+  const hasMore = remainingUnsynced > 0 || relinked >= RELINK_PER_INVOCATION;
+  console.log(`[vehicle_pages] Batch done: created ${created}/${specsThisBatch.length}, relinked=${relinked}, remaining=${remainingUnsynced}, hasMore=${hasMore}`);
 
-  return { processed: created, hasMore };
+  return { processed: created + relinked, hasMore };
 }
 
 // ── Bulk Push processor ───────────────────────────────────
