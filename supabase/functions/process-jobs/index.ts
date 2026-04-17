@@ -25,23 +25,22 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const INTERNAL_API_SECRET = Deno.env.get("INTERNAL_API_SECRET") || SUPABASE_SERVICE_ROLE_KEY;
 // Products per Edge Function invocation. Each product does 2-3 Shopify GraphQL
 // calls (tags, metafields, maybe create) + 200ms throttle delay. Observed
-// Products per push chunk. Now that we run work inside EdgeRuntime.waitUntil
-// the HTTP response returns in ~5ms and the worker keeps the Deno runtime alive
-// up to the wall-clock ceiling:
-//   Free   : 150s
-//   Paid   : 400s  (our production plan is Pro)
-//
-// Measured cost per product in push: ~1.2–2.0s (tag add + metafields set +
-// optional Shopify rate-limit delay). 100 × ~2s = 200s, comfortably under the
-// 400s ceiling even if Shopify is slow. Self-chain kicks off the next chunk
-// from inside the background task — no HTTP-timeout pressure.
-const BATCH_SIZE = 100;
+// Products per push chunk.
+// EdgeRuntime.waitUntil silently dropped work on this project (see commit
+// 7d0e2de), so we run the chunk inline (await). Inline ceiling is the 150s
+// idle timeout. Measured cost per product in push: ~1.2–2.0s (tag add +
+// metafields set + optional Shopify rate-limit delay).
+// 60 × ~2s = 120s, under the MAX_CHUNK_MS 120s guard. Self-chain picks up
+// the rest.
+const BATCH_SIZE = 60;
 
-// Hard ceiling in ms. If a chunk approaches this it stops early, checkpoints
-// progress, and self-chains. Set a safe 320s (80s of headroom under the 400s
-// wall clock). The guard fires between products/collections, so the current
-// unit still finishes cleanly instead of being killed mid-write.
-const MAX_CHUNK_MS = 320_000;
+// Hard ceiling in ms. Chunk bails early, checkpoints progress, and self-chains
+// before the runtime kills it. We target the 150s idle timeout (fixed on every
+// Supabase plan — even Pro can't lift it above 150s in the sync-await path)
+// with 30s of headroom. If the EdgeRuntime.waitUntil background-task path
+// starts working on this project, raise this to ~370s (30s under Pro's 400s
+// wall clock).
+const MAX_CHUNK_MS = 120_000;
 const SHOPIFY_API_VERSION = "2026-01"; // Single source of truth for API version
 
 /**
@@ -1088,32 +1087,22 @@ Deno.serve(async (req) => {
     // No body or invalid JSON — fall through to queue-based claim
   }
 
-  const edgeRuntime = (globalThis as unknown as {
-    EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
-  }).EdgeRuntime;
-
-  if (edgeRuntime?.waitUntil) {
-    // Kick off the work, keep the worker alive past the response via waitUntil,
-    // and return 202 immediately.
-    const work = processJobInBackground(targetJobId).catch((e) =>
-      console.error("[process-jobs] Background task error:", e),
-    );
-    edgeRuntime.waitUntil(work);
-    return new Response(
-      JSON.stringify({ accepted: true, job_id: targetJobId, mode: "background" }),
-      { status: 202, headers: { "Content-Type": "application/json" } },
-    );
-  }
-
-  // Fallback: await inline. Response returns when work finishes (or 150s
-  // idle timeout, whichever comes first). This is the pre-refactor behaviour.
+  // IMPORTANT: We tried the EdgeRuntime.waitUntil background-task pattern but
+  // on this Supabase Pro project it returned 202 immediately and SILENTLY
+  // DROPPED the work — version 205 of this function processed 0 chunks over
+  // ~40 invocations. Until that is debugged separately, we ALWAYS await the
+  // work inline. Ceiling is 150s (the idle-timeout is fixed on every plan)
+  // but the work is guaranteed to run. Chunks are sized (BATCH_SIZE=100,
+  // COLLECTION_BATCH_SIZE=200) plus a MAX_CHUNK_MS=320_000 guard that bails
+  // early and self-chains — actually the guard is too generous for 150s, so
+  // the guard needs to match the real ceiling when inline:
   try {
     await processJobInBackground(targetJobId);
   } catch (e) {
-    console.error("[process-jobs] Inline task error:", e);
+    console.error("[process-jobs] Task error:", e);
   }
   return new Response(
-    JSON.stringify({ processed: true, job_id: targetJobId, mode: "inline" }),
+    JSON.stringify({ processed: true, job_id: targetJobId }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 });
@@ -1831,14 +1820,10 @@ async function processPushChunk(
 
 // Collections per Edge Function invocation.
 // Each collection: ~1.5s (create + publish + DB).
-//
-// Previously this was 50 because we were hitting the 150s idle timeout (the
-// response couldn't be sent in time). Now the chunk runs inside
-// EdgeRuntime.waitUntil so the HTTP response returns instantly and only the
-// 400s wall clock matters. 200 × 1.5s = 300s, fits comfortably under 400s
-// even with the first-invocation Shopify pre-scan overhead. The MAX_CHUNK_MS
-// guard inside the loop bails early and self-chains if a chunk runs long.
-const COLLECTION_BATCH_SIZE = 200;
+// Inline mode (see BATCH_SIZE note): 80 × 1.5s = 120s, matches the 120s guard
+// including the first-invocation Shopify pre-scan overhead. Self-chain picks
+// up the rest on the next invocation.
+const COLLECTION_BATCH_SIZE = 80;
 
 async function processCollectionsChunk(
   db: ReturnType<typeof createClient>,
