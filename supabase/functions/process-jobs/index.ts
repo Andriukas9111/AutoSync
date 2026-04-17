@@ -1072,12 +1072,13 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
 }
 
 // ── HTTP entry point ─────────────────────────────────────────────────────────
-// Thin wrapper: parse the job_id out of the request body, hand the chunk to the
-// background worker via EdgeRuntime.waitUntil, and return 202 Accepted in ~5ms.
-// Because the response returns almost instantly, we NEVER hit the 150s idle
-// timeout — the ONLY timeout we need to respect is the 400s wall-clock ceiling
-// on Pro (150s on Free). Caller (pg_net, self-chain, or INSERT trigger) gets
-// a fast acknowledgement and doesn't tie up its own connection.
+// Attempts EdgeRuntime.waitUntil for the fast-return background-task pattern
+// (400s wall clock on Pro, 5ms response time). Falls back to awaiting inline
+// if the API isn't exposed — the inline path is limited to 150s by the idle
+// timeout but it GUARANTEES the work actually runs. Previous pure-waitUntil
+// version was silently dropping work (every INSERT trigger returned 202 in
+// ~1s with processed_items never advancing past 0) because the background
+// task wasn't being kept alive in this runtime environment.
 Deno.serve(async (req) => {
   let targetJobId: string | null = null;
   try {
@@ -1087,20 +1088,33 @@ Deno.serve(async (req) => {
     // No body or invalid JSON — fall through to queue-based claim
   }
 
-  // Start the actual work as a background task. EdgeRuntime is provided by the
-  // Supabase Edge Function runtime (Deno Deploy); in local `deno test` it's
-  // undefined, so fall back to a plain async call in that case.
-  const work = processJobInBackground(targetJobId);
-  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
-    EdgeRuntime.waitUntil(work);
-  } else {
-    // Local/CI: await to surface errors, but production path never hits this.
-    work.catch((e) => console.error("[process-jobs] Background task error:", e));
+  const edgeRuntime = (globalThis as unknown as {
+    EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+  }).EdgeRuntime;
+
+  if (edgeRuntime?.waitUntil) {
+    // Kick off the work, keep the worker alive past the response via waitUntil,
+    // and return 202 immediately.
+    const work = processJobInBackground(targetJobId).catch((e) =>
+      console.error("[process-jobs] Background task error:", e),
+    );
+    edgeRuntime.waitUntil(work);
+    return new Response(
+      JSON.stringify({ accepted: true, job_id: targetJobId, mode: "background" }),
+      { status: 202, headers: { "Content-Type": "application/json" } },
+    );
   }
 
+  // Fallback: await inline. Response returns when work finishes (or 150s
+  // idle timeout, whichever comes first). This is the pre-refactor behaviour.
+  try {
+    await processJobInBackground(targetJobId);
+  } catch (e) {
+    console.error("[process-jobs] Inline task error:", e);
+  }
   return new Response(
-    JSON.stringify({ accepted: true, job_id: targetJobId }),
-    { status: 202, headers: { "Content-Type": "application/json" } },
+    JSON.stringify({ processed: true, job_id: targetJobId, mode: "inline" }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
   );
 });
 
