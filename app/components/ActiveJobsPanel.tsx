@@ -18,6 +18,7 @@ import {
   Button,
 } from "@shopify/polaris";
 import { ClockIcon, CheckCircleIcon } from "@shopify/polaris-icons";
+import { useLocation } from "react-router";
 import { IconBadge } from "./IconBadge";
 import { formatJobType, formatElapsed, getJobWaitingMessage } from "../lib/design";
 import type { AppJob, AppStats } from "../lib/use-app-data";
@@ -28,7 +29,23 @@ interface ActiveJobsPanelProps {
   stats: AppStats;
 }
 
+/**
+ * Returns true when the "View" button's target page is the page we're already on.
+ * Used to hide the View button in that case so we never render a button that
+ * navigates to the same URL and visibly does nothing (source of the "View
+ * doesn't work" bug that appeared across Settings, Fitment, Push, etc.).
+ * Matches by prefix so /app/products/:id still counts as being on /app/products.
+ */
+function isCurrentPage(currentPath: string, target: string): boolean {
+  if (!target) return false;
+  const a = currentPath.replace(/\/+$/, "");
+  const b = target.replace(/\/+$/, "");
+  return a === b || a.startsWith(b + "/");
+}
+
 export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPanelProps) {
+  const location = useLocation();
+  const currentPath = location.pathname;
   // Filter to relevant jobs: running, paused, pending, recently completed (5 min), or failed
   const jobs = allJobs.filter((j) => {
     const createdAge = j.created_at ? Date.now() - new Date(j.created_at).getTime() : Infinity;
@@ -58,12 +75,36 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
     bulk_push: "/app/push",
     wheel_push: "/app/wheels",
     collections: "/app/collections",
+    collections_dedupe: "/app/collections",
+    collections_recovery: "/app/collections",
     vehicle_pages: "/app/vehicle-pages",
     sync: "/app/products",
+    sync_after_delete: "/app/products",
     provider_import: "/app/providers",
     provider_refresh: "/app/providers",
     provider_auto_fetch: "/app/providers",
+    // Cleanup family — triggered from settings, View button returns there.
+    // Previously missing, so clicking View fell through to "/app" (dashboard)
+    // which silently took users away from the page that started the job.
     cleanup: "/app/settings",
+    cleanup_tags: "/app/settings",
+    cleanup_metafields: "/app/settings",
+    cleanup_collections: "/app/settings",
+    delete_vehicle_pages: "/app/settings",
+    wheel_extract: "/app/wheels",
+    fetch: "/app/providers",
+  };
+
+  // Job-type → present-tense verb noun, used when we can't show a percentage
+  // because total_items isn't known ahead of time (bulk tag/metafield removal).
+  // "Preparing..." was a lie — the job has been actively writing to Shopify
+  // for minutes. Show the processed count so the user knows it's working.
+  const ACTIVITY_LABEL: Record<string, (n: number) => string> = {
+    cleanup_tags: (n) => `Removed ${n.toLocaleString()} tag${n === 1 ? "" : "s"} so far…`,
+    cleanup_metafields: (n) => `Removed ${n.toLocaleString()} metafield${n === 1 ? "" : "s"} so far…`,
+    cleanup_collections: (n) => `Removed ${n.toLocaleString()} collection${n === 1 ? "" : "s"} so far…`,
+    delete_vehicle_pages: (n) => `Deleted ${n.toLocaleString()} page${n === 1 ? "" : "s"} so far…`,
+    cleanup: (n) => `Processed ${n.toLocaleString()} item${n === 1 ? "" : "s"} so far…`,
   };
 
   return (
@@ -144,13 +185,20 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
                           {`${processed.toLocaleString()} / ${total.toLocaleString()} (${percent}%)`}
                         </Text>
                       )}
-                      <Button
-                        variant="plain"
-                        size="slim"
-                        onClick={() => navigate(linkMap[job.type] || "/app")}
-                      >
-                        View
-                      </Button>
+                      {/* Hide View when its target is the page we're already on.
+                          Previously rendered a button that navigated to the same
+                          URL and visibly did nothing — confusing across Settings,
+                          Fitment, Push. Now it only shows when it'll actually
+                          take the user somewhere new. */}
+                      {linkMap[job.type] && !isCurrentPage(currentPath, linkMap[job.type]) && (
+                        <Button
+                          variant="plain"
+                          size="slim"
+                          onClick={() => navigate(linkMap[job.type])}
+                        >
+                          View
+                        </Button>
+                      )}
                     </InlineStack>
                   </InlineStack>
 
@@ -158,16 +206,45 @@ export function ActiveJobsPanel({ navigate, jobs: allJobs, stats }: ActiveJobsPa
                     <ProgressBar progress={percent} size="small" />
                   )}
                   {isRunning && total === 0 && (
+                    // total=0 jobs (bulk tag/metafield removal) don't know the
+                    // upper bound up front — show the REAL processed count so
+                    // the user sees progress instead of a stale "Preparing…".
+                    // Only fall back to the waiting message when processed is
+                    // also 0 (job genuinely hasn't started writing yet).
                     <Text as="p" variant="bodySm" tone="subdued">
-                      {getJobWaitingMessage({
-                        type: job.type,
-                        status: job.status,
-                        processed,
-                        total,
-                        otherRunningJobs: allJobs.filter((j) => j.id !== job.id),
-                        metadata: job.metadata,
-                      })}
+                      {processed > 0 && ACTIVITY_LABEL[job.type]
+                        ? ACTIVITY_LABEL[job.type](processed)
+                        : processed > 0
+                          ? `${processed.toLocaleString()} processed so far…`
+                          : getJobWaitingMessage({
+                              type: job.type,
+                              status: job.status,
+                              processed,
+                              total,
+                              otherRunningJobs: allJobs.filter((j) => j.id !== job.id),
+                              metadata: job.metadata,
+                            })}
                     </Text>
+                  )}
+                  {/* For running jobs without a known total, show an indeterminate
+                      progress bar so the card doesn't look frozen. Polaris doesn't
+                      have indeterminate mode, so use a pulsing animation on a
+                      small-height bar set to 0%. */}
+                  {isRunning && total === 0 && processed > 0 && (
+                    <div style={{
+                      height: "4px",
+                      background: "var(--p-color-bg-surface-secondary)",
+                      borderRadius: "var(--p-border-radius-100)",
+                      overflow: "hidden",
+                    }}>
+                      <div style={{
+                        height: "100%",
+                        width: "30%",
+                        background: "var(--p-color-bg-fill-info)",
+                        borderRadius: "var(--p-border-radius-100)",
+                        animation: "activeJobIndeterminate 1.4s ease-in-out infinite",
+                      }} />
+                    </div>
                   )}
                   {isComplete && (
                     // Use the REAL percent, not hardcoded 100 — a self-chained

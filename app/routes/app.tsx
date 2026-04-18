@@ -364,6 +364,14 @@ export default function App() {
               50.1% { transform: scaleX(1); transform-origin: right; }
               100% { transform: scaleX(0); transform-origin: right; }
             }
+            /* Indeterminate progress bar for jobs with no known total
+               (bulk tag/metafield cleanup). Slides a short segment back and
+               forth so the Active Operations card doesn't look frozen. */
+            @keyframes activeJobIndeterminate {
+              0%   { transform: translateX(-100%); }
+              50%  { transform: translateX(250%); }
+              100% { transform: translateX(-100%); }
+            }
             /* ── Global App Layout ── */
             .as-app-container {
               max-width: 1200px !important;
