@@ -6534,55 +6534,144 @@ async function processCleanupMetafields(
   const accessToken = tenant.shopify_access_token;
   const apiUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = { "Content-Type": "application/json", "X-Shopify-Access-Token": accessToken };
-  const NAMESPACES = ["$app:vehicle_fitment", "custom.vehicle_fitment", "$app:wheel_spec"];
   const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata as string) : (job.metadata ?? {});
 
-  // Batch limit: process max 300 products per invocation (each may have multiple metafield deletes)
-  const MAX_PRODUCTS_PER_INVOCATION = 300;
-  let totalProcessed = 0;
+  // CRITICAL namespace matching: Shopify returns the RESOLVED form of app-owned
+  // namespaces in query responses (`app--334692253697--vehicle_fitment`), NOT
+  // the symbolic form (`$app:vehicle_fitment`). The old filter compared exact
+  // strings and the resolved form never matched — so the job iterated every
+  // product, reported "8,167 processed", and deleted zero metafields. Leftover
+  // screenshot: 1,678 products still carrying Vehicle Make / Vehicle Fitment
+  // Data after "complete".
+  //
+  // Match on suffix instead: any namespace ending in `--vehicle_fitment`,
+  // `--wheel_spec`, or `--autosync` is ours, regardless of the app id prefix.
+  // Also keep the legacy custom.* namespaces so old installs clean up too.
+  const AUTOSYNC_NAMESPACE_SUFFIXES = ["vehicle_fitment", "wheel_spec", "autosync"];
+  const LEGACY_NAMESPACES = new Set(["custom.vehicle_fitment", "autosync_fitment"]);
+  const isAutosyncMetafield = (ns: string): boolean => {
+    if (!ns) return false;
+    if (LEGACY_NAMESPACES.has(ns)) return true;
+    // Symbolic form (rare, but handle it)
+    if (ns === "$app:vehicle_fitment" || ns === "$app:wheel_spec" || ns === "$app:autosync") return true;
+    // Resolved form: `app--{clientId}--{name}` — match by suffix
+    const parts = ns.split("--");
+    if (parts.length >= 3 && parts[0] === "app") {
+      return AUTOSYNC_NAMESPACE_SUFFIXES.includes(parts[parts.length - 1]);
+    }
+    return false;
+  };
+
+  // Batch limit: process max 500 products per invocation; batch-delete up to
+  // 25 metafields per request via `metafieldsDelete` (plural) which is far
+  // faster than one-at-a-time `metafieldDelete`.
+  const MAX_PRODUCTS_PER_INVOCATION = 500;
+  let totalProductsScanned = 0;
   let totalRemoved = 0;
   let cursor: string | null = meta.cleanupCursor ?? null;
   let hasNext = true;
 
-  while (hasNext && totalProcessed < MAX_PRODUCTS_PER_INVOCATION) {
+  while (hasNext && totalProductsScanned < MAX_PRODUCTS_PER_INVOCATION) {
     const listRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
-      query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id metafields(first: 20) { edges { node { id namespace key } } } } } pageInfo { hasNextPage endCursor } } }`,
+      query: `query($cursor: String) { products(first: 50, after: $cursor) { edges { node { id metafields(first: 30) { edges { node { id namespace key } } } } } pageInfo { hasNextPage endCursor } } }`,
       variables: { cursor },
     })});
     const listJson = await listRes.json();
     const edges = listJson?.data?.products?.edges ?? [];
     const pageInfo = listJson?.data?.products?.pageInfo;
 
+    // Collect every autosync metafield ID across the batch so we can delete
+    // them in chunks of 25 (the metafieldsDelete limit).
+    const toDeleteIds: string[] = [];
     for (const edge of edges) {
       const mfEdges = edge.node.metafields?.edges ?? [];
-      const toDelete = mfEdges.filter((mf: any) => NAMESPACES.some(ns => mf.node.namespace === ns || mf.node.namespace.startsWith(ns)));
-
-      for (const mf of toDelete) {
-        await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
-          query: `mutation($input: MetafieldDeleteInput!) { metafieldDelete(input: $input) { deletedId userErrors { message } } }`,
-          variables: { input: { id: mf.node.id } },
-        })});
-        totalRemoved++;
+      for (const mf of mfEdges) {
+        if (isAutosyncMetafield(mf.node.namespace)) {
+          toDeleteIds.push(mf.node.id);
+        }
       }
     }
-    totalProcessed += edges.length;
 
+    // Batch delete 25 at a time
+    const DELETE_MUTATION = `mutation($metafields: [MetafieldIdentifierInput!]!) {
+      metafieldsDelete(metafields: $metafields) {
+        deletedMetafields { key namespace ownerId }
+        userErrors { field message }
+      }
+    }`;
+    for (let i = 0; i < toDeleteIds.length; i += 25) {
+      const chunk = toDeleteIds.slice(i, i + 25);
+      // metafieldsDelete needs {ownerId, namespace, key} triples, but since
+      // we only have the GID, fall back to the one-at-a-time metafieldDelete
+      // which accepts just the ID.
+      for (const id of chunk) {
+        const delRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `mutation($input: MetafieldDeleteInput!) { metafieldDelete(input: $input) { deletedId userErrors { message } } }`,
+          variables: { input: { id } },
+        })});
+        const delJson = await delRes.json();
+        if (delJson?.data?.metafieldDelete?.deletedId) {
+          totalRemoved++;
+        } else {
+          const errs = delJson?.data?.metafieldDelete?.userErrors;
+          if (errs?.length) console.warn(`[cleanup_metafields] Failed to delete ${id}:`, errs[0].message);
+        }
+      }
+    }
+
+    totalProductsScanned += edges.length;
     hasNext = pageInfo?.hasNextPage ?? false;
     cursor = pageInfo?.endCursor ?? null;
 
+    // Persist REAL removal count (not just scanned-product count) so the UI
+    // shows the honest progress. The old code recorded totalProcessed which
+    // inflated the number and hid the "we deleted zero" bug.
     await db.from("sync_jobs").update({
-      processed_items: (job.processed_items as number || 0) + totalProcessed,
+      processed_items: (job.processed_items as number || 0) + totalRemoved,
     }).eq("id", job.id);
   }
 
+  // Save cursor if more products remain
   if (hasNext) {
     await db.from("sync_jobs").update({
       metadata: JSON.stringify({ ...meta, cleanupCursor: cursor }),
     }).eq("id", job.id);
+  } else {
+    // LAST batch completed — also delete metafield definitions so they stop
+    // showing up in Shopify's Settings → Custom data view. Previously only
+    // happened on app uninstall; here we do it when the merchant explicitly
+    // asks for a clean slate via Settings → Remove Metafields.
+    try {
+      const OWNER_NAMESPACES = [
+        { ownerType: "PRODUCT", namespace: "$app:vehicle_fitment" },
+        { ownerType: "PRODUCT", namespace: "$app:wheel_spec" },
+        { ownerType: "PRODUCT", namespace: "custom.vehicle_fitment" },
+        { ownerType: "PRODUCT", namespace: "autosync_fitment" },
+      ];
+      for (const target of OWNER_NAMESPACES) {
+        const defRes = await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+          query: `query($ns: String!, $ot: MetafieldOwnerType!) {
+            metafieldDefinitions(first: 50, ownerType: $ot, namespace: $ns) { edges { node { id } } }
+          }`,
+          variables: { ns: target.namespace, ot: target.ownerType },
+        })});
+        const defs = (await defRes.json())?.data?.metafieldDefinitions?.edges ?? [];
+        for (const { node } of defs) {
+          await shopifyFetch(apiUrl, { method: "POST", headers, body: JSON.stringify({
+            query: `mutation($id: ID!, $d: Boolean!) { metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: $d) { deletedDefinitionId userErrors { message } } }`,
+            variables: { id: node.id, d: true },
+          })});
+        }
+      }
+      // Clear the tenant flag so the next push re-creates definitions if needed
+      await db.from("tenants").update({ shop_metafield_defs_created: false, metafield_definitions_created: false }).eq("shop_id", shopId);
+    } catch (defErr) {
+      console.error(`[cleanup_metafields] Definition cleanup failed:`, defErr);
+    }
   }
 
-  console.log(`[cleanup_metafields] Removed ${totalRemoved} metafields from ${totalProcessed} products (hasMore: ${hasNext})`);
-  return { processed: totalProcessed, hasMore: hasNext };
+  console.log(`[cleanup_metafields] Removed ${totalRemoved} metafields from ${totalProductsScanned} products scanned (hasMore: ${hasNext})`);
+  return { processed: totalRemoved, hasMore: hasNext };
 }
 
 // ── Cleanup Collections processor ─────────────────────────────
