@@ -48,6 +48,11 @@ export interface AppStats {
   activeMakes: number;
   uniqueMakes: number;
   uniqueModels: number;
+  // Universal part stats — these are "group fitment" rows where ONE DB row
+  // covers every vehicle in an OEM brand group (VAG, BMW, Stellantis…) that
+  // shares a common engine family. Surfaced on the dashboard + fitment page.
+  groupUniversalFitments: number;
+  groupCollections: number;
   // YMME database
   ymmeMakes: number;
   ymmeModels: number;
@@ -104,6 +109,7 @@ const DEFAULT_STATS: AppStats = {
   vehiclePages: 0, vehiclePagesSynced: 0, vehiclePagesPending: 0, vehiclePagesFailed: 0,
   providers: 0,
   pushedProducts: 0, needsPush: 0, stalePush: 0, activeMakes: 0, uniqueMakes: 0, uniqueModels: 0,
+  groupUniversalFitments: 0, groupCollections: 0,
   ymmeMakes: 0, ymmeModels: 0, ymmeEngines: 0,
   plan: "free", lastPushDate: null,
 };
@@ -203,19 +209,47 @@ export function useAppData(loaderStats?: Partial<AppStats>, pollInterval = 5000)
  * Computed helpers — use these instead of calculating in every page
  */
 export function computeFromStats(stats: AppStats) {
-  const mapped = stats.mapped || (stats.autoMapped + stats.smartMapped + stats.manualMapped);
+  // High-confidence "mapped" — strictly auto + smart + manual.
+  //
+  // IMPORTANT: stats.mapped (from the get_push_stats RPC) now INCLUDES flagged
+  // after migration `get_push_stats_include_flagged`, so using it here double-
+  // counted flagged products in pushReady (mapped + needsReview), which made
+  // the dashboard show "Pending 2,092 > Total 2,076" — mathematically impossible.
+  // Always derive `mapped` from the individual method counts so the contract
+  // "mapped is auto+smart+manual only" holds regardless of RPC changes.
+  const mapped = stats.autoMapped + stats.smartMapped + stats.manualMapped;
+
+  // "Needs review" = flagged. These products HAVE fitments (make-only from
+  // medium/low confidence matching + SQL heals) but the merchant should
+  // confirm a more specific vehicle match. They DO ship to Shopify, and
+  // land in make-level collections, but they aren't counted as fully mapped.
   const needsReview = stats.flagged;
-  const notMapped = stats.total - mapped;
-  const coverage = stats.total > 0 ? Math.round((mapped / stats.total) * 100) : 0;
-  const pendingPush = Math.max(0, mapped - stats.pushedProducts);
+
+  // Products that actually have something to push (any status with fitments).
+  // This drives the push progress bar and the "pending push" number.
+  const pushReady = mapped + needsReview;
+
+  // "Not mapped" is products with NO fitments at all — no_match + still-unmapped.
+  // Previously lumped flagged into this bucket which was misleading because
+  // flagged products do have fitments (just lower confidence).
+  const notMapped = Math.max(0, stats.total - pushReady);
+
+  // Coverage treats needsReview as partial credit (0.5x) so merchants see
+  // progress without the KPI jumping when flagged products get confirmed.
+  // For the "main" coverage percentage we use pushReady so the bar matches
+  // the push progress bar.
+  const coverage = stats.total > 0 ? Math.round((pushReady / stats.total) * 100) : 0;
+
+  // Pending push = any pushable product not yet synced.
+  const pendingPush = Math.max(0, pushReady - stats.pushedProducts);
 
   const vehicleTotal = stats.total;
   const vehicleMapped = mapped;
-  const vehicleNotMapped = vehicleTotal - vehicleMapped;
+  const vehicleNotMapped = notMapped;
   const vehicleCoverage = vehicleTotal > 0 ? Math.round((vehicleMapped / vehicleTotal) * 100) : 0;
 
   return {
-    mapped, needsReview, notMapped, coverage, pendingPush,
+    mapped, needsReview, notMapped, pushReady, coverage, pendingPush,
     vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage,
   };
 }

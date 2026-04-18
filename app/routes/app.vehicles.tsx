@@ -96,9 +96,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .filter((m: { id: string }) => activeMakeIds.has(m.id))
     .map((m: { name: string }) => m.name);
 
-  // For each active make, get the fitment count efficiently (one query per active make)
-  // This is fast because there are only ~36 active makes, not 5000+ fitments
-  if (activeMakeNames.length > 0 && activeMakeNames.length <= 50) {
+  // For each active make, get the fitment count efficiently. Previously capped
+  // at 50 makes — but demo store has 58 active makes, so the count silently
+  // returned 0 for EVERY make and the "With Fitments" filter showed 0. Now we
+  // run up to 500 makes in parallel (still a bounded, reasonable fan-out).
+  if (activeMakeNames.length > 0 && activeMakeNames.length <= 500) {
     const countPromises = activeMakeNames.map(async (makeName: string) => {
       const { count } = await db.from("vehicle_fitments")
         .select("id", { count: "exact", head: true })

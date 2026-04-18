@@ -24,9 +24,11 @@ import {
   deduplicateSuggestions,
   calculateMaxPossible,
   normalizeConfidence,
+  VARIANT_SUFFIXES,
   type SuggestedFitment,
   type EngineRow,
 } from "./app.api.suggest-fitments";
+import { detectSingleGroup, detectGroupEngine } from "../lib/brand-groups";
 
 const CHUNK_SIZE = 10; // Products per chunk — safe for Vercel 10s timeout with vehicle-heavy products
 
@@ -481,6 +483,51 @@ export async function action({ request }: ActionFunctionArgs) {
           continue;
         }
 
+        // ── GROUP-UNIVERSAL DETECTION ────────────────────────────
+        // If the detected makes all belong to a single OEM group (VAG, BMW,
+        // Stellantis, HMG, etc.) AND we detect a shared engine family in the
+        // text (e.g., "2.0 TSI", "N55"), create ONE group-universal fitment
+        // instead of expanding to hundreds of per-vehicle rows.
+        //
+        // This prevents the 250-tag/product Shopify cap from blocking pushes
+        // for parts like "VAG 2.0 TSI Blow Off Valve" that legitimately fit
+        // 80+ vehicle variants. Push generates a single group tag; the group
+        // tag drives a group-level smart collection on Shopify; the YMME
+        // widget resolves the group when a customer picks a specific vehicle.
+        const detectedGroup = detectSingleGroup(allMakes);
+        const detectedGroupEngine = detectedGroup
+          ? detectGroupEngine(detectedGroup, allText)
+          : null;
+
+        if (detectedGroup && detectedGroupEngine) {
+          // Create one group-universal fitment and skip per-vehicle expansion
+          const { error: groupErr } = await db.from("vehicle_fitments").insert({
+            product_id: product.id,
+            shop_id: shopId,
+            make: null,
+            model: null,
+            ymme_make_id: null,
+            ymme_model_id: null,
+            ymme_engine_id: null,
+            extraction_method: "universal_part",
+            confidence_score: 0.85,
+            source_text: product.title ?? "",
+            is_group_universal: true,
+            group_slug: detectedGroup.slug,
+            group_engine_slug: detectedGroupEngine.slug,
+          });
+          if (!groupErr) {
+            chunkFitments += 1;
+            await db.from("products")
+              .update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
+              .eq("id", product.id).eq("shop_id", shopId);
+            chunkAutoMapped++;
+            continue;
+          }
+          // On error fall through to normal matching so we don't drop the product
+          console.warn(`[extract] group-universal insert failed for ${product.id}:`, groupErr.message);
+        }
+
         // Universal hardware parts detection — parts that fit ALL vehicles from a make group
         // Only applies to generic hardware (spacers, bolts, caps) that have NO engine specs
         // VAG engine parts (e.g., "Audi, VW 2.0 TSI Blow Off Valve") have engine specs and
@@ -533,7 +580,16 @@ export async function action({ request }: ActionFunctionArgs) {
           for (const model of sortedModels) {
             const mName = (model as { id: string; name: string }).name.toLowerCase();
             if (modelNameBlocklist.has(mName)) continue;
-            if ((model as { id: string; name: string }).name.length <= 3 && !validShortModels.has(mName)) continue;
+            // Short-model guard: 3-char-or-less model names can be risky (e.g. "is",
+            // "it", "on" — words that happen to be Lexus/generic models). We allow:
+            //   (a) Names in the hand-curated validShortModels set (BMW X3, Audi A3…),
+            //   (b) Names containing a digit — digits disambiguate real models
+            //       (i30, i20, Q7, X5, 996, A35…) from English words.
+            // Before this fix, Hyundai "i30" was silently skipped because it wasn't
+            // in validShortModels, so products like "Hyundai i30N" only matched the
+            // make — never the model — and stayed in the flagged queue.
+            const hasDigit = /[0-9]/.test(mName);
+            if ((model as { id: string; name: string }).name.length <= 3 && !validShortModels.has(mName) && !hasDigit) continue;
 
             // Pure numeric model names (100, 200, 80, etc.) must appear near the make name
             // to avoid false positives like "100 Hp" matching "Audi 100"
@@ -544,7 +600,19 @@ export async function action({ request }: ActionFunctionArgs) {
               if (!makeModelRe.test(allText)) continue;
             }
 
-            const re = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+            // TRIM-AWARE MATCHING (aligned with suggest-fitments.tsx VARIANT_SUFFIXES):
+            // YMME stores base names ("i30", "Kona", "Golf") but titles often use
+            // trim/variant names ("i30N", "Kona N", "Golf R"). A plain `\b<model>\b`
+            // FAILS for fused trims like "i30N" because '0'+'N' are both word chars
+            // (no word boundary between them).
+            //
+            // Solution: after the base name, optionally match a KNOWN trim suffix.
+            // The trailing `\b` then requires a real word end AFTER the trim:
+            //   - "i30 " — trim absent, \b matches after '0' (space is non-word)  ✓
+            //   - "i30N,"— trim 'N' consumed, \b matches after 'N' (comma is non-word) ✓
+            //   - "i3000"— neither trim nor \b works, no match                    ✓
+            const escapedName = mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp(`\\b${escapedName}(?:${VARIANT_SUFFIXES})?\\b`, "i");
             if (re.test(allText)) {
               modelNameMatchIds.push((model as { id: string; name: string }).id);
               if (!profile.modelNames.includes((model as { id: string; name: string }).name)) {
@@ -699,23 +767,147 @@ export async function action({ request }: ActionFunctionArgs) {
             throw limitErr;
           }
 
-          const { error: fitErr } = await db.from("vehicle_fitments").insert(inserts);
-          if (!fitErr) {
+          // Use upsert with onConflict + ignoreDuplicates so duplicate engine_ids
+          // across suggestions (common for VAG parts that fit many models sharing
+          // an engine) don't abort the entire insert. Without this, a bulk insert
+          // would fail the FIRST duplicate and roll back EVERYTHING, then we'd
+          // flag the product even though most fitments were valid.
+          const { error: fitErr } = await db.from("vehicle_fitments").upsert(inserts, {
+            onConflict: "shop_id,product_id,ymme_engine_id",
+            ignoreDuplicates: true,
+          });
+
+          // POST-INSERT VERIFICATION: even if fitErr is truthy, check whether
+          // fitments actually landed in the DB. Supabase JS has been seen
+          // returning non-null error while the rows were persisted (partial
+          // response serialization, payload size, network hiccups). We trust
+          // the DB as the source of truth.
+          const { count: insertedCount } = await db.from("vehicle_fitments")
+            .select("id", { count: "exact", head: true })
+            .eq("product_id", product.id).eq("shop_id", shopId);
+
+          if ((insertedCount ?? 0) > 0) {
             chunkFitments += inserts.length;
             await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
             chunkAutoMapped++;
-          } else {
+          } else if (fitErr) {
             await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
             chunkFlagged++;
+          } else {
+            // Unusual: no fitErr and no inserts recorded. Mark as no_match to
+            // avoid infinite retry loops. Also guards against suggestions
+            // filtering out to 0 valid rows post-dedup.
+            await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkUnmapped++;
           }
         } else if (confidence >= FLAG_THRESHOLD) {
-          // Medium confidence — flag for manual review
+          // Medium confidence (0.30-0.55) — the scorer matched a model (and
+          // maybe an engine) but the overall confidence is below the
+          // auto-map threshold. Strategy:
+          //
+          //   1. PREFER model-level fitments from `unique` suggestions — if
+          //      the scorer said "probably Hyundai i30", create an i30 fitment
+          //      so the product lands in the i30 collection AND the merchant
+          //      can see our guess when they review.
+          //   2. FALL BACK to make-only only if no model was matched — still
+          //      better than no fitment at all (product still lands in make
+          //      collection for browse).
+          //
+          // Status stays `flagged` so the merchant reviews low-confidence
+          // matches before they ship to customers.
+          const modelSuggestions = unique
+            .filter((s) => s.model?.id && s.make.id && s.confidence >= FLAG_THRESHOLD)
+            .slice(0, 8); // Cap at 8 to prevent spam from overly broad matches
+
+          if (modelSuggestions.length > 0) {
+            // We have model matches — create proper fitments (even without engines).
+            // Dedup by (product_id, ymme_model_id, ymme_engine_id) tuple to handle
+            // re-extractions: fetch existing fitments for this product and only
+            // insert rows we don't already have. This avoids the partial-unique-index
+            // edge cases where upsert with onConflict="ymme_engine_id" silently
+            // drops rows whose engine_id is NULL (the index is partial WHERE engine_id
+            // IS NOT NULL, so NULLs don't participate in conflict detection).
+            const candidateInserts = modelSuggestions.map((s) => ({
+              product_id: product.id, shop_id: shopId,
+              make: s.make.name, model: s.model?.name ?? null,
+              variant: s.engine?.name ?? null,
+              year_from: s.yearFrom, year_to: s.yearTo,
+              engine: s.engine?.displayName ? s.engine.displayName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : null,
+              engine_code: s.engine?.code ?? null,
+              fuel_type: s.engine?.fuelType ?? null,
+              ymme_make_id: s.make.id,
+              ymme_model_id: s.model!.id,
+              ymme_engine_id: s.engine?.id ?? null,
+              extraction_method: "smart", confidence_score: s.confidence,
+              source_text: product.title ?? "",
+            }));
+            try {
+              await assertFitmentLimit(shopId);
+              const { data: existing } = await db.from("vehicle_fitments")
+                .select("ymme_model_id, ymme_engine_id")
+                .eq("shop_id", shopId).eq("product_id", product.id);
+              const existingKeys = new Set(
+                (existing ?? []).map((r: { ymme_model_id: string | null; ymme_engine_id: string | null }) =>
+                  `${r.ymme_model_id ?? ""}|${r.ymme_engine_id ?? ""}`,
+                ),
+              );
+              const freshInserts = candidateInserts.filter((i) =>
+                !existingKeys.has(`${i.ymme_model_id ?? ""}|${i.ymme_engine_id ?? ""}`),
+              );
+              if (freshInserts.length > 0) {
+                const { error: insErr } = await db.from("vehicle_fitments").insert(freshInserts);
+                if (insErr) {
+                  console.warn(`[extract] medium-conf insert failed for ${product.id}:`, insErr.message);
+                } else {
+                  chunkFitments += freshInserts.length;
+                }
+              }
+            } catch (err) {
+              console.warn(`[extract] medium-conf model path failed for ${product.id}:`, err instanceof Error ? err.message : err);
+            }
+          } else if (allMakes.length > 0) {
+            // No model matched — fall back to make-only so at least the product
+            // appears in the make's collection for customer browsing.
+            const makeNames = allMakes
+              .filter((makeName: string) => makeIdMap.has(makeName))
+              .slice(0, 3);
+            if (makeNames.length > 0) {
+              try {
+                await assertFitmentLimit(shopId);
+                const { data: existingMakes } = await db.from("vehicle_fitments")
+                  .select("make")
+                  .eq("shop_id", shopId).eq("product_id", product.id)
+                  .is("ymme_engine_id", null);
+                const existingSet = new Set((existingMakes ?? []).map((r: { make: string }) => r.make));
+                const newInserts = makeNames
+                  .filter((mk: string) => !existingSet.has(mk))
+                  .map((makeName: string) => ({
+                    product_id: product.id, shop_id: shopId,
+                    make: makeName, ymme_make_id: makeIdMap.get(makeName),
+                    extraction_method: "make_only", confidence_score: confidence,
+                    source_text: product.title ?? "",
+                  }));
+                if (newInserts.length > 0) {
+                  const { error: makeErr } = await db.from("vehicle_fitments").insert(newInserts);
+                  if (!makeErr) chunkFitments += newInserts.length;
+                  else console.warn(`[extract] make-only insert failed for ${product.id}:`, makeErr.message);
+                }
+              } catch (err) {
+                console.warn(`[extract] make-only fallback failed for ${product.id}:`, err instanceof Error ? err.message : err);
+              }
+            }
+          }
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
         } else if (allMakes.length > 0) {
           // Make found but no model/engine match — create MAKE-LEVEL fitments
-          // so the product still appears in make collections (e.g., "BMW Parts")
-          // This catches products like "BMW Brake Lines" that don't specify a model
+          // so the product still appears in make collections (e.g., "BMW Parts").
+          // This catches products like "BMW Brake Lines" that don't specify a model.
+          //
+          // CRITICAL: Products here get `flagged` status (NOT auto_mapped) because
+          // we only have a bare make — no model or engine. The merchant should
+          // review these to confirm which specific vehicles they actually fit.
+          // Marking them auto_mapped lies to the merchant about our confidence.
           const makeInserts = allMakes
             .filter((makeName: string) => makeIdMap.has(makeName))
             .slice(0, 3) // Max 3 makes per product to prevent spam
@@ -734,13 +926,21 @@ export async function action({ request }: ActionFunctionArgs) {
             try {
               await assertFitmentLimit(shopId);
               const { error: fitErr } = await db.from("vehicle_fitments").insert(makeInserts);
-              if (!fitErr) {
+              // Post-insert verification — see note in main branch above
+              const { count: insertedCount } = await db.from("vehicle_fitments")
+                .select("id", { count: "exact", head: true })
+                .eq("product_id", product.id).eq("shop_id", shopId);
+              if ((insertedCount ?? 0) > 0) {
                 chunkFitments += makeInserts.length;
-                await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
-                chunkAutoMapped++;
-              } else {
+                // flagged — not auto_mapped. Make-only is a weak signal.
                 await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
                 chunkFlagged++;
+              } else if (fitErr) {
+                await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkFlagged++;
+              } else {
+                await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkUnmapped++;
               }
             } catch {
               // Plan limit reached

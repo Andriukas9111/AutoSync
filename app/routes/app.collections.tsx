@@ -51,7 +51,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Run ALL queries in parallel — including tenant lookup
   // ALL queries in single Promise.all for maximum parallelism
-  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult, fitmentCountResult] = await Promise.all([
+  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult, fitmentCountResult, wheelFitmentsResult] = await Promise.all([
     getTenant(shopId),
     paginatedSelect("collection_mappings", "*", (q) =>
       q.eq("shop_id", shopId).order("created_at", { ascending: false })
@@ -66,6 +66,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("vehicle_fitments").select("make, model, year_from, year_to").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
     // Fitment count for the stat bar — prevents flash-of-zero before first poll.
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Wheel fitment specs — used to compute wheel collection count so the
+    // "Expected" stat matches "Existing" (which includes wheel collections).
+    // Previously Expected = make + make_model + year combos only, so for any
+    // shop that sold wheels, Existing > Expected and users thought something
+    // was over-creating.
+    db.from("wheel_fitments").select("pcd, diameter, width, offset_min").eq("shop_id", shopId).limit(50000),
   ]);
 
   const plan: PlanTier = getEffectivePlan(tenant);
@@ -90,6 +96,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .map((f) => `${f.make}|${f.model}|${f.year_from ?? ""}|${f.year_to ?? ""}`)
   )];
 
+  // Wheel fitment counts drive wheel_pcd / wheel_diameter / wheel_width /
+  // wheel_offset collections (one each per distinct value).
+  const wheelData = (wheelFitmentsResult.data ?? []) as { pcd: string | null; diameter: number | null; width: string | number | null; offset_min: number | null }[];
+  const uniquePcds = new Set<string>();
+  const uniqueDiameters = new Set<number>();
+  const uniqueWidths = new Set<string>();
+  const uniqueOffsets = new Set<number>();
+  for (const wf of wheelData) {
+    if (wf.pcd) uniquePcds.add(wf.pcd);
+    if (wf.diameter != null) uniqueDiameters.add(wf.diameter);
+    if (wf.width != null) uniqueWidths.add(String(wf.width));
+    if (wf.offset_min != null) uniqueOffsets.add(wf.offset_min);
+  }
+  const wheelCollectionCount = uniquePcds.size + uniqueDiameters.size + uniqueWidths.size + uniqueOffsets.size;
+
   return {
     plan,
     limits,
@@ -99,6 +120,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     uniqueMakes,
     uniqueMakeModelCount: uniqueMakeModels.length,
     uniqueMakeModelYearCount: uniqueMakeModelYears.length,
+    wheelCollectionCount,
     fitmentCount: fitmentCountResult.count ?? 0,
     loaderError: collectionsResult.error?.message ?? null,
   };
@@ -214,6 +236,7 @@ export default function Collections() {
     uniqueMakes,
     uniqueMakeModelCount,
     uniqueMakeModelYearCount,
+    wheelCollectionCount,
     fitmentCount,
     loaderError,
   } = useLoaderData<typeof loader>();
@@ -286,11 +309,12 @@ export default function Collections() {
 
   // Calculate TOTAL expected collections (all levels combined for the strategy)
   const previewCount =
-    strategy === "make"
+    (strategy === "make"
       ? uniqueMakes.length
       : strategy === "make_model"
         ? uniqueMakes.length + uniqueMakeModelCount
-        : uniqueMakes.length + uniqueMakeModelCount + uniqueMakeModelYearCount;
+        : uniqueMakes.length + uniqueMakeModelCount + uniqueMakeModelYearCount)
+    + wheelCollectionCount;  // Wheel collections are always created regardless of vehicle strategy
 
   return (
     <Page fullWidth title="Collections">

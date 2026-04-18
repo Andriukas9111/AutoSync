@@ -15,7 +15,8 @@
  * ~46K rows total, <10MB RAM -- safe for serverless.
  */
 
-import type { SupabaseClient } from "@supabase/supabase-js"
+// Deno: Supabase client types via esm.sh (same version as process-jobs/index.ts)
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // ── Index Types ──────────────────────────────────────────────
 

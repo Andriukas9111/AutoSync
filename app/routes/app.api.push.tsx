@@ -61,14 +61,19 @@ export async function action({ request }: ActionFunctionArgs) {
     return data({ error: msg }, { status: 409 });
   }
 
-  // Get the total count of pushable products — only products with REAL fitments
-  // Exclude: unmapped (no fitments), no_match (extraction found nothing), flagged (needs review)
+  // Get the total count of pushable products — any product that has real
+  // fitments worth sending to Shopify.
+  //
+  // Includes "flagged" because flagged products now carry make-only fitments
+  // (they're in the review queue but should still ship to Shopify with their
+  // make tag so they appear in make-level collections). Excludes "unmapped"
+  // (not yet extracted) and "no_match" (extraction found no vehicle data).
   const { count: mappedCount } = await db
     .from("products")
     .select("id", { count: "exact", head: true })
     .eq("shop_id", shopId)
     .neq("status", "staged")
-    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"]);
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped", "flagged"]);
 
   // Auto-select bulk push for plans that support it (Growth+)
   // Bulk operations are 10-20x faster for large catalogs

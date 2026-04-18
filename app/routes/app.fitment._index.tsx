@@ -40,6 +40,7 @@ import { CoverageBar } from "../components/CoverageBar";
 import { HowItWorks } from "../components/HowItWorks";
 import { PlanGate } from "../components/PlanGate";
 import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
+import { countFitmentCoverage, getBrandGroupBySlug, formatFitmentStructured } from "../lib/fitment-display";
 import { equalHeightGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
 import { RouteError } from "../components/RouteError";
@@ -64,6 +65,12 @@ interface FitmentRow {
   fuel_type: string | null;
   extraction_method: string | null;
   confidence_score: number | null;
+  // Group-universal fields — when is_group_universal=true the row stands in
+  // for every vehicle in the OEM group (VAG, BMW, Stellantis…) with the given
+  // shared engine. See app/lib/brand-groups.ts + app/lib/fitment-display.ts.
+  is_group_universal?: boolean | null;
+  group_slug?: string | null;
+  group_engine_slug?: string | null;
 }
 
 interface ProductFitmentGroup {
@@ -106,15 +113,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ] = await Promise.all([
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Get recently mapped products (last 20 products that have fitments) — vehicle parts only
+    // Get recently-mapped products (those with at least one real fitment) —
+    // vehicle parts only.
+    //
+    // PRIOR BUG: We filtered with `.not("fitment_status", "eq", "unmapped")`,
+    // which let `no_match` and zero-fitment rows into "Recent Fitment Activity"
+    // — customers saw a stream of "0 fitments · 0 makes · 0 models" items at
+    // the top, which looks broken. The real intent is "products the extraction
+    // actually mapped," which equals `auto_mapped` + `flagged` that also have
+    // at least one fitment row.
     db.from("products")
       .select("id, title, fitment_status, updated_at")
       .eq("shop_id", shopId)
       .neq("status", "staged")
       .neq("product_category", "wheels")
-      .not("fitment_status", "eq", "unmapped")
+      .in("fitment_status", ["auto_mapped", "flagged", "smart_mapped", "manual_mapped", "partial"])
       .order("updated_at", { ascending: false })
-      .limit(100),
+      .limit(200),
     getTenant(shopId),
     // Top makes by fitment count — cap at 50K rows to prevent OOM
     db.from("vehicle_fitments").select("make, model")
@@ -166,7 +181,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const productIds = recentProducts.map((p: any) => p.id);
     const { data: fitments } = await db
       .from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, extraction_method, confidence_score")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, extraction_method, confidence_score, is_group_universal, group_slug, group_engine_slug")
       .eq("shop_id", shopId)
       .in("product_id", productIds);
 
@@ -184,6 +199,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         fuel_type: f.fuel_type,
         extraction_method: f.extraction_method,
         confidence_score: f.confidence_score,
+        is_group_universal: f.is_group_universal,
+        group_slug: f.group_slug,
+        group_engine_slug: f.group_engine_slug,
       });
       fitmentsByProduct.set(f.product_id, list);
     }
@@ -578,8 +596,20 @@ export default function Fitment() {
                   .slice((activityPage - 1) * ACTIVITY_PAGE_SIZE, activityPage * ACTIVITY_PAGE_SIZE)
                   .map((group, idx, arr) => {
                   const isExpanded = expandedProduct === group.product_id;
-                  const uniqueMakes = [...new Set(group.fitments.map((f) => f.make).filter(Boolean))];
-                  const uniqueModels = [...new Set(group.fitments.map((f) => f.model).filter(Boolean))];
+                  // Derive both per-vehicle makes/models AND group-universal
+                  // coverage so the summary line reflects reality. A
+                  // group-universal row expands to "every make in that OEM
+                  // group" for counting purposes (see
+                  // app/lib/fitment-display.ts:countFitmentCoverage).
+                  const coverage = countFitmentCoverage(group.fitments);
+                  const uniqueMakeLabels = [...new Set(
+                    group.fitments.map((f) =>
+                      f.is_group_universal
+                        ? (getBrandGroupBySlug(f.group_slug ?? "")?.displayName ?? "Group")
+                        : (f.make as string | null)
+                    ).filter(Boolean)
+                  )] as string[];
+                  const groupCount = coverage.groupUniversal;
                   const isLast = idx === arr.length - 1;
 
                   return (
@@ -606,17 +636,19 @@ export default function Fitment() {
                                 {STATUS_LABEL[group.fitment_status] ?? group.fitment_status}
                               </Badge>
                               <Text as="span" variant="bodySm" tone="subdued">
-                                {`${group.fitments.length} fitment${group.fitments.length !== 1 ? "s" : ""} · ${uniqueMakes.length} make${uniqueMakes.length !== 1 ? "s" : ""} · ${uniqueModels.length} model${uniqueModels.length !== 1 ? "s" : ""}`}
+                                {groupCount > 0
+                                  ? `${groupCount} group universal · covers ${coverage.makes} make${coverage.makes !== 1 ? "s" : ""}`
+                                  : `${group.fitments.length} fitment${group.fitments.length !== 1 ? "s" : ""} · ${coverage.makes} make${coverage.makes !== 1 ? "s" : ""} · ${coverage.models} model${coverage.models !== 1 ? "s" : ""}`}
                               </Text>
                             </InlineStack>
                           </BlockStack>
                         </div>
                         <InlineStack gap="200" blockAlign="center">
-                          {uniqueMakes.slice(0, 3).map((m) => (
-                            <Badge key={m} tone="info" size="small">{m as string}</Badge>
+                          {uniqueMakeLabels.slice(0, 3).map((m) => (
+                            <Badge key={m} tone={groupCount > 0 ? "success" : "info"} size="small">{m}</Badge>
                           ))}
-                          {uniqueMakes.length > 3 && (
-                            <Badge size="small">{`+${uniqueMakes.length - 3}`}</Badge>
+                          {uniqueMakeLabels.length > 3 && (
+                            <Badge size="small">{`+${uniqueMakeLabels.length - 3}`}</Badge>
                           )}
                           <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
                         </InlineStack>
@@ -647,16 +679,38 @@ export default function Fitment() {
                                     <th key={h} style={{ textAlign: "left", padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
                                   ))}
                                 </tr></thead>
-                                <tbody>{group.fitments.map((f, fi) => (
-                                  <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
-                                    <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
-                                  </tr>
-                                ))}</tbody>
+                                <tbody>{group.fitments.map((f, fi) => {
+                                  const formatted = formatFitmentStructured(f);
+                                  if (f.is_group_universal) {
+                                    // Group-universal row spans the whole
+                                    // Make/Model/Years/Engine row with a
+                                    // group-aware label instead of nulls.
+                                    return (
+                                      <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                        <td colSpan={5} style={{ padding: "var(--p-space-100) var(--p-space-200)" }}>
+                                          <InlineStack gap="200" blockAlign="center" wrap>
+                                            <Badge tone="success" size="small">{`Group: ${formatted.primary}`}</Badge>
+                                            {formatted.secondary && <Text as="span" variant="bodySm" fontWeight="semibold">{formatted.secondary}</Text>}
+                                            {formatted.coverage && (
+                                              <Text as="span" variant="bodySm" tone="subdued">{`fits ${formatted.coverage}`}</Text>
+                                            )}
+                                          </InlineStack>
+                                        </td>
+                                        <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">Universal</Text></td>
+                                      </tr>
+                                    );
+                                  }
+                                  return (
+                                    <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
+                                    </tr>
+                                  );
+                                })}</tbody>
                               </table>
                             </div>
                           </BlockStack>

@@ -5,10 +5,68 @@ import { lookupVehicleByReg, VesError } from "../lib/dvla/ves-client.server";
 import { getMotHistory, MotError } from "../lib/dvla/mot-client.server";
 import { decodeVin, VinDecodeError } from "../lib/dvla/vin-decode.server";
 import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
+import { getBrandGroupForMake, detectGroupEngine } from "../lib/brand-groups";
 
-// ── Rate Limiting (in-memory, per Vercel instance) ──────────────────────
-// Limits per shop per endpoint per minute. Resets on cold starts.
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+/**
+ * Find products that fit a vehicle via a GROUP-UNIVERSAL fitment row.
+ *
+ * Universal-in-group parts (e.g., a VAG 2.0 TSI blow-off valve) are stored
+ * as ONE fitment row with `is_group_universal=true`, no specific make/model/
+ * engine. That row stands in for every vehicle in the group with that engine
+ * family. The YMME widget queries by a specific `ymme_engine_id`, so without
+ * this resolver those universal products would be invisible to customers
+ * searching for their specific vehicle.
+ *
+ * Resolution:
+ *   1. Look up the vehicle engine's make, then its brand group (VAG, BMW, …).
+ *   2. Detect an engine family slug from the YMME engine name (2.0 TSI, N55 …).
+ *   3. Query `vehicle_fitments` for group-universal rows matching that group
+ *      and (if we found a family) that family slug. Rows with NULL family
+ *      slug also match so the merchant can set up "all VAG parts" collections
+ *      that don't specify an engine.
+ */
+async function findGroupUniversalProductIds(
+  shopId: string,
+  engineId: string,
+): Promise<string[]> {
+  const { data: engine } = await db
+    .from("ymme_engines")
+    .select("name, ymme_models!inner(ymme_makes!inner(name))")
+    .eq("id", engineId)
+    .maybeSingle();
+  const makeName = (engine as unknown as { ymme_models?: { ymme_makes?: { name?: string } } })?.ymme_models?.ymme_makes?.name;
+  if (!makeName) return [];
+  const group = getBrandGroupForMake(makeName);
+  if (!group) return [];
+  const engineName = (engine as unknown as { name?: string })?.name ?? "";
+  const family = detectGroupEngine(group, engineName);
+
+  let query = db.from("vehicle_fitments")
+    .select("product_id")
+    .eq("shop_id", shopId)
+    .eq("is_group_universal", true)
+    .eq("group_slug", group.slug);
+  // If we detected a family, include both family-specific AND family-agnostic
+  // group fitments. If we couldn't detect a family, return all group fitments
+  // for this group — the merchant's own configuration decides whether to
+  // surface generic vs engine-specific parts.
+  if (family) {
+    query = query.or(`group_engine_slug.eq.${family.slug},group_engine_slug.is.null`);
+  }
+  const { data } = await query.limit(200);
+  return [...new Set((data ?? []).map((f: { product_id: string }) => f.product_id))];
+}
+
+// ── Rate Limiting (DB-backed via increment_rate_limit RPC) ────────────
+// Per-shop per-endpoint counters persisted in the `rate_limits` table so
+// they survive Vercel cold starts and horizontal scaling. An in-memory
+// Map would reset per serverless instance, letting a merchant bypass
+// limits by triggering a cold start or hitting a different Vercel node.
+//
+// The RPC performs an atomic INSERT ... ON CONFLICT increment and returns
+// the new post-increment count. We compare that against RATE_LIMITS[endpoint]
+// to decide allow/deny. A short in-memory cache (1.5s) in front of the RPC
+// keeps traffic in hot-paths from hitting Supabase on every request.
 const RATE_LIMITS: Record<string, number> = {
   "plate-lookup": 30,    // 30 lookups/min per shop (DVLA costs money)
   "vin-decode": 20,      // 20 VIN decodes/min per shop
@@ -18,32 +76,42 @@ const RATE_LIMITS: Record<string, number> = {
   "default": 100,        // fallback
 };
 
-let lastCleanup = Date.now();
+// 1.5s hot-path cache to avoid hammering Supabase from high-frequency endpoints
+// (e.g. fitment-check fires on every product page view). If cached count is
+// already over limit, we can fast-fail without an RPC round-trip.
+const rateLimitCache = new Map<string, { count: number; fetchedAt: number }>();
+const RATE_CACHE_TTL_MS = 1500;
 
-function checkRateLimit(shop: string, endpoint: string): boolean {
-  const key = `${shop}:${endpoint}`;
+async function checkRateLimit(shop: string, endpoint: string): Promise<boolean> {
   const limit = RATE_LIMITS[endpoint] ?? RATE_LIMITS.default;
+  const cacheKey = `${shop}:${endpoint}`;
   const now = Date.now();
+  const cached = rateLimitCache.get(cacheKey);
 
-  // Lazy cleanup: purge stale entries every 5 minutes instead of setInterval
-  // (setInterval keeps the process alive on serverless runtimes)
-  if (now - lastCleanup > 5 * 60_000) {
-    lastCleanup = now;
-    for (const [k, val] of rateLimitMap) {
-      if (now > val.resetAt) rateLimitMap.delete(k);
-    }
+  // Fast-fail if we recently saw a count over limit (already throttled this window).
+  if (cached && now - cached.fetchedAt < RATE_CACHE_TTL_MS && cached.count >= limit) {
+    return false;
   }
 
-  const entry = rateLimitMap.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + 60_000 });
+  try {
+    const { data, error } = await db.rpc("increment_rate_limit", {
+      p_shop_id: shop,
+      p_endpoint: endpoint,
+      p_window_s: 60,
+    });
+    if (error) {
+      // Fail OPEN on DB errors — don't take down the storefront if Supabase
+      // is briefly unreachable. Log so we know when this happens.
+      console.warn(`[rate-limit] RPC error for ${shop}:${endpoint} — failing open:`, error.message);
+      return true;
+    }
+    const count = typeof data === "number" ? data : 1;
+    rateLimitCache.set(cacheKey, { count, fetchedAt: now });
+    return count <= limit;
+  } catch (err) {
+    console.warn(`[rate-limit] exception for ${shop}:${endpoint} — failing open:`, err instanceof Error ? err.message : err);
     return true;
   }
-
-  if (entry.count >= limit) return false;
-  entry.count++;
-  return true;
 }
 
 // ---------- CORS helpers ----------
@@ -1607,14 +1675,25 @@ async function handleVehicleSpecs(params: URLSearchParams, request?: Request) {
   // Fetch linked products if shop provided
   let products: Array<{ title: string; handle: string; price: string | null; imageUrl: string | null }> = [];
   if (shop) {
+    // Specific per-vehicle fitments (engine-id matched)
     const { data: fitments } = await db
       .from("vehicle_fitments")
       .select("product_id")
       .eq("shop_id", shop)
       .eq("ymme_engine_id", engineId);
+    // PLUS group-universal fitments (brand-group + engine-family matched).
+    // Without this, a VAG 2.0 TSI blow-off valve stored as ONE group row
+    // would be invisible to a customer searching their specific Audi A3.
+    const groupIds = await findGroupUniversalProductIds(shop, engineId);
 
-    if (fitments && fitments.length > 0) {
-      const productIds = [...new Set(fitments.map((f: { product_id: string }) => f.product_id))];
+    const productIds = [
+      ...new Set([
+        ...((fitments ?? []).map((f: { product_id: string }) => f.product_id)),
+        ...groupIds,
+      ]),
+    ];
+
+    if (productIds.length > 0) {
       const { data: prods } = await db
         .from("products")
         .select("title, handle, price, image_url")
@@ -1917,7 +1996,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     : path.includes("wheel") ? "wheel-search"
     : path.includes("fitment") || path.includes("badge") ? "fitment-check"
     : "search";
-  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+  if (!(await checkRateLimit(shop, rateLimitEndpoint))) {
     // Previously passed { status, headers } as the 2nd arg, but json()
     // signature is json(body, statusNumber, request). The object coerced
     // to NaN, so rate-limited requests returned 200 OK instead of 429.
@@ -2025,7 +2104,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const rateLimitEndpoint = path === "plate-lookup" ? "plate-lookup"
     : path === "vin-decode" ? "vin-decode"
     : "track";
-  if (!checkRateLimit(shop, rateLimitEndpoint)) {
+  if (!(await checkRateLimit(shop, rateLimitEndpoint))) {
     // Previously passed { status, headers } as the 2nd arg, but json()
     // signature is json(body, statusNumber, request). The object coerced
     // to NaN, so rate-limited requests returned 200 OK instead of 429.

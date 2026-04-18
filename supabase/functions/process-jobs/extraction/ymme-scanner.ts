@@ -16,7 +16,7 @@ import type {
   YmmeIndexMake,
   YmmeIndexModel,
   YmmeIndexEngine,
-} from "./ymme-index"
+} from "./ymme-index.ts"
 
 // ── Trim-aware Regex Builder ─────────────────────────────────
 //

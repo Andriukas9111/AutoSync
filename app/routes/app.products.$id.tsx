@@ -48,6 +48,7 @@ import { assertFitmentLimit, BillingGateError } from "../lib/billing.server";
 import type { FitmentStatus, PlanTier, PlanLimits } from "../lib/types";
 import { RouteError } from "../components/RouteError";
 import { formatPrice } from "../lib/types";
+import { formatFitmentStructured } from "../lib/fitment-display";
 import { PLAN_NAMES, LimitGate } from "../components/PlanGate";
 import { VehicleSelector } from "../components/VehicleSelector";
 import type { VehicleSelection } from "../components/VehicleSelector";
@@ -90,8 +91,8 @@ interface Fitment {
   id: string;
   product_id: string;
   shop_id: string;
-  make: string;
-  model: string;
+  make: string | null;   // nullable for group-universal rows
+  model: string | null;  // nullable for group-universal rows
   variant: string | null;
   year_from: number | null;
   year_to: number | null;
@@ -109,6 +110,12 @@ interface Fitment {
   cylinders?: number | null;
   cylinder_config?: string | null;
   aspiration?: string | null;
+  // Group-universal: when true, this row replaces ~100 per-vehicle rows
+  // that would otherwise exist for every vehicle in the OEM group with
+  // that engine. See app/lib/brand-groups.ts + app/lib/fitment-display.ts.
+  is_group_universal?: boolean | null;
+  group_slug?: string | null;
+  group_engine_slug?: string | null;
 }
 
 interface WheelFitment {
@@ -1333,28 +1340,68 @@ export default function ProductDetails() {
                         ? `${fitment.year_from}–${fitment.year_to}`
                         : fitment.year_from ? `${fitment.year_from}+` : "All years";
 
+                      // Group-universal rows have null make/model/engine — we
+                      // show a "Group: VAG · 2.0 TSI · fits Audi, VW, Seat…"
+                      // banner instead of the usual per-vehicle row so
+                      // merchants see the feature working (no more blank "-"
+                      // columns that looked like bugs).
+                      const groupFmt = fitment.is_group_universal
+                        ? formatFitmentStructured({
+                            make: fitment.make, model: fitment.model,
+                            year_from: fitment.year_from, year_to: fitment.year_to,
+                            engine: fitment.engine, engine_code: fitment.engine_code,
+                            extraction_method: fitment.extraction_method,
+                            confidence_score: fitment.confidence_score,
+                            is_group_universal: fitment.is_group_universal,
+                            group_slug: fitment.group_slug,
+                            group_engine_slug: fitment.group_engine_slug,
+                          })
+                        : null;
+
                       return (
                         <ResourceItem
                           id={fitment.id}
                           onClick={() => {}}
-                          accessibilityLabel={`${fitment.make} ${fitment.model}`}
+                          accessibilityLabel={groupFmt ? groupFmt.primary : `${fitment.make} ${fitment.model}`}
                         >
                           <InlineStack gap="400" align="space-between" blockAlign="center" wrap>
                             <BlockStack gap="100">
-                              <InlineStack gap="200" blockAlign="center">
-                                <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                  {fitment.make} {fitment.model}
-                                </Text>
-                                {fitment.variant && <Badge>{fitment.variant}</Badge>}
+                              <InlineStack gap="200" blockAlign="center" wrap>
+                                {groupFmt ? (
+                                  <>
+                                    <Badge tone="success">{`Group: ${groupFmt.primary}`}</Badge>
+                                    {groupFmt.secondary && (
+                                      <Text as="span" variant="bodyMd" fontWeight="semibold">{groupFmt.secondary}</Text>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <Text as="span" variant="bodyMd" fontWeight="semibold">
+                                      {fitment.make} {fitment.model}
+                                    </Text>
+                                    {fitment.variant && <Badge>{fitment.variant}</Badge>}
+                                  </>
+                                )}
                               </InlineStack>
                               <InlineStack gap="300" wrap>
-                                <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>
-                                {(() => {
-                                  const engineText = formatFitmentEngine(fitment);
-                                  return engineText ? (
-                                    <Text as="span" variant="bodySm" tone="subdued">{engineText}</Text>
-                                  ) : null;
-                                })()}
+                                {groupFmt ? (
+                                  // Group-universal: show the covered-makes
+                                  // list instead of an irrelevant year range.
+                                  // e.g. "fits Audi, VW, Seat, Skoda, Cupra".
+                                  groupFmt.coverage ? (
+                                    <Text as="span" variant="bodySm" tone="subdued">{`fits ${groupFmt.coverage}`}</Text>
+                                  ) : null
+                                ) : (
+                                  <>
+                                    <Text as="span" variant="bodySm" tone="subdued">{yearRange}</Text>
+                                    {(() => {
+                                      const engineText = formatFitmentEngine(fitment);
+                                      return engineText ? (
+                                        <Text as="span" variant="bodySm" tone="subdued">{engineText}</Text>
+                                      ) : null;
+                                    })()}
+                                  </>
+                                )}
                                 {fitment.fuel_type && <Badge tone="info">{fitment.fuel_type}</Badge>}
                                 {fitment.extraction_method && (
                                   <Badge tone={

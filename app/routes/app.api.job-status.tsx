@@ -82,7 +82,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     noMatch: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match").neq("product_category", "wheels"),
     pushed: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null).neq("product_category", "wheels"),
     // Products that need pushing: mapped but never synced to Shopify
-    needsPush: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"]).is("synced_at", null).neq("product_category", "wheels"),
+    // needsPush includes "flagged" because flagged products now have make-only
+    // fitments that need to land in Shopify so they appear in make collections.
+    // Mirrors the push query in supabase/functions/process-jobs/index.ts:processPushChunk.
+    needsPush: db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped", "flagged"]).is("synced_at", null).neq("product_category", "wheels"),
     // Note: "stale push" (updated_at > synced_at) can't be done with PostgREST column comparison
     // We'll compute it from needsPush count instead
   };
@@ -118,6 +121,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // RPC: returns {auto_mapped, smart_mapped, manual_mapped, mapped_total, stale_push} in ONE query
     // Replaces 4 heavy queries (3 full-row fetches + 1 10K-row stale push check)
     pushStatsRes,
+    groupUniversalFitmentsRes,
+    groupCollectionsRes,
     // Fitment-page live panels (also cheap enough to include in every poll):
     //   - Top Makes by Fitment count (server-side GROUP BY via RPC, not 50k rows)
     //   - Recent Fitment Activity (10 latest mapped products + their fitments)
@@ -153,6 +158,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
     db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "no_match"),
     // Efficient RPC: COUNT(DISTINCT) + column comparison done in SQL, returns 5 numbers
     db.rpc("get_push_stats", { p_shop_id: shopId }),
+    // Group-universal stats — counts of universal parts + distinct group/engine combos.
+    // Powers dashboard card + fitment page "Group Universal" summary.
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("is_group_universal", true),
+    db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("type", "group_engine"),
     // Server-side GROUP BY — returns at most 10 rows regardless of tenant size
     db.rpc("get_top_makes", { p_shop_id: shopId, p_limit: 10 }),
     // Server-side latest-N + fitment aggregation — returns at most 10 rows
@@ -255,6 +264,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
       activeMakes: activeMakesRes.count ?? 0,
       uniqueMakes: activeMakesRes.count ?? 0,
       uniqueModels: modelCollectionRes.count ?? 0,
+      // Universal part stats — drives dashboard + fitment page visibility of
+      // the group-universal feature (VAG 2.0 TSI parts, BMW N55 parts, etc.).
+      // groupUniversalFitments: count of product rows stored as one group fitment
+      //   (each row replaces ~100 per-vehicle fitments that would otherwise exist).
+      // groupCollections: count of group-engine smart collections on Shopify
+      //   ("VAG 2.0 TSI Parts", "BMW N55 Parts", etc.).
+      groupUniversalFitments: groupUniversalFitmentsRes.count ?? 0,
+      groupCollections: groupCollectionsRes.count ?? 0,
       // YMME database (cached)
       ymmeMakes: ymme.makes,
       ymmeModels: ymme.models,

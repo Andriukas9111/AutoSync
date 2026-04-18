@@ -355,14 +355,18 @@ Deno.serve(async (req) => {
 
     if (products.length > 0) {
       // 1. Get ALL existing products for this PROVIDER (not just shop — prevents cross-provider confusion)
-      //    Also fetch handle as secondary dedup key when SKU is missing
+      //    Also fetch handle + title as secondary/tertiary dedup keys when
+      //    SKU is missing. Title fallback (lowercased+trimmed) is the last
+      //    line of defense so providers that occasionally emit products
+      //    without a SKU don't create duplicates on every re-fetch.
       const existingMap = new Map<string, { id: string; sku: string | null; handle: string | null }>(); // sku → product
       const existingHandleMap = new Map<string, string>(); // handle → id
+      const existingTitleMap = new Map<string, string>(); // lowercased title → id
       let offset = 0;
       while (true) {
         const { data: batch } = await db
           .from("products")
-          .select("id, sku, handle")
+          .select("id, sku, handle, title")
           .eq("shop_id", shop_id)
           .eq("provider_id", provider_id)
           .range(offset, offset + 999);
@@ -370,6 +374,7 @@ Deno.serve(async (req) => {
         for (const p of batch) {
           if (p.sku) existingMap.set(p.sku, p);
           if (p.handle) existingHandleMap.set(p.handle, p.id);
+          if (p.title) existingTitleMap.set(p.title.toLowerCase().trim(), p.id);
         }
         offset += batch.length;
         if (batch.length < 1000) break;
@@ -400,14 +405,25 @@ Deno.serve(async (req) => {
         // Skip products with no SKU AND no title (garbage data)
         if (!product.sku && !product.title) { skippedCount++; continue; }
 
-        // Intra-batch dedup — if same SKU already processed in this batch, skip
-        if (product.sku && seenInBatch.has(product.sku)) { skippedCount++; continue; }
-        if (product.sku) seenInBatch.add(product.sku);
+        // Intra-batch dedup — dedup by SKU when present, fall back to title.
+        // Previously we only deduped by SKU, so products with null SKU (which
+        // exist in the Forge feed — some items lack a `code` field) were
+        // re-inserted on every page/retry, producing thousands of duplicate
+        // rows for the same product. Using title as the last-resort key keeps
+        // a single canonical row per product regardless of SKU availability.
+        const dedupKey = product.sku || product.title;
+        if (dedupKey && seenInBatch.has(dedupKey)) { skippedCount++; continue; }
+        if (dedupKey) seenInBatch.add(dedupKey);
 
-        // Find existing product — by SKU (primary) or handle (fallback for SKU-less products)
+        // Find existing product — by SKU (primary), handle (secondary), or
+        // title (fallback for SKU-less providers). Title lookup is case-
+        // insensitive and scoped per shop + provider.
         const existing = product.sku ? existingMap.get(product.sku) : null;
         const existingByHandle = !existing && product.handle ? existingHandleMap.get(product.handle) : null;
-        const existingId = existing?.id || existingByHandle || null;
+        const existingByTitle = (!existing && !existingByHandle && product.title)
+          ? existingTitleMap.get(product.title.toLowerCase().trim())
+          : null;
+        const existingId = existing?.id || existingByHandle || existingByTitle || null;
 
         if (existingId) {
           if (duplicate_strategy === "skip") {

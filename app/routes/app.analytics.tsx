@@ -152,6 +152,15 @@ interface AnalyticsData {
   topPlateMakes: Array<{ make: string; count: number }>;
   searchCount: number;
   demandGaps: Array<{ make: string; model: string; searches: number }>;
+  // Shopify platform limits tracker — shows how close the store is to
+  // caps like 5,000 collections, 250 tags/product, etc.
+  shopifyLimits: {
+    collections: { used: number; limit: number; label: string; description: string };
+    tagsPerProduct: { used: number; limit: number; label: string; description: string };
+    products: { used: number; limit: number; label: string; description: string };
+    vehiclePages: { used: number; limit: number; label: string; description: string };
+    metaobjectDefs: { used: number; limit: number; label: string; description: string };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +203,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       topPlateMakes: [],
       searchCount: 0,
       demandGaps: [],
+      shopifyLimits: {
+        collections: { used: 0, limit: 5000, label: "Smart Collections", description: "" },
+        tagsPerProduct: { used: 0, limit: 250, label: "Tags per Product", description: "" },
+        products: { used: 0, limit: 2000000, label: "Products", description: "" },
+        vehiclePages: { used: 0, limit: 10000000, label: "Vehicle Spec Pages", description: "" },
+        metaobjectDefs: { used: 0, limit: 1000, label: "Metaobject Definitions", description: "" },
+      },
     } satisfies AnalyticsData & { gated: boolean };
   }
 
@@ -221,6 +237,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       topPlateMakes: [],
       searchCount: 0,
       demandGaps: [],
+      shopifyLimits: {
+        collections: { used: 0, limit: 5000, label: "Smart Collections", description: "" },
+        tagsPerProduct: { used: 0, limit: 250, label: "Tags per Product", description: "" },
+        products: { used: 0, limit: 2000000, label: "Products", description: "" },
+        vehiclePages: { used: 0, limit: 10000000, label: "Vehicle Spec Pages", description: "" },
+        metaobjectDefs: { used: 0, limit: 1000, label: "Metaobject Definitions", description: "" },
+      },
     } satisfies AnalyticsData;
   }
 
@@ -295,6 +318,146 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(5000),
   ]);
 
+  // ── Shopify Platform Limits tracker ─────────────────────────
+  // Show merchants how close they are to Shopify-imposed caps so they can
+  // upgrade the store plan (Plus/Enterprise raise these) or prune data
+  // before creates silently start failing. Collections is the most common
+  // wall because we create make/make_model/year combinations.
+  const [
+    collectionsCountRes,
+    productsCountRes,
+    vehiclePagesCountRes,
+    metaobjectDefsCountRes,
+  ] = await Promise.all([
+    db.from("collection_mappings").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).not("shopify_collection_id", "is", null),
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged"),
+    db.from("vehicle_page_sync").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("sync_status", "synced"),
+    // Metaobject definitions are 1 for vehicle-spec (shared by all vehicle_pages)
+    // so we count them as a constant.
+    Promise.resolve({ count: 1 }),
+  ]);
+
+  // Product with MOST PROJECTED TAGS — ranks tag usage against Shopify's 250 cap.
+  //
+  // AutoSync pushes auto-generated tags when products sync to Shopify:
+  //   _autosync_{Make}, _autosync_{Make_Model}, _autosync_{Make_Model_Year} for each year in range.
+  // PLUS any base tags the merchant/provider already set on the product.
+  //
+  // A product with many fitments (e.g., a universal VAG engine part that fits 6 makes, 40 models,
+  // across 20 years) can silently exceed Shopify's 250 tags/product cap — Shopify will reject the
+  // push. Merchants need to know WHICH products are hitting the cap so they can prune fitments
+  // or split the product. That's why we show the peak product with its projected tag total.
+  //
+  // We compute this via a single JOIN query (base tags + distinct make/model tags + year range
+  // totals) instead of fetching rows and iterating in JS — the JS approach capped at limit(50)
+  // and missed the real peak products which have the most fitments.
+  const { data: topTagProducts } = await db.rpc("get_top_tag_products", {
+    p_shop_id: shopId,
+    p_limit: 5,
+  }).select();
+
+  // Fallback: if RPC doesn't exist yet, compute manually via SQL-ish approach on client.
+  // We ask Supabase for top-10 products by fitment count, then compute projected tags.
+  let maxTagsProduct: { title: string; tagCount: number; handle: string } | null = null;
+  if (topTagProducts && Array.isArray(topTagProducts) && topTagProducts.length > 0) {
+    const top = topTagProducts[0] as { title: string; handle: string; total_tags: number };
+    maxTagsProduct = { title: top.title, tagCount: top.total_tags, handle: top.handle };
+  } else {
+    // RPC not deployed — fall back to a direct SQL-ish computation.
+    // Fetch top 200 products with most fitments (those are most likely candidates for tag peak)
+    // then compute projected tag count per product.
+    const { data: fitmentAgg } = await db
+      .from("vehicle_fitments")
+      .select("product_id, make, model, year_from, year_to")
+      .eq("shop_id", shopId)
+      .limit(50000);
+
+    // Build per-product stats in memory: distinct makes, distinct (make,model), year-range total
+    const perProduct: Record<string, { makes: Set<string>; models: Set<string>; years: number }> = {};
+    for (const f of fitmentAgg ?? []) {
+      const rec = f as { product_id: string; make: string | null; model: string | null; year_from: number | null; year_to: number | null };
+      if (!perProduct[rec.product_id]) {
+        perProduct[rec.product_id] = { makes: new Set(), models: new Set(), years: 0 };
+      }
+      if (rec.make) perProduct[rec.product_id].makes.add(rec.make);
+      if (rec.make && rec.model) perProduct[rec.product_id].models.add(`${rec.make}|${rec.model}`);
+      if (rec.year_from && rec.year_to) perProduct[rec.product_id].years += (rec.year_to - rec.year_from + 1);
+      else if (rec.year_from) perProduct[rec.product_id].years += 1;
+    }
+
+    // Find the top-5 product_ids by projected tag count
+    const scored = Object.entries(perProduct)
+      .map(([pid, s]) => ({ pid, tagCount: s.makes.size + s.models.size + s.years }))
+      .sort((a, b) => b.tagCount - a.tagCount)
+      .slice(0, 5);
+
+    if (scored.length > 0) {
+      // Fetch titles/handles for those IDs — plus base tag count
+      const topIds = scored.map((s) => s.pid);
+      const { data: productRows } = await db
+        .from("products")
+        .select("id, title, handle, tags")
+        .in("id", topIds);
+
+      // Merge: base_tags + projected from fitments → find the true peak.
+      const enriched = scored.map((s) => {
+        const pr = (productRows ?? []).find((p) => String(p.id) === s.pid) as
+          | { title: string; handle: string; tags: unknown }
+          | undefined;
+        const baseTags = Array.isArray(pr?.tags) ? pr!.tags.length : 0;
+        return {
+          title: pr?.title ?? "Unknown",
+          handle: pr?.handle ?? "",
+          tagCount: s.tagCount + baseTags,
+        };
+      }).sort((a, b) => b.tagCount - a.tagCount);
+
+      maxTagsProduct = enriched[0] ?? null;
+    }
+  }
+
+  // Shopify limits. These are public Shopify API limits as of 2026.
+  // Plus/Enterprise stores get higher caps; we assume standard cap so the
+  // warning is pessimistic and safe. If merchant is on Plus, they'll see
+  // "cap reached" later than they actually would.
+  const shopifyLimits = {
+    collections: {
+      used: collectionsCountRes.count ?? 0,
+      limit: 5000,          // Standard store max
+      label: "Smart Collections",
+      description: "Shopify caps stores at 5,000 collections. Plus/Enterprise raises this to 50,000.",
+    },
+    tagsPerProduct: {
+      used: maxTagsProduct?.tagCount ?? 0,
+      limit: 250,
+      label: maxTagsProduct
+        ? `Projected Tags on "${maxTagsProduct.title.length > 48 ? maxTagsProduct.title.slice(0, 48) + "…" : maxTagsProduct.title}"`
+        : "Projected Tags per Product",
+      description: "Shopify caps each product at 250 tags. AutoSync pushes _autosync_{Make}, _autosync_{Make_Model}, _autosync_{Make_Model_Year} tags based on fitments — plus your base tags. Products with many fitments (universal parts spanning multiple makes/years) can silently exceed 250 and fail to push. The product shown has the highest projected tag count in your catalog.",
+    },
+    products: {
+      used: productsCountRes.count ?? 0,
+      limit: 2_000_000,     // Standard Shopify cap; Plus is unlimited
+      label: "Products",
+      description: "Standard Shopify plans cap at 2M products per store.",
+    },
+    vehiclePages: {
+      used: vehiclePagesCountRes.count ?? 0,
+      limit: 10_000_000,    // Metaobject entries per type — very high
+      label: "Vehicle Spec Pages",
+      description: "Metaobjects per type: 10M. Essentially unlimited for automotive use.",
+    },
+    metaobjectDefs: {
+      used: (metaobjectDefsCountRes.count ?? 0),
+      limit: 1000,
+      label: "Metaobject Definitions",
+      description: "Max 1,000 metaobject definitions per store.",
+    },
+  };
+
   // ── Plate lookup analytics ──────────────────────────────────
   const [plateLookupRes, plateLookupCountRes] = await Promise.all([
     db.from("plate_lookups")
@@ -367,11 +530,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 15);
 
   // ── Popular models (by fitment count) ──────────────────────
+  //
+  // IMPORTANT: We return ALL models across ALL makes in `popularMakes` (not a global top-15).
+  // The drilldown in Fitment Coverage by Make filters popularModels by make on the client,
+  // so if we only returned the top-15 global models, makes like Renault (whose top model
+  // Megane has 72 fitments, losing to the Big 3 German makes) would show "0 models" in the
+  // drilldown even though the make has dozens of models with fitments. That was the bug.
+  //
+  // To keep payload small we:
+  //   - Include all models for each make in the top-15 makes list (popularMakes)
+  //   - Skip all other makes
+  // For a typical store this is ~15 makes × ~30 models = ~450 rows. Fits well in payload.
+  const topMakeSet = new Set<string>();
+  // We need to know which makes are in popularMakes; compute that first.
+  const interimPopularMakes = Object.entries(makeFitmentCounts)
+    .map(([make, data]) => ({ make, fitmentCount: data.fitments, productCount: data.products.size }))
+    .sort((a, b) => b.fitmentCount - a.fitmentCount)
+    .slice(0, 15);
+  for (const m of interimPopularMakes) topMakeSet.add(m.make);
+
   const modelFitmentCounts: Record<string, number> = {};
   const modelMakes: Record<string, string> = {};
   for (const f of fitmentsByModelRes.data ?? []) {
     const rec = f as { make: string; model: string };
-    if (!rec.model) continue;
+    if (!rec.model || !rec.make) continue;
+    // Only track models for the top 15 makes — keeps payload small while giving the drilldown full detail.
+    if (!topMakeSet.has(rec.make)) continue;
     const key = `${rec.make}|||${rec.model}`;
     modelFitmentCounts[key] = (modelFitmentCounts[key] ?? 0) + 1;
     modelMakes[key] = rec.make;
@@ -381,8 +565,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const [make, model] = key.split("|||");
       return { make, model, fitmentCount };
     })
-    .sort((a, b) => b.fitmentCount - a.fitmentCount)
-    .slice(0, 15);
+    .sort((a, b) => b.fitmentCount - a.fitmentCount);
 
   // ── Provider metrics ───────────────────────────────────────
   const providerMetrics: ProviderMetric[] = (providersRes.data ?? []).map(
@@ -547,6 +730,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topPlateMakes,
     searchCount: (searchEventsRes.data ?? []).length,
     demandGaps,
+    shopifyLimits,
   } satisfies AnalyticsData;
 };
 
@@ -584,6 +768,7 @@ export default function AnalyticsPage() {
     conversionBySource,
     conversionByVehicle,
     providerMetrics,
+    shopifyLimits,
   } = loaderData;
   const gated = "gated" in loaderData && (loaderData as Record<string, unknown>).gated === true;
 
@@ -654,6 +839,61 @@ export default function AnalyticsPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+          </Layout.Section>
+
+          {/* ── Shopify Platform Limits ────────────────────── */}
+          {/* Shows how close this store is to Shopify caps (5K collections, */}
+          {/* 250 tags/product, etc.) so merchants can upgrade store plan or */}
+          {/* prune data before Shopify silently starts rejecting creates. */}
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Shopify Platform Limits</Text>
+                  </InlineStack>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Live usage vs Shopify-imposed caps
+                  </Text>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Shopify enforces hard caps on collections, tags, and metafields per store. When you hit them, new creates silently fail. Monitor these numbers so you can upgrade to Shopify Plus or prune unused data before they block AutoSync.
+                </Text>
+                <BlockStack gap="300">
+                  {[
+                    shopifyLimits.collections,
+                    shopifyLimits.tagsPerProduct,
+                    shopifyLimits.products,
+                    shopifyLimits.vehiclePages,
+                    shopifyLimits.metaobjectDefs,
+                  ].map((limit) => {
+                    const pct = Math.min(100, Math.round((limit.used / limit.limit) * 100));
+                    const tone: "success" | "warning" | "critical" =
+                      pct >= 90 ? "critical" : pct >= 75 ? "warning" : "success";
+                    return (
+                      <Card key={limit.label} padding="400" background="bg-surface-secondary">
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="p" variant="bodyMd" fontWeight="medium">{limit.label}</Text>
+                              <Badge tone={tone}>{`${pct}% used`}</Badge>
+                            </InlineStack>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                              {`${limit.used.toLocaleString()} / ${limit.limit.toLocaleString()}`}
+                            </Text>
+                          </InlineStack>
+                          <ProgressBar progress={pct} tone={tone === "success" ? undefined : tone === "warning" ? "highlight" : "critical"} size="small" />
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {limit.description}
+                          </Text>
+                        </BlockStack>
+                      </Card>
+                    );
+                  })}
+                </BlockStack>
+              </BlockStack>
             </Card>
           </Layout.Section>
 

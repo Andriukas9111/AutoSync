@@ -58,7 +58,7 @@ import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
 import { FilterBar } from "../components/FilterBar";
 
 export function ErrorBoundary() {
-  return <RouteError />;
+  return <RouteError pageName="Wheels" />;
 }
 
 // ---------------------------------------------------------------------------

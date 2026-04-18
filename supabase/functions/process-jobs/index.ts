@@ -13,6 +13,8 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { runExtractChunk } from "./extract-chunk.ts";
+import { getBrandGroupBySlug } from "./brand-groups.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -305,13 +307,21 @@ async function processProviderAutoFetch(
       return { processed: 0, hasMore: false, error: `Import Edge Function failed (${importResponse.status}): ${text.slice(0, 200)}` };
     }
 
-    // Update next_scheduled_fetch for this provider
+    // Update next_scheduled_fetch + last_fetch_at for this provider.
+    //
+    // IMPORTANT: writes `last_fetch_at` (the column the UI reads) NOT
+    // `last_fetched_at`. Both columns exist in the schema for historical
+    // reasons; previous versions updated `last_fetched_at` which left the
+    // Import Settings "Last Import" display stuck at the manual import
+    // time — users thought auto-fetch wasn't working.
     const fetchSchedule = provider.fetch_schedule || schedule || "24h";
     const hours = parseInt(fetchSchedule) || 24;
     const nextFetch = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
     await db.from("providers").update({
       next_scheduled_fetch: nextFetch,
-      last_fetched_at: new Date().toISOString(),
+      last_fetch_at: nowIso,
+      last_fetched_at: nowIso, // keep both in sync for any legacy readers
     }).eq("id", providerId).eq("shop_id", job.shop_id as string);
 
     console.log(`[auto-fetch] Triggered import for provider ${provider.name}, next fetch: ${nextFetch}`);
@@ -911,8 +921,26 @@ async function processJobInBackground(targetJobId: string | null): Promise<void>
         // metafields, mark synced_at, self-chain.
         result = await processPushChunk(db, job);
         break;
+      case "collections_backfill_seo":
+        // Backfills SEO title/description + descriptionHtml + make logo image
+        // onto existing collections that were created without them (e.g. by
+        // direct pg_net SQL creates or an earlier buggy version of the
+        // recovery handler). Uses collectionUpdate mutation; self-chains
+        // until every row in collection_mappings has SEO populated.
+        result = await processCollectionsBackfillSeo(db, job);
+        break;
       case "collections":
-        result = await processCollectionsChunk(db, job);
+      case "collections_recovery":
+        // BOTH types now use the fast recovery pipeline: parallel batched
+        // creates with no per-candidate Shopify existence check. The legacy
+        // processCollectionsChunk was burning the 120s chunk budget on
+        // sequential shopifyCollectionExists calls (one GraphQL round-trip
+        // per candidate), so on stores with hundreds of missing collections
+        // the chunk would timeout having created zero new entries. The new
+        // handler relies on Shopify handle-uniqueness for dedup and refetches
+        // existing collections by handle when a create returns a "handle
+        // taken" userError. 5 concurrent creates + 150/chunk = ~8x faster.
+        result = await processCollectionsRecovery(db, job);
         break;
       case "collections_dedupe": {
         // Dedicated safety-net sweep. Can be queued manually, by a UI button,
@@ -1175,66 +1203,31 @@ async function processExtractChunk(
     (job as { total_items?: number }).total_items = computedTotal;
   }
 
-  // Delegate extraction to the Vercel auto-extract API — it has the FULL smart mapping engine
-  // (same buildVehicleProfile + scoreByProfile used for manual smart mapping)
-  // (same suggest-fitments logic used for manual smart mapping)
-  const appUrl = (job.metadata as any)?.appUrl || "https://autosync-v3.vercel.app";
-  let autoMapped = 0;
-  let noMatch = 0;
-
+  // Run extraction IN-PROCESS via the ported chunk logic. No HTTP hop.
+  // This was previously a fetch to Vercel's /app/api/auto-extract endpoint,
+  // but the architectural rule is "everything on Supabase" — Vercel is just
+  // UI hosting and will be replaced. See extract-chunk.ts header for the
+  // port context.
   try {
-    const formBody = new URLSearchParams();
-    formBody.append("_action", "chunk");
-    formBody.append("jobId", job.id as string);
-
-    console.log(`[extract] Calling Vercel auto-extract chunk for job ${job.id}`);
-    const chunkRes = await fetch(`${appUrl}/app/api/auto-extract`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Internal-Key": INTERNAL_API_SECRET,
-        "X-Shop-Id": shopId,
-      },
-      redirect: "follow",
-      body: formBody.toString(),
-    });
-
-    if (chunkRes.ok) {
-      const result = await chunkRes.json();
-      autoMapped = result.autoMapped ?? result.chunkAutoMapped ?? 0;
-      noMatch = result.unmapped ?? result.chunkUnmapped ?? 0;
-      const chunkProcessed = result.processed ?? 10;
-      console.log(`[extract] Vercel chunk: ${autoMapped} mapped, ${noMatch} no-match, processed=${chunkProcessed}, remaining=${result.remaining ?? '?'}, done=${result.done}`);
-
-      if (result.done) {
-        return { processed: chunkProcessed, hasMore: false };
-      }
-    } else {
-      const errBody = await chunkRes.text().catch(() => "");
-      console.error(`[extract] Vercel auto-extract failed: HTTP ${chunkRes.status} — ${errBody.slice(0, 300)}`);
-      // Wait 30 seconds before retrying to prevent rapid infinite loops
-      await new Promise((r) => setTimeout(r, 30000));
-      return { processed: 0, hasMore: true };
-    }
+    console.log(`[extract] Running chunk for job ${job.id} in-process`);
+    const result = await runExtractChunk(db, shopId, job.id as string);
+    const autoMapped = result.autoMapped ?? 0;
+    const noMatch = result.unmapped ?? 0;
+    const chunkProcessed = result.processed ?? 0;
+    console.log(
+      `[extract] Chunk: ${autoMapped} mapped, ${noMatch} no-match, ` +
+      `flagged=${result.flagged ?? 0}, remaining=${result.remaining ?? "?"}, done=${result.done}`,
+    );
+    return {
+      processed: chunkProcessed > 0 ? chunkProcessed : 10,
+      hasMore: !result.done,
+    };
   } catch (err) {
-    console.error(`[extract] Vercel auto-extract call failed:`, err);
-    // Wait 30 seconds before retrying
+    console.error(`[extract] runExtractChunk failed:`, err);
+    // Back off so we don't hot-loop on a persistent error
     await new Promise((r) => setTimeout(r, 30000));
     return { processed: 0, hasMore: true };
   }
-
-  // Check remaining unmapped
-  const { count: remaining } = await db
-    .from("products")
-    .select("id", { count: "exact", head: true })
-    .eq("shop_id", shopId)
-    .neq("status", "staged")
-    .eq("fitment_status", "unmapped");
-
-  const processed = autoMapped + noMatch;
-  console.log(`[extract] Chunk: ${autoMapped} mapped, ${noMatch} no-match, ${remaining ?? 0} remaining`);
-
-  return { processed: processed > 0 ? processed : 10, hasMore: (remaining ?? 0) > 0 };
 }
 
 // ── Push processor ─────────────────────────────────────────
@@ -1334,24 +1327,31 @@ async function processPushChunk(
     .maybeSingle();
   const publicationId = tenantPub?.online_store_publication_id || null;
 
-  // Pick the next BATCH_SIZE unsynced MAPPED products.
-  // Only auto_mapped, smart_mapped, manual products have fitments worth pushing
-  // to Shopify. no_match and flagged products have no fitments, so the push
-  // inner loop early-returns at `if (!hasFitments && !hasWheelFitments) continue`
-  // which skips the synced_at update — that's how the same 983 no-fitment
-  // products kept getting re-selected on every chunk. Fix: only pick products
-  // that actually have something to push.
-  // Keep this status list in sync with app/routes/app.api.job-status.tsx (needsPush),
-  // app/routes/app.api.push.tsx, app/routes/app.push.tsx, app/lib/pipeline/push.server.ts,
-  // supabase/migrations/038_get_push_stats_uses_fitment_status.sql. Previously had
-  // "manual" here (missing _mapped suffix) — manually mapped products were
-  // silently skipped on push. Unified on manual_mapped.
+  // Pick the next BATCH_SIZE unsynced products that have SOMETHING to push.
+  //
+  // STATUS LIST: We include "flagged" alongside the mapped statuses because
+  // flagged products now carry make-only fitments (from the make-only
+  // fallback in extract-chunk.ts medium-confidence + low-confidence branches,
+  // plus SQL heals for existing data). Those need per-make tags pushed so
+  // they land in make collections for browsing while the merchant reviews
+  // them for more specific mapping.
+  //
+  // Previously the list was ["auto_mapped","smart_mapped","manual_mapped"]
+  // and the comment claimed "flagged products have no fitments" — that was
+  // true before the universal-part + make-only fallback work. The inner
+  // loop's `if (!hasFitments && !hasWheelFitments) continue` is still the
+  // belt-and-braces guard for products that ended up in a mapped status
+  // without any rows in vehicle_fitments / wheel_fitments.
+  //
+  // Keep this status list synchronized with: job-status.tsx (needsPush),
+  // app.api.push.tsx, app.push.tsx, app/lib/pipeline/push.server.ts,
+  // migrations/038_get_push_stats_uses_fitment_status.sql.
   const { data: products } = await db
     .from("products")
     .select("id, title, description, sku, price, compare_at_price, vendor, product_type, image_url, shopify_product_id, shopify_gid")
     .eq("shop_id", shopId)
     .neq("status", "staged")
-    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped"])
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped", "flagged"])
     .is("synced_at", null)
     .order("id")
     .limit(BATCH_SIZE);
@@ -1370,7 +1370,7 @@ async function processPushChunk(
     const batch = productIds.slice(fi, fi + 500);
     const { data: batchFitments } = await db
       .from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id, is_group_universal, group_slug, group_engine_slug")
       .eq("shop_id", shopId)
       .in("product_id", batch);
     if (batchFitments) allFitments.push(...batchFitments);
@@ -1419,6 +1419,70 @@ async function processPushChunk(
     const list = fitmentsByProduct.get(f.product_id as string) ?? [];
     list.push(f);
     fitmentsByProduct.set(f.product_id as string, list);
+  }
+
+  // ── Group-universal tag expansion ─────────────────────────────
+  //
+  // A group-universal fitment (e.g. VAG 2.0 TSI) represents EVERY vehicle
+  // in the OEM group with that engine family. For per-vehicle smart
+  // collections ("Audi A3 Parts", "VW Golf Parts") to pick these products
+  // up, we expand each group fitment into the matching vehicle tags at
+  // push time — `_autosync_<make>` + `_autosync_<model>` for every
+  // covered vehicle, up to a cap so we stay under Shopify's 250-tag/product
+  // ceiling.
+  //
+  // We cap at 6 makes (all group members) + 30 top models per group+engine.
+  // The product ends up with ~38 tags, well under 250, but now appears in:
+  //   - group-level collections via the group tag
+  //   - per-make collections via `_autosync_<make>` (e.g. "Audi Parts")
+  //   - per-make-model collections via `_autosync_<make>` AND
+  //     `_autosync_<model>` matched conjunctively (e.g. "Audi A3 Parts")
+  //
+  // Year-level collections are deliberately skipped for universals because
+  // the year tag is a combined `_autosync_<make>_<model>_<yr>` and we'd blow
+  // the tag budget covering every year range.
+  const groupExpansionCache = new Map<string, { makes: string[]; models: string[] }>();
+  const uniqueGroupPairs = new Set<string>();
+  for (const f of allFitments) {
+    if (f.is_group_universal && f.group_slug) {
+      uniqueGroupPairs.add(`${f.group_slug}||${f.group_engine_slug ?? ""}`);
+    }
+  }
+  for (const pair of uniqueGroupPairs) {
+    const [groupSlug, engineSlug] = pair.split("||");
+    const group = getBrandGroupBySlug(groupSlug);
+    if (!group) continue;
+    const makes = group.makes.slice(0, 6);
+    let models: string[] = [];
+    // For a specific engine, look up matching YMME engines → models
+    if (engineSlug) {
+      const engine = group.sharedEngines?.find((e) => e.slug === engineSlug);
+      const keywords = engine?.keywords ?? [];
+      if (keywords.length > 0) {
+        // Match engines whose name contains ANY of the keywords (ilike OR),
+        // scoped to the brand group's makes. Pull top-30 unique model names.
+        const orFilter = keywords.map((kw) => `name.ilike.%${kw}%`).join(",");
+        const { data: engines } = await db
+          .from("ymme_engines")
+          .select("model:ymme_models!inner(name, make:ymme_makes!inner(name))")
+          .eq("active", true)
+          .or(orFilter)
+          .limit(500);
+        const seen = new Set<string>();
+        for (const e of engines ?? []) {
+          const modelRec = (e as any).model;
+          const makeName = modelRec?.make?.name;
+          const modelName = modelRec?.name;
+          if (!makeName || !modelName) continue;
+          if (!makes.includes(makeName)) continue;
+          if (seen.has(modelName)) continue;
+          seen.add(modelName);
+          models.push(modelName);
+          if (models.length >= 30) break;
+        }
+      }
+    }
+    groupExpansionCache.set(pair, { makes, models });
   }
 
   // Batch query wheel fitments for all products in this batch
@@ -1620,7 +1684,56 @@ async function processPushChunk(
     const seenMakes = new Set<string>();
     const seenModels = new Set<string>();
     const seenYearRanges = new Set<string>();
+    const seenGroupTags = new Set<string>();
     for (const f of productFitments ?? []) {
+      // ── GROUP-UNIVERSAL FITMENTS ──
+      // One fitment row stands in for an entire OEM group (e.g., all VAG
+      // vehicles with a 2.0 TSI engine). Push ONE group tag per row instead
+      // of expanding to hundreds of per-vehicle tags. Keeps us under the
+      // Shopify 250-tag cap. The group tag drives a group-level smart
+      // collection; the YMME widget proxy resolves vehicle → group when a
+      // customer picks a specific vehicle so findability is preserved.
+      if (f.is_group_universal) {
+        const groupSlug = f.group_slug as string | null;
+        const groupEngineSlug = f.group_engine_slug as string | null;
+        if (groupSlug) {
+          // 1. Group tags — drive the group-level "VAG 2.0 TSI Parts" collection
+          const baseTag = `_autosync_group_${groupSlug}`;
+          if (!seenGroupTags.has(baseTag)) {
+            tags.push(baseTag);
+            seenGroupTags.add(baseTag);
+          }
+          if (groupEngineSlug) {
+            const engineTag = `_autosync_group_${groupSlug}_${groupEngineSlug}`;
+            if (!seenGroupTags.has(engineTag)) {
+              tags.push(engineTag);
+              seenGroupTags.add(engineTag);
+            }
+          }
+          // 2. Expand to per-make + per-model tags so the product also lands
+          //    in "Audi A3 Parts", "VW Golf Parts", etc. Cap is enforced at
+          //    cache-build time (6 makes + 30 models = 36 tags max per
+          //    group+engine, safely under 250 total).
+          const expansion = groupExpansionCache.get(`${groupSlug}||${groupEngineSlug ?? ""}`);
+          if (expansion) {
+            for (const mk of expansion.makes) {
+              if (!seenMakes.has(mk)) {
+                tags.push(`_autosync_${mk}`);
+                seenMakes.add(mk);
+                activeMakes.add(mk);
+              }
+            }
+            for (const md of expansion.models) {
+              if (!seenModels.has(md)) {
+                tags.push(`_autosync_${md}`);
+                seenModels.add(md);
+              }
+            }
+          }
+        }
+        continue; // Group row — per-vehicle year tags intentionally skipped
+      }
+
       const make = f.make as string;
       const model = f.model as string;
       const yearFrom = f.year_from as number | null;
@@ -1914,6 +2027,663 @@ async function processPushChunk(
 // including the first-invocation Shopify pre-scan overhead. Self-chain picks
 // up the rest on the next invocation.
 const COLLECTION_BATCH_SIZE = 80;
+
+// ── Backfill SEO/image onto existing collection_mappings ────────────────────
+// Finds collection_mappings rows that are missing seo_title, seo_description,
+// or image_url and updates the corresponding Shopify collection + DB row.
+// Uses parallel batched Shopify collectionUpdate calls for speed. Self-chains
+// via hasMore until every row has full metadata.
+async function processCollectionsBackfillSeo(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const start = Date.now();
+  const MAX_MS = 100_000;
+  const CONCURRENCY = 5;
+  const PER_CHUNK = 300;
+
+  const { data: tenant } = await db.from("tenants").select("shopify_access_token").eq("shop_id", shopId).maybeSingle();
+  if (!tenant?.shopify_access_token) return { processed: 0, hasMore: false, error: "No Shopify token" };
+  const accessToken = tenant.shopify_access_token;
+
+  // Preload make logos
+  const { data: allMakeLogos } = await db.from("ymme_makes").select("name, logo_url").limit(5000);
+  const logoMap = new Map<string, string>();
+  for (const m of allMakeLogos ?? []) if (m.logo_url) logoMap.set(m.name, m.logo_url);
+
+  // Pull rows needing backfill (missing SEO OR missing image where a logo is available)
+  const { data: rows } = await db.from("collection_mappings")
+    .select("id, shopify_collection_id, type, make, model, title, seo_title, image_url")
+    .eq("shop_id", shopId)
+    .or("seo_title.is.null,image_url.is.null")
+    .not("shopify_collection_id", "is", null)
+    .order("id", { ascending: true })
+    .limit(PER_CHUNK);
+
+  if (!rows || rows.length === 0) return { processed: 0, hasMore: false };
+
+  console.log(`[backfill_seo] Found ${rows.length} rows needing backfill this chunk`);
+
+  if ((job.total_items as number) === 0 || !(job.total_items as number)) {
+    const { count: total } = await db.from("collection_mappings")
+      .select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId)
+      .or("seo_title.is.null,image_url.is.null")
+      .not("shopify_collection_id", "is", null);
+    await db.from("sync_jobs").update({ total_items: total ?? 0 }).eq("id", job.id);
+  }
+
+  const currentYear = new Date().getFullYear();
+  const seoTitleTrunc = (s: string) => s.length <= 60 ? s : s.slice(0, s.lastIndexOf(" ", 57) > 30 ? s.lastIndexOf(" ", 57) : 57) + "...";
+  const seoDescTrunc = (s: string) => s.length <= 160 ? s : s.slice(0, s.lastIndexOf(" ", 157) > 100 ? s.lastIndexOf(" ", 157) : 157) + "...";
+
+  type SeoBits = { seoT: string; seoD: string; descHtml: string };
+  function computeSeo(r: { type: string; make: string | null; model: string | null; title: string }): SeoBits {
+    let seoT = "", seoD = "", descHtml = "";
+    if (r.type === "make" && r.make) {
+      seoT = seoTitleTrunc(`${r.make} Parts & Accessories ${currentYear} | Performance & Aftermarket`);
+      seoD = seoDescTrunc(`Explore ${r.make} aftermarket parts & performance accessories. Fitment-verified for all ${r.make} models. Shop exhaust, intake, suspension, brakes & styling upgrades.`);
+      descHtml = `<h2>${r.make} Performance Parts &amp; Accessories</h2><p>Explore our range of aftermarket parts and accessories for <strong>${r.make}</strong> vehicles. Every product is fitment-verified.</p>`;
+    } else if (r.type === "make_model" && r.make && r.model) {
+      seoT = seoTitleTrunc(`${r.make} ${r.model} Parts & Accessories ${currentYear} | Performance Upgrades`);
+      seoD = seoDescTrunc(`Browse ${r.make} ${r.model} performance parts, upgrades & accessories. Every part fitment-verified for guaranteed compatibility.`);
+      descHtml = `<h2>${r.make} ${r.model} Performance Parts &amp; Accessories</h2><p>Performance parts for the <strong>${r.make} ${r.model}</strong>. Fitment-verified for guaranteed compatibility.</p>`;
+    } else if (r.type === "make_model_year" && r.make && r.model) {
+      const yr = r.title.replace(/^.+ ([0-9]{4}(?:[-+][0-9]{0,4})?) Parts$/, "$1");
+      seoT = seoTitleTrunc(`${r.make} ${r.model} ${yr} Parts & Accessories | Shop Now`);
+      seoD = seoDescTrunc(`Shop fitment-verified ${r.make} ${r.model} ${yr} performance parts & accessories. Guaranteed compatibility.`);
+      descHtml = `<h2>${r.make} ${r.model} ${yr} Performance Parts &amp; Accessories</h2><p>Fitment-verified parts for the <strong>${r.make} ${r.model} (${yr})</strong>.</p>`;
+    } else if (r.type === "wheel_pcd") {
+      const pcd = r.title.replace(/ Wheels$/, "");
+      seoT = seoTitleTrunc(`${pcd} Wheels | Alloy Wheels & Rims | Shop by PCD`);
+      seoD = seoDescTrunc(`Browse ${pcd} PCD alloy wheels. Fitment-verified bolt pattern, offset, and center bore specs.`);
+      descHtml = `<h2>${pcd} Alloy Wheels &amp; Rims</h2><p>Wheels with <strong>${pcd}</strong> bolt pattern.</p>`;
+    } else if (r.type === "wheel_diameter") {
+      const d = r.title.replace(/ Inch Wheels$/, "");
+      seoT = seoTitleTrunc(`${d} Inch Wheels | Alloy Rims | Shop by Size`);
+      seoD = seoDescTrunc(`Browse ${d}" alloy wheels and rims. Multiple bolt patterns, widths, and offsets.`);
+      descHtml = `<h2>${d} Inch Alloy Wheels &amp; Rims</h2><p><strong>${d}"</strong> wheels across multiple bolt patterns.</p>`;
+    } else if (r.type === "wheel_width") {
+      const w = r.title.replace(/J Wheels$/, "");
+      seoT = seoTitleTrunc(`${w}J Width Wheels | Alloy Rims`);
+      seoD = seoDescTrunc(`Browse ${w}J width alloy wheels. Multiple bolt patterns and offsets.`);
+      descHtml = `<h2>${w}J Width Wheels</h2><p>Wheels with <strong>${w}J</strong> width.</p>`;
+    } else if (r.type === "wheel_offset") {
+      const et = r.title.replace(/^ET/, "").replace(/ Wheels$/, "");
+      seoT = seoTitleTrunc(`ET${et} Offset Wheels | Alloy Rims`);
+      seoD = seoDescTrunc(`Browse ET${et} offset alloy wheels. Multiple bolt patterns and sizes.`);
+      descHtml = `<h2>ET${et} Offset Wheels</h2><p>Wheels with <strong>ET${et}</strong> offset.</p>`;
+    }
+    return { seoT, seoD, descHtml };
+  }
+
+  const UPDATE_MUT = `mutation U($input: CollectionInput!) { collectionUpdate(input: $input) { collection { id } userErrors { field message } } }`;
+
+  async function backfillOne(r: { id: string; shopify_collection_id: number; type: string; make: string | null; model: string | null; title: string; seo_title: string | null; image_url: string | null }): Promise<{ updated: boolean; error?: string }> {
+    try {
+      const { seoT, seoD, descHtml } = computeSeo(r);
+      const input: Record<string, unknown> = {
+        id: `gid://shopify/Collection/${r.shopify_collection_id}`,
+      };
+      if (seoT && seoD) input.seo = { title: seoT, description: seoD };
+      if (descHtml) input.descriptionHtml = descHtml;
+      const logoUrl = r.make ? logoMap.get(r.make) : null;
+      if (logoUrl && !r.image_url) {
+        input.image = { src: logoUrl, altText: `${r.title} parts` };
+      }
+
+      // No-op if nothing actually changed
+      if (!input.seo && !input.descriptionHtml && !input.image) {
+        return { updated: false, error: "Nothing to backfill" };
+      }
+
+      const res = await shopifyGraphQL(shopId, accessToken, UPDATE_MUT, { input });
+      const resData = (res?.data as any)?.collectionUpdate;
+      const userErrs = resData?.userErrors ?? [];
+      if (userErrs.length > 0) {
+        const msg = userErrs.map((e: { message: string }) => e.message).join("; ");
+        console.warn(`[backfill_seo] Update failed for "${r.title}": ${msg}`);
+        return { updated: false, error: msg };
+      }
+
+      await db.from("collection_mappings").update({
+        seo_title: seoT || null,
+        seo_description: seoD || null,
+        image_url: logoUrl ?? r.image_url ?? null,
+        synced_at: new Date().toISOString(),
+      }).eq("id", r.id);
+
+      return { updated: true };
+    } catch (e) {
+      return { updated: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  let updated = 0;
+  let errors = 0;
+  for (let i = 0; i < rows.length; i += CONCURRENCY) {
+    if (Date.now() - start > MAX_MS) break;
+    const batch = rows.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(backfillOne));
+    for (const r of results) { if (r.updated) updated++; else errors++; }
+  }
+
+  // Any rows still needing backfill?
+  const { count: remaining } = await db.from("collection_mappings")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .or("seo_title.is.null,image_url.is.null")
+    .not("shopify_collection_id", "is", null);
+
+  console.log(`[backfill_seo] chunk: updated=${updated} errors=${errors} remaining=${remaining}`);
+  return { processed: updated, hasMore: (remaining ?? 0) > 0 };
+}
+
+// ── Focused collections recovery handler ────────────────────────────────────
+// Queries DB for the exact set of missing collections and creates them via
+// parallel batched Shopify calls. No pre-scan, no per-candidate existence
+// check: Shopify handles are globally unique, so a duplicate create fails
+// with a userErrors response that we handle gracefully by refetching the
+// existing collection by handle.
+//
+// Why this exists separately from processCollectionsChunk: the original chunk
+// handler sequentially calls shopifyCollectionExists (one GraphQL round-trip)
+// BEFORE every create. For N missing items that's 2N sequential Shopify calls
+// within the 120s chunk budget, so at ~300ms/call you only complete ~200
+// iterations total — most of which might be skipped because they're already
+// in existingSet. Net result: chunks return created=0 for hours. This handler
+// fires createOnly with concurrency=5, finishing ~700 items in 2-3 chunks.
+async function processCollectionsRecovery(
+  db: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+): Promise<{ processed: number; hasMore: boolean; error?: string }> {
+  const shopId = job.shop_id as string;
+  const recoveryStart = Date.now();
+  const MAX_RECOVERY_MS = 100_000; // Leave 20s buffer under 120s
+  const BATCH_CONCURRENCY = 5;     // 5 parallel collectionCreate calls
+  const PER_CHUNK_LIMIT = 150;     // Cap per chunk (~30s with 5 parallel)
+
+  const { data: tenant } = await db
+    .from("tenants")
+    .select("shopify_access_token")
+    .eq("shop_id", shopId)
+    .maybeSingle();
+  if (!tenant?.shopify_access_token) {
+    return { processed: 0, hasMore: false, error: "No Shopify access token found." };
+  }
+  const accessToken = tenant.shopify_access_token;
+
+  // Cache make logos (one query). Sanitize URLs that point at the "optimized"
+  // variant of the car-logos-dataset — those are full-res PNGs that exceed
+  // Shopify's 25-megapixel limit, so every collectionCreate that includes one
+  // as `image` fails with userErrors. We transparently rewrite to the /thumb/
+  // variant (300x300) which is well under the limit and gives us the same
+  // visual identity.
+  const { data: allMakeLogos } = await db
+    .from("ymme_makes")
+    .select("name, logo_url")
+    .limit(5000);
+  const logoMap = new Map<string, string>();
+  for (const m of allMakeLogos ?? []) {
+    if (!m.logo_url) continue;
+    const safeUrl = m.logo_url.replace("/logos/optimized/", "/logos/thumb/");
+    logoMap.set(m.name, safeUrl);
+  }
+
+  // Preload publication IDs (one GraphQL call)
+  const publicationIds = await getPublicationIds(shopId, accessToken, db);
+  const pubInput = publicationIds.map((pid: string) => ({ publicationId: pid }));
+
+  // Parse strategy
+  let strategy = "make_model_year";
+  try {
+    const meta = typeof job.metadata === "string" ? JSON.parse(job.metadata) : job.metadata;
+    if (meta?.strategy) strategy = meta.strategy;
+    else {
+      const { data: s } = await db.from("app_settings").select("collection_strategy").eq("shop_id", shopId).maybeSingle();
+      if (s?.collection_strategy) strategy = s.collection_strategy;
+    }
+  } catch { /* default */ }
+
+  // Build the full target list from fitments
+  type Target = { type: "make" | "make_model" | "make_model_year" | "wheel_pcd" | "wheel_diameter" | "wheel_width" | "wheel_offset" | "group" | "group_engine"; make: string | null; model: string | null; yr: string | null; title: string; tag: string; value: string | null };
+  const targets: Target[] = [];
+
+  // Makes
+  // IMPORTANT: .range() pagination WITHOUT .order() is non-deterministic in Postgres.
+  // Without an explicit sort, each page may return overlapping or missing rows
+  // because the backing table scan order can shift between requests. This caused
+  // an entire make (Seat, 930 fitments) to be skipped from uniqueMakes across
+  // paged reads, so none of its collections ever got created. Order by id so
+  // pagination is stable and every row is visited exactly once.
+  const uniqueMakes = new Set<string>();
+  const uniqueMakeModels = new Set<string>();
+  const yearCombos = new Set<string>();
+  let fOff = 0;
+  while (true) {
+    const { data: batch } = await db.from("vehicle_fitments")
+      .select("id, make, model, year_from, year_to")
+      .eq("shop_id", shopId)
+      .order("id", { ascending: true })
+      .range(fOff, fOff + 999);
+    if (!batch || batch.length === 0) break;
+    for (const f of batch) {
+      if (f.make) uniqueMakes.add(f.make);
+      if (f.make && f.model) uniqueMakeModels.add(`${f.make}|||${f.model}`);
+      if (f.make && f.model && f.year_from) {
+        const yr = f.year_to ? `${f.year_from}-${f.year_to}` : `${f.year_from}+`;
+        yearCombos.add(`${f.make}|||${f.model}|||${yr}`);
+      }
+    }
+    fOff += batch.length;
+    if (batch.length < 1000) break;
+  }
+
+  for (const make of uniqueMakes) {
+    targets.push({ type: "make", make, model: null, yr: null, title: `${make} Parts`, tag: `_autosync_${make}`, value: null });
+  }
+  if (strategy === "make_model" || strategy === "make_model_year") {
+    for (const mm of uniqueMakeModels) {
+      const [mk, md] = mm.split("|||");
+      targets.push({ type: "make_model", make: mk, model: md, yr: null, title: `${mk} ${md} Parts`, tag: "", value: null });
+    }
+  }
+  if (strategy === "make_model_year") {
+    for (const combo of yearCombos) {
+      const [mk, md, yr] = combo.split("|||");
+      targets.push({ type: "make_model_year", make: mk, model: md, yr, title: `${mk} ${md} ${yr} Parts`, tag: `_autosync_${mk}_${md}_${yr}`, value: null });
+    }
+  }
+
+  // Group-universal collections — one per detected brand group + one per
+  // group+engine combo that has at least one fitment. These collections are
+  // populated via the `_autosync_group_<slug>[_<engine>]` tag emitted during
+  // push. See app/lib/brand-groups.ts + extract-chunk.ts for how these tags
+  // get assigned to products.
+  const groupPairs = new Set<string>(); // "vag||2_0_tsi" or "vag||"
+  {
+    let gOff = 0;
+    while (true) {
+      const { data: batch } = await db.from("vehicle_fitments")
+        .select("group_slug, group_engine_slug")
+        .eq("shop_id", shopId)
+        .eq("is_group_universal", true)
+        .order("id", { ascending: true })
+        .range(gOff, gOff + 999);
+      if (!batch || batch.length === 0) break;
+      for (const f of batch) {
+        const gs = (f as any).group_slug as string | null;
+        if (!gs) continue;
+        const es = (f as any).group_engine_slug as string | null;
+        groupPairs.add(`${gs}||${es ?? ""}`);
+      }
+      gOff += batch.length;
+      if (batch.length < 1000) break;
+    }
+  }
+  // Look up display names from the brand-groups module (loaded lazily to keep
+  // the top of the file tidy — this is Deno so dynamic import just resolves).
+  const brandGroupsMod = await import("./brand-groups.ts");
+  for (const pair of groupPairs) {
+    const [slug, engineSlug] = pair.split("||");
+    const group = brandGroupsMod.getBrandGroupBySlug(slug);
+    if (!group) continue;
+    if (engineSlug) {
+      const engine = group.sharedEngines?.find((e) => e.slug === engineSlug);
+      const engineName = engine?.name ?? engineSlug;
+      targets.push({
+        type: "group_engine",
+        make: null, model: null, yr: null,
+        title: `${group.displayName} ${engineName} Parts`,
+        tag: `_autosync_group_${slug}_${engineSlug}`,
+        value: `${slug}:${engineSlug}`,
+      });
+    } else {
+      targets.push({
+        type: "group",
+        make: null, model: null, yr: null,
+        title: `${group.displayName} Parts`,
+        tag: `_autosync_group_${slug}`,
+        value: slug,
+      });
+    }
+  }
+
+  // Wheel collections
+  const uniquePcds = new Set<string>();
+  const uniqueDiameters = new Set<number>();
+  const uniqueWidths = new Set<string>();
+  const uniqueOffsets = new Set<string>();
+  let wOff = 0;
+  while (true) {
+    const { data: batch } = await db.from("wheel_fitments")
+      .select("id, pcd, diameter, width, offset_min")
+      .eq("shop_id", shopId)
+      .order("id", { ascending: true })
+      .range(wOff, wOff + 999);
+    if (!batch || batch.length === 0) break;
+    for (const wf of batch) {
+      if (wf.pcd) uniquePcds.add(wf.pcd);
+      if (wf.diameter) uniqueDiameters.add(wf.diameter);
+      if (wf.width) uniqueWidths.add(String(wf.width));
+      if (wf.offset_min != null) uniqueOffsets.add(String(wf.offset_min));
+    }
+    wOff += batch.length;
+    if (batch.length < 1000) break;
+  }
+  for (const pcd of uniquePcds) targets.push({ type: "wheel_pcd", make: null, model: null, yr: null, title: `${pcd} Wheels`, tag: `_autosync_wheel_PCD_${pcd}`, value: pcd });
+  for (const d of uniqueDiameters) targets.push({ type: "wheel_diameter", make: null, model: null, yr: null, title: `${d} Inch Wheels`, tag: `_autosync_wheel_${d}inch`, value: String(d) });
+  for (const w of uniqueWidths) targets.push({ type: "wheel_width", make: null, model: null, yr: null, title: `${w}J Wheels`, tag: `_autosync_wheel_${w}J`, value: w });
+  for (const et of uniqueOffsets) targets.push({ type: "wheel_offset", make: null, model: null, yr: null, title: `ET${et} Wheels`, tag: `_autosync_wheel_ET${et}`, value: et });
+
+  const totalTargets = targets.length;
+  console.log(`[recovery] Total targets: ${totalTargets} (makes=${uniqueMakes.size}, mm=${uniqueMakeModels.size}, year=${yearCombos.size}, wheels=${uniquePcds.size + uniqueDiameters.size + uniqueWidths.size + uniqueOffsets.size})`);
+
+  if ((job.total_items as number) === 0 || !(job.total_items as number)) {
+    await db.from("sync_jobs").update({ total_items: totalTargets }).eq("id", job.id);
+  }
+
+  // Load existing titles from DB (fast in-memory set). ORDER BY id for stable
+  // pagination — see note above about unordered .range() skipping rows.
+  const existingTitles = new Set<string>();
+  let eOff = 0;
+  while (true) {
+    const { data: batch } = await db.from("collection_mappings")
+      .select("id, title")
+      .eq("shop_id", shopId)
+      .order("id", { ascending: true })
+      .range(eOff, eOff + 999);
+    if (!batch || batch.length === 0) break;
+    for (const e of batch) if (e.title) existingTitles.add(e.title);
+    eOff += batch.length;
+    if (batch.length < 1000) break;
+  }
+  console.log(`[recovery] Existing in DB: ${existingTitles.size}/${totalTargets}`);
+
+  // Filter to only missing
+  const missing = targets.filter(t => !existingTitles.has(t.title));
+  if (missing.length === 0) {
+    console.log("[recovery] Nothing missing — all collections in sync");
+    return { processed: 0, hasMore: false };
+  }
+  console.log(`[recovery] Missing: ${missing.length}`);
+
+  // Build collectionCreate + upsert for ONE target
+  const CREATE_MUT = `mutation C($input: CollectionInput!) { collectionCreate(input: $input) { collection { id handle title } userErrors { field message } } }`;
+  const PUBLISH_MUT = `mutation P($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { userErrors { field message } } }`;
+  const BY_HANDLE = `query H($handle: String!) { collectionByHandle(handle: $handle) { id handle title } }`;
+
+  const currentYear = new Date().getFullYear();
+  function seoTitle(text: string): string {
+    if (text.length <= 60) return text;
+    const cut = text.lastIndexOf(" ", 57);
+    return text.slice(0, cut > 30 ? cut : 57) + "...";
+  }
+  function seoDesc(text: string): string {
+    if (text.length <= 160) return text;
+    const cut = text.lastIndexOf(" ", 157);
+    return text.slice(0, cut > 100 ? cut : 157) + "...";
+  }
+
+  function buildInput(t: Target): { input: Record<string, unknown>; seoT: string | null; seoD: string | null } {
+    let rules: Array<{ column: string; relation: string; condition: string }> = [];
+    if (t.type === "make") rules = [{ column: "TAG", relation: "EQUALS", condition: `_autosync_${t.make}` }];
+    else if (t.type === "make_model") rules = [
+      { column: "TAG", relation: "EQUALS", condition: `_autosync_${t.make}` },
+      { column: "TAG", relation: "EQUALS", condition: `_autosync_${t.model}` },
+    ];
+    else rules = [{ column: "TAG", relation: "EQUALS", condition: t.tag }];
+
+    const input: Record<string, unknown> = {
+      title: t.title,
+      ruleSet: { appliedDisjunctively: false, rules },
+    };
+    if (t.make && logoMap.has(t.make)) {
+      input.image = { src: logoMap.get(t.make), altText: `${t.title} parts` };
+    }
+
+    // SEO + descriptionHtml per collection type (parity with processCollectionsChunk)
+    let seoT: string | null = null;
+    let seoD: string | null = null;
+    let descHtml = "";
+    if (t.type === "make" && t.make) {
+      seoT = seoTitle(`${t.make} Parts & Accessories ${currentYear} | Performance & Aftermarket`);
+      seoD = seoDesc(`Explore ${t.make} aftermarket parts & performance accessories. Fitment-verified for all ${t.make} models. Shop exhaust, intake, suspension, brakes & styling upgrades.`);
+      descHtml = `<h2>${t.make} Performance Parts &amp; Accessories</h2><p>Explore our range of aftermarket parts and accessories for <strong>${t.make}</strong> vehicles. Every product is fitment-verified.</p>`;
+    } else if (t.type === "make_model" && t.make && t.model) {
+      seoT = seoTitle(`${t.make} ${t.model} Parts & Accessories ${currentYear} | Performance Upgrades`);
+      seoD = seoDesc(`Browse ${t.make} ${t.model} performance parts, upgrades & accessories. Every part fitment-verified for guaranteed compatibility.`);
+      descHtml = `<h2>${t.make} ${t.model} Performance Parts &amp; Accessories</h2><p>Browse performance parts for the <strong>${t.make} ${t.model}</strong>. Fitment-verified for guaranteed compatibility.</p>`;
+    } else if (t.type === "make_model_year" && t.make && t.model && t.yr) {
+      seoT = seoTitle(`${t.make} ${t.model} ${t.yr} Parts & Accessories | Shop Now`);
+      seoD = seoDesc(`Shop fitment-verified ${t.make} ${t.model} ${t.yr} performance parts & accessories. Guaranteed compatibility.`);
+      descHtml = `<h2>${t.make} ${t.model} ${t.yr} Performance Parts &amp; Accessories</h2><p>Fitment-verified parts for the <strong>${t.make} ${t.model} (${t.yr})</strong>.</p>`;
+    } else if (t.type === "wheel_pcd" && t.value) {
+      seoT = seoTitle(`${t.value} Wheels | Alloy Wheels & Rims | Shop by PCD`);
+      seoD = seoDesc(`Browse ${t.value} PCD alloy wheels. Fitment-verified bolt pattern, offset, and center bore specs.`);
+      descHtml = `<h2>${t.value} Alloy Wheels &amp; Rims</h2><p>Wheels with <strong>${t.value}</strong> bolt pattern.</p>`;
+    } else if (t.type === "wheel_diameter" && t.value) {
+      seoT = seoTitle(`${t.value} Inch Wheels | Alloy Rims | Shop by Size`);
+      seoD = seoDesc(`Browse ${t.value}" alloy wheels and rims. Multiple bolt patterns, widths, and offsets.`);
+      descHtml = `<h2>${t.value} Inch Alloy Wheels &amp; Rims</h2><p><strong>${t.value}"</strong> wheels across multiple bolt patterns.</p>`;
+    } else if (t.type === "wheel_width" && t.value) {
+      seoT = seoTitle(`${t.value}J Width Wheels | Alloy Rims`);
+      seoD = seoDesc(`Browse ${t.value}J width alloy wheels. Multiple bolt patterns and offsets.`);
+      descHtml = `<h2>${t.value}J Width Wheels</h2><p>Wheels with <strong>${t.value}J</strong> width.</p>`;
+    } else if (t.type === "wheel_offset" && t.value) {
+      seoT = seoTitle(`ET${t.value} Offset Wheels | Alloy Rims`);
+      seoD = seoDesc(`Browse ET${t.value} offset alloy wheels. Multiple bolt patterns and sizes.`);
+      descHtml = `<h2>ET${t.value} Offset Wheels</h2><p>Wheels with <strong>ET${t.value}</strong> offset.</p>`;
+    } else if (t.type === "group" || t.type === "group_engine") {
+      // Group-universal collection (e.g., "VAG Parts" or "VAG (Volkswagen
+      // Group) 2.0 TSI Parts"). Title already holds the group display name.
+      seoT = seoTitle(`${t.title} | Aftermarket & Performance`);
+      seoD = seoDesc(`Performance parts that fit every vehicle in the ${t.title.replace(/ Parts$/, "")} platform. Fitment-verified.`);
+      descHtml = `<h2>${t.title}</h2><p>Aftermarket and performance parts that fit every vehicle in the <strong>${t.title.replace(/ Parts$/, "")}</strong> platform. All fitment-verified.</p>`;
+    }
+    if (seoT && seoD) input.seo = { title: seoT, description: seoD };
+    if (descHtml) input.descriptionHtml = descHtml;
+
+    return { input, seoT, seoD };
+  }
+
+  function titleToHandle(title: string): string {
+    return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  const BY_TITLE = `query T($q: String!) { collections(first: 5, query: $q) { edges { node { id title handle } } } }`;
+
+  // Shopify hard-caps stores at 5000 collections total. Once hit, every new
+  // collectionCreate returns userErrors with "You have reached the maximum
+  // number of collections (5000)". We detect this via a sentinel flag so the
+  // handler can short-circuit all remaining creates in the queue and surface
+  // a clear actionable error to the merchant instead of retrying forever.
+  let shopifyCapHit = false;
+
+  async function createOne(t: Target): Promise<{ created: boolean; error?: string }> {
+    if (shopifyCapHit) return { created: false, error: "Shopify 5000 collection cap reached" };
+    const targetHandle = titleToHandle(t.title);
+
+    // BULLETPROOF DUPLICATE PREVENTION — STEP 1: Atomic DB pre-claim.
+    // Before calling Shopify we INSERT a placeholder row keyed by
+    // (shop_id, title). The unique constraint on (shop_id,title) means only
+    // one concurrent worker can claim a given title. If another worker
+    // already claimed it, our INSERT fails → skip this target. Eliminates
+    // the race where two chunks both think a collection doesn't exist yet
+    // and both call collectionCreate.
+    const { error: claimErr } = await db.from("collection_mappings").insert({
+      shop_id: shopId,
+      make: t.make,
+      model: t.model,
+      type: t.type,
+      title: t.title,
+      handle: targetHandle,
+      shopify_collection_id: null,           // null = placeholder, no Shopify row yet
+      synced_at: new Date().toISOString(),
+    });
+    if (claimErr) {
+      // Expected for duplicates — another worker already claimed this title,
+      // OR a previous run already created it. Not an error.
+      if (/duplicate key|unique constraint|shop_id.*title/i.test(claimErr.message)) {
+        return { created: false, error: undefined };
+      }
+      return { created: false, error: `DB pre-claim failed: ${claimErr.message}` };
+    }
+
+    try {
+      const { input, seoT, seoD } = buildInput(t);
+      // BULLETPROOF STEP 2: Force the exact handle we want. Shopify will
+      // REJECT the create if this handle is already taken rather than
+      // auto-appending "-1". We handle that rejection below by fetching
+      // the existing collection and linking it to our placeholder row —
+      // instead of creating a second "Seat Parts" with handle "seat-parts-1".
+      (input as Record<string, unknown>).handle = targetHandle;
+
+      const createRes = await shopifyGraphQL(shopId, accessToken, CREATE_MUT, { input });
+      const createData = (createRes?.data as any)?.collectionCreate;
+      let collection = createData?.collection;
+      const userErrors = createData?.userErrors ?? [];
+      const topLevelErrors = (createRes as any)?.errors ?? [];
+
+      if (!collection) {
+        // Log the ACTUAL Shopify errors so we know why creates fail
+        const errorDetail = [
+          userErrors.length > 0 ? `userErrors: ${userErrors.map((e: { message: string; field?: string[] }) => `${e.field?.join(".") ?? "?"}: ${e.message}`).join("; ")}` : "",
+          topLevelErrors.length > 0 ? `topErrors: ${topLevelErrors.map((e: { message: string }) => e.message).join("; ")}` : "",
+        ].filter(Boolean).join(" | ");
+        console.warn(`[recovery] Create failed for "${t.title}": ${errorDetail || "unknown reason"}`);
+
+        // Shopify's 5000-collection hard cap: stop early + fail fast
+        const capHit = userErrors.some((e: { message: string }) => /maximum number of collections \(5000\)|has reached the limit of collections/i.test(e.message));
+        if (capHit) {
+          shopifyCapHit = true;
+          // Release the DB claim so a future chunk can retry this one
+          await db.from("collection_mappings").delete().eq("shop_id", shopId).eq("title", t.title).is("shopify_collection_id", null);
+          return { created: false, error: "SHOPIFY_CAP_REACHED: 5000 collection limit" };
+        }
+
+        // Handle-already-taken: use BY_HANDLE to find the existing collection and
+        // link it to our placeholder row. This is the ONLY dedup recovery path —
+        // we no longer fall back to BY_TITLE because letting Shopify auto-append
+        // "-1" to handles is exactly what creates duplicates. With explicit handle
+        // in create input, Shopify either uses our handle or rejects — no renames.
+        try {
+          const lookupRes = await shopifyGraphQL(shopId, accessToken, BY_HANDLE, { handle: targetHandle });
+          const existing = (lookupRes?.data as any)?.collectionByHandle;
+          if (existing?.id) {
+            const numId = parseInt(existing.id.replace(/\D/g, ""), 10);
+            await db.from("collection_mappings").update({
+              handle: existing.handle,
+              shopify_collection_id: numId,
+              image_url: t.make ? logoMap.get(t.make) ?? null : null,
+              seo_title: seoT, seo_description: seoD,
+              synced_at: new Date().toISOString(),
+            }).eq("shop_id", shopId).eq("title", t.title);
+            return { created: true };
+          }
+        } catch (lookupErr) {
+          console.warn(`[recovery] BY_HANDLE lookup threw for "${t.title}":`, lookupErr instanceof Error ? lookupErr.message : lookupErr);
+        }
+
+        // Couldn't find existing by handle and Shopify didn't create it — release
+        // the placeholder so the next chunk can retry this title.
+        await db.from("collection_mappings").delete()
+          .eq("shop_id", shopId).eq("title", t.title).is("shopify_collection_id", null);
+        return { created: false, error: errorDetail || "create returned null" };
+      }
+
+      // Publish to channels (fire-and-forget — don't fail recovery on publish error)
+      try {
+        await shopifyGraphQL(shopId, accessToken, PUBLISH_MUT, { id: collection.id, input: pubInput });
+      } catch (pubErr) {
+        console.warn(`[recovery] Publish failed for ${t.title}: ${pubErr instanceof Error ? pubErr.message : pubErr}`);
+      }
+
+      // UPDATE the placeholder row we pre-claimed with the real Shopify ID +
+      // metadata. Using UPDATE (not upsert) guarantees we only touch OUR row;
+      // any duplicate-row write from another worker would be a no-op because
+      // only one worker could have held the (shop_id, title) unique claim.
+      const numId = parseInt(collection.id.replace(/\D/g, ""), 10);
+      const { error: updErr } = await db.from("collection_mappings").update({
+        handle: collection.handle,
+        shopify_collection_id: numId,
+        image_url: t.make ? logoMap.get(t.make) ?? null : null,
+        seo_title: seoT, seo_description: seoD,
+        synced_at: new Date().toISOString(),
+      }).eq("shop_id", shopId).eq("title", t.title);
+      if (updErr) console.warn(`[recovery] Update placeholder failed for ${t.title}: ${updErr.message}`);
+      return { created: true };
+    } catch (err) {
+      // Something threw AFTER we pre-claimed but before we succeeded. Release
+      // the placeholder so a future chunk can retry.
+      await db.from("collection_mappings").delete()
+        .eq("shop_id", shopId).eq("title", t.title).is("shopify_collection_id", null);
+      return { created: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  // Parallel batched executor
+  let created = 0;
+  let errors = 0;
+  let attempted = 0;
+  const queue = missing.slice(0, PER_CHUNK_LIMIT);
+  for (let i = 0; i < queue.length; i += BATCH_CONCURRENCY) {
+    if (Date.now() - recoveryStart > MAX_RECOVERY_MS) {
+      console.log(`[recovery] Wall-clock stop at ${attempted}/${queue.length}`);
+      break;
+    }
+    const batch = queue.slice(i, i + BATCH_CONCURRENCY);
+    const results = await Promise.all(batch.map(createOne));
+    for (const r of results) {
+      attempted++;
+      if (r.created) created++;
+      else {
+        errors++;
+        if (errors <= 5) console.warn(`[recovery] Error: ${r.error}`);
+      }
+    }
+  }
+
+  // Count post-chunk. We only count rows with a real Shopify ID — placeholder
+  // rows (shopify_collection_id IS NULL) don't count toward progress because
+  // they haven't actually been created on Shopify yet.
+  const { count: newCount } = await db.from("collection_mappings")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .not("shopify_collection_id", "is", null);
+  let hasMore = (newCount ?? 0) < totalTargets;
+  console.log(`[recovery] created=${created} errors=${errors} attempted=${attempted} total=${newCount}/${totalTargets} hasMore=${hasMore} capHit=${shopifyCapHit}`);
+
+  // BULLETPROOF STEP 3: Run the duplicate sweep ONLY on the final chunk.
+  // The full scan was costing 20-30s per chunk (list 2000+ Shopify titles,
+  // compare against our owned set) even when nothing needed cleaning — which
+  // dropped throughput from ~5/s to ~1/s. The atomic DB claim + deterministic
+  // handle already make it structurally impossible to create a new duplicate
+  // during recovery, so the sweep's only useful job is mopping up pre-existing
+  // orphans at the END. Run it once when hasMore=false.
+  if (!hasMore) {
+    try {
+      const swept = await sweepCollectionDuplicates(shopId, accessToken, db, 200);
+      if (swept > 0) console.log(`[recovery.sweep] Final chunk: deleted ${swept} duplicate collections`);
+    } catch (e) {
+      console.warn("[recovery.sweep] Non-fatal error:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  // If Shopify's 5000 cap was hit, end the job with a clear error instead of
+  // looping forever. Merchant needs to either delete unused collections or
+  // pick a less granular collection_strategy (make instead of make_model_year).
+  if (shopifyCapHit) {
+    return {
+      processed: created,
+      hasMore: false,
+      error: "Shopify collection limit reached (5000 per store). Reduce collection granularity in Settings → Collection Strategy, or delete unused collections in Shopify admin.",
+    };
+  }
+
+  return { processed: created, hasMore };
+}
 
 async function processCollectionsChunk(
   db: ReturnType<typeof createClient>,
@@ -2956,6 +3726,7 @@ async function sweepCollectionDuplicates(
       .from("collection_mappings")
       .select("handle, title")
       .eq("shop_id", shopIdArg)
+      .order("id", { ascending: true })
       .range(dbOffset, dbOffset + 999);
     if (!page || page.length === 0) break;
     for (const row of page) {
@@ -3071,6 +3842,7 @@ async function processVehiclePagesChunk(
       .select("ymme_engine_id")
       .eq("shop_id", shopId)
       .not("ymme_engine_id", "is", null)
+      .order("id", { ascending: true })
       .range(feOffset, feOffset + 999);
     if (!feBatch || feBatch.length === 0) break;
     for (const f of feBatch) {
@@ -3088,6 +3860,7 @@ async function processVehiclePagesChunk(
       .select("engine_id")
       .eq("shop_id", shopId)
       .eq("sync_status", "pending")
+      .order("engine_id", { ascending: true })
       .range(psOffset, psOffset + 999);
     if (!psBatch || psBatch.length === 0) break;
     for (const s of psBatch) fitmentEngineSet.add(s.engine_id);
@@ -3118,6 +3891,7 @@ async function processVehiclePagesChunk(
   while (true) {
     const { data: batch } = await db.from("vehicle_page_sync")
       .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced")
+      .order("engine_id", { ascending: true })
       .range(syncOff2, syncOff2 + 999);
     if (!batch || batch.length === 0) break;
     for (const s of batch) alreadySyncedSet2.add(s.engine_id);
@@ -3358,6 +4132,7 @@ async function processVehiclePagesChunk(
   while (true) {
     const { data: batch } = await db.from("vehicle_page_sync")
       .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced")
+      .order("engine_id", { ascending: true })
       .range(syncOffset, syncOffset + 999);
     if (!batch || batch.length === 0) break;
     for (const s of batch) alreadySyncedSet.add(s.engine_id);
@@ -3822,6 +4597,7 @@ async function processBulkProductCreate(
         const { data: imgBatch } = await db.from("products")
           .select("shopify_gid, image_url, raw_data")
           .eq("shop_id", shopId).not("shopify_gid", "is", null)
+          .order("id", { ascending: true })
           .range(imgOffset, imgOffset + 999);
         if (!imgBatch || imgBatch.length === 0) break;
         for (const p of imgBatch) {
@@ -4214,8 +4990,10 @@ async function processBulkPush(
     let ffOffset = 0;
     while (true) {
       const { data: batch } = await db.from("vehicle_fitments")
-        .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
-        .eq("shop_id", shopId).range(ffOffset, ffOffset + 999);
+        .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id, is_group_universal, group_slug, group_engine_slug")
+        .eq("shop_id", shopId)
+        .order("id", { ascending: true })
+        .range(ffOffset, ffOffset + 999);
       if (!batch || batch.length === 0) break;
       fastFitments.push(...batch);
       ffOffset += batch.length;
@@ -4227,7 +5005,9 @@ async function processBulkPush(
     while (true) {
       const { data: batch } = await db.from("wheel_fitments")
         .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
-        .eq("shop_id", shopId).range(fwOffset, fwOffset + 999);
+        .eq("shop_id", shopId)
+        .order("id", { ascending: true })
+        .range(fwOffset, fwOffset + 999);
       if (!batch || batch.length === 0) break;
       fastWheelFits.push(...batch);
       fwOffset += batch.length;
@@ -4511,6 +5291,7 @@ async function processBulkPush(
           .select("shopify_gid, image_url, raw_data")
           .eq("shop_id", shopId).not("shopify_gid", "is", null)
           .not("image_url", "is", null).neq("image_url", "")
+          .order("id", { ascending: true })
           .range(imgOffset, imgOffset + 499);
         if (!imgBatch || imgBatch.length === 0) break;
         for (const p of imgBatch) {
@@ -4605,6 +5386,7 @@ async function processBulkPush(
           const { data: batch } = await db.from("products")
             .select("shopify_product_id").eq("shop_id", shopId).neq("status", "staged")
             .not("shopify_product_id", "is", null)
+            .order("id", { ascending: true })
             .range(pubOffset, pubOffset + 1000 - 1);
           if (!batch || batch.length === 0) break;
           for (const p of batch) {
@@ -4690,6 +5472,7 @@ async function processBulkPush(
       .select("id, shopify_product_id")
       .eq("shop_id", shopId).neq("status", "staged").not("fitment_status", "eq", "unmapped")
       .not("shopify_product_id", "is", null)
+      .order("id", { ascending: true })
       .range(pOffset, pOffset + DB_BATCH - 1);
     if (pErr) { console.warn(`[bulk_push] Product query error:`, pErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!batch || batch.length === 0) break;
@@ -4708,8 +5491,10 @@ async function processBulkPush(
   let fOffset = 0;
   while (allFitments.length < MAX_FITMENTS) {
     const { data: batch, error: fErr } = await db.from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id")
-      .eq("shop_id", shopId).range(fOffset, fOffset + DB_BATCH - 1);
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, ymme_engine_id, ymme_model_id, is_group_universal, group_slug, group_engine_slug")
+      .eq("shop_id", shopId)
+      .order("id", { ascending: true })
+      .range(fOffset, fOffset + DB_BATCH - 1);
     if (fErr) { console.warn(`[bulk_push] Fitment query error at offset ${fOffset}:`, fErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!batch || batch.length === 0) break;
     allFitments.push(...batch);
@@ -4755,7 +5540,9 @@ async function processBulkPush(
   while (allWheelFitments.length < MAX_FITMENTS) {
     const { data: wfBatch, error: wfErr } = await db.from("wheel_fitments")
       .select("product_id, pcd, diameter, width, center_bore, offset_min, offset_max")
-      .eq("shop_id", shopId).range(wfOffset, wfOffset + DB_BATCH - 1);
+      .eq("shop_id", shopId)
+      .order("id", { ascending: true })
+      .range(wfOffset, wfOffset + DB_BATCH - 1);
     if (wfErr) { console.warn(`[bulk_push] Wheel fitment query error at offset ${wfOffset}:`, wfErr.message); await new Promise(r => setTimeout(r, 2000)); continue; }
     if (!wfBatch || wfBatch.length === 0) break;
     allWheelFitments.push(...wfBatch);
@@ -4952,6 +5739,7 @@ async function processBulkPublish(
       .select("shopify_product_id")
       .eq("shop_id", shopId).neq("status", "staged")
       .not("shopify_product_id", "is", null)
+      .order("id", { ascending: true })
       .range(dbOffset, dbOffset + DB_BATCH - 1);
     if (!batch || batch.length === 0) break;
     for (const p of batch) {
@@ -5051,30 +5839,61 @@ async function processSyncAfterDelete(
       }
     }
 
-    // 3. Detect stale vehicle pages (engines with 0 products)
-    const { data: syncedPages } = await db.from("vehicle_page_sync")
-      .select("engine_id").eq("shop_id", shopId).eq("sync_status", "synced").limit(5000);
-    if (syncedPages && syncedPages.length > 0) {
-      const syncedEngineIds = syncedPages.map((s: any) => s.engine_id);
-      // Check in chunks of 500 to avoid PostgREST URL limits
+    // 3. Reconcile vehicle page sync state with live fitments.
+    //
+    // Previously this only did stale-detection (synced → pending_delete). That
+    // had a nasty edge case: during an extraction re-run, we temporarily delete
+    // all fitments, so every synced page looks stale and gets marked
+    // pending_delete. When the new fitments land, the pages never get marked
+    // synced again — they just accumulate in pending_delete forever.
+    //
+    // Now we reconcile in BOTH directions on every sync_after_delete run:
+    //   a) pending_delete → synced  when the page's engine has fitments again
+    //   b) synced → pending_delete  when the page's engine has no fitments
+    // This self-heals any stuck pending_delete backlog.
+    const { data: allTrackedPages } = await db.from("vehicle_page_sync")
+      .select("engine_id, sync_status")
+      .eq("shop_id", shopId)
+      .in("sync_status", ["synced", "pending_delete"])
+      .limit(10000);
+    if (allTrackedPages && allTrackedPages.length > 0) {
+      const allEngineIds = allTrackedPages.map((s: any) => s.engine_id);
+      // Check which engines still have fitments (PostgREST URL-safe chunks)
       const liveEngineIds = new Set<string>();
-      for (let i = 0; i < syncedEngineIds.length; i += 500) {
-        const chunk = syncedEngineIds.slice(i, i + 500);
+      for (let i = 0; i < allEngineIds.length; i += 500) {
+        const chunk = allEngineIds.slice(i, i + 500);
         const { data: enginesWithFitments } = await db.from("vehicle_fitments")
           .select("ymme_engine_id").eq("shop_id", shopId)
           .in("ymme_engine_id", chunk).not("ymme_engine_id", "is", null);
         for (const f of enginesWithFitments ?? []) liveEngineIds.add(f.ymme_engine_id);
       }
-      const staleEngineIds = syncedEngineIds.filter((id: string) => !liveEngineIds.has(id));
-      if (staleEngineIds.length > 0) {
-        // Mark stale vehicle pages for removal in chunks
-        for (let i = 0; i < staleEngineIds.length; i += 500) {
+
+      // (a) Revive pages that are pending_delete but have fitments now
+      const stalePendingDeleteIds: string[] = [];
+      const revivableIds: string[] = [];
+      for (const p of allTrackedPages as any[]) {
+        const hasFit = liveEngineIds.has(p.engine_id);
+        if (p.sync_status === "pending_delete" && hasFit) revivableIds.push(p.engine_id);
+        else if (p.sync_status === "synced" && !hasFit) stalePendingDeleteIds.push(p.engine_id);
+      }
+      if (revivableIds.length > 0) {
+        for (let i = 0; i < revivableIds.length; i += 500) {
+          await db.from("vehicle_page_sync")
+            .update({ sync_status: "synced", updated_at: new Date().toISOString() })
+            .eq("shop_id", shopId)
+            .in("engine_id", revivableIds.slice(i, i + 500));
+        }
+        console.log(`[sync_after_delete] Revived ${revivableIds.length} pages back to synced (engines regained fitments)`);
+      }
+      // (b) Mark stale synced pages for removal
+      if (stalePendingDeleteIds.length > 0) {
+        for (let i = 0; i < stalePendingDeleteIds.length; i += 500) {
           await db.from("vehicle_page_sync")
             .update({ sync_status: "pending_delete" })
             .eq("shop_id", shopId)
-            .in("engine_id", staleEngineIds.slice(i, i + 500));
+            .in("engine_id", stalePendingDeleteIds.slice(i, i + 500));
         }
-        console.log(`[sync_after_delete] Marked ${staleEngineIds.length} vehicle pages for deletion`);
+        console.log(`[sync_after_delete] Marked ${stalePendingDeleteIds.length} vehicle pages for deletion`);
       }
     }
 
@@ -5247,6 +6066,7 @@ async function processCleanupChunk(
           .eq("shop_id", shopId).neq("status", "staged")
           .not("fitment_status", "in", '("unmapped","no_match")')
           .not("shopify_product_id", "is", null)
+          .order("id", { ascending: true })
           .range(dbOffset, dbOffset + DB_BATCH - 1);
         if (!batch || batch.length === 0) break;
         for (const p of batch) keepGids.add(`gid://shopify/Product/${p.shopify_product_id}`);
@@ -5346,6 +6166,7 @@ async function processCleanupChunk(
           .eq("shop_id", shopId).neq("status", "staged")
           .not("fitment_status", "in", '("unmapped","no_match")')
           .not("shopify_product_id", "is", null)
+          .order("id", { ascending: true })
           .range(dbOffset, dbOffset + DB_BATCH - 1);
         if (!batch || batch.length === 0) break;
         for (const p of batch) keepGids.add(`gid://shopify/Product/${p.shopify_product_id}`);
@@ -5790,6 +6611,7 @@ async function processCleanupCollections(
       .select("shopify_collection_id")
       .eq("shop_id", shopId)
       .not("shopify_collection_id", "is", null)
+      .order("id", { ascending: true })
       .range(offset, offset + 999);
     if (!batch || batch.length === 0) break;
     for (const c of batch) {

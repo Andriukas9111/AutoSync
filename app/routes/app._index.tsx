@@ -588,7 +588,21 @@ export default function Dashboard() {
                       { label: "Mapped", value: vehicleMapped },
                       { label: "Fitments", value: liveFitmentCount },
                       { label: "Vehicle Coverage", value: s.vehicleCoverage ?? Math.round(liveFitmentCount * 8) },
-                      { label: "Unmapped", value: vehicleNotMapped },
+                      // Split the old "Unmapped" catch-all into two real buckets:
+                      // - Needs Review: flagged products with make-only fitments
+                      //   (they DO ship to Shopify, just need confirmation).
+                      // - No Match: truly no vehicle data detected.
+                      // Before this change the dashboard showed "Unmapped 1,961"
+                      // which was misleading — 1,276 of those were flagged-with-fitments.
+                      ...(needsReview > 0 ? [
+                        { label: "Needs Review", value: needsReview },
+                      ] : []),
+                      { label: "No Match", value: s.noMatch },
+                      // Universal parts stat — products where ONE fitment row
+                      // covers an entire OEM group (VAG 2.0 TSI, BMW N55…).
+                      ...(s.groupUniversalFitments > 0 ? [
+                        { label: "Universal Parts", value: s.groupUniversalFitments },
+                      ] : []),
                       ...(s.wheelProducts > 0 ? [
                         { label: "Wheels", value: s.wheelProducts },
                         { label: "W. Mapped", value: s.wheelMapped },
@@ -616,11 +630,20 @@ export default function Dashboard() {
                   <div style={statGridStyle(2)}>
                     {[
                       { label: "Pushed", value: livePushedProducts },
-                      { label: "Pending", value: Math.max(0, liveMapped - livePushedProducts) },
+                      // "Pending" = any pushable product not yet synced. We
+                      // use `pendingPush` from computeFromStats which already
+                      // includes flagged-with-fitments in the push queue.
+                      // Before: `liveMapped - livePushedProducts` which
+                      // excluded flagged, so the dashboard reported "0 Pending"
+                      // even when 1,276 flagged products hadn't been pushed.
+                      { label: "Pending", value: pendingPush },
                       { label: "Collections", value: liveCollectionCount },
                       { label: "Makes", value: liveActiveMakes },
                       { label: "Pages", value: liveVehiclePages },
                       { label: "Coverage", value: `${vehicleCoverage}%` as unknown as number },
+                      ...(s.groupCollections > 0 ? [
+                        { label: "Group Collections", value: s.groupCollections },
+                      ] : []),
                     ].map((s) => (
                       <div key={s.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</Text>

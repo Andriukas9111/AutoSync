@@ -146,28 +146,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (status) {
     if (status.startsWith("cat_")) {
       query = query.eq("product_category", status.replace("cat_", ""));
-    } else if (status === "smart_mapped" || status === "manual_mapped" || status === "auto_mapped") {
-      // Filter by extraction method — finds products with ANY fitment of that type,
-      // even if the product also has fitments from other methods.
-      // e.g., filtering "Smart Mapped" finds products with 2 smart + 1 manual fitments.
-      const methodMap: Record<string, string> = {
-        smart_mapped: "smart",
-        manual_mapped: "manual",
-        auto_mapped: "auto",
-      };
-      const { data: methodProductIds } = await db
-        .from("vehicle_fitments")
-        .select("product_id")
-        .eq("shop_id", shopId)
-        .eq("extraction_method", methodMap[status]);
-      const uniqueIds = [...new Set((methodProductIds ?? []).map((r: any) => r.product_id))];
-      if (uniqueIds.length > 0) {
-        query = query.in("id", uniqueIds);
-      } else {
-        // No products match — use impossible filter to return empty
-        query = query.eq("id", "00000000-0000-0000-0000-000000000000");
-      }
     } else {
+      // Filter by products.fitment_status directly — this column is authoritative and
+      // matches what the stat tiles (get_push_stats RPC) count. The previous approach
+      // queried vehicle_fitments.extraction_method which stores engine-specific labels
+      // (make_only / universal_part / smart) and never the literal "auto" or "manual",
+      // so `?status=auto_mapped` always returned 0 results despite 128 auto-mapped
+      // products existing. One source of truth = one column: products.fitment_status.
       query = query.eq("fitment_status", status);
     }
   }
@@ -621,7 +606,15 @@ export default function Products() {
     <Page
       fullWidth
       title="Products"
-      subtitle={`${totalCount.toLocaleString()} products across all sources`}
+      subtitle={
+        // Show the REAL unfiltered total so the subtitle doesn't say "0 products
+        // across all sources" when a filter is active. totalCount reflects the
+        // filtered query; vehicleTotal + wheelTotal is the true catalog size and
+        // matches the dashboard. When a filter is active we also show "(N matching)".
+        filters.search || filters.status || filters.source || filters.provider
+          ? `${(vehicleTotal + wheelTotal).toLocaleString()} products across all sources — ${totalCount.toLocaleString()} match current filter`
+          : `${(vehicleTotal + wheelTotal).toLocaleString()} products across all sources`
+      }
       primaryAction={{
         content: isFetching ? "Fetching..." : "Fetch Products",
         onAction: handleFetchProducts,
