@@ -23,6 +23,7 @@ import {
   Icon,
   InlineGrid,
   Box,
+  Toast,
 } from "@shopify/polaris";
 import {
   ExportIcon,
@@ -415,20 +416,33 @@ function DangerAction({
   const [open, setOpen] = useState(false);
   const isLoading = fetcher.state !== "idle";
 
-  // Show result banner from this specific fetcher
+  // Previously rendered a Banner INSIDE this component on success/error, which
+  // inflated one grid cell and broke the 2×2 Shopify-Cleanup layout (see the
+  // "Collection removal started" green block eating the Tags slot in a prior
+  // screenshot). Polaris Toast renders in the Frame's toast layer instead —
+  // no layout impact — and auto-dismisses so the user doesn't have to clear it.
   const result = fetcher.data as { success?: boolean; message?: string; error?: string } | undefined;
+  const [toastShown, setToastShown] = useState<string | null>(null);
+  const toastMessage = result?.success ? result.message : result?.error;
+  const toastError = !result?.success && !!result?.error;
+
+  useEffect(() => {
+    if (toastMessage && toastMessage !== toastShown) {
+      setToastShown(toastMessage);
+    }
+  }, [toastMessage, toastShown]);
+
+  const activeToast = toastMessage && toastMessage === toastShown;
 
   return (
     <>
-      {result?.success && (
-        <Banner tone="success" onDismiss={() => {}}>
-          <p>{result.message}</p>
-        </Banner>
-      )}
-      {result?.error && (
-        <Banner tone="critical" onDismiss={() => {}}>
-          <p>{result.error}</p>
-        </Banner>
+      {activeToast && (
+        <Toast
+          content={toastMessage!}
+          error={toastError}
+          onDismiss={() => setToastShown(null)}
+          duration={4500}
+        />
       )}
       <Box background="bg-surface-secondary" borderRadius="200" padding="300">
         <BlockStack gap="200">
