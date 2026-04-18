@@ -1,10 +1,19 @@
 /**
  * FilterBar — Unified filter row used across every list page.
  *
- * Ensures the TextField + Search button + Select dropdowns share the same
- * height and dropdown styling app-wide. Each instance renders inside a
+ * Ensures the TextField + Search button + dropdowns share the same height
+ * and dropdown styling app-wide. Each instance renders inside a
  * .as-filter-bar container (styled globally in app.tsx) so height/dropdown
  * fixes apply uniformly.
+ *
+ * DROPDOWN CONSISTENCY RULE — matches VehicleSelector (manual mapping):
+ *   - short list (≤10 options) → plain Polaris <Select>
+ *   - long list  (>10 options) → type-ahead Combobox+Listbox
+ * Callers can force the Combobox form by passing `searchable: true` even
+ * when options are short (e.g., 8-item provider filters that will grow).
+ * The switch happens automatically based on options.length when you don't
+ * override, so dropdowns across the app stay consistent with the manual-
+ * mapping experience without each caller having to know which widget to use.
  *
  * Usage:
  *   <FilterBar
@@ -15,11 +24,12 @@
  *     placeholder="Search by title..."
  *     selects={[
  *       { label: "Status", value: status, options: STATUS_OPTIONS, onChange: setStatus, minWidth: 170 },
- *       { label: "Source", value: source, options: SOURCE_OPTIONS, onChange: setSource, minWidth: 150 },
+ *       { label: "Provider", value: provider, options: providerOptions, onChange: setProvider, searchable: true },
  *     ]}
  *     onClearAll={hasActiveFilters ? resetFilters : undefined}
  *   />
  */
+import { useMemo, useState, useCallback } from "react";
 import {
   TextField,
   Select,
@@ -29,6 +39,8 @@ import {
   Card,
   BlockStack,
   Text,
+  Combobox,
+  Listbox,
 } from "@shopify/polaris";
 import { SearchIcon, FilterIcon } from "@shopify/polaris-icons";
 import { IconBadge } from "./IconBadge";
@@ -39,6 +51,88 @@ export interface FilterBarSelect {
   options: { label: string; value: string }[];
   onChange: (value: string) => void;
   minWidth?: number;
+  /** Force the searchable Combobox form. Defaults to true when options.length > 10. */
+  searchable?: boolean;
+}
+
+const SEARCHABLE_THRESHOLD = 10;
+
+/**
+ * Renders a single filter dropdown, auto-upgrading to a searchable Combobox
+ * when the option list is long enough that scrolling becomes painful.
+ * Uses the same Combobox/Listbox pattern as VehicleSelector so the app-wide
+ * dropdown experience stays uniform.
+ */
+function FilterSelect({ s }: { s: FilterBarSelect }) {
+  const shouldSearch = s.searchable ?? s.options.length > SEARCHABLE_THRESHOLD;
+
+  if (!shouldSearch) {
+    return (
+      <div style={{ minWidth: `${s.minWidth ?? 160}px` }}>
+        <Select
+          label={s.label}
+          labelHidden
+          options={s.options}
+          value={s.value}
+          onChange={s.onChange}
+        />
+      </div>
+    );
+  }
+
+  return <SearchableFilter s={s} />;
+}
+
+function SearchableFilter({ s }: { s: FilterBarSelect }) {
+  const [input, setInput] = useState("");
+  const currentLabel = useMemo(
+    () => s.options.find((o) => o.value === s.value)?.label ?? "",
+    [s.options, s.value],
+  );
+
+  const filtered = useMemo(() => {
+    const q = input.trim().toLowerCase();
+    if (!q) return s.options;
+    return s.options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [input, s.options]);
+
+  const handleSelect = useCallback((val: string) => {
+    s.onChange(val);
+    setInput("");
+  }, [s]);
+
+  return (
+    <div style={{ minWidth: `${s.minWidth ?? 200}px` }}>
+      <Combobox
+        activator={
+          <Combobox.TextField
+            label={s.label}
+            labelHidden
+            value={input || currentLabel}
+            placeholder={s.label}
+            onChange={setInput}
+            onFocus={() => setInput("")}
+            prefix={<Icon source={SearchIcon} />}
+            autoComplete="off"
+          />
+        }
+      >
+        {filtered.length > 0 ? (
+          <Listbox onSelect={handleSelect}>
+            {filtered.slice(0, 200).map((o) => (
+              <Listbox.Option key={o.value} value={o.value} selected={o.value === s.value}>
+                {o.label}
+              </Listbox.Option>
+            ))}
+          </Listbox>
+        ) : (
+          <div style={{ padding: "8px 12px" }}>
+            <Text as="p" variant="bodySm" tone="subdued">No matches</Text>
+          </div>
+        )}
+      </Combobox>
+    </div>
+  );
 }
 
 export interface FilterBarProps {
@@ -97,15 +191,7 @@ export function FilterBar({
               />
             </div>
             {selects.map((s, i) => (
-              <div key={i} style={{ minWidth: `${s.minWidth ?? 160}px` }}>
-                <Select
-                  label={s.label}
-                  labelHidden
-                  options={s.options}
-                  value={s.value}
-                  onChange={s.onChange}
-                />
-              </div>
+              <FilterSelect key={i} s={s} />
             ))}
             {onClearAll && (
               <Button onClick={onClearAll} variant="plain">

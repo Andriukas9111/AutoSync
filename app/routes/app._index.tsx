@@ -390,6 +390,18 @@ export default function Dashboard() {
   // CRITICAL: pass ALL fields that job-status.tsx returns to prevent flash-of-wrong-data.
   // Any field NOT passed here defaults to 0 from DEFAULT_STATS, causing a visible jump
   // when the first poll returns correct data after ~5 seconds.
+  //
+  // needsPush formula MUST match job-status.tsx:88 — products with fitments
+  // (auto/smart/manual/flagged) that have synced_at=NULL. Seeding with
+  // `totalProducts - pushedProducts` double-counted no_match products in the
+  // flash window, showing "Pending 1,351" before polling settled to the real
+  // value (~667). Computing it from the loader's authoritative counts here
+  // keeps the seed honest.
+  const seedNeedsPush = Math.max(
+    0,
+    (autoMapped + smartMapped + manualMapped + flagged) - (loaderPushedProducts ?? 0),
+  );
+
   const { stats: liveData, jobs: liveJobs } = useAppData({
     total: totalProducts,
     unmapped,
@@ -403,7 +415,7 @@ export default function Dashboard() {
     vehicleCoverage: Math.round(fitmentCount * 8), // Same formula as job-status.tsx
     collections: collectionCount,
     pushedProducts: loaderPushedProducts,
-    needsPush: totalProducts - (loaderPushedProducts ?? 0), // Approximate — exact value comes from poll
+    needsPush: seedNeedsPush,
     activeMakes: loaderActiveMakes,
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
