@@ -463,22 +463,44 @@ Deno.serve(async (req) => {
         toInsert.push(product);
       }
 
-      // 4. Batch insert new products
+      // 4. Batch insert new products via UPSERT on (shop_id, handle) so the
+      //    DB silently swallows duplicates that slipped through in-memory
+      //    dedup. Forge's API returns the same SKU multiple times within a
+      //    single page response (confirmed by row timestamps <1s apart with
+      //    identical handles), so relying on seenInBatch alone isn't enough.
+      //    The unique index `products_shop_handle_uniq` enforces the
+      //    invariant at the DB level; `ignoreDuplicates: true` keeps the
+      //    existing row (preserving fitment_status, synced_at, etc.) and
+      //    turns the conflict into a no-op instead of an error.
       if (toInsert.length > 0) {
         const BATCH = 500;
         for (let i = 0; i < toInsert.length; i += BATCH) {
           const batch = toInsert.slice(i, i + BATCH);
-          const { error: insertErr } = await db.from("products").insert(batch);
+          const { error: insertErr, data: inserted } = await db
+            .from("products")
+            .upsert(batch, { onConflict: "shop_id,handle", ignoreDuplicates: true })
+            .select("id");
           if (insertErr) {
-            console.error(`[provider-import] Insert error: ${insertErr.message}`);
-            // Try inserting one by one to skip problematic rows
+            console.error(`[provider-import] Upsert error: ${insertErr.message}`);
+            // Fallback: insert one-by-one so a single bad row doesn't poison
+            // the whole batch.
             for (const single of batch) {
-              const { error: singleErr } = await db.from("products").insert(single);
+              const { error: singleErr } = await db
+                .from("products")
+                .upsert(single, { onConflict: "shop_id,handle", ignoreDuplicates: true });
               if (!singleErr) insertedCount++;
               else console.warn(`[provider-import] Skipped product "${single.title?.slice(0, 40)}": ${singleErr.message}`);
             }
           } else {
-            insertedCount += batch.length;
+            // `inserted.length` tells us how many actually hit the table —
+            // ignored duplicates aren't returned, so this reports the real
+            // new-insert count instead of the attempted-insert count.
+            insertedCount += inserted?.length ?? 0;
+            const ignored = batch.length - (inserted?.length ?? 0);
+            if (ignored > 0) {
+              skippedCount += ignored;
+              console.log(`[provider-import] Ignored ${ignored} duplicate handles in batch`);
+            }
           }
         }
       }

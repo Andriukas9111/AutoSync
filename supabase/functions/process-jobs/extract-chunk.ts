@@ -462,7 +462,16 @@ export async function runExtractChunk(
           chunkUnmapped++
         }
       } else if (confidence >= FLAG_THRESHOLD) {
-        // Medium confidence: prefer model fitments, fall back to make-only
+        // Medium confidence: prefer model fitments, fall back to make-only.
+        //
+        // CRITICAL: only mark `flagged` if at least one fitment actually
+        // landed in vehicle_fitments. Previously this branch *unconditionally*
+        // wrote fitment_status='flagged' at the end, regardless of whether
+        // the model-insert or make-insert succeeded — so silent failures
+        // (make not in YMME, empty modelSuggestions + empty allMakes, insert
+        // errors) left 978/1201 flagged products with ZERO fitments. That
+        // broke the push pipeline (no tags written) and confused the UI.
+        // Now: if no fitments exist post-write → mark as `no_match`.
         const modelSuggestions = unique
           .filter((s) => s.model?.id && s.make.id && s.confidence >= FLAG_THRESHOLD)
           .slice(0, 8)
@@ -534,8 +543,19 @@ export async function runExtractChunk(
             }
           }
         }
-        await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId)
-        chunkFlagged++
+        // Post-insert reality check: if this product still has zero fitment
+        // rows, demote to `no_match`. Only flag when we actually stored
+        // something the push pipeline can work with.
+        const { count: mcCount } = await db.from("vehicle_fitments")
+          .select("id", { count: "exact", head: true })
+          .eq("product_id", product.id).eq("shop_id", shopId)
+        if ((mcCount ?? 0) > 0) {
+          await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId)
+          chunkFlagged++
+        } else {
+          await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId)
+          chunkUnmapped++
+        }
       } else if (allMakes.length > 0) {
         // Low confidence, but make found → flagged with make-only fallback.
         // DIAG: log what we're working with so we can diagnose why the final
