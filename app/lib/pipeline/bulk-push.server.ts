@@ -15,6 +15,10 @@
  */
 
 import db from "../db.server";
+import { apiVersion } from "../../shopify.server";
+
+// Shopify API version — imported from shopify.server.ts (single source of truth)
+const SHOPIFY_API_VERSION = apiVersion;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -238,7 +242,7 @@ export async function startBulkPush(
   mutationString: string,
 ): Promise<BulkStartResult> {
   const { shopId, accessToken } = options;
-  const graphqlUrl = `https://${shopId}/admin/api/2026-01/graphql.json`;
+  const graphqlUrl = `https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const headers = {
     "Content-Type": "application/json",
     "X-Shopify-Access-Token": accessToken,
@@ -344,7 +348,7 @@ export async function checkBulkOperationStatus(
   accessToken: string,
   operationId: string,
 ): Promise<BulkStatusResult> {
-  const res = await fetch(`https://${shopId}/admin/api/2026-01/graphql.json`, {
+  const res = await fetch(`https://${shopId}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -36,70 +36,206 @@ export interface DuplicateCheckResult {
 // Known field patterns — 50+ common column name variations
 // ---------------------------------------------------------------------------
 
+// Comprehensive field patterns — supports Shopify, WooCommerce, PrestaShop,
+// Magento, OpenCart, BigCommerce, VirtueMart/Joomla, custom supplier feeds
 const FIELD_PATTERNS: Record<string, string[]> = {
   title: [
-    "title", "name", "product_name", "product_title", "item_name", "item_title",
-    "product name", "product title", "item name", "description_short", "short_name",
-    "part_description", "part_name", "part description",
+    // Shopify
+    "title", "product_title",
+    // WooCommerce / WordPress
+    "name", "product_name", "post_title",
+    // PrestaShop
+    "nom", "designation",
+    // Magento
+    "item_name", "item_title",
+    // Generic
+    "product name", "product title", "item name", "short_name",
+    "part_description", "part_name", "part description", "product",
+    "listing_title", "article_name",
   ],
   sku: [
-    "sku", "variant_sku", "item_sku", "product_sku", "part_number", "part_no",
-    "partnumber", "part_num", "item_number", "item_no", "reference", "ref",
-    "article_number", "article_no", "catalog_number", "oem_number", "oem",
+    // Shopify
+    "sku", "variant_sku",
+    // WooCommerce
+    "item_sku", "product_sku", "_sku",
+    // PrestaShop / Magento
+    "reference", "product_reference",
+    // Generic supplier
+    "part_number", "part_no", "partnumber", "part_num",
+    "item_number", "item_no", "article_number", "article_no",
+    "catalog_number", "oem_number", "oem",
     "manufacturer_part_number", "mpn",
+    "code", "product_code", "item_code", "part_code", "stock_code",
+    "model_code", "model", "ref",
   ],
   price: [
-    "price", "variant_price", "retail_price", "sale_price", "selling_price",
-    "rrp", "msrp", "retail", "unit_price", "list_price",
+    // Shopify
+    "price", "variant_price",
+    // WooCommerce
+    "regular_price", "_regular_price", "sale_price_dates_from",
+    // PrestaShop
+    "prix", "prix_ttc", "price_tax_incl", "price_tex",
+    // Magento
+    "base_price",
+    // Generic
+    "retail_price", "selling_price", "rrp", "msrp", "retail",
+    "unit_price", "list_price", "rrp_inc_vat", "rrp_exc_vat",
+    "price_normal", "price.normal", "normal_price",
   ],
   cost_price: [
     "cost", "cost_price", "wholesale_price", "trade_price", "buy_price",
     "purchase_price", "supplier_price", "net_price", "dealer_price",
+    "your_price", "your_price_exc_vat", "your_price_ex_vat", "trade",
+    "your_price_inc_vat", "nett", "nett_price", "cost_per_item",
+    // PrestaShop
+    "wholesale_price", "prix_achat",
+    // Magento
+    "base_cost",
   ],
   map_price: [
     "map", "map_price", "minimum_advertised_price", "min_price",
   ],
   compare_at_price: [
-    "compare_at_price", "compare_price", "was_price", "original_price",
-    "before_price", "old_price", "regular_price",
+    // Shopify
+    "compare_at_price", "variant_compare_at_price",
+    // WooCommerce
+    "_sale_price", "sale_price",
+    // Generic
+    "compare_price", "was_price", "original_price",
+    "before_price", "old_price", "special_offer",
+    "offer_price", "discount_price", "special_price",
+    "price.special_offer", "price_special_offer",
+    // PrestaShop
+    "prix_promo", "reduction_price",
   ],
   vendor: [
-    "vendor", "brand", "manufacturer", "maker", "supplier", "brand_name",
+    // Shopify
+    "vendor",
+    // Generic
+    "brand", "manufacturer", "maker", "supplier", "brand_name",
     "manufacturer_name", "mfg", "make",
+    // PrestaShop
+    "marque", "fabricant",
+    // Magento
+    "manufacturer",
+    // WooCommerce
+    "pa_brand",
+    // Flattened nested (from API enrichment)
+    "manufacturer_name", "manufacturer_id",
   ],
   product_type: [
-    "product_type", "type", "category", "product_category", "item_type",
+    // Shopify
+    "product_type", "type",
+    // Generic
+    "category", "product_category", "item_type",
     "classification", "group", "department", "class",
+    // WooCommerce
+    "tax:product_type", "tax:product_cat",
+    // PrestaShop
+    "categorie", "categorie_principale",
+    // OpenCart
+    "categories",
   ],
   handle: [
-    "handle", "slug", "url_key", "seo_url", "permalink",
+    // Shopify
+    "handle", "op",
+    // WooCommerce / WordPress
+    "slug", "post_name",
+    // Magento
+    "url_key",
+    // Generic
+    "seo_url", "permalink", "url_rewrite", "friendly_url",
+    // PrestaShop
+    "link_rewrite",
   ],
   description: [
-    "description", "body_html", "body", "long_description", "full_description",
+    // Shopify
+    "body_html", "body_(html)",
+    // WooCommerce
+    "post_content", "post_excerpt",
+    // PrestaShop
+    "description_long", "description_courte",
+    // Magento
+    "short_description",
+    // Generic
+    "description", "body", "long_description", "full_description",
     "product_description", "details", "content", "text",
+    "short_desc", "desc", "summary",
   ],
   image_url: [
-    "image_url", "image", "image_src", "photo_url", "picture_url",
-    "thumbnail", "main_image", "primary_image", "img_url", "photo",
-    "image_link", "picture",
+    // Shopify
+    "image_src", "image_url",
+    // WooCommerce
+    "images", "featured_image",
+    // PrestaShop
+    "image_url", "url_image",
+    // Magento
+    "base_image", "small_image", "thumbnail_image",
+    // Generic
+    "image", "photo_url", "picture_url", "thumbnail",
+    "main_image", "primary_image", "img_url", "photo",
+    "image_link", "picture", "img", "image_1",
+    // OpenCart
+    "main_image",
   ],
   barcode: [
+    // Shopify
+    "variant_barcode",
+    // Generic
     "barcode", "upc", "ean", "gtin", "isbn", "asin",
     "upc_code", "ean_code", "gtin13", "gtin14",
+    // PrestaShop
+    "ean13",
+    // WooCommerce
+    "_global_unique_id",
   ],
   weight: [
     "weight", "weight_value", "shipping_weight", "item_weight", "net_weight",
     "gross_weight", "product_weight",
+    // Shopify
+    "variant_grams",
+    // WooCommerce
+    "_weight",
+    // PrestaShop
+    "poids",
   ],
   weight_unit: [
     "weight_unit", "weight_uom", "unit_of_measure",
   ],
   tags: [
     "tags", "keywords", "labels", "tag_list",
+    "product_tags", "tag",
   ],
   provider_sku: [
     "supplier_sku", "supplier_code", "supplier_ref", "external_sku",
     "vendor_sku", "source_sku", "original_sku",
+  ],
+  // ── Wheel-specific fields (alloy wheels, rims) ──
+  wheel_pcd: [
+    "pcd", "bolt_pattern", "bolt pattern", "stud_pattern", "stud pattern",
+    "pcd_size", "lochkreis", "bolt_circle", "entraxe",
+  ],
+  wheel_diameter: [
+    "diameter", "rim_diameter", "wheel_diameter", "rim_size",
+    "wheel_size", "felgengroesse", "taille",
+  ],
+  wheel_width: [
+    "width", "rim_width", "wheel_width", "felgenbreite", "jante_largeur",
+  ],
+  wheel_center_bore: [
+    "center_bore", "centre_bore", "hub_bore", "cb", "center bore",
+    "centre bore", "nabenbohrung", "alesage",
+  ],
+  wheel_offset: [
+    "offset", "et", "et_offset", "einpresstiefe", "deport",
+  ],
+  wheel_max_load: [
+    "max_load", "load_rating", "load_index", "tragfaehigkeit",
+    "tuv_max_load", "load_capacity",
+  ],
+  wheel_colour: [
+    "colour", "color", "finish", "wheel_color", "wheel_colour",
+    "acc_colour", "farbe", "couleur",
   ],
 };
 
@@ -111,12 +247,28 @@ const FIELD_PATTERNS: Record<string, string[]> = {
  * Auto-detect column mappings from header names.
  * Returns a mapping for every header — unmapped headers get targetField: null.
  */
+// Headers that should NEVER be auto-mapped (always Skip)
+const SKIP_HEADERS = new Set([
+  "href", "id", "parent_id", "sort_order", "custom_sort_order",
+  "date_added", "date_modified", "date_modified_admin", "date_modified_api",
+  "link", "status", "published", "published_at", "updated_at", "created_at",
+  "exclude_from_google_base", "exclude_from_api_webhook", "is_digital",
+  "is_addon_product", "is_discontinued", "triggers_event_system",
+]);
+
 export function autoMapColumns(headers: string[]): ColumnMapping[] {
   const mappings: ColumnMapping[] = [];
   const usedTargets = new Set<string>();
 
   for (const header of headers) {
     const normalizedHeader = header.toLowerCase().trim().replace(/[\s_-]+/g, "_");
+
+    // Skip blocklisted headers
+    if (SKIP_HEADERS.has(normalizedHeader)) {
+      mappings.push({ sourceColumn: header, targetField: null, isUserEdited: false });
+      continue;
+    }
+
     let matched = false;
 
     for (const [targetField, patterns] of Object.entries(FIELD_PATTERNS)) {
@@ -124,9 +276,10 @@ export function autoMapColumns(headers: string[]): ColumnMapping[] {
 
       const isMatch = patterns.some((p) => {
         const normalizedPattern = p.replace(/[\s_-]+/g, "_");
+        // Exact match OR header contains the full pattern (e.g., "product_title" contains "title")
+        // Do NOT match pattern-contains-header (e.g., "barcode" should not match "code")
         return normalizedHeader === normalizedPattern ||
-          normalizedHeader.includes(normalizedPattern) ||
-          normalizedPattern.includes(normalizedHeader);
+          normalizedHeader.includes(normalizedPattern);
       });
 
       if (isMatch) {
@@ -145,20 +298,105 @@ export function autoMapColumns(headers: string[]): ColumnMapping[] {
   return mappings;
 }
 
+/**
+ * Enhanced auto-mapping that also analyzes sample data to make smarter decisions.
+ * - Detects URL columns and avoids mapping them as SKU
+ * - Detects price-like values and maps them correctly
+ * - Detects image URLs by checking for common image extensions or domains
+ */
+export function smartAutoMapColumns(
+  headers: string[],
+  sampleRows: Record<string, string>[],
+): ColumnMapping[] {
+  // Start with pattern-based mapping
+  const mappings = autoMapColumns(headers);
+
+  if (sampleRows.length === 0) return mappings;
+
+  const sample = sampleRows[0];
+  const usedTargets = new Set(mappings.filter(m => m.targetField).map(m => m.targetField!));
+
+  for (const mapping of mappings) {
+    const val = String(sample[mapping.sourceColumn] || "").trim();
+    if (!val) continue;
+
+    // Fix: if mapped as SKU but value looks like a URL path, unmatch it
+    if (mapping.targetField === "sku" && (val.startsWith("/") || val.startsWith("http"))) {
+      mapping.targetField = null;
+      mapping.isUserEdited = false;
+      usedTargets.delete("sku");
+    }
+
+    // Fix: if mapped as barcode but value looks like a short product code (not numeric), remap to SKU
+    if (mapping.targetField === "barcode" && !usedTargets.has("sku")) {
+      const isNumericBarcode = /^\d{8,14}$/.test(val); // UPC/EAN are 8-14 digits
+      if (!isNumericBarcode) {
+        mapping.targetField = "sku";
+        usedTargets.delete("barcode");
+        usedTargets.add("sku");
+      }
+    }
+
+    // Auto-detect image URLs for unmapped columns
+    if (!mapping.targetField && !usedTargets.has("image_url")) {
+      if (/\.(jpg|jpeg|png|gif|webp|svg)/i.test(val) || /\/images\//i.test(val) || /\/userfiles\//i.test(val)) {
+        mapping.targetField = "image_url";
+        usedTargets.add("image_url");
+      }
+    }
+
+    // Auto-detect URL columns as description source (product page links)
+    if (!mapping.targetField && mapping.sourceColumn.toLowerCase() === "link" && val.startsWith("http")) {
+      // Keep as unmapped — stored in raw_data for reference
+    }
+
+    // Auto-detect cost price fields
+    if (!mapping.targetField && !usedTargets.has("cost_price")) {
+      const header = mapping.sourceColumn.toLowerCase();
+      if (/your.price|trade.price|wholesale|cost/i.test(header) && /^\d/.test(val)) {
+        mapping.targetField = "cost_price";
+        usedTargets.add("cost_price");
+      }
+    }
+
+    // Auto-detect PCD (bolt pattern) values like "5x112", "4x100", "5x114.3"
+    if (!mapping.targetField && !usedTargets.has("wheel_pcd")) {
+      if (/^\d[xX]\d{2,3}(\.\d)?$/.test(val)) {
+        mapping.targetField = "wheel_pcd";
+        usedTargets.add("wheel_pcd");
+      }
+    }
+
+    // Auto-detect wheel width values like "7.5", "8.0", "8.5" (half-inch increments)
+    if (!mapping.targetField && !usedTargets.has("wheel_width")) {
+      const header = mapping.sourceColumn.toLowerCase();
+      if (header.includes("width") && /^\d+\.?\d*$/.test(val) && parseFloat(val) >= 4 && parseFloat(val) <= 16) {
+        mapping.targetField = "wheel_width";
+        usedTargets.add("wheel_width");
+      }
+    }
+  }
+
+  return mappings;
+}
+
 // ---------------------------------------------------------------------------
 // Saved mapping management
 // ---------------------------------------------------------------------------
 
 /**
  * Load saved column mappings for a provider from the database.
+ * shopId is REQUIRED for multi-tenant security — ensures mappings are scoped to the tenant.
  */
 export async function loadSavedMappings(
   providerId: string,
+  shopId: string,
 ): Promise<ColumnMapping[]> {
   const { data } = await db
     .from("provider_column_mappings")
     .select("source_column, target_field, transform_rule, is_user_edited")
-    .eq("provider_id", providerId);
+    .eq("provider_id", providerId)
+    .eq("shop_id", shopId);
 
   if (!data) return [];
 

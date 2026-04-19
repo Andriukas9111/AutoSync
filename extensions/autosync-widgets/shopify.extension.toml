@@ -16,10 +16,6 @@ name = "Vehicle Compatibility Table"
 template = "blocks/vehicle-compatibility.liquid"
 
 [[blocks]]
-name = "Floating Vehicle Bar"
-template = "blocks/floating-vehicle-bar.liquid"
-
-[[blocks]]
 name = "Plate Lookup"
 template = "blocks/plate-lookup.liquid"
 
@@ -32,7 +28,7 @@ name = "VIN Decode"
 template = "blocks/vin-decode.liquid"
 
 [[blocks]]
-name = "Vehicle Showcase"
+name = "Vehicle Spec Pages"
 template = "blocks/vehicle-specs-page.liquid"
 
 [[blocks]]

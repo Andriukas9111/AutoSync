@@ -7,9 +7,9 @@
  * Step 4: Import with progress
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { useLoaderData, useNavigate, useSearchParams, redirect } from "react-router";
 import {
   Page,
   Card,
@@ -34,15 +34,21 @@ import {
   DeleteIcon,
   RefreshIcon,
   ConnectIcon,
+  LinkIcon,
+  ViewIcon,
+  AlertCircleIcon,
 } from "@shopify/polaris-icons";
+import { IconBadge } from "../components/IconBadge";
 import { DataTable } from "../components/DataTable";
 import { HowItWorks } from "../components/HowItWorks";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { getTargetFields } from "../lib/providers/column-mapper.server";
 import type { PlanTier } from "../lib/types";
+import { stepNumberStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,13 +89,33 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
+  const limits = getPlanLimits(plan);
+
+  // Server-side enforcement: redirect if plan doesn't allow providers
+  if (limits.providers === 0) {
+    throw redirect("/app/providers?error=plan_limit");
+  }
+
   const targetFields = getTargetFields();
+
+  // Generate a signed upload URL for Supabase Storage
+  // This lets the client upload large files directly to Supabase,
+  // bypassing Vercel's 4.5MB body size limit
+  const uploadToken = `uploads/${providerId}/${Date.now()}_file`;
+  const { data: signedUrl } = await db.storage
+    .from("provider-uploads")
+    .createSignedUploadUrl(uploadToken);
+
+  // signedUrl already contains the full URL from Supabase JS client
+  const fullUploadUrl = signedUrl?.signedUrl || null;
 
   return {
     provider,
     plan,
     targetFields,
+    uploadUrl: fullUploadUrl,
+    uploadToken: signedUrl ? uploadToken : null,
   };
 };
 
@@ -120,7 +146,7 @@ const FORMAT_LABELS: Record<string, string> = {
 };
 
 export default function ProviderImportWizard() {
-  const { provider, targetFields } = useLoaderData<typeof loader>();
+  const { provider, targetFields, uploadUrl, uploadToken } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -132,6 +158,10 @@ export default function ProviderImportWizard() {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // FTP file selection (when remotePath is a directory)
+  const [ftpFiles, setFtpFiles] = useState<{ name: string; size: number; sizeFormatted: string; modified: string | null }[] | null>(null);
+  const [selectedFtpFile, setSelectedFtpFile] = useState<string | null>(null);
 
   // Preview state
   const [preview, setPreview] = useState<{
@@ -179,6 +209,9 @@ export default function ProviderImportWizard() {
   const providerType = provider.type as string;
   const cfg = (provider.config || {}) as Record<string, unknown>;
 
+  // Auto-fetch ref — prevents double-fetch in strict mode
+  const autoFetchedRef = useRef(false);
+
   // ---------------------------------------------------------------------------
   // Step 1: File Upload
   // ---------------------------------------------------------------------------
@@ -193,29 +226,64 @@ export default function ProviderImportWizard() {
     [],
   );
 
+  // Storage path from uploaded file (set after Supabase upload)
+  const [storagePath, setStoragePath] = useState<string | null>(null);
+
   const handlePreviewFile = useCallback(async () => {
     if (!file) return;
     setLoading(true);
     setError(null);
 
     try {
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("provider_id", provider.id);
+      let usedStoragePath: string | null = null;
+
+      // For large files (>4MB), upload to Supabase Storage first via signed URL
+      // This bypasses Vercel's 4.5MB body size limit
+      if (file.size > 4 * 1024 * 1024 && uploadUrl && uploadToken) {
+        const uploadResponse = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type || "application/octet-stream" },
+          body: file,
+        });
+
+        if (!uploadResponse.ok) {
+          setError(`File upload failed (${uploadResponse.status}). Please try a smaller file or contact support.`);
+          setLoading(false);
+          return;
+        }
+
+        usedStoragePath = uploadToken;
+        setStoragePath(uploadToken);
+      } else if (file.size > 4 * 1024 * 1024) {
+        setError("File is too large for direct upload. Please try again or use a smaller file.");
+        setLoading(false);
+        return;
+      }
+
+      // Send to Vercel API for parsing/preview
+      const previewForm = new FormData();
+      previewForm.set("provider_id", provider.id);
+
+      if (usedStoragePath) {
+        // Large file: send storage path only
+        previewForm.set("storage_path", usedStoragePath);
+        previewForm.set("file_name", file.name);
+      } else {
+        // Small file: send directly
+        previewForm.set("file", file);
+      }
 
       const response = await fetch("/app/api/upload-preview", {
         method: "POST",
-        body: formData,
+        body: previewForm,
       });
 
       if (!response.ok) {
-        // Try to parse error response, but handle HTML/redirect responses gracefully
         let errorMessage = `Server error (${response.status})`;
         try {
           const result = await response.json();
           errorMessage = result.error || errorMessage;
         } catch {
-          // Response wasn't JSON (likely auth redirect)
           if (response.status === 401 || response.status === 403) {
             errorMessage = "Session expired — please reload the page";
           }
@@ -259,7 +327,7 @@ export default function ProviderImportWizard() {
     } finally {
       setLoading(false);
     }
-  }, [file, provider.id]);
+  }, [file, provider.id, uploadUrl, uploadToken]);
 
   // ---------------------------------------------------------------------------
   // API Fetch — fetch data directly from provider's configured API endpoint
@@ -293,7 +361,7 @@ export default function ProviderImportWizard() {
     }
   }, [provider.id]);
 
-  const handleFetchFromApi = useCallback(async () => {
+  const handleFetchFromApi = useCallback(async (ftpFileOverride?: string) => {
     setFetchingApi(true);
     setError(null);
 
@@ -301,6 +369,8 @@ export default function ProviderImportWizard() {
       const formData = new FormData();
       formData.set("provider_id", provider.id);
       formData.set("_action", "fetch");
+      const ftpFile = ftpFileOverride || selectedFtpFile;
+      if (ftpFile) formData.set("ftp_file", ftpFile);
 
       const response = await fetch("/app/api/provider-fetch", {
         method: "POST",
@@ -330,6 +400,14 @@ export default function ProviderImportWizard() {
         return;
       }
 
+      // Handle FTP directory listing — show file picker
+      if (result.ftpFiles) {
+        setFtpFiles(result.ftpFiles);
+        setFetchingApi(false);
+        return;
+      }
+
+      setFtpFiles(null);
       setPreview(result.preview);
 
       const enrichedMappings: ColumnMappingUI[] = (result.mappings || []).map(
@@ -354,7 +432,25 @@ export default function ProviderImportWizard() {
     } finally {
       setFetchingApi(false);
     }
-  }, [provider.id]);
+  }, [provider.id, selectedFtpFile]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-fetch on mount for API/FTP providers
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (autoFetchedRef.current) return;
+    if (step !== "upload") return;
+
+    const hasConfig =
+      (providerType === "api" && cfg.endpoint) ||
+      (providerType === "ftp" && cfg.host && cfg.remotePath);
+
+    if ((providerType === "api" || providerType === "ftp") && hasConfig) {
+      autoFetchedRef.current = true;
+      const timer = setTimeout(() => handleFetchFromApi(), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [step, providerType, cfg.endpoint, cfg.host, cfg.remotePath, handleFetchFromApi]);
 
   // ---------------------------------------------------------------------------
   // Step 2: Column Mapping
@@ -378,19 +474,83 @@ export default function ProviderImportWizard() {
   // ---------------------------------------------------------------------------
 
   const handleStartImport = useCallback(async () => {
-    if (!file || !preview) return;
+    if (!preview) return;
     setStep("importing");
     setImportProgress(10);
     setError(null);
 
     try {
+      // For API/FTP providers without a local file, use the server-side
+      // import action which re-fetches data and runs the import pipeline
+      if (!file && (providerType === "api" || providerType === "ftp")) {
+        setImportProgress(20);
+
+        const formData = new FormData();
+        formData.set("provider_id", provider.id);
+        formData.set("_action", "import");
+        formData.set("mappings", JSON.stringify(mappings));
+        formData.set("duplicate_strategy", duplicateStrategy);
+
+        const response = await fetch("/app/api/provider-fetch", {
+          method: "POST",
+          body: formData,
+        });
+
+        setImportProgress(80);
+
+        if (!response.ok) {
+          let errorMessage = `Import failed (${response.status})`;
+          try {
+            const errResult = await response.json();
+            errorMessage = errResult.error || errorMessage;
+          } catch {
+            if (response.status === 401 || response.status === 403) {
+              errorMessage = "Session expired — please reload the page";
+            }
+          }
+          setError(errorMessage);
+          setStep("validate");
+          return;
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+          setError(result.error);
+          setStep("validate");
+          return;
+        }
+
+        setImportResult(result);
+        setImportProgress(100);
+        setStep("complete");
+        return;
+      }
+
+      // File-based import (CSV, XML, JSON upload)
+      if (!file && !storagePath) {
+        setError("No file selected. Please upload a file first.");
+        setStep("validate");
+        return;
+      }
+
+      setImportProgress(20);
+
       const formData = new FormData();
-      formData.set("file", file);
       formData.set("provider_id", provider.id);
       formData.set("mappings", JSON.stringify(mappings));
       formData.set("duplicate_strategy", duplicateStrategy);
 
-      setImportProgress(30);
+      if (storagePath) {
+        // File already in Supabase Storage from the preview step — reuse it
+        formData.set("storage_path", storagePath);
+        formData.set("file_name", file?.name || preview?.fileName || "import");
+      } else if (file) {
+        // Small file — send directly
+        formData.set("file", file);
+      }
+
+      setImportProgress(40);
 
       const response = await fetch("/app/api/provider-import", {
         method: "POST",
@@ -430,7 +590,7 @@ export default function ProviderImportWizard() {
       setError(`Import failed: ${message}`);
       setStep("validate");
     }
-  }, [file, preview, provider.id, mappings, duplicateStrategy]);
+  }, [file, preview, provider.id, providerType, mappings, duplicateStrategy]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -509,7 +669,10 @@ export default function ProviderImportWizard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Fetch from API</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ConnectIcon} />
+                      <Text as="h2" variant="headingMd">Fetch from API</Text>
+                    </InlineStack>
                     <Badge tone="info">API</Badge>
                   </InlineStack>
                   <Text as="p" variant="bodyMd" tone="subdued">
@@ -569,7 +732,10 @@ export default function ProviderImportWizard() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
-                    <Text as="h2" variant="headingMd">Fetch from FTP</Text>
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={ConnectIcon} />
+                      <Text as="h2" variant="headingMd">Fetch from FTP</Text>
+                    </InlineStack>
                     <Badge tone="info">FTP</Badge>
                   </InlineStack>
 
@@ -607,15 +773,47 @@ export default function ProviderImportWizard() {
                     </Banner>
                   )}
 
+                  {/* FTP file picker — shown when remotePath is a directory */}
+                  {ftpFiles && ftpFiles.length > 0 && (
+                    <BlockStack gap="200">
+                      <Text as="p" variant="bodySm" fontWeight="semibold">
+                        Select a file to import ({ftpFiles.length} available):
+                      </Text>
+                      <BlockStack gap="100">
+                        {ftpFiles.map((f) => (
+                          <div
+                            key={f.name}
+                            onClick={() => setSelectedFtpFile(f.name)}
+                            style={{
+                              padding: "var(--p-space-200) var(--p-space-300)",
+                              borderRadius: "var(--p-border-radius-200)",
+                              border: `1px solid ${selectedFtpFile === f.name ? "var(--p-color-border-emphasis)" : "var(--p-color-border-secondary)"}`,
+                              background: selectedFtpFile === f.name ? "var(--p-color-bg-surface-selected)" : "var(--p-color-bg-surface)",
+                              cursor: "pointer",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text as="span" variant="bodyMd" fontWeight={selectedFtpFile === f.name ? "semibold" : "regular"}>
+                              {f.name}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">{f.sizeFormatted}</Text>
+                          </div>
+                        ))}
+                      </BlockStack>
+                    </BlockStack>
+                  )}
+
                   <InlineStack gap="300">
                     <Button
                       variant="primary"
-                      onClick={handleFetchFromApi}
+                      onClick={() => handleFetchFromApi()}
                       loading={fetchingApi}
-                      disabled={!cfg.host || !cfg.remotePath || fetchingApi || testingConnection}
+                      disabled={!cfg.host || !cfg.remotePath || fetchingApi || testingConnection || (ftpFiles !== null && !selectedFtpFile)}
                       icon={ImportIcon}
                     >
-                      Fetch Products
+                      {ftpFiles && selectedFtpFile ? `Fetch ${selectedFtpFile}` : "Fetch Products"}
                     </Button>
                     <Button
                       onClick={handleTestConnection}
@@ -639,9 +837,12 @@ export default function ProviderImportWizard() {
             {/* ── File Upload (all provider types) ── */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={FileIcon} />
+                  <Text as="h2" variant="headingMd">
+                    {providerType === "api" ? "Or Upload a File" : "Upload Data File"}
+                  </Text>
+                </InlineStack>
                 <Text as="p" variant="bodyMd" tone="subdued">
                   Supports CSV, TSV, JSON, XML, and Excel files. Format is auto-detected.
                 </Text>
@@ -748,10 +949,13 @@ export default function ProviderImportWizard() {
             {/* Column Mapping Table */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between">
-                  <Text as="h2" variant="headingMd">
-                    Column Mapping
-                  </Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={LinkIcon} />
+                    <Text as="h2" variant="headingMd">
+                      Column Mapping
+                    </Text>
+                  </InlineStack>
                   <Badge tone={mappedCount === totalColumns ? "success" : undefined}>
                     {`${mappedCount} / ${totalColumns} mapped`}
                   </Badge>
@@ -761,6 +965,7 @@ export default function ProviderImportWizard() {
                   Map each source column to a product field. Unmapped columns are stored in raw data for future use.
                 </Text>
 
+                <div style={{ maxHeight: "400px", overflowY: "auto" }}>
                 <DataTable
                   columnContentTypes={["text", "text", "text"]}
                   headings={["Source Column", "Sample Value", "Map To"]}
@@ -787,15 +992,19 @@ export default function ProviderImportWizard() {
                     />,
                   ])}
                 />
+                </div>
               </BlockStack>
             </Card>
 
             {/* Sample Data Preview */}
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Data Preview (First 5 Rows)
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={ViewIcon} />
+                  <Text as="h2" variant="headingMd">
+                    Data Preview (First 5 Rows)
+                  </Text>
+                </InlineStack>
 
                 <div style={{ overflowX: "auto" }}>
                   <DataTable
@@ -840,9 +1049,12 @@ export default function ProviderImportWizard() {
           <>
             <Card>
               <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">
-                  Import Validation
-                </Text>
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={CheckCircleIcon} />
+                  <Text as="h2" variant="headingMd">
+                    Import Validation
+                  </Text>
+                </InlineStack>
 
                 <InlineGrid columns={3} gap="400">
                   <BlockStack gap="100">
@@ -850,6 +1062,12 @@ export default function ProviderImportWizard() {
                     <Text as="p" variant="headingLg">
                       {preview.totalRows.toLocaleString()}
                     </Text>
+                    {/* Show grouped product count if file has variant rows (Shopify CSV) */}
+                    {mappings.some(m => m.sourceColumn.toLowerCase().includes("variant")) && preview.totalRows > mappings.filter(m => m.targetField === "title").length && (
+                      <Text as="p" variant="bodySm" tone="subdued">
+                        Products will be grouped by handle (variant rows merged)
+                      </Text>
+                    )}
                   </BlockStack>
                   <BlockStack gap="100">
                     <Text as="p" variant="bodySm" tone="subdued">Mapped Columns</Text>
@@ -871,9 +1089,12 @@ export default function ProviderImportWizard() {
             {duplicatePreview.duplicateCount > 0 && (
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">
-                    Duplicate Handling
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={RefreshIcon} />
+                    <Text as="h2" variant="headingMd">
+                      Duplicate Handling
+                    </Text>
+                  </InlineStack>
                   <Text as="p" variant="bodySm" tone="subdued">
                     {`Found ${duplicatePreview.duplicateCount} products with matching SKUs already in your database.`}
                   </Text>
@@ -900,7 +1121,7 @@ export default function ProviderImportWizard() {
                 onClick={handleStartImport}
                 icon={ImportIcon}
               >
-                {`Import ${preview.totalRows.toLocaleString()} Products`}
+                Import Products
               </Button>
             </InlineStack>
           </>
@@ -931,39 +1152,67 @@ export default function ProviderImportWizard() {
         {/* ============================================================ */}
         {step === "complete" && importResult && (
           <>
-            <Banner
-              tone={importResult.errorRows > 0 ? "warning" : "success"}
-              title={
-                importResult.errorRows > 0
-                  ? "Import completed with some issues"
-                  : "Import completed successfully"
-              }
-            >
-              <p>
-                {`Imported ${importResult.importedRows.toLocaleString()} of ${importResult.totalRows.toLocaleString()} products.`}
-                {importResult.skippedRows > 0 &&
-                  ` Skipped ${importResult.skippedRows} duplicates.`}
-                {importResult.errorRows > 0 &&
-                  ` ${importResult.errorRows} rows had errors.`}
-              </p>
-            </Banner>
+            {/* Background import shows processing message — products import server-side */}
+            {importResult.totalRows === 0 ? (
+              <Banner tone="success" title="Import started — processing in background">
+                <p>
+                  Products are being imported from the API right now. This typically takes 15-30 seconds.
+                  You can safely close this page — the import continues server-side.
+                  Click "View Products" below to see progress.
+                </p>
+              </Banner>
+            ) : (
+              <Banner
+                tone={importResult.errorRows > 0 ? "warning" : "success"}
+                title={
+                  importResult.errorRows > 0
+                    ? "Import completed with some issues"
+                    : "Import completed successfully"
+                }
+              >
+                <BlockStack gap="200">
+                  <p>
+                    {(importResult as Record<string, unknown>).variantRowsGrouped
+                      ? `${importResult.totalRows.toLocaleString()} rows grouped into ${((importResult as Record<string, unknown>).uniqueProducts as number || importResult.importedRows).toLocaleString()} products (variant rows merged). `
+                      : ""}
+                    {`Imported ${importResult.importedRows.toLocaleString()} products.`}
+                    {importResult.skippedRows > 0 &&
+                      ` Skipped ${importResult.skippedRows.toLocaleString()} duplicates.`}
+                    {importResult.errorRows > 0 &&
+                      ` ${importResult.errorRows} rows had errors.`}
+                  </p>
+                </BlockStack>
+              </Banner>
+            )}
 
-            <Card>
-              <BlockStack gap="400">
-                <Text as="h2" variant="headingMd">Import Summary</Text>
-                <InlineGrid columns={4} gap="400">
-                  <StatCard label="Total Rows" value={importResult.totalRows} />
-                  <StatCard label="Imported" value={importResult.importedRows} tone="success" />
-                  <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
-                  <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
-                </InlineGrid>
-              </BlockStack>
-            </Card>
+            {/* Only show stats card if we have actual numbers (not background processing) */}
+            {importResult.totalRows > 0 && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={CheckCircleIcon} />
+                    <Text as="h2" variant="headingMd">Import Summary</Text>
+                  </InlineStack>
+                  <InlineGrid columns={(importResult as Record<string, unknown>).variantRowsGrouped ? 5 : 4} gap="400">
+                    <StatCard label="Total Rows" value={importResult.totalRows} />
+                    {(importResult as Record<string, unknown>).uniqueProducts && (
+                      <StatCard label="Unique Products" value={(importResult as Record<string, unknown>).uniqueProducts as number} />
+                    )}
+                    <StatCard label="Imported" value={importResult.importedRows} tone="success" />
+                    <StatCard label="Skipped" value={importResult.skippedRows} tone="subdued" />
+                    <StatCard label="Errors" value={importResult.errorRows} tone={importResult.errorRows > 0 ? "critical" : "subdued"} />
+                  </InlineGrid>
+                </BlockStack>
+              </Card>
+            )}
 
             {importResult.errors.length > 0 && (
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Errors</Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={AlertCircleIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
+                    <Text as="h2" variant="headingMd">Errors</Text>
+                  </InlineStack>
                   <DataTable
                     columnContentTypes={["numeric", "text", "text"]}
                     headings={["Row", "Field", "Error"]}
@@ -1029,28 +1278,21 @@ function StepBadge({
   active: boolean;
   completed: boolean;
 }) {
+  const circleStyle = {
+    ...stepNumberStyle,
+    background: completed
+      ? "var(--p-color-bg-fill-success)"
+      : active
+        ? "var(--p-color-bg-fill-emphasis)"
+        : "var(--p-color-bg-fill-secondary)",
+    color: completed || active
+      ? "var(--p-color-text-inverse)"
+      : "var(--p-color-text-secondary)",
+  };
+
   return (
     <InlineStack gap="200" blockAlign="center">
-      <div
-        style={{
-          width: 28,
-          height: 28,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "12px",
-          fontWeight: 600,
-          background: completed
-            ? "var(--p-color-bg-fill-success)"
-            : active
-              ? "var(--p-color-bg-fill-brand)"
-              : "var(--p-color-bg-fill-secondary)",
-          color: completed || active
-            ? "var(--p-color-text-inverse)"
-            : "var(--p-color-text-secondary)",
-        }}
-      >
+      <div style={circleStyle}>
         {completed ? "✓" : step}
       </div>
       <Text
@@ -1086,4 +1328,9 @@ function StatCard({
       </Text>
     </BlockStack>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Provider Import" />;
 }

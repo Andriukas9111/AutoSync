@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import {
   Page,
   Layout,
@@ -15,11 +15,9 @@ import {
   Banner,
   Divider,
   Box,
-  Icon,
 } from "@shopify/polaris";
 import {
   ProductIcon,
-  ConnectIcon,
   GaugeIcon,
   CollectionIcon,
   PackageIcon,
@@ -34,20 +32,21 @@ import {
   SearchIcon,
   AlertCircleIcon,
   CheckCircleIcon,
-  AlertTriangleIcon,
   ClockIcon,
+  MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, getPlanConfigs } from "../lib/billing.server";
+import { getPlanLimits, getPlanConfigs, getEffectivePlan } from "../lib/billing.server";
 import type { PlanTier } from "../lib/types";
+import { asPushStats } from "../lib/types";
 import { OnboardingChecklist } from "../components/OnboardingChecklist";
 import { IconBadge } from "../components/IconBadge";
 import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
-import { SkeletonCard } from "../components/SkeletonCard";
 import { useAppData, computeFromStats } from "../lib/use-app-data";
-import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
+import { statMiniStyle, statGridStyle, STATUS_TONES, statusDotStyle, listRowStyle, tableContainerStyle, formatJobType, formatDate, autoFitGridStyle } from "../lib/design";
 
 // ---------------------------------------------------------------------------
 // Loader — aggregate ALL system stats for the dashboard
@@ -63,10 +62,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     tenantResult,
     totalProductsResult,
     unmappedResult,
-    autoMappedResult,
-    smartMappedResult,
-    manualMappedResult,
+    pushStatsResult,  // RPC: auto/smart/manual/mapped_total/stale_push
     flaggedResult,
+    noMatchResult,
     fitmentCountResult,
     collectionCountResult,
     topMakesResult,
@@ -79,19 +77,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeModelsResult,
     ymmeEnginesResult,
     ymmeSpecsResult,
+    syncedProductsResult,
+    anyPushedResult,
+    wheelProductsResult,
+    wheelMappedResult,
+    wheelFitmentsResult,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
-    // Product counts
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
+    db.from("tenants").select("shop_id, plan, plan_status, product_count, fitment_count, installed_at").eq("shop_id", shopId).maybeSingle(),
+    // Vehicle part counts ONLY — exclude wheels (.neq is safe with NULL: NULL != 'wheels' is true in Supabase)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped").neq("product_category", "wheels"),
+    // Method-based counts: use same RPC as job-status.tsx for consistency (prevents flash-of-wrong-data)
+    // Returns {auto_mapped, smart_mapped, manual_mapped, mapped_total, stale_push} as COUNT(DISTINCT)
+    db.rpc("get_push_stats", { p_shop_id: shopId }),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "no_match").neq("product_category", "wheels"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("collection_mappings").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Top makes
-    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null),
+    // Top makes — cap at 50K rows (enough for accurate top 10, prevents OOM on huge shops)
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000).then((r) => ({ data: r.data ?? [], error: r.error })),
     // Providers
     db.from("providers").select("id, name, type, status, product_count, last_fetch_at").eq("shop_id", shopId).order("created_at", { ascending: false }).limit(5),
     // Recent jobs
@@ -107,10 +111,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("ymme_models").select("id", { count: "exact", head: true }),
     db.from("ymme_engines").select("id", { count: "exact", head: true }),
     db.from("ymme_vehicle_specs").select("id", { count: "exact", head: true }),
+    // Pushed vehicle parts ONLY — matches job-status.tsx (excludes wheels to prevent flash-of-wrong-data)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null).neq("product_category", "wheels"),
+    // hasPushed: ANY product pushed (includes wheels) — for onboarding checklist
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").not("synced_at", "is", null),
+    // Wheel counts — needed for initial render to prevent flash (useAppData defaults to 0)
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("product_category", "wheels").neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("wheel_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
   ]);
 
   const tenant = tenantResult.data;
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
   const limits = getPlanLimits(plan);
   const isFirstTime = !tenant;
 
@@ -145,15 +157,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     planName,
     limits,
     isFirstTime,
-    hasPushed: (tenant?.product_count ?? 0) > 0,
+    hasPushed: (anyPushedResult.count ?? 0) > 0, // ANY product pushed (vehicle or wheel) — for onboarding
     // Products — real counts for instant render, useAppData updates live
+    // Uses same RPC as job-status.tsx to guarantee identical numbers (zero flash)
     totalProducts: totalProductsResult.count ?? 0,
     unmapped: unmappedResult.count ?? 0,
-    autoMapped: autoMappedResult.count ?? 0,
-    smartMapped: smartMappedResult.count ?? 0,
-    manualMapped: manualMappedResult.count ?? 0,
+    ...(() => {
+      const p = asPushStats(pushStatsResult.data);
+      return {
+        autoMapped: p.auto_mapped,
+        smartMapped: p.smart_mapped,
+        manualMapped: p.manual_mapped,
+        mapped: p.mapped_total,
+      };
+    })(),
     flagged: flaggedResult.count ?? 0,
-    mapped: (autoMappedResult.count ?? 0) + (smartMappedResult.count ?? 0) + (manualMappedResult.count ?? 0),
+    noMatch: noMatchResult.count ?? 0,
     // Fitments
     fitmentCount: fitmentCountResult.count ?? 0,
     topMakes,
@@ -170,12 +189,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ymmeEngines: ymmeEnginesResult.count ?? 0,
     ymmeSpecs: ymmeSpecsResult.count ?? 0,
     // Push + sync stats
-    pushedProducts: totalProductsResult.count ?? 0,
+    pushedProducts: syncedProductsResult.count ?? 0,
     activeMakes: activeMakesResult.count ?? 0,
     vehiclePagesSynced: vehiclePagesResult.count ?? 0,
-    // Unique makes/models from fitments (topMakes already has all makes)
-    uniqueMakes: topMakes.length,
+    // Unique makes/models — same source as job-status.tsx (tenant_active_makes)
+    uniqueMakes: activeMakesResult.count ?? 0,
     uniqueModels: modelCollectionResult.count ?? 0,
+    // Wheel counts — prevents flash-of-wrong-data on initial render
+    wheelProducts: wheelProductsResult.count ?? 0,
+    wheelMapped: wheelMappedResult.count ?? 0,
+    wheelFitments: wheelFitmentsResult.count ?? 0,
   };
 };
 
@@ -183,32 +206,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "\u2014";
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-function formatJobType(type: string): string {
-  const labels: Record<string, string> = {
-    fetch: "Fetch Products",
-    extract: "Auto Extract",
-    push: "Push to Shopify",
-    collections: "Create Collections",
-  };
-  return labels[type] ?? type;
-}
 
 // ---------------------------------------------------------------------------
 // Quick Action Card sub-component
@@ -222,7 +219,7 @@ function QuickActionCard({
   primary = false,
   badge,
 }: {
-  icon: any;
+  icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   label: string;
   description: string;
   onClick: () => void;
@@ -263,24 +260,12 @@ function QuickActionCard({
       <BlockStack gap="200">
         <InlineStack gap="200" blockAlign="center" align="space-between">
           <InlineStack gap="200" blockAlign="center">
-            <div
-              style={{
-                width: "36px",
-                height: "36px",
-                borderRadius: "var(--p-border-radius-200)",
-                background: primary
-                  ? "var(--p-color-bg-fill-emphasis)"
-                  : "var(--p-color-bg-surface-secondary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: primary
-                  ? "var(--p-color-text-inverse)"
-                  : "var(--p-color-icon-emphasis)",
-              }}
-            >
-              <Icon source={icon} />
-            </div>
+            <IconBadge
+              icon={icon}
+              size={36}
+              bg={primary ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)"}
+              color={primary ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
+            />
             <Text as="span" variant="headingSm">
               {label}
             </Text>
@@ -309,7 +294,7 @@ function StatusChip({
   color,
   onClick,
 }: {
-  icon: any;
+  icon: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
   label: string;
   count: number;
   bg: string;
@@ -326,8 +311,8 @@ function StatusChip({
         ...statMiniStyle,
         display: "flex",
         alignItems: "center",
-        gap: "10px",
-        padding: "12px 16px",
+        gap: "var(--p-space-200)",
+        padding: "var(--p-space-300) var(--p-space-400)",
         border: "1px solid var(--p-color-border-secondary)",
         cursor: onClick ? "pointer" : "default",
         flex: "1 1 0",
@@ -376,6 +361,7 @@ export default function Dashboard() {
     smartMapped,
     manualMapped,
     flagged,
+    noMatch: loaderNoMatch,
     mapped,
     fitmentCount,
     topMakes,
@@ -392,39 +378,67 @@ export default function Dashboard() {
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
     uniqueModels: loaderUniqueModels,
+    wheelProducts: loaderWheelProducts,
+    wheelMapped: loaderWheelMapped,
+    wheelFitments: loaderWheelFitments,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
   const [showWelcome, setShowWelcome] = useState(true);
 
   // Unified live data — replaces 9 scattered polling implementations
-  const { stats: liveData, isLoading: dataLoading } = useAppData({
+  // CRITICAL: pass ALL fields that job-status.tsx returns to prevent flash-of-wrong-data.
+  // Any field NOT passed here defaults to 0 from DEFAULT_STATS, causing a visible jump
+  // when the first poll returns correct data after ~5 seconds.
+  //
+  // needsPush formula MUST match job-status.tsx:88 — products with fitments
+  // (auto/smart/manual/flagged) that have synced_at=NULL. Seeding with
+  // `totalProducts - pushedProducts` double-counted no_match products in the
+  // flash window, showing "Pending 1,351" before polling settled to the real
+  // value (~667). Computing it from the loader's authoritative counts here
+  // keeps the seed honest.
+  const seedNeedsPush = Math.max(
+    0,
+    (autoMapped + smartMapped + manualMapped + flagged) - (loaderPushedProducts ?? 0),
+  );
+
+  const { stats: liveData, jobs: liveJobs } = useAppData({
     total: totalProducts,
     unmapped,
+    mapped, // Distinct count — prevents sum fallback (autoMapped+smartMapped+manualMapped)
     autoMapped,
     smartMapped,
     manualMapped,
     flagged,
+    noMatch: loaderNoMatch,
     fitments: fitmentCount,
+    vehicleCoverage: Math.round(fitmentCount * 8), // Same formula as job-status.tsx
     collections: collectionCount,
     pushedProducts: loaderPushedProducts,
+    needsPush: seedNeedsPush,
     activeMakes: loaderActiveMakes,
     vehiclePagesSynced: loaderVehiclePages,
     uniqueMakes: loaderUniqueMakes,
     uniqueModels: loaderUniqueModels,
+    // Wheel counts — prevents flash-of-wrong-data on initial render
+    wheelProducts: loaderWheelProducts,
+    wheelMapped: loaderWheelMapped,
+    wheelFitments: loaderWheelFitments,
   });
 
   // All live values from unified hook
   const s = liveData; // Short alias
-  const { mapped: liveMapped, needsReview, coverage, pendingPush } = computeFromStats(s);
-  const liveTotalProducts = s.total;
+  const { mapped: liveMapped, needsReview, notMapped, coverage, pendingPush, vehicleTotal, vehicleMapped, vehicleNotMapped, vehicleCoverage } = computeFromStats(s);
+  // Plan usage counts ALL products (vehicle + wheels) — not just vehicle parts
+  const liveTotalProducts = s.total + (s.wheelProducts ?? 0);
   const liveUnmapped = s.unmapped;
   const liveAutoMapped = s.autoMapped;
   const liveSmartMapped = s.smartMapped;
   const liveFlagged = s.flagged;
-  const liveFitmentCount = s.fitments;
+  // autoMapped is already vehicle-only from the API (wheels are excluded by .neq filter)
+  const vehicleAutoMapped = liveAutoMapped;
+  // Plan usage counts ALL fitments (vehicle + wheel)
+  const liveFitmentCount = s.fitments + (s.wheelFitments ?? 0);
   const liveCollectionCount = s.collections;
   const livePushedProducts = s.pushedProducts;
   const liveActiveMakes = s.activeMakes;
@@ -433,18 +447,41 @@ export default function Dashboard() {
   const liveUniqueModels = s.uniqueModels;
 
   const planLabel = planName;
-  const showOnboarding = liveTotalProducts < 1 || liveFitmentCount < 1;
+  // Always render OnboardingChecklist — the component itself decides when to hide
+  // (hides when 4+ steps are complete: fetch + map + push + collections)
+  const showOnboarding = true;
 
   const productUsagePercent =
     limits.products === Infinity ? 0 : Math.min(100, Math.round((liveTotalProducts / limits.products) * 100));
   const fitmentUsagePercent =
     limits.fitments === Infinity ? 0 : Math.min(100, Math.round((liveFitmentCount / limits.fitments) * 100));
+  const isOverProductLimit = limits.products !== Infinity && liveTotalProducts > limits.products;
+  const isOverFitmentLimit = limits.fitments !== Infinity && liveFitmentCount > limits.fitments;
 
   return (
     <Page title="Dashboard" fullWidth>
       <Layout>
         <Layout.Section>
           <BlockStack gap="500">
+            {/* Over-limit warning — shows when data exceeds plan limits (e.g., after downgrade) */}
+            {(isOverProductLimit || isOverFitmentLimit) && (
+              <Banner tone="critical" title="Plan limit exceeded">
+                <BlockStack gap="100">
+                  {isOverProductLimit && (
+                    <Text as="p" variant="bodySm">
+                      You have <strong>{liveTotalProducts.toLocaleString()}</strong> products but your {planLabel} plan allows <strong>{limits.products.toLocaleString()}</strong>. You cannot add new products or run imports until you upgrade or remove existing products.
+                    </Text>
+                  )}
+                  {isOverFitmentLimit && (
+                    <Text as="p" variant="bodySm">
+                      You have <strong>{liveFitmentCount.toLocaleString()}</strong> fitments but your {planLabel} plan allows <strong>{limits.fitments.toLocaleString()}</strong>. You cannot add new fitments until you upgrade or remove existing data.
+                    </Text>
+                  )}
+                  <Button variant="primary" onClick={() => navigate("/app/plans")}>Upgrade Plan</Button>
+                </BlockStack>
+              </Banner>
+            )}
+
             {/* Welcome banner */}
             {isFirstTime && showWelcome && (
               <Banner
@@ -466,9 +503,9 @@ export default function Dashboard() {
                   <Text as="h2" variant="headingMd">
                     Quick Actions
                   </Text>
-                  {(liveUnmapped + liveFlagged) > 0 && (
+                  {needsReview > 0 && (
                     <Badge tone="warning">
-                      {`${(liveUnmapped + liveFlagged).toLocaleString()} need review`}
+                      {`${needsReview.toLocaleString()} need review`}
                     </Badge>
                   )}
                 </InlineStack>
@@ -485,7 +522,7 @@ export default function Dashboard() {
                     label="Auto Extract"
                     description="Automatically detect vehicle fitments"
                     onClick={() => navigate("/app/fitment")}
-                    badge={(liveUnmapped + liveFlagged) > 0 ? { content: `${(liveUnmapped + liveFlagged).toLocaleString()} pending`, tone: "warning" } : undefined}
+                    badge={needsReview > 0 ? { content: `${needsReview.toLocaleString()} flagged`, tone: "warning" } : undefined}
                   />
                   <QuickActionCard
                     icon={TargetIcon}
@@ -533,7 +570,7 @@ export default function Dashboard() {
             </Card>
 
             {/* ─── Active Jobs — Live Progress ─── */}
-            <ActiveJobsPanel navigate={navigate} />
+            <ActiveJobsPanel navigate={navigate} jobs={liveJobs} stats={s} />
 
             {/* Onboarding checklist */}
             {showOnboarding && (
@@ -546,7 +583,6 @@ export default function Dashboard() {
             )}
 
             {/* ─── System Overview — 3-column status cards ─── */}
-            {pageLoading ? <SkeletonCard variant="stat" count={9} cols={3} /> : (
             <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="400">
               {/* Products & Fitments */}
               <Card>
@@ -560,16 +596,33 @@ export default function Dashboard() {
                   </InlineStack>
                   <div style={statGridStyle(2)}>
                     {[
-                      { label: "Total Products", value: liveTotalProducts },
-                      { label: "Vehicle Links", value: liveFitmentCount },
-                      { label: "Mapped", value: liveMapped },
-                      { label: "Needs Review", value: liveUnmapped + liveFlagged },
-                      { label: "Makes with Parts", value: liveUniqueMakes },
-                      { label: "Models with Parts", value: liveUniqueModels },
-                    ].map((s) => (
-                      <div key={s.label} style={statMiniStyle}>
-                        <Text as="p" variant="headingMd" fontWeight="bold">{s.value.toLocaleString()}</Text>
-                        <Text as="p" variant="bodySm" tone="subdued">{s.label}</Text>
+                      { label: "Vehicle Parts", value: vehicleTotal },
+                      { label: "Mapped", value: vehicleMapped },
+                      { label: "Fitments", value: liveFitmentCount },
+                      { label: "Vehicle Coverage", value: s.vehicleCoverage ?? Math.round(liveFitmentCount * 8) },
+                      // Split the old "Unmapped" catch-all into two real buckets:
+                      // - Needs Review: flagged products with make-only fitments
+                      //   (they DO ship to Shopify, just need confirmation).
+                      // - No Match: truly no vehicle data detected.
+                      // Before this change the dashboard showed "Unmapped 1,961"
+                      // which was misleading — 1,276 of those were flagged-with-fitments.
+                      ...(needsReview > 0 ? [
+                        { label: "Needs Review", value: needsReview },
+                      ] : []),
+                      { label: "No Match", value: s.noMatch },
+                      // Universal parts stat — products where ONE fitment row
+                      // covers an entire OEM group (VAG 2.0 TSI, BMW N55…).
+                      ...(s.groupUniversalFitments > 0 ? [
+                        { label: "Universal Parts", value: s.groupUniversalFitments },
+                      ] : []),
+                      ...(s.wheelProducts > 0 ? [
+                        { label: "Wheels", value: s.wheelProducts },
+                        { label: "W. Mapped", value: s.wheelMapped },
+                      ] : []),
+                    ].map((item) => (
+                      <div key={item.label} style={statMiniStyle}>
+                        <Text as="p" variant="headingMd" fontWeight="bold">{item.value.toLocaleString()}</Text>
+                        <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
                       </div>
                     ))}
                   </div>
@@ -588,12 +641,21 @@ export default function Dashboard() {
                   </InlineStack>
                   <div style={statGridStyle(2)}>
                     {[
-                      { label: "Products Pushed", value: livePushedProducts },
-                      { label: "Pending Push", value: Math.max(0, liveMapped - livePushedProducts) },
+                      { label: "Pushed", value: livePushedProducts },
+                      // "Pending" = any pushable product not yet synced. We
+                      // use `pendingPush` from computeFromStats which already
+                      // includes flagged-with-fitments in the push queue.
+                      // Before: `liveMapped - livePushedProducts` which
+                      // excluded flagged, so the dashboard reported "0 Pending"
+                      // even when 1,276 flagged products hadn't been pushed.
+                      { label: "Pending", value: pendingPush },
                       { label: "Collections", value: liveCollectionCount },
-                      { label: "Active Makes", value: liveActiveMakes },
-                      { label: "Vehicle Pages", value: liveVehiclePages },
-                      { label: "Coverage", value: `${coverage}%` as unknown as number },
+                      { label: "Makes", value: liveActiveMakes },
+                      { label: "Pages", value: liveVehiclePages },
+                      { label: "Coverage", value: `${vehicleCoverage}%` as unknown as number },
+                      ...(s.groupCollections > 0 ? [
+                        { label: "Group Collections", value: s.groupCollections },
+                      ] : []),
                     ].map((s) => (
                       <div key={s.label} style={statMiniStyle}>
                         <Text as="p" variant="headingMd" fontWeight="bold">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</Text>
@@ -630,33 +692,31 @@ export default function Dashboard() {
                 </BlockStack>
               </Card>
             </InlineGrid>
-            )}
 
-            {/* ─── Fitment Coverage — Hero Card ─── */}
+            {/* ─── Fitment Coverage — uses shared CoverageBar pattern ─── */}
             <Card>
               <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
+                <InlineStack align="space-between">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                    <Text as="h2" variant="headingMd">Vehicle Fitment Coverage</Text>
                   </InlineStack>
-                  <InlineStack gap="300" blockAlign="center">
-                    <Text as="span" variant="heading2xl" fontWeight="bold">
-                      {`${coverage}%`}
-                    </Text>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      {`${liveMapped.toLocaleString()} of ${liveTotalProducts.toLocaleString()} products mapped`}
-                    </Text>
-                  </InlineStack>
+                  <Text as="p" variant="headingMd" fontWeight="bold">
+                    {`${vehicleCoverage}%`}
+                  </Text>
                 </InlineStack>
 
-                <ProgressBar progress={coverage} size="small" />
+                <ProgressBar progress={vehicleCoverage} size="medium" />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  {`${vehicleMapped.toLocaleString()} of ${vehicleTotal.toLocaleString()} vehicle parts mapped`}
+                </Text>
 
                 {/* Compact status chips — unified icon style */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-200)" }}>
                   {([
-                    { icon: AlertCircleIcon, label: "Needs Review", count: liveUnmapped + liveFlagged, status: "unmapped" },
-                    { icon: CheckCircleIcon, label: "Auto Mapped", count: liveAutoMapped, status: "auto_mapped" },
+                    { icon: AlertCircleIcon, label: "Flagged", count: needsReview, status: "flagged" },
+                    { icon: MinusCircleIcon, label: "No Vehicle Data", count: s.noMatch ?? 0, status: "no_match" },
+                    { icon: CheckCircleIcon, label: "Auto Mapped", count: vehicleAutoMapped, status: "auto_mapped" },
                     { icon: WandIcon, label: "Smart Mapped", count: liveSmartMapped, status: "smart_mapped" },
                     { icon: TargetIcon, label: "Manual Mapped", count: s.manualMapped, status: "manual_mapped" },
                   ] as const).map((item) => (
@@ -742,7 +802,7 @@ export default function Dashboard() {
 
                   <div style={{
                     ...statGridStyle(2),
-                    gap: "12px",
+                    gap: "var(--p-space-300)",
                   }}>
                     {[
                       { label: "Makes", value: ymmeMakes },
@@ -786,11 +846,15 @@ export default function Dashboard() {
                   {providers.length === 0 ? (
                     <BlockStack gap="300">
                       <Text as="p" variant="bodySm" tone="subdued">
-                        No providers configured. Add a CSV, API, or FTP provider to import product data from suppliers.
+                        {limits.providers === 0
+                          ? "Providers are available on the Starter plan and above. Upgrade to import product data from CSV, API, or FTP sources."
+                          : "No providers configured. Add a CSV, API, or FTP provider to import product data from suppliers."}
                       </Text>
-                      <Button onClick={() => navigate("/app/providers/new")} size="slim">
-                        Add Provider
-                      </Button>
+                      {limits.providers > 0 && (
+                        <Button onClick={() => navigate("/app/providers/new")} size="slim">
+                          Add Provider
+                        </Button>
+                      )}
                     </BlockStack>
                   ) : (
                     <BlockStack gap="200">
@@ -846,7 +910,7 @@ export default function Dashboard() {
                     {recentJobs.map((job: any) => (
                       <div
                         key={job.id}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 16px", background: "var(--p-color-bg-surface)" }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--p-space-300)", padding: "var(--p-space-200) var(--p-space-400)", background: "var(--p-color-bg-surface)" }}
                       >
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
                           <div style={statusDotStyle(job.status)} />
@@ -857,7 +921,7 @@ export default function Dashboard() {
                             <Text as="span" variant="bodySm" tone="subdued">
                               {formatDate(job.completed_at ?? job.created_at)}
                               {job.total_items
-                                ? ` \u00B7 ${job.processed_items ?? 0}/${job.total_items}`
+                                ? ` \u00B7 ${Math.min(job.processed_items ?? 0, job.total_items)}/${job.total_items}`
                                 : ""}
                             </Text>
                           </BlockStack>
@@ -958,11 +1022,7 @@ export default function Dashboard() {
 
                 {/* Feature summary */}
                 <Text as="h3" variant="headingSm">Included Features</Text>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-                  gap: "8px",
-                }}>
+                <div style={autoFitGridStyle("200px", "8px")}>
                   {([
                     { label: "Push Tags", on: limits.features.pushTags },
                     { label: "Push Metafields", on: limits.features.pushMetafields },
@@ -975,7 +1035,6 @@ export default function Dashboard() {
                     { label: "YMME Widget", on: limits.features.ymmeWidget },
                     { label: "Fitment Badge", on: limits.features.fitmentBadge },
                     { label: "Compatibility Table", on: limits.features.compatibilityTable },
-                    { label: "Floating Bar", on: limits.features.floatingBar },
                     { label: "My Garage", on: limits.features.myGarage },
                     { label: "Wheel Finder", on: limits.features.wheelFinder },
                     { label: "Plate Lookup", on: limits.features.plateLookup },
@@ -986,8 +1045,8 @@ export default function Dashboard() {
                     <div key={feat.label} style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: "8px",
-                      padding: "6px 10px",
+                      gap: "var(--p-space-200)",
+                      padding: "var(--p-space-100) var(--p-space-200)",
                       borderRadius: "var(--p-border-radius-200)",
                       background: feat.on
                         ? "var(--p-color-bg-surface-secondary)"
@@ -1079,4 +1138,9 @@ export default function Dashboard() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Dashboard" />;
 }

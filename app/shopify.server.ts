@@ -17,7 +17,14 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   future: {
-    expiringOfflineAccessTokens: true,
+    // Disabled: tokens expire after 1 HOUR causing constant 401 errors in Edge Functions.
+    // Our app was created before April 2026, so we're exempt from the mandate.
+    // When Shopify requires this for all apps, implement refresh logic in Edge Function:
+    // - Store refresh_token + expires_at in tenants table
+    // - Add refreshShopifyToken() helper that calls POST /admin/oauth/access_token
+    // - Pre-check token expiry before every API call with 5-min buffer
+    // - Handle concurrent refresh with advisory lock
+    expiringOfflineAccessTokens: false,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

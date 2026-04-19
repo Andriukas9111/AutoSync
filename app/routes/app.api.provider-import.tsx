@@ -5,6 +5,7 @@ import db from "../lib/db.server";
 import { parseFile } from "../lib/providers/universal-parser.server";
 import { runProviderImport } from "../lib/providers/import-pipeline.server";
 import type { ColumnMapping } from "../lib/providers/column-mapper.server";
+import { assertProductLimit, BillingGateError } from "../lib/billing.server";
 
 // ---------------------------------------------------------------------------
 // Provider Import API — unified import pipeline
@@ -18,8 +19,20 @@ export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
+  // Plan gate: check product limit
+  try {
+    await assertProductLimit(shopId);
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
+  const storagePath = String(formData.get("storage_path") || "").trim();
+  const fileNameOverride = String(formData.get("file_name") || "").trim();
   const providerId = String(formData.get("provider_id") || "").trim();
   const mappingsRaw = String(formData.get("mappings") || "").trim();
   const duplicateStrategy = String(
@@ -30,7 +43,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
   // ---- Validation ----
 
-  if (!file || file.size === 0) {
+  // Path traversal protection: reject storage paths with directory escape sequences
+  if (storagePath && (storagePath.includes("..") || storagePath.startsWith("/"))) {
+    return data({ error: "Invalid storage path." }, { status: 400 });
+  }
+
+  if (!storagePath && (!file || file.size === 0)) {
     return data({ error: "No file uploaded." }, { status: 400 });
   }
 
@@ -77,18 +95,33 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  // ---- Read and parse file ----
+  // ---- Read file content (from direct upload or Supabase Storage) ----
 
   let content: string | Buffer;
-  const fileName = file.name || "upload";
+  let fileName: string;
 
-  // Use ArrayBuffer for binary formats (xlsx/xls), text for everything else
-  const lowerName = fileName.toLowerCase();
-  if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
-    const arrayBuffer = await file.arrayBuffer();
-    content = Buffer.from(arrayBuffer);
+  if (storagePath) {
+    // Download from Supabase Storage (large files uploaded via signed URL)
+    const { data: fileData, error: downloadError } = await db.storage
+      .from("provider-uploads")
+      .download(storagePath);
+
+    if (downloadError || !fileData) {
+      return data({ error: `Failed to download file: ${downloadError?.message || "Unknown error"}` }, { status: 500 });
+    }
+
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    fileName = fileNameOverride || storagePath.split("/").pop() || "upload";
+    const lowerName = fileName.toLowerCase();
+    content = (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) ? buffer : buffer.toString("utf-8");
   } else {
-    content = await file.text();
+    fileName = file!.name || "upload";
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+      content = Buffer.from(await file!.arrayBuffer());
+    } else {
+      content = await file!.text();
+    }
   }
 
   let parsedFile;
@@ -120,7 +153,7 @@ export async function action({ request }: ActionFunctionArgs) {
       shopId,
       providerId,
       fileName,
-      fileSize: file.size,
+      fileSize: file ? file.size : (typeof content === "string" ? Buffer.byteLength(content) : (content as Buffer).length),
       fileType: parsedFile.format,
       mappings,
       duplicateStrategy,

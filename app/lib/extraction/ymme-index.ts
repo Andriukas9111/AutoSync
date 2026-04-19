@@ -502,13 +502,29 @@ async function buildYmmeIndex(
     }
   }
 
-  // Sort by length descending and build regex (longest first: "Golf R" before "Golf")
+  // Sort by length descending and build regex (longest first: "Golf R" before "Golf").
+  //
+  // The capture group (group 1) always contains the BASE model name, never a
+  // trim suffix. Trim letters (if present) are consumed by a non-capturing
+  // group AFTER the capture, keeping `modelNameToMakes.get(modelTerm)` lookups
+  // correct in ymme-scanner.ts — even when the text is "i30N", group 1 is "i30".
+  //
+  // The trailing `(?:[a-z]{1,3})?(?=[\s,.\-/()]|$|[^a-z0-9])` block:
+  //   - Optionally consumes 1-3 trim letters that follow the base name.
+  //   - Then requires a real terminator (whitespace, punctuation, end).
+  //   - For alphabetic-ending models ("Kona"), the trim part is empty and the
+  //     terminator already holds (Kona<space>).
+  //   - For digit-ending models ("i30"), the trim part absorbs "N" so the
+  //     terminator check passes (i30N<comma>).
   modelScanTerms.sort((a, b) => b.length - a.length)
   const modelEscaped = modelScanTerms.map((t) =>
     t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   )
   const modelScanRegex = modelEscaped.length > 0
-    ? new RegExp(`\\b(${modelEscaped.join("|")})\\b`, "gi")
+    ? new RegExp(
+        `\\b(${modelEscaped.join("|")})(?:[a-z]{1,3})?(?=[\\s,.\\-/()]|$|[^a-z0-9])`,
+        "gi"
+      )
     : /(?!x)x/ // Never matches (empty model list)
 
   // ── Build platform code -> makes map ──

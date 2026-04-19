@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -34,11 +34,14 @@ import {
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { syncAfterDelete } from "../lib/db.server";
 import { IconBadge } from "../components/IconBadge";
 import type { PlanTier, FitmentStatus } from "../lib/types";
 import { formatPrice } from "../lib/types";
 import { isAdminShop } from "../lib/admin.server";
+import { getPlanLimits } from "../lib/billing.server";
+import { statMiniStyle, statGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critical" | "attention" | undefined> = {
   free: undefined,
@@ -47,6 +50,7 @@ const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critic
   professional: "attention",
   business: "warning",
   enterprise: "critical",
+  custom: "critical",
 };
 
 const PLAN_DISPLAY_NAME: Record<PlanTier, string> = {
@@ -56,6 +60,7 @@ const PLAN_DISPLAY_NAME: Record<PlanTier, string> = {
   professional: "Professional",
   business: "Business",
   enterprise: "Enterprise",
+  custom: "Custom",
 };
 
 function capitalisePlan(plan: string): string {
@@ -64,7 +69,7 @@ function capitalisePlan(plan: string): string {
 
 const STATUS_BADGES: Record<string, { tone: "info" | "success" | "warning" | "critical" | undefined; label: string }> = {
   unmapped: { tone: undefined, label: "Unmapped" },
-  auto_mapped: { tone: "info", label: "Auto Mapped" },
+  auto_mapped: { tone: "success", label: "Auto Mapped" },
   smart_mapped: { tone: "success", label: "Smart Mapped" },
   manual_mapped: { tone: "success", label: "Manual" },
   partial: { tone: "warning", label: "Partial" },
@@ -107,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Top makes used in fitments
     topMakesRes,
   ] = await Promise.all([
-    db.from("tenants").select("*").eq("shop_id", shopId).single(),
+    db.from("tenants").select("*").eq("shop_id", shopId).maybeSingle(),
     db.from("products")
       .select("id, title, handle, vendor, product_type, price, image_url, fitment_status, source, synced_at, created_at, shopify_product_id")
       .eq("shop_id", shopId)
@@ -115,12 +120,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .limit(50),
     db.from("vehicle_fitments").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
     db.from("vehicle_fitments")
-      .select("id, make, model, year_from, year_to, engine, confidence, source, created_at, product_id")
+      .select("id, make, model, year_from, year_to, engine, confidence, extraction_method, created_at, product_id")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(30),
     db.from("sync_jobs")
-      .select("id, type, status, progress, total, errors, created_at, completed_at")
+      .select("id, type, status, progress, total_items, error, created_at, completed_at")
       .eq("shop_id", shopId)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -130,9 +135,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
     // Fitment status breakdown
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "manual_mapped"),
+    // Method-based counts: products with ANY fitment of that type
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "auto"),
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "smart"),
+    db.from("vehicle_fitments").select("product_id").eq("shop_id", shopId).eq("extraction_method", "manual"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "partial"),
     db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
     // Top makes
@@ -158,9 +164,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const statusBreakdown = {
     unmapped: unmappedRes.count ?? 0,
-    auto_mapped: autoMappedRes.count ?? 0,
-    smart_mapped: smartMappedRes.count ?? 0,
-    manual_mapped: manualMappedRes.count ?? 0,
+    auto_mapped: new Set((autoMappedRes.data ?? []).map((r: any) => r.product_id)).size,
+    smart_mapped: new Set((smartMappedRes.data ?? []).map((r: any) => r.product_id)).size,
+    manual_mapped: new Set((manualMappedRes.data ?? []).map((r: any) => r.product_id)).size,
     partial: partialRes.count ?? 0,
     flagged: flaggedRes.count ?? 0,
   };
@@ -181,6 +187,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 10)
     .map(([make, count]) => ({ make, count }));
 
+  // Get plan limits for this tenant
+  const planLimits = getPlanLimits(tenant.plan ?? "free");
+
   return {
     tenant,
     products,
@@ -195,6 +204,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     coveragePercent,
     topMakes,
     shopId,
+    planLimits,
   };
 };
 
@@ -266,33 +276,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     case "purge-fitments": {
-      const { error, count } = await db
-        .from("vehicle_fitments")
-        .delete()
-        .eq("shop_id", shopId);
+      const [{ error }, { error: wheelErr }] = await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+        db.from("wheel_fitments").delete().eq("shop_id", shopId),
+      ]);
 
-      if (error) {
-        return data({ ok: false, message: `Failed: ${error.message}` });
+      if (error || wheelErr) {
+        return data({ ok: false, message: `Failed: ${(error ?? wheelErr)!.message}` });
       }
 
       // Reset all products to unmapped
-      await db.from("products").update({ fitment_status: "unmapped" }).eq("shop_id", shopId);
-      // Update tenant counts
-      await db.from("tenants").update({ fitment_count: 0 }).eq("shop_id", shopId);
+      const { error: resetErr } = await db.from("products")
+        .update({ fitment_status: "unmapped" })
+        .eq("shop_id", shopId);
+      if (resetErr) {
+        console.error(`[admin.tenant] Failed to reset products for ${shopId}: ${resetErr.message}`);
+        return data({ ok: false, message: `Fitments purged but product reset failed: ${resetErr.message}` });
+      }
+      // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+      await syncAfterDelete(shopId);
 
       return data({ ok: true, message: `Purged all fitments for this tenant. Products reset to unmapped.` });
     }
 
     case "purge-products": {
-      // Delete fitments first (FK constraint)
-      await db.from("vehicle_fitments").delete().eq("shop_id", shopId);
+      // Delete all fitments first (vehicle + wheel), then products
+      await Promise.all([
+        db.from("vehicle_fitments").delete().eq("shop_id", shopId),
+        db.from("wheel_fitments").delete().eq("shop_id", shopId),
+      ]);
       const { error } = await db.from("products").delete().eq("shop_id", shopId);
 
       if (error) {
         return data({ ok: false, message: `Failed: ${error.message}` });
       }
 
-      await db.from("tenants").update({ product_count: 0, fitment_count: 0 }).eq("shop_id", shopId);
+      // Comprehensive post-delete sync: counts, active makes, stale vehicle pages, cleanup jobs
+      await syncAfterDelete(shopId);
       return data({ ok: true, message: "Purged all products and fitments for this tenant." });
     }
 
@@ -324,7 +344,10 @@ export default function TenantDetail() {
   const fetcher = useFetcher<{ ok: boolean; message: string }>();
   const navigate = useNavigate();
   const isSubmitting = fetcher.state !== "idle";
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const TENANT_TAB_IDS = ["overview", "products", "fitments", "sync-jobs", "settings", "actions"];
+  const selectedTab = Math.max(0, TENANT_TAB_IDS.indexOf(searchParams.get("tab") ?? "overview"));
+  const setSelectedTab = (idx: number) => { setSearchParams((prev) => { prev.set("tab", TENANT_TAB_IDS[idx] ?? "overview"); return prev; }); };
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(tenant.plan);
   const [confirmPurgeFitments, setConfirmPurgeFitments] = useState(false);
@@ -387,8 +410,7 @@ export default function TenantDetail() {
         {/* ── KPI Cards ── */}
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[
@@ -609,7 +631,7 @@ export default function TenantDetail() {
                   ) : (
                     <DataTable
                       columnContentTypes={["text", "text", "text", "text", "text", "text"]}
-                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Source"]}
+                      headings={["Make", "Model", "Years", "Engine", "Confidence", "Method"]}
                       rows={recentFitments.map((f: any) => [
                         f.make || "—",
                         f.model || "—",
@@ -618,7 +640,7 @@ export default function TenantDetail() {
                           : f.year_from ? String(f.year_from) : "—",
                         f.engine || "—",
                         f.confidence ? `${Math.round(f.confidence * 100)}%` : "—",
-                        f.source || "—",
+                        f.extraction_method || "—",
                       ])}
                     />
                   )}
@@ -855,4 +877,9 @@ export default function TenantDetail() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin Tenant" />;
 }

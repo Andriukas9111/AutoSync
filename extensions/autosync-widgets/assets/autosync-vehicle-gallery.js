@@ -10,11 +10,19 @@
     var countEl = container.querySelector('[data-avs-count]');
     var allVehicles = [];
 
-    if (!proxyUrl) {
-      showEmpty();
-      return;
-    }
+    /* ── Settings from data attributes ────────────── */
+    var PER_PAGE = parseInt(container.getAttribute('data-per-page'), 10) || 18;
+    var MAX_VEHICLES = parseInt(container.getAttribute('data-max-vehicles'), 10) || 0;
+    var GRID_ROWS = parseInt(container.getAttribute('data-grid-rows'), 10) || 4;
+    var colsSetting = (gridEl && gridEl.getAttribute('data-columns')) || 'auto';
 
+    /* ── State ─────────────────────────────────────── */
+    var currentPage = 1;
+    var currentVehicles = [];
+    var scrollWrap = null;
+    var loadMoreWrap = null;
+
+    if (!proxyUrl) { showEmpty(); return; }
     fetchGallery();
 
     function fetchGallery() {
@@ -40,28 +48,58 @@
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'block';
       gridEl.style.display = 'none';
+      if (scrollWrap) scrollWrap.style.display = 'none';
+      if (loadMoreWrap) loadMoreWrap.style.display = 'none';
     }
 
-    
-    function svgEl(html) {
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      return tmp.firstChild;
+    /* SVG parser for hardcoded icon markup only */
+    function svgEl(svgMarkup) {
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(svgMarkup, 'image/svg+xml');
+      return doc.documentElement;
     }
 
-    var PER_PAGE = 18;
-    var currentPage = 1;
-    var currentVehicles = [];
+    /* ── Calculate scroll container max-height ─────── */
+    function calcScrollHeight() {
+      if (GRID_ROWS <= 0) return 'none';
+      /* Card ~180px + 18px gap per row */
+      return (GRID_ROWS * 198 + 20) + 'px';
+    }
 
+    /* ── Render Grid ───────────────────────────────── */
     function renderGrid(vehicles) {
+      /* Apply max vehicle limit */
+      if (MAX_VEHICLES > 0 && vehicles.length > MAX_VEHICLES) {
+        vehicles = vehicles.slice(0, MAX_VEHICLES);
+      }
+
       currentVehicles = vehicles;
       currentPage = 1;
       loadingEl.style.display = 'none';
       emptyEl.style.display = 'none';
+
+      /* Create scroll wrapper if not exists */
+      if (!scrollWrap) {
+        scrollWrap = document.createElement('div');
+        scrollWrap.className = 'avs-scroll-wrap';
+        gridEl.parentNode.insertBefore(scrollWrap, gridEl);
+        scrollWrap.appendChild(gridEl);
+      }
+      scrollWrap.style.display = 'block';
+
+      var maxH = calcScrollHeight();
+      if (maxH !== 'none') {
+        scrollWrap.style.maxHeight = maxH;
+        scrollWrap.style.overflowY = 'auto';
+      } else {
+        scrollWrap.style.maxHeight = 'none';
+        scrollWrap.style.overflowY = 'visible';
+      }
+
+      /* Grid setup */
       gridEl.style.display = 'grid';
       gridEl.textContent = '';
 
-      var colsSetting = gridEl.getAttribute('data-columns') || 'auto';
       if (colsSetting === 'auto') {
         gridEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
       } else {
@@ -73,40 +111,72 @@
 
       if (countEl) countEl.textContent = vehicles.length + ' vehicle' + (vehicles.length !== 1 ? 's' : '');
 
-      var oldBtn = container.querySelector('[data-avs-load-more]');
-      if (oldBtn) oldBtn.remove();
+      /* Remove old Load More */
+      if (loadMoreWrap) { loadMoreWrap.remove(); loadMoreWrap = null; }
 
+      /* Render first batch */
       renderCards(vehicles.slice(0, PER_PAGE), showLogos, showSpecs);
 
+      /* Show Load More button if there are more */
       if (vehicles.length > PER_PAGE) {
-        var wrap = document.createElement('div');
-        wrap.setAttribute('data-avs-load-more', '');
-        wrap.style.cssText = 'text-align:center;padding:24px 0;grid-column:1/-1;';
-        var btn = document.createElement('button');
-        btn.textContent = 'Show More (' + (vehicles.length - PER_PAGE) + ' remaining)';
-        btn.style.cssText = 'background:var(--avs-primary,#2563eb);color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;';
-        btn.onclick = function() {
-          currentPage++;
-          var s = (currentPage - 1) * PER_PAGE;
-          renderCards(currentVehicles.slice(s, s + PER_PAGE), showLogos, showSpecs);
-          var rem = currentVehicles.length - (currentPage * PER_PAGE);
-          if (rem <= 0) wrap.remove();
-          else btn.textContent = 'Show More (' + rem + ' remaining)';
-        };
-        wrap.appendChild(btn);
-        gridEl.appendChild(wrap);
+        showLoadMore(showLogos, showSpecs);
       }
     }
 
+    /* ── Load More Button (inside scroll container) ── */
+    function showLoadMore(showLogos, showSpecs) {
+      if (loadMoreWrap) loadMoreWrap.remove();
+
+      loadMoreWrap = document.createElement('div');
+      loadMoreWrap.className = 'avs-load-more-wrap';
+
+      var remaining = currentVehicles.length - (currentPage * PER_PAGE);
+      var btn = document.createElement('button');
+      btn.className = 'avs-load-more-btn';
+      btn.type = 'button';
+      btn.textContent = 'Load More (' + remaining + ' remaining)';
+
+      btn.addEventListener('click', function() {
+        currentPage++;
+        var s = (currentPage - 1) * PER_PAGE;
+        var batch = currentVehicles.slice(s, s + PER_PAGE);
+
+        /* Remove the button wrap temporarily */
+        if (loadMoreWrap) loadMoreWrap.remove();
+
+        /* Render next batch into the grid */
+        renderCards(batch, showLogos, showSpecs);
+
+        /* Check if more remain */
+        var newRemaining = currentVehicles.length - (currentPage * PER_PAGE);
+        if (newRemaining > 0) {
+          showLoadMore(showLogos, showSpecs);
+          /* Scroll to where new cards start */
+          var cards = gridEl.querySelectorAll('.avs-card');
+          if (cards.length > 0) {
+            var targetCard = cards[cards.length - batch.length];
+            if (targetCard && scrollWrap.style.overflowY === 'auto') {
+              setTimeout(function() {
+                targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+              }, 100);
+            }
+          }
+        }
+      });
+
+      loadMoreWrap.appendChild(btn);
+      /* Place Load More INSIDE the scroll wrapper, after the grid */
+      scrollWrap.appendChild(loadMoreWrap);
+    }
+
+    /* ── Render batch of cards ──────────────────────── */
     function renderCards(vehicles, showLogos, showSpecs) {
-      var lm = container.querySelector('[data-avs-load-more]');
       vehicles.forEach(function(v, idx) {
         var card = document.createElement('a');
         card.href = v.url;
         card.className = 'avs-card';
         card.style.animationDelay = Math.min(idx * 0.04, 0.6) + 's';
 
-        
         var header = document.createElement('div');
         header.className = 'avs-card__header';
 
@@ -120,7 +190,6 @@
             img.alt = (v.make || '') + ' logo';
             img.loading = 'lazy';
             img.onerror = function() {
-              
               this.parentNode.removeChild(this);
               var fb = document.createElement('span');
               fb.className = 'avs-card__logo-fallback';
@@ -160,7 +229,6 @@
         header.appendChild(titles);
         card.appendChild(header);
 
-        
         if (showSpecs) {
           var specs = document.createElement('div');
           specs.className = 'avs-card__specs';
@@ -198,7 +266,6 @@
           }
         }
 
-        
         var footer = document.createElement('div');
         footer.className = 'avs-card__footer';
 
@@ -211,12 +278,11 @@
         footer.appendChild(link);
 
         card.appendChild(footer);
-        if (lm) gridEl.insertBefore(card, lm);
-        else gridEl.appendChild(card);
+        gridEl.appendChild(card);
       });
     }
 
-    
+    /* ── Search/Filter ─────────────────────────────── */
     if (searchInput) {
       var debounceTimer;
       searchInput.addEventListener('input', function() {
@@ -235,11 +301,13 @@
           if (filtered.length === 0) {
             gridEl.style.display = 'none';
             emptyEl.style.display = 'block';
+            if (scrollWrap) scrollWrap.style.display = 'none';
+            if (loadMoreWrap) { loadMoreWrap.remove(); loadMoreWrap = null; }
             var titleEl = emptyEl.querySelector('.avs-empty__title');
             if (titleEl) {
               titleEl.textContent = 'No vehicles match "' + searchInput.value + '"';
             }
-            countEl.textContent = '0 vehicles';
+            if (countEl) countEl.textContent = '0 vehicles';
           } else {
             emptyEl.style.display = 'none';
             renderGrid(filtered);

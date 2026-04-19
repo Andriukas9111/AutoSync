@@ -172,16 +172,30 @@ async function buildCollectionTargets(
 ): Promise<CollectionTarget[]> {
   const targets: CollectionTarget[] = [];
 
-  // Query ALL fitments (both with and without YMME IDs)
+  // Query ALL fitments (both with and without YMME IDs), paginated to avoid 1000-row limit.
   // This ensures collections work whether fitments came from auto-extraction
   // (no ymme IDs) or manual mapping (with ymme IDs).
-  const { data: fitments, error } = await db
-    .from("vehicle_fitments")
-    .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
-    .eq("shop_id", shopId)
-    .not("make", "is", null);
+  const fitments: any[] = [];
+  let fOffset = 0;
+  while (true) {
+    const { data: batch, error: batchErr } = await db
+      .from("vehicle_fitments")
+      .select("make, model, year_from, year_to, ymme_make_id, ymme_model_id")
+      .eq("shop_id", shopId)
+      .not("make", "is", null)
+      .order("id", { ascending: true })
+      .range(fOffset, fOffset + 999);
+    if (batchErr) {
+      console.error("[collections] Failed to query fitments:", batchErr.message);
+      throw new Error(`Failed to query fitments: ${batchErr.message}`);
+    }
+    if (!batch || batch.length === 0) break;
+    fitments.push(...batch);
+    fOffset += batch.length;
+    if (batch.length < 1000) break;
+  }
 
-  if (error || !fitments || fitments.length === 0) return [];
+  if (fitments.length === 0) return [];
 
   // Resolve YMME IDs from text names when missing
   const makeNameToId = new Map<string, string | number>();
@@ -543,54 +557,6 @@ async function publishablePublishFallback(admin: any, resourceId: string, public
   }
 }
 
-/**
- * Legacy: Publishes a resource to all active sales channels (queries each time).
- * Kept as fallback. Prefer publishResourceFast with pre-cached IDs.
- */
-async function publishToAllChannels(admin: any, resourceId: string) {
-  try {
-    // Get all available publications (sales channels)
-    const pubResp = await admin.graphql(`query {
-      publications(first: 20) {
-        nodes { id name }
-      }
-    }`);
-    const pubJson = await pubResp.json();
-    const publications = pubJson?.data?.publications?.nodes ?? [];
-
-    console.log(`[collections] Found ${publications.length} sales channels:`, publications.map((p: any) => p.name).join(", "));
-
-    if (publications.length === 0) {
-      console.warn("[collections] No sales channels found — collection will not be visible");
-      return;
-    }
-
-    // Publish to each channel
-    const publishResp = await admin.graphql(`mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
-      publishablePublish(id: $id, input: $input) {
-        publishable { availablePublicationsCount { count } }
-        userErrors { field message }
-      }
-    }`, {
-      variables: {
-        id: resourceId,
-        input: publications.map((p: any) => ({ publicationId: p.id })),
-      },
-    });
-
-    const publishJson = await publishResp.json();
-    const publishErrors = publishJson?.data?.publishablePublish?.userErrors;
-    if (publishErrors?.length) {
-      console.error(`[collections] Publish errors for ${resourceId}:`, publishErrors.map((e: any) => e.message).join(", "));
-    } else {
-      const pubCount = publishJson?.data?.publishablePublish?.publishable?.availablePublicationsCount?.count;
-      console.log(`[collections] Published ${resourceId} to ${pubCount ?? "?"} channels`);
-    }
-  } catch (err) {
-    console.error("[collections] publishToAllChannels error:", err instanceof Error ? err.message : err);
-  }
-}
-
 // ── Shopify Lookups ─────────────────────────────────────────
 
 async function findExistingCollection(
@@ -659,6 +625,16 @@ async function upsertCollectionMapping(
 
 // ── String Builders ─────────────────────────────────────────
 
+/** Escape HTML entities to prevent XSS in collection descriptions */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildCollectionTitle(target: CollectionTarget): string {
   if (target.yearRange && target.model) {
     return `${target.make} ${target.model} ${target.yearRange} Parts`;
@@ -675,9 +651,9 @@ function buildCollectionTitle(target: CollectionTarget): string {
  * keyword-rich, informative, and help with on-page SEO.
  */
 function buildCollectionDescriptionHtml(target: CollectionTarget): string {
-  const make = target.make;
-  const model = target.model;
-  const yearRange = target.yearRange;
+  const make = escHtml(target.make);
+  const model = target.model ? escHtml(target.model) : undefined;
+  const yearRange = target.yearRange ? escHtml(target.yearRange) : undefined;
 
   if (yearRange && model) {
     return [

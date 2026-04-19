@@ -21,8 +21,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const delimiter = String(formData.get("delimiter") || ",");
 
   // Validation
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   if (!file || file.size === 0) {
     return data({ error: "No file uploaded." }, { status: 400 });
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return data({ error: "File exceeds 50MB limit." }, { status: 413 });
   }
 
   if (!providerId) {
@@ -112,7 +116,7 @@ export async function action({ request }: ActionFunctionArgs) {
   // Insert products in batches of 500
   const BATCH_SIZE = 500;
   let inserted = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
 
   for (let i = 0; i < products.length; i += BATCH_SIZE) {
     const batch = products.slice(i, i + BATCH_SIZE);

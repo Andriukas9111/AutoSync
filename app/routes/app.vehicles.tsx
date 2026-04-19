@@ -34,11 +34,12 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getPlanLimits, getTenant } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getPlanLimits, getTenant, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -60,18 +61,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     getTenant(shopId),
     db
       .from("ymme_makes")
-      .select("id, name, slug, country, logo_url, nhtsa_make_id")
+      .select("id, name, slug, country, logo_url")
       .eq("active", true)
       .order("name", { ascending: true }),
     db
       .from("tenant_active_makes")
       .select("ymme_make_id")
       .eq("shop_id", shopId),
-    db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
+    db.from("vehicle_fitments").select("make")
+      .eq("shop_id", shopId).not("make", "is", null).limit(50000),
     db
       .from("ymme_models")
       .select("id", { count: "exact", head: true })
@@ -83,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const tenant = tenantResult;
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   const allMakes = makesResult.data ?? [];
@@ -98,9 +96,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .filter((m: { id: string }) => activeMakeIds.has(m.id))
     .map((m: { name: string }) => m.name);
 
-  // For each active make, get the fitment count efficiently (one query per active make)
-  // This is fast because there are only ~36 active makes, not 5000+ fitments
-  if (activeMakeNames.length > 0 && activeMakeNames.length <= 50) {
+  // For each active make, get the fitment count efficiently. Previously capped
+  // at 50 makes — but demo store has 58 active makes, so the count silently
+  // returned 0 for EVERY make and the "With Fitments" filter showed 0. Now we
+  // run up to 500 makes in parallel (still a bounded, reasonable fan-out).
+  if (activeMakeNames.length > 0 && activeMakeNames.length <= 500) {
     const countPromises = activeMakeNames.map(async (makeName: string) => {
       const { count } = await db.from("vehicle_fitments")
         .select("id", { count: "exact", head: true })
@@ -115,7 +115,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Build makes list with enriched data
-  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null; nhtsa_make_id: number | null }) => ({
+  const makes = allMakes.map((make: { id: string; name: string; slug: string | null; country: string | null; logo_url: string | null }) => ({
     ...make,
     isActive: activeMakeIds.has(make.id),
     productCount: productCountByMake[make.name] || 0,
@@ -156,7 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (enable) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = tenant?.plan ?? "free";
+      const plan: PlanTier = getEffectivePlan(tenant);
       const limits = getPlanLimits(plan);
 
       const { count: currentActive } = await db
@@ -206,11 +206,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (_action === "auto_activate") {
     // Auto-activate all makes that have mapped products
-    const { data: fitments } = await db
-      .from("vehicle_fitments")
-      .select("make")
-      .eq("shop_id", shopId)
-      .not("make", "is", null);
+    const { data: fitments } = await db.from("vehicle_fitments")
+      .select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000);
 
     const fitmentMakes = new Set(
       (fitments ?? []).map((f: { make: string }) => f.make),
@@ -281,7 +278,6 @@ interface MakeItem {
   slug: string | null;
   country: string | null;
   logo_url: string | null;
-  nhtsa_make_id: number | null;
   isActive: boolean;
   productCount: number;
 }
@@ -891,7 +887,7 @@ export default function Vehicles() {
                     }}
                     style={{
                       cursor: "pointer",
-                      padding: "12px 0",
+                      padding: "var(--p-space-300) 0",
                       transition: "background-color 0.15s",
                     }}
                   >
@@ -1211,6 +1207,7 @@ export default function Vehicles() {
       title="Vehicle Database"
       subtitle="Browse and manage your YMME vehicle database"
     >
+      <BlockStack gap="600">
       <Layout>
         <Layout.Section>
           <BlockStack gap="400">
@@ -1326,9 +1323,15 @@ export default function Vehicles() {
           </BlockStack>
         </Layout.Section>
       </Layout>
+      </BlockStack>
 
       {/* Engine detail modal */}
       {renderEngineModal()}
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="YMME Browser" />;
 }

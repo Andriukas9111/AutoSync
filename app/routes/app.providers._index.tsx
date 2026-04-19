@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate } from "react-router";
+import { useLoaderData, useNavigate, useRevalidator } from "react-router";
 import {
   Page,
   Card,
@@ -19,20 +19,22 @@ import {
 } from "@shopify/polaris";
 import {
   ImportIcon,
-  ViewIcon,
   DatabaseIcon,
   ProductIcon,
   CategoriesIcon,
+  LockIcon,
 } from "@shopify/polaris-icons";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
-import type { ProviderType } from "../lib/types";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
+import type { PlanTier, PlanLimits, ProviderType } from "../lib/types";
 import { formatTimeAgo } from "../lib/types";
+import { PlanGate } from "../components/PlanGate";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,22 +114,9 @@ function getStatusLabel(status: string): string {
   }
 }
 
-/** Polaris-safe background color token per provider type for the initial avatar */
-function getAvatarBackground(type: string): string {
-  switch (type) {
-    case "csv":
-      return "var(--p-color-bg-fill-info)";
-    case "json":
-      return "var(--p-color-bg-fill-success)";
-    case "xml":
-      return "var(--p-color-bg-fill-warning)";
-    case "api":
-      return "var(--p-color-bg-fill-caution)";
-    case "ftp":
-      return "var(--p-color-bg-fill-info)";
-    default:
-      return "var(--p-color-bg-fill-info)";
-  }
+/** Polaris-safe background color token for provider avatar — consistent blue theme */
+function getAvatarBackground(): string {
+  return "var(--p-color-bg-fill-info)";
 }
 
 // ---------------------------------------------------------------------------
@@ -156,15 +145,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const plan = tenant?.plan ?? "free";
+  const plan = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
   const providers = (providersResult.data ?? []) as Provider[];
+
+  // Get REAL product counts per provider (not stale provider.product_count)
+  if (providers.length > 0) {
+    const countResults = await Promise.all(
+      providers.map(p =>
+        db.from("products").select("id", { count: "exact", head: true })
+          .eq("shop_id", shopId).eq("provider_id", p.id)
+      )
+    );
+    providers.forEach((p, i) => {
+      const live = countResults[i].count ?? 0;
+      if (live > 0) p.product_count = live;
+    });
+  }
 
   return {
     providers,
     providerCount: providers.length,
     providerLimit: limits.providers,
     plan,
+    limits,
   };
 };
 
@@ -173,13 +177,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // ---------------------------------------------------------------------------
 
 export default function ProvidersIndex() {
-  const { providers, providerCount: loaderProviderCount, providerLimit, plan } =
+  const { providers, providerCount: loaderProviderCount, providerLimit, plan, limits } =
     useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
 
   // Live stats polling — updates provider/product counts every 5 seconds
-  const { stats: polledStats } = useAppData();
-  const providerCount = polledStats?.providers ?? loaderProviderCount;
+  const { stats: polledStats } = useAppData({
+    providers: loaderProviderCount,
+  });
+  const providerCount = polledStats.providers;
+
+  // Auto-revalidate loader data when product count changes (keeps provider cards fresh)
+  const lastTotal = useRef(polledStats?.total);
+  useEffect(() => {
+    if (polledStats?.total !== undefined && polledStats.total !== lastTotal.current) {
+      lastTotal.current = polledStats.total;
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }
+  }, [polledStats?.total]);
 
   const atLimit =
     providerLimit !== Infinity && providerCount >= providerLimit;
@@ -210,19 +226,28 @@ export default function ProvidersIndex() {
         primaryAction={{
           content: "Import Products",
           onAction: () => navigate("/app/providers/new"),
-          disabled: atLimit,
+          disabled: atLimit || providerLimit === 0,
         }}
       >
-        <BlockStack gap="400">
-          {atLimit && (
-            <Banner tone="warning">
-              <p>
-                Your <strong>{plan}</strong> plan allows{" "}
-                <strong>{limitLabel}</strong> provider
-                {providerLimit === 1 ? "" : "s"}. Upgrade to add more.
-              </p>
-            </Banner>
-          )}
+        <BlockStack gap="600">
+          {/* When provider limit is 0, show upgrade prompt — no empty state */}
+          {providerLimit === 0 ? (
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center" wrap={false}>
+                  <IconBadge icon={LockIcon} bg="var(--p-color-bg-fill-critical-secondary)" color="var(--p-color-icon-critical)" />
+                  <Text as="span" variant="bodyMd" fontWeight="semibold">Data Providers</Text>
+                  <Badge size="small" tone="info">Starter+</Badge>
+                </InlineStack>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Import products from CSV, XML, API, or FTP sources. Available on the Starter plan and above.
+                </Text>
+                <Button size="slim" onClick={() => navigate("/app/plans")}>
+                  Upgrade to Starter
+                </Button>
+              </BlockStack>
+            </Card>
+          ) : (
           <Card>
             <EmptyState
               heading="Import your first products"
@@ -244,6 +269,7 @@ export default function ProvidersIndex() {
               </InlineStack>
             </EmptyState>
           </Card>
+          )}
         </BlockStack>
       </Page>
     );
@@ -261,7 +287,7 @@ export default function ProvidersIndex() {
         disabled: atLimit,
       }}
     >
-      <BlockStack gap="400">
+      <BlockStack gap="600">
         {/* How It Works */}
         <HowItWorks
           steps={[
@@ -273,6 +299,7 @@ export default function ProvidersIndex() {
 
         {/* Stats Dashboard */}
         {(() => {
+          // ALL products from all providers (not vehicle-only — providers page is about the full catalog)
           const providerTotalProducts = providers.reduce((sum, p) => sum + (p.product_count || 0), 0);
           const totalImports = providers.reduce((sum, p) => sum + (p.import_count || 0), 0);
           const sourceTypeCount = new Set(providers.map(p => p.type)).size;
@@ -285,8 +312,7 @@ export default function ProvidersIndex() {
           return (
             <Card padding="0">
               <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                ...autoFitGridStyle("100px", "0px"),
                 borderBottom: "1px solid var(--p-color-border-secondary)",
               }}>
                 {statItems.map((item, i) => (
@@ -296,7 +322,7 @@ export default function ProvidersIndex() {
                     textAlign: "center",
                   }}>
                     <BlockStack gap="200" inlineAlign="center">
-                      <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                      <IconBadge icon={item.icon} />
                       <Text as="p" variant="headingLg" fontWeight="bold">
                         {item.count}
                       </Text>
@@ -317,7 +343,7 @@ export default function ProvidersIndex() {
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <InlineStack gap="200" blockAlign="center">
-                  <Icon source={DatabaseIcon} tone="base" />
+                  <Icon source={DatabaseIcon} tone="subdued" />
                   <Text variant="bodySm" as="span">
                     Using{" "}
                     <Text variant="bodySm" as="span" fontWeight="semibold">
@@ -333,7 +359,7 @@ export default function ProvidersIndex() {
                 {atLimit && (
                   <Button
                     variant="plain"
-                    url="/app/plans"
+                    onClick={() => navigate("/app/plans")}
                   >
                     Upgrade plan
                   </Button>
@@ -348,14 +374,7 @@ export default function ProvidersIndex() {
           </Card>
         )}
 
-        {atLimit && (
-          <Banner tone="warning">
-            <p>
-              You have reached the provider limit for the{" "}
-              <strong>{plan}</strong> plan. Upgrade to add more.
-            </p>
-          </Banner>
-        )}
+        {/* Provider limit banner removed — usage card above shows limit info */}
 
         {/* Provider card grid */}
         <InlineGrid columns={{ xs: 1, sm: 1, md: 2, lg: 3 }} gap="400">
@@ -389,36 +408,63 @@ function ProviderCard({
   const timeAgo = formatTimeAgo(provider.last_fetch_at);
 
   return (
-    <Card>
+    <div
+      onClick={() => onNavigate(`/app/providers/${provider.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onNavigate(`/app/providers/${provider.id}`);
+        }
+      }}
+      role="link"
+      tabIndex={0}
+      style={{
+        cursor: "pointer",
+        borderRadius: "var(--p-border-radius-300)",
+        border: "1px solid var(--p-color-border)",
+        padding: "var(--p-space-400)",
+        background: "var(--p-color-bg-surface)",
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "var(--p-shadow-300)";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border-emphasis)";
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
+        (e.currentTarget as HTMLElement).style.borderColor = "var(--p-color-border)";
+      }}
+    >
       <BlockStack gap="300">
-        {/* Top row: logo / name / type badge */}
+        {/* Top row: logo + name + badge */}
         <InlineStack gap="300" blockAlign="center" wrap={false}>
-          {provider.logo_url ? (
-            <Thumbnail
-              source={provider.logo_url}
-              alt={provider.name}
-              size="small"
-            />
-          ) : (
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                background: getAvatarBackground(provider.type),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
-              <Text variant="bodySm" as="span" fontWeight="bold">
-                {getProviderInitials(provider.name)}
-              </Text>
-            </div>
-          )}
+          <div style={{ flexShrink: 0, borderRadius: "var(--p-border-radius-200)", overflow: "hidden" }}>
+            {provider.logo_url ? (
+              <Thumbnail
+                source={provider.logo_url}
+                alt={provider.name}
+                size="small"
+              />
+            ) : (
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: "var(--p-border-radius-200)",
+                  background: getAvatarBackground(),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text variant="bodySm" as="span" fontWeight="bold">
+                  {getProviderInitials(provider.name)}
+                </Text>
+              </div>
+            )}
+          </div>
 
-          <BlockStack gap="0">
+          <BlockStack gap="100">
             <InlineStack gap="200" blockAlign="center" wrap={false}>
               <Text variant="headingMd" as="h3">
                 {provider.name}
@@ -427,70 +473,53 @@ function ProviderCard({
                 {provider.type.toUpperCase()}
               </Badge>
             </InlineStack>
+            {provider.description && (
+              <Text variant="bodySm" as="p" tone="subdued">
+                {provider.description.length > 60
+                  ? provider.description.slice(0, 60) + "..."
+                  : provider.description}
+              </Text>
+            )}
           </BlockStack>
         </InlineStack>
 
-        {/* Description */}
-        {provider.description && (
-          <Box>
-            <div
-              style={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <Text variant="bodySm" as="p" tone="subdued">
-                {provider.description}
-              </Text>
-            </div>
-          </Box>
-        )}
-
-        {/* Stats row */}
-        <InlineStack gap="300" wrap={true}>
-          <InlineStack gap="100" blockAlign="center">
-            <Icon source={ProductIcon} tone="subdued" />
+        {/* Stats + status on one row */}
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="300" blockAlign="center">
             <Text variant="bodySm" as="span" tone="subdued">
-              {provider.product_count.toLocaleString()}{" "}
-              {provider.product_count === 1 ? "product" : "products"}
+              {provider.product_count.toLocaleString()} products
+            </Text>
+            <Text variant="bodySm" as="span" tone="subdued">·</Text>
+            <Text variant="bodySm" as="span" tone="subdued">
+              {provider.import_count ?? 0} {(provider.import_count ?? 0) === 1 ? "import" : "imports"}
+            </Text>
+            <Text variant="bodySm" as="span" tone="subdued">·</Text>
+            <Text variant="bodySm" as="span" tone="subdued">
+              {timeAgo}
             </Text>
           </InlineStack>
-          <Text variant="bodySm" as="span" tone="subdued">
-            {provider.import_count ?? 0}{" "}
-            {(provider.import_count ?? 0) === 1 ? "import" : "imports"}
-          </Text>
-          <Text variant="bodySm" as="span" tone="subdued">
-            Last: {timeAgo}
-          </Text>
+          <Badge tone={statusTone}>{statusLabel}</Badge>
         </InlineStack>
 
-        {/* Status badge */}
-        <Box>
-          <Badge tone={statusTone}>{statusLabel}</Badge>
-        </Box>
-
-        {/* Action buttons */}
-        <InlineStack gap="200">
+        {/* Import button */}
+        <InlineStack align="end">
           <Button
             icon={ImportIcon}
-            onClick={() =>
-              onNavigate(`/app/providers/${provider.id}/import`)
-            }
+            size="slim"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigate(`/app/providers/${provider.id}/import`);
+            }}
           >
             Import
           </Button>
-          <Button
-            variant="plain"
-            icon={ViewIcon}
-            onClick={() =>
-              onNavigate(`/app/providers/${provider.id}`)
-            }
-          >
-            View
-          </Button>
         </InlineStack>
       </BlockStack>
-    </Card>
+    </div>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Providers" />;
 }

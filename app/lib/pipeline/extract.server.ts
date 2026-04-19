@@ -414,7 +414,12 @@ export async function runAutoExtraction(
             .eq("shop_id", shopId);
           stats.flagged++;
         } else {
-          // LOW — leave unmapped
+          // LOW — mark as no_match to prevent infinite reprocessing
+          await db
+            .from("products")
+            .update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
+            .eq("id", product.id)
+            .eq("shop_id", shopId);
           stats.unmapped++;
         }
 
@@ -425,6 +430,12 @@ export async function runAutoExtraction(
         console.error(
           `[extract] Product ${product.id} failed: ${message}`,
         );
+        // Mark as flagged to prevent infinite retry
+        await db
+          .from("products")
+          .update({ fitment_status: "flagged", updated_at: new Date().toISOString() })
+          .eq("id", product.id)
+          .eq("shop_id", shopId);
         stats.processed++;
         stats.unmapped++;
       }

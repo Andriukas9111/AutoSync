@@ -13,21 +13,24 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
+import crypto from "crypto";
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { assertFeature, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
+import { assertFeature, assertFitmentLimit, BillingGateError, getTenant, getPlanLimits } from "../lib/billing.server";
 import {
   buildVehicleProfile,
   buildSearchPatterns,
-  scoreByProfile,
+  scoreEnginesToSuggestions,
   deduplicateSuggestions,
   calculateMaxPossible,
   normalizeConfidence,
+  VARIANT_SUFFIXES,
   type SuggestedFitment,
   type EngineRow,
 } from "./app.api.suggest-fitments";
+import { detectSingleGroup, detectGroupEngine } from "../lib/brand-groups";
 
-const CHUNK_SIZE = 10; // Products per chunk — stays well within Vercel timeout
+const CHUNK_SIZE = 10; // Products per chunk — safe for Vercel 10s timeout with vehicle-heavy products
 
 // ── Loader: return current job status ──────────────────────────
 
@@ -44,13 +47,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     .limit(1)
     .maybeSingle();
 
-  // Get live counts
+  // Get live counts — exclude staged products (they're in provider view, not extraction queue)
   const [totalRes, unmappedRes, autoRes, smartRes, flaggedRes] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "unmapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "auto_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "smart_mapped"),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("fitment_status", "flagged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "unmapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "auto_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "smart_mapped"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").eq("fitment_status", "flagged"),
   ]);
 
   return data({
@@ -68,24 +71,79 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // ── Action: chunked extraction ─────────────────────────────────
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request);
-  const shopId = session.shop;
+  // Support internal calls from Edge Function (no Shopify session needed for extraction).
+  // The Edge Function sends X-Internal-Key. We accept any key that matches one of the
+  // Supabase service-role secrets we know about — Supabase Pro has multiple key formats
+  // (legacy JWT `eyJ...`, new `sb_secret_...`, `SUPABASE_SECRET_KEY`) and the Edge Function
+  // may send whichever its Deno env auto-provisioned. Previously we only compared to
+  // SUPABASE_SERVICE_ROLE_KEY — if the Edge Function's injected key was a different
+  // format/rotation, timingSafeEqual silently failed and we fell through to
+  // `authenticate.admin()` which returns a 302 redirect. Vercel logs show 302s every 30s
+  // for 4 hours during the recent extract run — all chunks failed to auth, zero progress.
+  const internalKey = request.headers.get("X-Internal-Key") ?? "";
+  const internalShopId = request.headers.get("X-Shop-Id");
+  const candidates = [
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+    process.env.SUPABASE_SECRET_KEY ?? "",
+    process.env.INTERNAL_API_SECRET ?? "",
+  ].filter(k => k.length > 0);
 
-  const formData = await request.formData();
-  const actionType = formData.get("_action") as string;
-
-  // Plan gate
-  try {
-    await assertFeature(shopId, "autoExtraction");
-  } catch (err) {
-    if (err instanceof BillingGateError) {
-      return data({ error: err.message, requiredPlan: err.requiredPlan }, { status: 403 });
+  const keyMatch = internalKey.length > 0 && candidates.some((expected) => {
+    if (expected.length !== internalKey.length) return false;
+    try {
+      return crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expected));
+    } catch {
+      return false;
     }
-    throw err;
+  });
+  const isInternalCall = keyMatch && !!internalShopId;
+
+  if (internalKey && !isInternalCall) {
+    // Log when an internal call reached us but didn't match any candidate — avoids the
+    // silent fall-through-to-redirect that made this bug invisible for so long.
+    console.warn(
+      `[auto-extract] Internal call rejected: keyLen=${internalKey.length}, shopHeader=${internalShopId ?? "missing"}, candidateLens=[${candidates.map(c => c.length).join(",")}]`,
+    );
   }
 
-  // ── START: Create a new job ───────────────────────────────────
-  if (actionType === "start") {
+  let shopId: string;
+  if (isInternalCall) {
+    shopId = internalShopId!;
+  } else {
+    const { session } = await authenticate.admin(request);
+    shopId = session.shop;
+  }
+
+  // Support both form-urlencoded (from UI) and JSON (from pg_net/Edge Function)
+  let actionType: string;
+  let formData: FormData;
+  const contentType = request.headers.get("Content-Type") || "";
+  if (contentType.includes("application/json")) {
+    const json = await request.json();
+    formData = new FormData();
+    for (const [k, v] of Object.entries(json)) {
+      formData.append(k, String(v));
+    }
+    actionType = (json._action || json.action || "chunk") as string;
+  } else {
+    formData = await request.formData();
+    actionType = formData.get("_action") as string;
+  }
+
+  // Plan gate (skip for internal calls — Edge Function already checked)
+  if (!isInternalCall) {
+    try {
+      await assertFeature(shopId, "autoExtraction");
+    } catch (err) {
+      if (err instanceof BillingGateError) {
+        return data({ error: err.message, requiredPlan: err.requiredPlan }, { status: 403 });
+      }
+      throw err;
+    }
+  }
+
+  // ── RE-EXTRACT: Reset flagged/no_match products and re-run extraction ──
+  if (actionType === "re-extract") {
     // Check for already-running job
     const { data: running } = await db
       .from("sync_jobs")
@@ -100,11 +158,114 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ error: "An extraction job is already running", jobId: running.id }, { status: 409 });
     }
 
+    // Which statuses to re-extract? Default: flagged + no_match
+    const includeStatuses = (formData.get("statuses") as string || "flagged,no_match").split(",");
+
+    // Reset products back to unmapped so the extraction pipeline picks them up
+    let totalReset = 0;
+    for (const status of includeStatuses) {
+      const trimmed = status.trim();
+      if (!["flagged", "no_match"].includes(trimmed)) continue;
+
+      // Also delete existing fitments for flagged products that will be re-extracted
+      // (auto_mapped products are not re-extracted — they already have good fitments)
+      if (trimmed === "flagged") {
+        const { data: flaggedProducts } = await db
+          .from("products")
+          .select("id")
+          .eq("shop_id", shopId)
+          .neq("status", "staged")
+          .eq("fitment_status", "flagged")
+          .limit(10000);
+        if (flaggedProducts && flaggedProducts.length > 0) {
+          const ids = flaggedProducts.map((p: { id: string }) => p.id);
+          // Delete old fitments — batch .in() to handle >500 IDs
+          for (let i = 0; i < ids.length; i += 500) {
+            const batch = ids.slice(i, i + 500);
+            await db.from("vehicle_fitments").delete().eq("shop_id", shopId).in("product_id", batch);
+          }
+        }
+      }
+
+      // Previously used .select("id", { count: "exact", head: true }) after
+      // .update() — but Supabase's update().select() signature does not
+      // accept the { count, head } options object, so this threw a TypeError
+      // at runtime on some Supabase-js versions and silently dropped the
+      // count otherwise. Count matching rows BEFORE the update instead.
+      const { count } = await db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .neq("status", "staged")
+        .eq("fitment_status", trimmed);
+
+      await db
+        .from("products")
+        .update({ fitment_status: "unmapped", updated_at: new Date().toISOString() })
+        .eq("shop_id", shopId)
+        .neq("status", "staged")
+        .eq("fitment_status", trimmed);
+
+      totalReset += count ?? 0;
+    }
+
+    if (totalReset === 0) {
+      return data({ error: "No products found to re-extract" });
+    }
+
+    // Create extraction job
+    const { data: job, error: jobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "extract",
+        status: "running",
+        processed_items: 0,
+        total_items: totalReset,
+        started_at: new Date().toISOString(),
+      })
+      .select("id, total_items")
+      .maybeSingle();
+
+    if (jobError || !job) {
+      return data({ error: "Failed to create re-extraction job" }, { status: 500 });
+    }
+
+    // Fire-and-forget: invoke Edge Function
+    triggerEdgeFunction(job.id, shopId);
+
+    return data({ started: true, jobId: job.id, totalReset, totalItems: job.total_items });
+  }
+
+  // ── START: Create a new job ───────────────────────────────────
+  if (actionType === "start") {
+    // Check for already-running job (TOCTOU: narrow race window with immediate insert)
+    const { data: running } = await db
+      .from("sync_jobs")
+      .select("id, status")
+      .eq("shop_id", shopId)
+      .eq("type", "extract")
+      .in("status", ["pending", "running"])
+      .limit(1)
+      .maybeSingle();
+
+    if (running) {
+      return data({ error: "An extraction job is already running", jobId: running.id }, { status: 409 });
+    }
+
+    // Count unmapped products
     const { count: unmappedCount } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
+
+    const totalToProcess = unmappedCount ?? 0;
+
+    if (totalToProcess === 0) {
+      return data({ error: "No unmapped products to extract" });
+    }
 
     const { data: job, error: jobError } = await db
       .from("sync_jobs")
@@ -113,15 +274,33 @@ export async function action({ request }: ActionFunctionArgs) {
         type: "extract",
         status: "running",
         processed_items: 0,
-        total_items: unmappedCount ?? 0,
+        total_items: totalToProcess,
         started_at: new Date().toISOString(),
       })
       .select("id, total_items")
-      .single();
+      .maybeSingle();
 
     if (jobError || !job) {
       return data({ error: "Failed to create job" }, { status: 500 });
     }
+
+    // Post-insert duplicate guard: if another job was created concurrently,
+    // keep the OLDEST (lowest id) and cancel ours if we lost the race
+    const { data: activeJobs } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("type", "extract")
+      .in("status", ["pending", "running"])
+      .order("id", { ascending: true })
+      .limit(2);
+    if (activeJobs && activeJobs.length > 1 && activeJobs[0].id !== job.id) {
+      await db.from("sync_jobs").delete().eq("id", job.id);
+      return data({ error: "An extraction job is already running" }, { status: 409 });
+    }
+
+    // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+    triggerEdgeFunction(job.id, shopId);
 
     return data({ started: true, jobId: job.id, totalItems: job.total_items });
   }
@@ -147,10 +326,15 @@ export async function action({ request }: ActionFunctionArgs) {
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
+        .neq("status", "staged")
         .eq("fitment_status", "unmapped");
 
+      // Get processed count directly from the job record
+      const { data: jobData } = await db.from("sync_jobs").select("processed_items").eq("id", jobId).eq("shop_id", shopId).maybeSingle();
+      const processedCount = jobData?.processed_items ?? 0;
+
       await db.from("sync_jobs")
-        .update({ status: "running", total_items: (remaining ?? 0) + (await getProcessedCount(jobId)) })
+        .update({ status: "running", total_items: (remaining ?? 0) + processedCount })
         .eq("id", jobId)
         .eq("shop_id", shopId);
     }
@@ -165,7 +349,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // Check job is still running (not paused/stopped)
     const { data: job } = await db
       .from("sync_jobs")
-      .select("id, status, processed_items")
+      .select("id, status, processed_items, total_items")
       .eq("id", jobId)
       .eq("shop_id", shopId)
       .maybeSingle();
@@ -174,11 +358,14 @@ export async function action({ request }: ActionFunctionArgs) {
       return data({ done: true, reason: job?.status || "not_found" });
     }
 
-    // Get next chunk of unmapped products
+    // Get next chunk of unmapped products needing extraction
+    // Only process "unmapped" — once the engine processes a product it gets set to
+    // auto_mapped, flagged, or no_match. Those are terminal states for this pass.
     const { data: products } = await db
       .from("products")
-      .select("id, title, description, handle, tags, product_type, vendor, sku")
+      .select("id, title, description, handle, tags, product_type, vendor, sku, raw_data")
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped")
       .order("id")
       .limit(CHUNK_SIZE);
@@ -215,7 +402,7 @@ export async function action({ request }: ActionFunctionArgs) {
           .range(modelOffset, modelOffset + 999);
         if (!modelBatch || modelBatch.length === 0) break;
         for (const m of modelBatch) {
-          const makeId = (m as any).make_id as string;
+          const makeId = (m as { make_id: string }).make_id;
           if (!preloadedModels.has(makeId)) preloadedModels.set(makeId, []);
           preloadedModels.get(makeId)!.push({ id: m.id, name: m.name });
         }
@@ -255,22 +442,123 @@ export async function action({ request }: ActionFunctionArgs) {
 
     for (const product of products) {
       try {
-        const allText = [
+        // Build combined text from ALL product fields including provider raw_data
+        const textParts = [
           product.title ?? "",
           product.description ?? "",
           product.sku ?? "",
           product.vendor ?? "",
           product.product_type ?? "",
           Array.isArray(product.tags) ? product.tags.join(" ") : (product.tags ?? ""),
-        ].join(" ");
+        ];
+
+        // Extract vehicle-relevant data from provider raw_data (tags_BMW, tags_VW, fitment_data, etc.)
+        const rawData = product.raw_data as Record<string, unknown> | null;
+        if (rawData && typeof rawData === "object") {
+          for (const [key, val] of Object.entries(rawData)) {
+            if (typeof val !== "string" || !val) continue;
+            const kl = key.toLowerCase();
+            // Include fields that likely contain vehicle/fitment data
+            if (kl.startsWith("tags_") || kl.startsWith("tag_") ||
+                kl.includes("fitment") || kl.includes("vehicle") ||
+                kl.includes("make") || kl.includes("model") ||
+                kl.includes("year") || kl.includes("engine") ||
+                kl.includes("application") || kl.includes("compatibility") ||
+                kl.includes("car") || kl.includes("auto")) {
+              textParts.push(val);
+            }
+          }
+        }
+
+        const allText = textParts.join(" ");
 
         const profile = buildVehicleProfile(allText, knownMakes);
         const allMakes = [...profile.makeGroup, ...profile.directMakes];
 
         if (allMakes.length === 0) {
+          await db.from("products")
+            .update({ fitment_status: "no_match", updated_at: new Date().toISOString() })
+            .eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
           continue;
         }
+
+        // ── GROUP-UNIVERSAL DETECTION ────────────────────────────
+        // If the detected makes all belong to a single OEM group (VAG, BMW,
+        // Stellantis, HMG, etc.) AND we detect a shared engine family in the
+        // text (e.g., "2.0 TSI", "N55"), create ONE group-universal fitment
+        // instead of expanding to hundreds of per-vehicle rows.
+        //
+        // This prevents the 250-tag/product Shopify cap from blocking pushes
+        // for parts like "VAG 2.0 TSI Blow Off Valve" that legitimately fit
+        // 80+ vehicle variants. Push generates a single group tag; the group
+        // tag drives a group-level smart collection on Shopify; the YMME
+        // widget resolves the group when a customer picks a specific vehicle.
+        const detectedGroup = detectSingleGroup(allMakes);
+        const detectedGroupEngine = detectedGroup
+          ? detectGroupEngine(detectedGroup, allText)
+          : null;
+
+        if (detectedGroup && detectedGroupEngine) {
+          // Create one group-universal fitment and skip per-vehicle expansion
+          const { error: groupErr } = await db.from("vehicle_fitments").insert({
+            product_id: product.id,
+            shop_id: shopId,
+            make: null,
+            model: null,
+            ymme_make_id: null,
+            ymme_model_id: null,
+            ymme_engine_id: null,
+            extraction_method: "universal_part",
+            confidence_score: 0.85,
+            source_text: product.title ?? "",
+            is_group_universal: true,
+            group_slug: detectedGroup.slug,
+            group_engine_slug: detectedGroupEngine.slug,
+          });
+          if (!groupErr) {
+            chunkFitments += 1;
+            await db.from("products")
+              .update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() })
+              .eq("id", product.id).eq("shop_id", shopId);
+            chunkAutoMapped++;
+            continue;
+          }
+          // On error fall through to normal matching so we don't drop the product
+          console.warn(`[extract] group-universal insert failed for ${product.id}:`, groupErr.message);
+        }
+
+        // Universal hardware parts detection — parts that fit ALL vehicles from a make group
+        // Only applies to generic hardware (spacers, bolts, caps) that have NO engine specs
+        // VAG engine parts (e.g., "Audi, VW 2.0 TSI Blow Off Valve") have engine specs and
+        // should go through normal smart matching to find EVERY vehicle with that engine
+        const universalHardwareKeywords = /\b(spacers?|wheel ?bolts?|lug ?nuts?|lug ?bolts?|hub ?rings?|hub ?centric|valve ?stems?|centre ?caps?|center ?caps?|wheel ?locks?|wheel ?nuts?|lock ?nuts?)\b/i;
+        const hasEngineSpec = /\b(\d\.\d\s*(?:TSI|TFSI|TDI|FSI|T|L|V\d|HDi|CDTi|dCi|VTEC|EcoBoost|Turbo|BiTurbo)|\d{3,4}\s*(?:cc|HP|Hp|hp|bhp|PS))\b/i.test(allText);
+        const isUniversalHardware = allMakes.length >= 3 && universalHardwareKeywords.test(allText) && !hasEngineSpec;
+
+        if (isUniversalHardware) {
+          // True universal hardware — create make-only fitments for ALL detected makes
+          const makeInserts = allMakes
+            .filter((makeName: string) => makeIdMap.has(makeName))
+            .map((makeName: string) => ({
+              product_id: product.id, shop_id: shopId,
+              make: makeName, ymme_make_id: makeIdMap.get(makeName),
+              extraction_method: "universal_part", confidence_score: 0.80,
+              source_text: product.title ?? "",
+            }));
+
+          if (makeInserts.length > 0) {
+            const { error: fitErr } = await db.from("vehicle_fitments").insert(makeInserts);
+            if (!fitErr) {
+              chunkFitments += makeInserts.length;
+              await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkAutoMapped++;
+            }
+          }
+          continue; // Skip engine-level matching for universal hardware
+        }
+        // VAG group parts with engine specs (e.g., "Audi, VW, SEAT, Skoda 2.0 TSI Blow Off Valve")
+        // proceed to normal smart matching — they'll find ALL vehicles with that engine across makes
 
         const searchPatterns = buildSearchPatterns(profile);
         const suggestions: SuggestedFitment[] = [];
@@ -292,13 +580,55 @@ export async function action({ request }: ActionFunctionArgs) {
           for (const model of sortedModels) {
             const mName = (model as { id: string; name: string }).name.toLowerCase();
             if (modelNameBlocklist.has(mName)) continue;
-            if ((model as { id: string; name: string }).name.length <= 3 && !validShortModels.has(mName)) continue;
-            const re = new RegExp(`\\b${mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+            // Short-model guard: 3-char-or-less model names can be risky (e.g. "is",
+            // "it", "on" — words that happen to be Lexus/generic models). We allow:
+            //   (a) Names in the hand-curated validShortModels set (BMW X3, Audi A3…),
+            //   (b) Names containing a digit — digits disambiguate real models
+            //       (i30, i20, Q7, X5, 996, A35…) from English words.
+            // Before this fix, Hyundai "i30" was silently skipped because it wasn't
+            // in validShortModels, so products like "Hyundai i30N" only matched the
+            // make — never the model — and stayed in the flagged queue.
+            const hasDigit = /[0-9]/.test(mName);
+            if ((model as { id: string; name: string }).name.length <= 3 && !validShortModels.has(mName) && !hasDigit) continue;
+
+            // Pure numeric model names (100, 200, 80, etc.) must appear near the make name
+            // to avoid false positives like "100 Hp" matching "Audi 100"
+            const isPureNumeric = /^\d+$/.test((model as { id: string; name: string }).name);
+            if (isPureNumeric) {
+              // Require "Make Model" pattern (e.g., "Audi 100" not just "100")
+              const makeModelRe = new RegExp(`\\b${makeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+${mName}\\b`, "i");
+              if (!makeModelRe.test(allText)) continue;
+            }
+
+            // TRIM-AWARE MATCHING (aligned with suggest-fitments.tsx VARIANT_SUFFIXES):
+            // YMME stores base names ("i30", "Kona", "Golf") but titles often use
+            // trim/variant names ("i30N", "Kona N", "Golf R"). A plain `\b<model>\b`
+            // FAILS for fused trims like "i30N" because '0'+'N' are both word chars
+            // (no word boundary between them).
+            //
+            // Solution: after the base name, optionally match a KNOWN trim suffix.
+            // The trailing `\b` then requires a real word end AFTER the trim:
+            //   - "i30 " — trim absent, \b matches after '0' (space is non-word)  ✓
+            //   - "i30N,"— trim 'N' consumed, \b matches after 'N' (comma is non-word) ✓
+            //   - "i3000"— neither trim nor \b works, no match                    ✓
+            const escapedName = mName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const re = new RegExp(`\\b${escapedName}(?:${VARIANT_SUFFIXES})?\\b`, "i");
             if (re.test(allText)) {
               modelNameMatchIds.push((model as { id: string; name: string }).id);
               if (!profile.modelNames.includes((model as { id: string; name: string }).name)) {
                 profile.modelNames.push((model as { id: string; name: string }).name);
               }
+            }
+          }
+
+          // Also add models resolved from chassis codes (e.g., 997 → 911)
+          // These models won't appear in the text but ARE the correct match
+          for (const resolvedModelName of profile.modelNames) {
+            const matchingModel = makeModels.find((m: { name: string }) =>
+              m.name.toLowerCase() === resolvedModelName.toLowerCase()
+            );
+            if (matchingModel && !modelNameMatchIds.includes((matchingModel as { id: string }).id)) {
+              modelNameMatchIds.push((matchingModel as { id: string }).id);
             }
           }
 
@@ -346,36 +676,20 @@ export async function action({ request }: ActionFunctionArgs) {
           const seen = new Set<string>();
           engines = engines.filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
 
-          // Score
-          for (const engineRow of engines) {
-            let { score, matchedHints } = scoreByProfile(engineRow, profile);
-            if (modelNameMatchIds.includes(engineRow.model.id)) {
-              score = Math.min(1.0, score + 0.25);
-              if (!matchedHints.includes(engineRow.model.name)) matchedHints.push(engineRow.model.name);
-            }
-            if (score < 0.20) {
-              const ln = (engineRow.name || "").toLowerCase();
-              for (const pat of searchPatterns) {
-                const clean = pat.replace(/%/g, "").toLowerCase();
-                if (clean.length >= 3 && ln.includes(clean)) { score = Math.max(score, 0.50); break; }
-              }
-            }
-            if (score < 0.15) continue;
-
-            suggestions.push({
-              make: { id: engineRow.model.make.id, name: engineRow.model.make.name },
-              model: { id: engineRow.model.id, name: engineRow.model.name, generation: engineRow.model.generation },
-              engine: {
-                id: engineRow.id, code: engineRow.code || "", name: engineRow.name,
-                displayName: engineRow.name || "Unknown",
-                displacementCc: engineRow.displacement_cc, fuelType: engineRow.fuel_type,
-                powerHp: engineRow.power_hp, aspiration: engineRow.aspiration,
-                cylinders: engineRow.cylinders, cylinderConfig: engineRow.cylinder_config,
-              },
-              yearFrom: engineRow.year_from, yearTo: engineRow.year_to,
-              confidence: score, source: "vehicle-profile", matchedHints,
-            });
-          }
+          // ── SHARED SCORING PIPELINE ──
+          // Same function is called by /app/api/suggest-fitments (manual Smart
+          // Suggestions). Any future scoring / scope / fallback change lands
+          // in both flows automatically. See suggest-fitments.tsx →
+          // scoreEnginesToSuggestions for the full contract.
+          suggestions.push(
+            ...scoreEnginesToSuggestions(
+              engines,
+              profile,
+              modelNameMatchIds,
+              searchPatterns,
+              { minScore: 0.15 },
+            ),
+          );
         }
 
         // Deduplicate and normalize
@@ -390,52 +704,256 @@ export async function action({ request }: ActionFunctionArgs) {
         const best = unique[0];
         const confidence = best?.confidence ?? 0;
 
-        // Route by confidence
-        // Only auto-map Strong Match engines that match the detected model
-        // Medium/Good matches from other models are flagged for manual review
-        if (confidence >= 0.8 && unique.length > 0) {
-          const detectedModel = profile.model || profile.chassisCode;
-          const top = unique.filter((s) => {
-            if (s.confidence < 0.7) return false;
-            // If we detected a specific model, only auto-map engines from that model
-            if (detectedModel && s.model?.name) {
-              const modelUpper = s.model.name.toUpperCase();
-              const detectedUpper = detectedModel.toUpperCase();
-              // Model must match — e.g. "Golf" must match "Golf", not "Passat CC"
-              if (!modelUpper.includes(detectedUpper) && !detectedUpper.includes(modelUpper)) {
-                return false; // Skip engines from non-matching models
-              }
+        // Route by confidence — lowered threshold from 0.8 to 0.65
+        // Products with a strong model name match AND good score should auto-map,
+        // not sit in the flagged queue where a human has to approve them.
+        // The model name filter below ensures we only auto-map engines from the
+        // correct model, so false positives are still prevented.
+        const AUTO_MAP_THRESHOLD = 0.55; // Lowered from 0.65 — products with model name match are reliable
+        const FLAG_THRESHOLD = 0.30;   // Lowered from 0.40 — catch more products for review instead of no_match
+
+        if (confidence >= AUTO_MAP_THRESHOLD && unique.length > 0) {
+          // Auto-accept ALL suggestions above the threshold — same as manual smart mapping
+          // No model name filter — products like "Porsche 996/997 & Audi S4" have MULTIPLE makes
+          // No limit of 5 — map EVERYTHING the smart engine finds
+          const top = unique.filter((s) => s.confidence >= FLAG_THRESHOLD);
+          // CRITICAL: Only create fitments that have complete engine data (make+model+engine IDs)
+          // Fitments without engine IDs break vehicle pages and provide no value.
+          let inserts = top
+            .filter((s) => s.engine?.id && s.model?.id && s.make.id) // Guard: NEVER insert without IDs
+            .map((s) => ({
+              product_id: product.id, shop_id: shopId,
+              make: s.make.name, model: s.model?.name ?? null,
+              variant: s.engine?.name ?? null,
+              year_from: s.yearFrom, year_to: s.yearTo,
+              engine: s.engine?.displayName ? s.engine.displayName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : null,
+              engine_code: s.engine?.code ?? null,
+              fuel_type: s.engine?.fuelType ?? null,
+              ymme_make_id: s.make.id, ymme_model_id: s.model!.id,
+              ymme_engine_id: s.engine!.id,
+              extraction_method: "smart", confidence_score: s.confidence,
+              source_text: product.title ?? "",
+            }));
+
+          // Deduplicate: skip fitments that already exist for this product+engine
+          const existingIds = inserts.filter(i => i.ymme_engine_id).map(i => i.ymme_engine_id);
+          if (existingIds.length > 0) {
+            const { data: existing } = await db.from("vehicle_fitments")
+              .select("ymme_engine_id")
+              .eq("product_id", product.id)
+              .eq("shop_id", shopId)
+              .in("ymme_engine_id", existingIds as string[]);
+            const existingSet = new Set((existing ?? []).map(e => e.ymme_engine_id));
+            inserts = inserts.filter(i => !i.ymme_engine_id || !existingSet.has(i.ymme_engine_id));
+          }
+
+          if (inserts.length === 0) {
+            // All fitments already exist — mark as auto_mapped without inserting duplicates
+            await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkAutoMapped++;
+            continue;
+          }
+
+          // Enforce fitment limit before inserting
+          try {
+            await assertFitmentLimit(shopId);
+          } catch (limitErr) {
+            if (limitErr instanceof BillingGateError) {
+              // Plan limit reached — flag remaining products instead of inserting
+              await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkFlagged++;
+              continue;
             }
-            return true;
-          }).slice(0, 5);
-          const inserts = top.map((s) => ({
-            product_id: product.id, shop_id: shopId,
-            make: s.make.name, model: s.model?.name ?? null,
-            variant: s.engine?.name ?? null,
-            year_from: s.yearFrom, year_to: s.yearTo,
-            engine: s.engine?.displayName ?? null,
-            engine_code: s.engine?.code ?? null,
-            fuel_type: s.engine?.fuelType ?? null,
-            ymme_make_id: s.make.id, ymme_model_id: s.model?.id ?? null,
-            ymme_engine_id: s.engine?.id ?? null,
-            extraction_method: "smart", confidence_score: s.confidence,
-            source_text: product.title ?? "",
-          }));
-          const { error: fitErr } = await db.from("vehicle_fitments").insert(inserts);
-          if (!fitErr) {
+            throw limitErr;
+          }
+
+          // Use upsert with onConflict + ignoreDuplicates so duplicate engine_ids
+          // across suggestions (common for VAG parts that fit many models sharing
+          // an engine) don't abort the entire insert. Without this, a bulk insert
+          // would fail the FIRST duplicate and roll back EVERYTHING, then we'd
+          // flag the product even though most fitments were valid.
+          const { error: fitErr } = await db.from("vehicle_fitments").upsert(inserts, {
+            onConflict: "shop_id,product_id,ymme_engine_id",
+            ignoreDuplicates: true,
+          });
+
+          // POST-INSERT VERIFICATION: even if fitErr is truthy, check whether
+          // fitments actually landed in the DB. Supabase JS has been seen
+          // returning non-null error while the rows were persisted (partial
+          // response serialization, payload size, network hiccups). We trust
+          // the DB as the source of truth.
+          const { count: insertedCount } = await db.from("vehicle_fitments")
+            .select("id", { count: "exact", head: true })
+            .eq("product_id", product.id).eq("shop_id", shopId);
+
+          if ((insertedCount ?? 0) > 0) {
             chunkFitments += inserts.length;
             await db.from("products").update({ fitment_status: "auto_mapped", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
             chunkAutoMapped++;
-          } else {
+          } else if (fitErr) {
             await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
             chunkFlagged++;
+          } else {
+            // Unusual: no fitErr and no inserts recorded. Mark as no_match to
+            // avoid infinite retry loops. Also guards against suggestions
+            // filtering out to 0 valid rows post-dedup.
+            await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkUnmapped++;
           }
-        } else if (confidence >= 0.5) {
+        } else if (confidence >= FLAG_THRESHOLD) {
+          // Medium confidence (0.30-0.55) — the scorer matched a model (and
+          // maybe an engine) but the overall confidence is below the
+          // auto-map threshold. Strategy:
+          //
+          //   1. PREFER model-level fitments from `unique` suggestions — if
+          //      the scorer said "probably Hyundai i30", create an i30 fitment
+          //      so the product lands in the i30 collection AND the merchant
+          //      can see our guess when they review.
+          //   2. FALL BACK to make-only only if no model was matched — still
+          //      better than no fitment at all (product still lands in make
+          //      collection for browse).
+          //
+          // Status stays `flagged` so the merchant reviews low-confidence
+          // matches before they ship to customers.
+          const modelSuggestions = unique
+            .filter((s) => s.model?.id && s.make.id && s.confidence >= FLAG_THRESHOLD)
+            .slice(0, 8); // Cap at 8 to prevent spam from overly broad matches
+
+          if (modelSuggestions.length > 0) {
+            // We have model matches — create proper fitments (even without engines).
+            // Dedup by (product_id, ymme_model_id, ymme_engine_id) tuple to handle
+            // re-extractions: fetch existing fitments for this product and only
+            // insert rows we don't already have. This avoids the partial-unique-index
+            // edge cases where upsert with onConflict="ymme_engine_id" silently
+            // drops rows whose engine_id is NULL (the index is partial WHERE engine_id
+            // IS NOT NULL, so NULLs don't participate in conflict detection).
+            const candidateInserts = modelSuggestions.map((s) => ({
+              product_id: product.id, shop_id: shopId,
+              make: s.make.name, model: s.model?.name ?? null,
+              variant: s.engine?.name ?? null,
+              year_from: s.yearFrom, year_to: s.yearTo,
+              engine: s.engine?.displayName ? s.engine.displayName.replace(/\s*\[[0-9a-f]{8}\]$/, "") : null,
+              engine_code: s.engine?.code ?? null,
+              fuel_type: s.engine?.fuelType ?? null,
+              ymme_make_id: s.make.id,
+              ymme_model_id: s.model!.id,
+              ymme_engine_id: s.engine?.id ?? null,
+              extraction_method: "smart", confidence_score: s.confidence,
+              source_text: product.title ?? "",
+            }));
+            try {
+              await assertFitmentLimit(shopId);
+              const { data: existing } = await db.from("vehicle_fitments")
+                .select("ymme_model_id, ymme_engine_id")
+                .eq("shop_id", shopId).eq("product_id", product.id);
+              const existingKeys = new Set(
+                (existing ?? []).map((r: { ymme_model_id: string | null; ymme_engine_id: string | null }) =>
+                  `${r.ymme_model_id ?? ""}|${r.ymme_engine_id ?? ""}`,
+                ),
+              );
+              const freshInserts = candidateInserts.filter((i) =>
+                !existingKeys.has(`${i.ymme_model_id ?? ""}|${i.ymme_engine_id ?? ""}`),
+              );
+              if (freshInserts.length > 0) {
+                const { error: insErr } = await db.from("vehicle_fitments").insert(freshInserts);
+                if (insErr) {
+                  console.warn(`[extract] medium-conf insert failed for ${product.id}:`, insErr.message);
+                } else {
+                  chunkFitments += freshInserts.length;
+                }
+              }
+            } catch (err) {
+              console.warn(`[extract] medium-conf model path failed for ${product.id}:`, err instanceof Error ? err.message : err);
+            }
+          } else if (allMakes.length > 0) {
+            // No model matched — fall back to make-only so at least the product
+            // appears in the make's collection for customer browsing.
+            const makeNames = allMakes
+              .filter((makeName: string) => makeIdMap.has(makeName))
+              .slice(0, 3);
+            if (makeNames.length > 0) {
+              try {
+                await assertFitmentLimit(shopId);
+                const { data: existingMakes } = await db.from("vehicle_fitments")
+                  .select("make")
+                  .eq("shop_id", shopId).eq("product_id", product.id)
+                  .is("ymme_engine_id", null);
+                const existingSet = new Set((existingMakes ?? []).map((r: { make: string }) => r.make));
+                const newInserts = makeNames
+                  .filter((mk: string) => !existingSet.has(mk))
+                  .map((makeName: string) => ({
+                    product_id: product.id, shop_id: shopId,
+                    make: makeName, ymme_make_id: makeIdMap.get(makeName),
+                    extraction_method: "make_only", confidence_score: confidence,
+                    source_text: product.title ?? "",
+                  }));
+                if (newInserts.length > 0) {
+                  const { error: makeErr } = await db.from("vehicle_fitments").insert(newInserts);
+                  if (!makeErr) chunkFitments += newInserts.length;
+                  else console.warn(`[extract] make-only insert failed for ${product.id}:`, makeErr.message);
+                }
+              } catch (err) {
+                console.warn(`[extract] make-only fallback failed for ${product.id}:`, err instanceof Error ? err.message : err);
+              }
+            }
+          }
           await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkFlagged++;
+        } else if (allMakes.length > 0) {
+          // Make found but no model/engine match — create MAKE-LEVEL fitments
+          // so the product still appears in make collections (e.g., "BMW Parts").
+          // This catches products like "BMW Brake Lines" that don't specify a model.
+          //
+          // CRITICAL: Products here get `flagged` status (NOT auto_mapped) because
+          // we only have a bare make — no model or engine. The merchant should
+          // review these to confirm which specific vehicles they actually fit.
+          // Marking them auto_mapped lies to the merchant about our confidence.
+          const makeInserts = allMakes
+            .filter((makeName: string) => makeIdMap.has(makeName))
+            .slice(0, 3) // Max 3 makes per product to prevent spam
+            .map((makeName: string) => ({
+              product_id: product.id,
+              shop_id: shopId,
+              make: makeName,
+              ymme_make_id: makeIdMap.get(makeName),
+              extraction_method: "make_only",
+              confidence_score: 0.30,
+              source_text: product.title ?? "",
+            }));
+
+          if (makeInserts.length > 0) {
+            // Check fitment limit before inserting
+            try {
+              await assertFitmentLimit(shopId);
+              const { error: fitErr } = await db.from("vehicle_fitments").insert(makeInserts);
+              // Post-insert verification — see note in main branch above
+              const { count: insertedCount } = await db.from("vehicle_fitments")
+                .select("id", { count: "exact", head: true })
+                .eq("product_id", product.id).eq("shop_id", shopId);
+              if ((insertedCount ?? 0) > 0) {
+                chunkFitments += makeInserts.length;
+                // flagged — not auto_mapped. Make-only is a weak signal.
+                await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkFlagged++;
+              } else if (fitErr) {
+                await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkFlagged++;
+              } else {
+                await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+                chunkUnmapped++;
+              }
+            } catch {
+              // Plan limit reached
+              await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+              chunkFlagged++;
+            }
+          } else {
+            await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+            chunkUnmapped++;
+          }
         } else {
-          // Leave as unmapped but mark as scanned so we don't reprocess
-          await db.from("products").update({ fitment_status: "flagged", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
+          // No makes found at all — genuinely no vehicle data
+          await db.from("products").update({ fitment_status: "no_match", updated_at: new Date().toISOString() }).eq("id", product.id).eq("shop_id", shopId);
           chunkUnmapped++;
         }
       } catch (err) {
@@ -446,24 +964,31 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Update job progress
-    const newProcessed = (job.processed_items ?? 0) + products.length;
-    await db.from("sync_jobs")
-      .update({ processed_items: newProcessed })
-      .eq("id", jobId);
-
-    // Update tenant fitment count
-    if (chunkFitments > 0) {
-      const { data: tenant } = await db.from("tenants").select("fitment_count").eq("shop_id", shopId).maybeSingle();
-      await db.from("tenants").update({ fitment_count: (tenant?.fitment_count ?? 0) + chunkFitments }).eq("shop_id", shopId);
-    }
-
-    // Check if more products remain
+    // Check how many unmapped products remain
     const { count: remaining } = await db
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("shop_id", shopId)
+      .neq("status", "staged")
       .eq("fitment_status", "unmapped");
+
+    // Update job progress
+    const newProcessed = (job.processed_items ?? 0) + products.length;
+    const totalItems = (job.total_items ?? 7783) as number;
+    const progress = totalItems > 0 ? Math.round((newProcessed / totalItems) * 100) : 0;
+    await db.from("sync_jobs")
+      .update({ processed_items: newProcessed, progress: Math.min(progress, (remaining ?? 0) === 0 ? 100 : 99) })
+      .eq("id", jobId);
+
+    // Update tenant fitment count
+    if (chunkFitments > 0) {
+      const { count: actualFitments } = await db.from("vehicle_fitments")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId);
+      if (actualFitments !== null) {
+        await db.from("tenants").update({ fitment_count: actualFitments }).eq("shop_id", shopId);
+      }
+    }
 
     return data({
       chunk: true,

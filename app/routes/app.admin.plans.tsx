@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher, useNavigate } from "react-router";
+import { useLoaderData, useFetcher, useNavigate, useSearchParams } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -15,7 +15,6 @@ import {
   TextField,
   Select,
   Checkbox,
-  Icon,
   Tabs,
 } from "@shopify/polaris";
 import {
@@ -51,6 +50,8 @@ import {
 } from "../lib/billing.server";
 import { PLAN_ORDER } from "../lib/types";
 import type { PlanTier, PlanLimits, PlanConfig } from "../lib/types";
+import { autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Feature definitions grouped by category
@@ -97,7 +98,6 @@ const FEATURE_GROUPS: FeatureGroup[] = [
       { key: "ymmeWidget", label: "YMME Widget", icon: SearchIcon },
       { key: "fitmentBadge", label: "Fitment Badge", icon: CheckCircleIcon },
       { key: "compatibilityTable", label: "Compatibility Table", icon: CategoriesIcon },
-      { key: "floatingBar", label: "Floating Bar", icon: GaugeIcon },
       { key: "myGarage", label: "My Garage", icon: ProductIcon },
       { key: "wheelFinder", label: "Wheel Finder", icon: TargetIcon },
       { key: "plateLookup", label: "Plate Lookup (DVLA)", icon: GlobeIcon },
@@ -162,6 +162,7 @@ const PLAN_BADGE_TONE: Record<PlanTier, "info" | "success" | "warning" | "critic
   professional: "attention",
   business: "warning",
   enterprise: "critical",
+  custom: "critical",
 };
 
 // ---------------------------------------------------------------------------
@@ -307,18 +308,12 @@ function PlanSelectorCard({
     >
       <BlockStack gap="200">
         <InlineStack gap="200" blockAlign="center" align="space-between">
-          <div style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "var(--p-border-radius-200)",
-            background: isSelected ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: isSelected ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)",
-          }}>
-            <Icon source={SettingsIcon} />
-          </div>
+          <IconBadge
+            icon={SettingsIcon}
+            size={32}
+            bg={isSelected ? "var(--p-color-bg-fill-emphasis)" : "var(--p-color-bg-surface-secondary)"}
+            color={isSelected ? "var(--p-color-text-inverse)" : "var(--p-color-icon-emphasis)"}
+          />
           {config.badge && (
             <Badge tone={badgeTone} size="small">{config.badge}</Badge>
           )}
@@ -358,8 +353,8 @@ function FeatureToggleRow({
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "10px",
-        padding: "6px 12px",
+        gap: "var(--p-space-200)",
+        padding: "var(--p-space-150) var(--p-space-300)",
         borderRadius: "var(--p-border-radius-200)",
         background: checked ? "var(--p-color-bg-surface-secondary)" : "transparent",
         transition: "background 100ms ease",
@@ -370,19 +365,7 @@ function FeatureToggleRow({
       role="button"
       tabIndex={0}
     >
-      <div style={{
-        width: "24px",
-        height: "24px",
-        borderRadius: "var(--p-border-radius-200)",
-        background: "var(--p-color-bg-surface-secondary)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: checked ? "var(--p-color-icon-emphasis)" : "var(--p-color-icon-subdued)",
-        flexShrink: 0,
-      }}>
-        <Icon source={icon} />
-      </div>
+      <IconBadge icon={icon} size={24} color={checked ? "var(--p-color-icon-emphasis)" : "var(--p-color-icon-subdued)"} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <Text as="span" variant="bodySm" fontWeight={checked ? "semibold" : "regular"}>{label}</Text>
       </div>
@@ -478,7 +461,7 @@ export default function AdminPlans() {
               <IconBadge icon={SettingsIcon} color="var(--p-color-icon-emphasis)" />
               <Text as="h2" variant="headingMd">Select Plan to Edit</Text>
             </InlineStack>
-            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: "var(--p-space-300)", flexWrap: "wrap" }}>
               {PLAN_ORDER.map((tier) => (
                 <PlanSelectorCard
                   key={tier}
@@ -495,7 +478,7 @@ export default function AdminPlans() {
         {/* ─── Tabs ─── */}
         <Tabs tabs={tabs} selected={selectedTab} onSelect={setSelectedTab}>
           {selectedTab === 0 ? (
-            <div style={{ paddingTop: "16px" }}>
+            <div style={{ paddingTop: "var(--p-space-400)" }}>
               <BlockStack gap="400">
                 {/* ─── Plan Info & Pricing ─── */}
                 <Card>
@@ -506,7 +489,7 @@ export default function AdminPlans() {
                     </InlineStack>
                     <Divider />
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       <div style={{ flex: "1 1 180px" }}>
                         <TextField
                           label="Display Name"
@@ -563,7 +546,7 @@ export default function AdminPlans() {
                     </InlineStack>
                     <Divider />
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       {[
                         { label: "Products", icon: ProductIcon, key: "products" as const },
                         { label: "Fitments", icon: LinkIcon, key: "fitments" as const },
@@ -574,7 +557,7 @@ export default function AdminPlans() {
                             <IconBadge icon={item.icon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="span" variant="bodySm" fontWeight="semibold">{item.label}</Text>
                           </InlineStack>
-                          <div style={{ marginTop: "6px" }}>
+                          <div style={{ marginTop: "var(--p-space-150)" }}>
                             <TextField
                               label=""
                               labelHidden
@@ -592,7 +575,7 @@ export default function AdminPlans() {
                       ))}
                     </div>
 
-                    <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                       {[
                         { label: "Active Makes", icon: DatabaseIcon, key: "activeMakes" as const },
                         { label: "Scheduled Fetches/Day", icon: ClockIcon, key: "scheduledFetchesPerDay" as const },
@@ -602,7 +585,7 @@ export default function AdminPlans() {
                             <IconBadge icon={item.icon} size={22} color="var(--p-color-icon-emphasis)" />
                             <Text as="span" variant="bodySm" fontWeight="semibold">{item.label}</Text>
                           </InlineStack>
-                          <div style={{ marginTop: "6px" }}>
+                          <div style={{ marginTop: "var(--p-space-150)" }}>
                             <TextField
                               label=""
                               labelHidden
@@ -666,7 +649,7 @@ export default function AdminPlans() {
                         <Divider />
 
                         {/* Boolean toggles */}
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "4px" }}>
+                        <div style={autoFitGridStyle("220px", "var(--p-space-100)")}>
                           {group.booleans.map((feature) => (
                             <FeatureToggleRow
                               key={feature.key}
@@ -688,7 +671,7 @@ export default function AdminPlans() {
                         {group.enums.length > 0 && (
                           <>
                             <Divider />
-                            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: "var(--p-space-400)", flexWrap: "wrap" }}>
                               {group.enums.map((feature) => (
                                 <div key={feature.key} style={{ flex: "1 1 200px", minWidth: "200px" }}>
                                   <Select
@@ -724,7 +707,7 @@ export default function AdminPlans() {
             </div>
           ) : (
             /* ─── All Plans Overview Tab ─── */
-            <div style={{ paddingTop: "16px" }}>
+            <div style={{ paddingTop: "var(--p-space-400)" }}>
               <Card>
                 <BlockStack gap="300">
                   <InlineStack gap="200" blockAlign="center">
@@ -734,7 +717,7 @@ export default function AdminPlans() {
                   <Divider />
 
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "800px" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
                       <thead>
                         <tr>
                           {["Plan", "Price", "Products", "Fitments", "Providers", "Makes", "Fetches", "Features", "Badge"].map((h) => (
@@ -742,7 +725,7 @@ export default function AdminPlans() {
                               key={h}
                               style={{
                                 textAlign: h === "Plan" ? "left" : "center",
-                                padding: "12px 10px",
+                                padding: "var(--p-space-300) var(--p-space-200)",
                                 borderBottom: "2px solid var(--p-color-border)",
                                 textTransform: "uppercase",
                                 letterSpacing: "0.5px",
@@ -781,33 +764,33 @@ export default function AdminPlans() {
                                 }
                               }}
                             >
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                                 <Text as="span" variant="bodyMd" fontWeight="bold">{c.name}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodyMd" fontWeight="semibold">
                                   {c.priceMonthly === 0 ? "Free" : `$${String(c.priceMonthly)}`}
                                 </Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.products)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.fitments)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.providers)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.activeMakes)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Text as="span" variant="bodySm">{formatLimit(c.limits.scheduledFetchesPerDay)}</Text>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 <Badge tone="info">{`${String(enabled)}/20`}</Badge>
                               </td>
-                              <td style={{ padding: "12px 10px", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
+                              <td style={{ padding: "var(--p-space-300) var(--p-space-200)", borderBottom: "1px solid var(--p-color-border-secondary)", textAlign: "center" }}>
                                 {c.badge
                                   ? <Badge tone={badgeTone}>{c.badge}</Badge>
                                   : <Text as="span" variant="bodySm" tone="subdued">—</Text>}
@@ -826,4 +809,9 @@ export default function AdminPlans() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Admin Plans" />;
 }

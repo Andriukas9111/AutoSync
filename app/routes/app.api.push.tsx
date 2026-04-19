@@ -1,15 +1,18 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { triggerEdgeFunction } from "../lib/db.server";
 import { assertFeature } from "../lib/billing.server";
-import { pushToShopify } from "../lib/pipeline/push.server";
 
 // ---------------------------------------------------------------------------
-// POST — Start a push job
+// POST — Create a push job (processed by Edge Function via pg_cron)
+//
+// This route returns INSTANTLY after creating the job record.
+// The Supabase Edge Function `process-jobs` picks it up within 30 seconds.
+// This avoids Vercel's serverless timeout (10s free / 60s pro).
 // ---------------------------------------------------------------------------
 export async function action({ request }: ActionFunctionArgs) {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
   // Parse options from request body
@@ -41,52 +44,76 @@ export async function action({ request }: ActionFunctionArgs) {
     throw err;
   }
 
-  // Create a sync job record
+  // Concurrency guard — prevent push while cleanup or another push is running
+  const { data: conflictingJob } = await db
+    .from("sync_jobs")
+    .select("id, type")
+    .eq("shop_id", shopId)
+    .in("type", ["push", "bulk_push", "cleanup"])
+    .in("status", ["running", "pending", "processing"])
+    .limit(1)
+    .maybeSingle();
+
+  if (conflictingJob) {
+    const msg = conflictingJob.type === "push"
+      ? "A push operation is already in progress"
+      : `Cannot start push while a ${conflictingJob.type} job is running`;
+    return data({ error: msg }, { status: 409 });
+  }
+
+  // Get the total count of pushable products — any product that has real
+  // fitments worth sending to Shopify.
+  //
+  // Includes "flagged" because flagged products now carry make-only fitments
+  // (they're in the review queue but should still ship to Shopify with their
+  // make tag so they appear in make-level collections). Excludes "unmapped"
+  // (not yet extracted) and "no_match" (extraction found no vehicle data).
+  const { count: mappedCount } = await db
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .neq("status", "staged")
+    .in("fitment_status", ["auto_mapped", "smart_mapped", "manual_mapped", "flagged"]);
+
+  // Auto-select bulk push for plans that support it (Growth+)
+  // Bulk operations are 10-20x faster for large catalogs
+  let useBulk = false;
+  try {
+    await assertFeature(shopId, "bulkOperations");
+    useBulk = true;
+  } catch {
+    // Plan doesn't support bulk ops — use regular push
+  }
+
+  const jobType = useBulk ? "bulk_push" : "push";
   const { data: job, error: jobError } = await db
     .from("sync_jobs")
     .insert({
       shop_id: shopId,
-      type: "push",
-      status: "pending",
+      type: jobType,
+      status: useBulk ? "running" : "pending",
       progress: 0,
+      total_items: mappedCount ?? 0,
+      processed_items: 0,
+      metadata: JSON.stringify({ pushTags, pushMetafields, method: useBulk ? "bulk_operations" : "individual" }),
+      started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (jobError || !job) {
     return data({ error: "Failed to create sync job" }, { status: 500 });
   }
 
-  // Run the push
-  try {
-    const result = await pushToShopify(shopId, job.id, admin, {
-      pushTags,
-      pushMetafields,
-    });
+  // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+  triggerEdgeFunction(job.id, shopId);
 
-    return data({
-      success: true,
-      jobId: job.id,
-      processed: result.processed,
-      tagsPushed: result.tagsPushed,
-      metafieldsPushed: result.metafieldsPushed,
-      errors: result.errors,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Push failed";
-
-    // Mark job as failed
-    await db
-      .from("sync_jobs")
-      .update({
-        status: "failed",
-        error: message,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", job.id);
-
-    return data({ error: message }, { status: 500 });
-  }
+  return data({
+    success: true,
+    jobId: job.id,
+    totalItems: mappedCount ?? 0,
+    message: "Push job created. Processing will begin shortly.",
+  });
 }
 
 // ---------------------------------------------------------------------------

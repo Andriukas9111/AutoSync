@@ -1,0 +1,43 @@
+{
+  "url": "https://linear.app",
+  "scraped": "2026-04-09",
+  "bodyBg": "rgb(8, 9, 10)",
+  "bodyColor": "rgb(247, 248, 248)",
+  "bodyFont": "Inter Variable, SF Pro Display, system",
+  "cssVars": {
+    "--color-text-primary": "#f7f8f8",
+    "--color-text-secondary": "#d0d6e0",
+    "--color-text-tertiary": "#8a8f98",
+    "--color-bg-primary": "#08090a",
+    "--color-bg-secondary": "#1c1c1f",
+    "--color-accent": "#7170ff"
+  },
+  "nav": {
+    "bg": "transparent",
+    "backdrop": "blur(20px)",
+    "border": "0.667px solid rgba(255,255,255,0.08)"
+  },
+  "h1": {
+    "text": "The product development system for teams and agents",
+    "fontSize": "64px",
+    "fontWeight": "510",
+    "lineHeight": "64px",
+    "letterSpacing": "-1.408px"
+  },
+  "sections": [
+    {"name": "hero", "top": 0, "height": 1026, "h2_size": null},
+    {"name": "logos", "top": 1409, "height": 28},
+    {"name": "manifesto", "top": 1533, "h2_size": "48px", "h2_color": "rgb(138,143,152)"},
+    {"name": "benefits_grid", "top": 1813, "height": 468},
+    {"name": "feature_1_operations", "top": 2483, "height": 1205, "padding": "96px 0px 128px"},
+    {"name": "feature_2_direction", "top": 3698, "height": 1197, "padding": "96px 0px 128px"},
+    {"name": "feature_3_agents", "top": 4905, "height": 1153, "padding": "96px 0px 128px"},
+    {"name": "feature_4_review", "top": 6068, "height": 1071, "padding": "96px 0px 128px"},
+    {"name": "feature_5_progress", "top": 7149, "height": 1176, "padding": "96px 0px 128px"},
+    {"name": "changelog", "top": 8487, "height": 421},
+    {"name": "quotes", "top": 9068, "height": 564},
+    {"name": "cta", "top": 9856, "height": 224, "h2_size": "72px"}
+  ],
+  "animations": ["grid-dot pong (3200ms)", "grid-dot upDown (2800ms)", "steps(1,end)"],
+  "totalHeight": 10767
+}

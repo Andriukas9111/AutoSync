@@ -35,9 +35,11 @@
     window.dispatchEvent(new CustomEvent('autosync:vehicle-changed', { detail: null }));
   }
 
+  // Note: Despite the name, this does NOT escape HTML entities.
+  // All callers use textContent (safe from XSS), not innerHTML.
+  // This function strips dedup suffixes like " [92efc5dd]" from engine display names.
   function escapeText(str) {
     if (!str) return '';
-    // Strip dedup suffixes like " [92efc5dd]" from engine names
     return String(str).replace(/\s*\[[0-9a-f]{8}\]$/, '');
   }
 
@@ -50,6 +52,154 @@
     opt.value = value;
     opt.textContent = text;
     return opt;
+  }
+
+  // ── Generic Custom Dropdown ──
+  // Converts ANY native <select> into a styled custom dropdown matching the Make dropdown
+  function convertToCustomDropdown(selectEl) {
+    if (!selectEl || selectEl.dataset.customized) return;
+    selectEl.dataset.customized = 'true';
+
+    var parent = selectEl.parentNode;
+    var wrapper = document.createElement('div');
+    wrapper.className = 'autosync-ymme__custom-select';
+    wrapper.style.position = 'relative';
+
+    // Create trigger button
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'autosync-ymme__select-trigger';
+    trigger.disabled = selectEl.disabled;
+
+    var display = document.createElement('span');
+    display.className = 'autosync-ymme__select-value';
+    display.textContent = selectEl.options[selectEl.selectedIndex]?.text || selectEl.options[0]?.text || 'Select...';
+    trigger.appendChild(display);
+
+    var arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrow.setAttribute('class', 'autosync-ymme__select-arrow');
+    arrow.setAttribute('width', '12');
+    arrow.setAttribute('height', '12');
+    arrow.setAttribute('viewBox', '0 0 12 12');
+    arrow.setAttribute('fill', 'none');
+    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M2.5 4.5L6 8L9.5 4.5');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    arrow.appendChild(path);
+    trigger.appendChild(arrow);
+
+    // Create dropdown panel — uses flex layout so inner list can scroll
+    var dropdown = document.createElement('div');
+    dropdown.className = 'autosync-ymme__select-dropdown';
+    dropdown.style.cssText = 'display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:1000;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);max-height:280px;overflow:hidden;flex-direction:column;animation:autosync-dropdown-in 0.15s ease;';
+
+    var optionsList = document.createElement('ul');
+    optionsList.className = 'autosync-ymme__select-options';
+    optionsList.style.cssText = 'list-style:none;margin:0;padding:4px 0;overflow-y:auto;flex:1;overscroll-behavior:contain;';
+
+    var isOpen = false;
+
+    function renderOptions() {
+      while (optionsList.firstChild) optionsList.removeChild(optionsList.firstChild);
+      for (var i = 0; i < selectEl.options.length; i++) {
+        var opt = selectEl.options[i];
+        var li = document.createElement('li');
+        li.className = 'autosync-ymme__select-option';
+        li.setAttribute('role', 'option');
+        li.dataset.value = opt.value;
+        li.textContent = opt.text;
+        if (opt.selected && opt.value) li.classList.add('autosync-ymme__select-option--selected');
+        (function(option, listItem) {
+          listItem.addEventListener('click', function() {
+            selectEl.value = option.value;
+            selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+            display.textContent = option.text;
+            closeDD();
+            // Update selected state
+            var items = optionsList.querySelectorAll('.autosync-ymme__select-option');
+            items.forEach(function(it) { it.classList.remove('autosync-ymme__select-option--selected'); });
+            listItem.classList.add('autosync-ymme__select-option--selected');
+          });
+        })(opt, li);
+        optionsList.appendChild(li);
+      }
+    }
+
+    function openDD() {
+      if (trigger.disabled) return;
+      isOpen = true;
+      dropdown.style.display = 'flex';
+      wrapper.classList.add('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'true');
+      renderOptions();
+    }
+
+    function closeDD() {
+      isOpen = false;
+      dropdown.style.display = 'none';
+      wrapper.classList.remove('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    trigger.addEventListener('click', function(e) {
+      e.preventDefault();
+      // Close every other open custom dropdown on the page FIRST, before
+      // opening this one. Previously we used e.stopPropagation() to stop
+      // bubbling to the document listener — but that ALSO stopped the
+      // document listener on OTHER dropdowns from firing, so clicking
+      // trigger B left A's popup stuck on screen. Manual close-others is
+      // more reliable.
+      if (!isOpen) {
+        var allOpen = document.querySelectorAll('.autosync-ymme__custom-select--open');
+        for (var i = 0; i < allOpen.length; i++) {
+          var other = allOpen[i];
+          if (other !== wrapper) {
+            var otherDropdown = other.querySelector('.autosync-ymme__select-dropdown');
+            if (otherDropdown) otherDropdown.style.display = 'none';
+            var otherTrigger = other.querySelector('.autosync-ymme__select-trigger');
+            if (otherTrigger) otherTrigger.setAttribute('aria-expanded', 'false');
+            other.classList.remove('autosync-ymme__custom-select--open');
+          }
+        }
+      }
+      isOpen ? closeDD() : openDD();
+    });
+
+    document.addEventListener('click', function(e) {
+      if (isOpen && !wrapper.contains(e.target)) closeDD();
+    });
+
+    dropdown.appendChild(optionsList);
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(dropdown);
+
+    // Hide original select
+    selectEl.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important;padding:0!important;margin:-1px!important;';
+
+    // Insert wrapper before select, move select inside wrapper
+    parent.insertBefore(wrapper, selectEl);
+    wrapper.appendChild(selectEl);
+
+    // Watch for external changes to the select (JS updates). When the native
+    // select's options list is replaced (e.g. Width cascade after Diameter
+    // changes), we must also re-render the custom dropdown's option list IF
+    // it is currently open, otherwise the user sees the old/empty options.
+    var observer = new MutationObserver(function() {
+      display.textContent = selectEl.options[selectEl.selectedIndex]?.text || 'Select...';
+      trigger.disabled = selectEl.disabled;
+      if (isOpen) renderOptions();
+    });
+    observer.observe(selectEl, { attributes: true, childList: true, subtree: true });
+
+    // Also listen for change events from JS
+    selectEl.addEventListener('change', function() {
+      display.textContent = selectEl.options[selectEl.selectedIndex]?.text || 'Select...';
+    });
+
+    return wrapper;
   }
 
   async function proxyFetch(proxyUrl, path, params) {
@@ -209,6 +359,10 @@
 
     if (!trigger || !dropdown || !optionsList) return;
 
+    // Accessibility: add ARIA attributes to make dropdown
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-expanded', 'false');
+
     var isOpen = false;
     var allMakes = makes || [];
     var selectedMake = null;
@@ -346,6 +500,7 @@
       if (trigger.disabled) return;
       isOpen = true;
       customSelect.classList.add('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'true');
       renderOptions('');
       if (searchInput) {
         searchInput.value = '';
@@ -356,6 +511,7 @@
     function closeDropdown() {
       isOpen = false;
       customSelect.classList.remove('autosync-ymme__custom-select--open');
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -542,17 +698,32 @@
     var popover = container.querySelector('[data-autosync-garage-popover]');
     if (!trigger || !popover) return;
 
+    // Plan check — hide garage if not included in tenant's plan (Business+ only)
+    var proxyUrl = container.dataset.proxyUrl;
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'myGarage').then(function (allowed) {
+        if (!allowed) { trigger.style.display = 'none'; popover.style.display = 'none'; }
+      });
+    }
+
+    // Accessibility
+    trigger.setAttribute('aria-label', 'Open saved vehicles garage');
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+
     var isOpen = false;
 
     function open() {
       isOpen = true;
       popover.style.display = '';
+      trigger.setAttribute('aria-expanded', 'true');
       renderGarageUI(container);
     }
 
     function close() {
       isOpen = false;
       popover.style.display = 'none';
+      trigger.setAttribute('aria-expanded', 'false');
     }
 
     trigger.addEventListener('click', function (e) {
@@ -610,6 +781,11 @@
 
     if (!makeSelect) return;
 
+    // Convert native selects to custom dropdowns (matching Make dropdown design)
+    if (modelSelect) convertToCustomDropdown(modelSelect);
+    if (yearSelect) convertToCustomDropdown(yearSelect);
+    if (engineSelect) convertToCustomDropdown(engineSelect);
+
     // State
     var state = { make: null, makeName: '', model: null, modelName: '', year: null, engine: null, engineName: '' };
     var customMakeDropdown = null;
@@ -650,6 +826,17 @@
     }
 
     function restoreById(saved) {
+      // Only restore if makes actually loaded — prevents stale localStorage from
+      // populating Model/Year/Engine when no data has been pushed to Shopify yet
+      if (allMakesData.length === 0) return;
+
+      // Verify the saved make exists in the loaded makes list
+      var makeExists = false;
+      for (var k = 0; k < allMakesData.length; k++) {
+        if (String(allMakesData[k].id) === String(saved.makeId)) { makeExists = true; break; }
+      }
+      if (!makeExists) return;
+
       // 1. Set make
       state.make = saved.makeId;
       state.makeName = saved.makeName || '';
@@ -1008,6 +1195,11 @@
 
         storeVehicle(vehicle);
 
+        // Track YMME search event for analytics
+        trackEvent(proxyUrl, 'ymme_search', {
+          source: 'ymme_widget',
+        });
+
         // Mark session as coming from YMME widget for source attribution
         try {
           sessionStorage.setItem('autosync_search_source', 'widget');
@@ -1056,7 +1248,31 @@
 
   // --------------- Fitment Badge ---------------
 
+  // Cached widget plan check — runs once per page, shared across all widgets
+  var __widgetPlanCache = null;
+  function checkWidgetPlan(proxyUrl, widgetType) {
+    if (__widgetPlanCache) return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
+    __widgetPlanCache = proxyFetch(proxyUrl, 'widget-check', {}).then(function (d) {
+      // Auto-hide watermarks if merchant has opted out (paid plan feature)
+      if (d.hideWatermark) {
+        document.querySelectorAll('.autosync-widget-footer, .apl-footer, .avs-footer, .avsd-footer, .avd-footer').forEach(function (el) {
+          el.style.display = 'none';
+        });
+      }
+      return d;
+    }).catch(function () { return { allowed: {} }; });
+    return __widgetPlanCache.then(function (d) { return d.allowed && d.allowed[widgetType]; });
+  }
+
   function initFitmentBadge(container) {
+    var proxyUrl = container.dataset.proxyUrl;
+    // Plan check — hide badge if not included in tenant's plan
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'fitmentBadge').then(function (allowed) {
+        if (!allowed) container.style.display = 'none';
+      });
+    }
+
     var productTags = (container.dataset.productTags || '').toLowerCase();
 
     // Parse make_names and model_names as JSON arrays (list.single_line_text_field)
@@ -1121,16 +1337,32 @@
   // --------------- Compatibility Table ---------------
 
   function initCompatTable(container) {
+    var proxyUrl = container.dataset.proxyUrl;
+    // Plan check — hide compatibility table if not included in tenant's plan
+    if (proxyUrl) {
+      checkWidgetPlan(proxyUrl, 'compatibilityTable').then(function (allowed) {
+        if (!allowed) container.style.display = 'none';
+      });
+    }
+
     var metaVehicles = container.dataset.metafieldVehicles;
     var tbody = container.querySelector('[data-autosync-compat-body]');
     if (!tbody) return;
+
+    // Respect the merchant's show_years / show_engine settings from the block.
+    // Previously the JS always rendered these columns, so toggling the
+    // settings in the theme editor did nothing on the rendered table.
+    var showYears = (tbody.dataset.showYears || 'true') !== 'false';
+    var showEngine = (tbody.dataset.showEngine || 'true') !== 'false';
+    // Column count matches the thead: 2 (make+model) + years? + engine?
+    var colCount = 2 + (showYears ? 1 : 0) + (showEngine ? 1 : 0);
 
     clearChildren(tbody);
 
     if (!metaVehicles) {
       var emptyRow = document.createElement('tr');
       var emptyCell = document.createElement('td');
-      emptyCell.setAttribute('colspan', '4');
+      emptyCell.setAttribute('colspan', String(colCount));
       emptyCell.textContent = 'No compatibility data available';
       emptyRow.appendChild(emptyCell);
       tbody.appendChild(emptyRow);
@@ -1142,7 +1374,7 @@
       if (!Array.isArray(vehicles) || vehicles.length === 0) {
         var noRow = document.createElement('tr');
         var noCell = document.createElement('td');
-        noCell.setAttribute('colspan', '4');
+        noCell.setAttribute('colspan', String(colCount));
         noCell.textContent = 'No vehicles listed';
         noRow.appendChild(noCell);
         tbody.appendChild(noRow);
@@ -1160,20 +1392,24 @@
         tdModel.textContent = escapeText(v.model);
         tr.appendChild(tdModel);
 
-        var tdYears = document.createElement('td');
-        tdYears.textContent = (v.year_from || '') + (v.year_to ? '\u2013' + v.year_to : '+');
-        tr.appendChild(tdYears);
+        if (showYears) {
+          var tdYears = document.createElement('td');
+          tdYears.textContent = (v.year_from || '') + (v.year_to ? '\u2013' + v.year_to : '+');
+          tr.appendChild(tdYears);
+        }
 
-        var tdEngine = document.createElement('td');
-        tdEngine.textContent = v.engine ? escapeText(v.engine) : '\u2014';
-        tr.appendChild(tdEngine);
+        if (showEngine) {
+          var tdEngine = document.createElement('td');
+          tdEngine.textContent = v.engine ? escapeText(v.engine) : '\u2014';
+          tr.appendChild(tdEngine);
+        }
 
         tbody.appendChild(tr);
       });
     } catch (e) {
       var errRow = document.createElement('tr');
       var errCell = document.createElement('td');
-      errCell.setAttribute('colspan', '4');
+      errCell.setAttribute('colspan', String(colCount));
       errCell.textContent = 'Error parsing compatibility data';
       errRow.appendChild(errCell);
       tbody.appendChild(errRow);
@@ -1315,92 +1551,142 @@
     });
   }
 
-  // --------------- Wheel Finder ---------------
+  // --------------- Wheel Finder (Cascading Dropdowns) ---------------
 
   function initWheelFinder(container) {
     var proxyUrl = container.dataset.proxyUrl;
+    var currencyCode = container.dataset.currencyCode || 'USD';
+    var formatter;
+    try { formatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode }); } catch (_e) { formatter = null; }
+
+    var pcdEl = container.querySelector('[data-autosync-wheel-level="pcd"]');
+    var diameterEl = container.querySelector('[data-autosync-wheel-level="diameter"]');
+    var widthEl = container.querySelector('[data-autosync-wheel-level="width"]');
+    var offsetEl = container.querySelector('[data-autosync-wheel-level="offset"]');
     var searchBtn = container.querySelector('[data-autosync-wheel-search]');
     var resultsDiv = container.querySelector('[data-autosync-wheel-results]');
 
-    if (!searchBtn) return;
+    if (!pcdEl || !searchBtn) return;
 
-    searchBtn.addEventListener('click', function () {
-      var pcdEl = container.querySelector('[data-autosync-wheel-pcd]');
-      var diameterEl = container.querySelector('[data-autosync-wheel-diameter]');
-      var offsetEl = container.querySelector('[data-autosync-wheel-offset]');
+    // Convert native selects to custom dropdowns
+    if (pcdEl) convertToCustomDropdown(pcdEl);
+    if (diameterEl) convertToCustomDropdown(diameterEl);
+    if (widthEl) convertToCustomDropdown(widthEl);
+    if (offsetEl) convertToCustomDropdown(offsetEl);
 
-      var pcd = pcdEl ? pcdEl.value : '';
-      var diameter = diameterEl ? diameterEl.value : '';
-      var offset = offsetEl ? offsetEl.value : '';
+    var state = { pcd: '', diameter: '', width: '', offset: '' };
+    var btnText = searchBtn.textContent || 'Search Wheels';
 
-      if (!pcd && !diameter) return;
+    function resetSelect(el, placeholder) {
+      clearChildren(el);
+      var opt = document.createElement('option');
+      opt.value = ''; opt.textContent = placeholder;
+      el.appendChild(opt);
+      el.disabled = true;
+    }
 
+    function populateSelect(el, items, formatter, placeholder) {
+      clearChildren(el);
+      var defOpt = document.createElement('option');
+      defOpt.value = ''; defOpt.textContent = placeholder || 'Select...';
+      el.appendChild(defOpt);
+      items.forEach(function(item) {
+        var opt = document.createElement('option');
+        opt.value = String(item);
+        opt.textContent = formatter ? formatter(item) : String(item);
+        el.appendChild(opt);
+      });
+      el.disabled = false;
+    }
+
+    // Load PCDs on init
+    proxyFetch(proxyUrl, 'wheel-pcds', {}).then(function(data) {
+      if (data.pcds && data.pcds.length > 0) {
+        populateSelect(pcdEl, data.pcds, null, 'Select PCD');
+      } else {
+        resetSelect(pcdEl, 'No wheels available');
+      }
+    }).catch(function() { resetSelect(pcdEl, 'Error loading'); });
+
+    // PCD change → load diameters
+    pcdEl.addEventListener('change', function() {
+      state.pcd = this.value;
+      state.diameter = ''; state.width = ''; state.offset = '';
+      resetSelect(diameterEl, 'Loading...');
+      resetSelect(widthEl, 'Select Diameter first');
+      resetSelect(offsetEl, 'Select Width first');
+      searchBtn.disabled = !state.pcd;
+      if (resultsDiv) { clearChildren(resultsDiv); resultsDiv.classList.add('autosync-wheel-finder--hidden'); }
+      if (!state.pcd) { resetSelect(diameterEl, 'Select PCD first'); return; }
+      proxyFetch(proxyUrl, 'wheel-diameters', { pcd: state.pcd }).then(function(data) {
+        populateSelect(diameterEl, data.diameters || [], function(d) { return d + '"'; }, 'Select Diameter');
+      }).catch(function() { resetSelect(diameterEl, 'Error loading'); });
+    });
+
+    // Diameter change → load widths
+    diameterEl.addEventListener('change', function() {
+      state.diameter = this.value;
+      state.width = ''; state.offset = '';
+      resetSelect(widthEl, 'Loading...');
+      resetSelect(offsetEl, 'Select Width first');
+      searchBtn.disabled = !state.pcd;
+      if (!state.diameter) { resetSelect(widthEl, 'Select Diameter first'); return; }
+      proxyFetch(proxyUrl, 'wheel-widths', { pcd: state.pcd, diameter: state.diameter }).then(function(data) {
+        populateSelect(widthEl, data.widths || [], function(w) { return w + 'J'; }, 'Select Width');
+      }).catch(function() { resetSelect(widthEl, 'Error loading'); });
+    });
+
+    // Width change → load offsets + enable search
+    widthEl.addEventListener('change', function() {
+      state.width = this.value;
+      state.offset = '';
+      searchBtn.disabled = !state.width;
+      resetSelect(offsetEl, 'Loading...');
+      if (!state.width) { resetSelect(offsetEl, 'Select Width first'); return; }
+      proxyFetch(proxyUrl, 'wheel-offsets', { pcd: state.pcd, diameter: state.diameter, width: state.width }).then(function(data) {
+        var offsets = data.offsets || [];
+        if (offsets.length > 0) {
+          populateSelect(offsetEl, offsets, function(o) { return 'ET' + o; }, 'All Offsets');
+        } else {
+          resetSelect(offsetEl, 'No offset data');
+        }
+      }).catch(function() { resetSelect(offsetEl, 'Error'); });
+    });
+
+    // Offset change
+    offsetEl.addEventListener('change', function() {
+      state.offset = this.value;
+    });
+
+    // Search button — redirect to Shopify collection with metafield filters
+    // Same pattern as YMME: calls proxy to get collection URL with filter params
+    // Uses $app:wheel_spec metafields so Search & Discovery shows filter chips
+    searchBtn.addEventListener('click', function() {
+      if (!state.pcd) return;
       searchBtn.disabled = true;
       searchBtn.textContent = 'Searching...';
 
-      proxyFetch(proxyUrl, 'wheel-search', { pcd: pcd, diameter: diameter, offset: offset })
-        .then(function (data) {
-          searchBtn.disabled = false;
-          searchBtn.textContent = 'Search Wheels';
+      // Track wheel search event for analytics
+      trackEvent(proxyUrl, 'wheel_search', { source: 'wheel_finder_widget' });
 
-          if (resultsDiv) {
-            clearChildren(resultsDiv);
+      // Call wheel-lookup proxy endpoint to get collection URL with metafield filters
+      var lookupParams = { pcd: state.pcd };
+      if (state.diameter) lookupParams.diameter = state.diameter;
+      if (state.width) lookupParams.width = state.width;
+      if (state.offset) lookupParams.offset = state.offset;
 
-            if (data.error) {
-              var errP = document.createElement('p');
-              errP.className = 'autosync-wheel-finder__error';
-              errP.textContent = escapeText(data.error);
-              resultsDiv.appendChild(errP);
-            } else if (data.wheels && data.wheels.length > 0) {
-              var heading = document.createElement('p');
-              heading.className = 'autosync-wheel-finder__count';
-              heading.textContent = data.count + ' matching wheel' + (data.count !== 1 ? 's' : '') + ' found';
-              resultsDiv.appendChild(heading);
-
-              var grid = document.createElement('div');
-              grid.className = 'autosync-wheel-finder__grid';
-
-              data.wheels.forEach(function (item) {
-                var card = document.createElement('a');
-                card.className = 'autosync-wheel-finder__card';
-                card.href = '/products/' + escapeText(item.product.handle);
-
-                if (item.product.image_url) {
-                  var img = document.createElement('img');
-                  img.src = item.product.image_url;
-                  img.alt = escapeText(item.product.title);
-                  img.loading = 'lazy';
-                  card.appendChild(img);
-                }
-
-                var title = document.createElement('span');
-                title.className = 'autosync-wheel-finder__title';
-                title.textContent = escapeText(item.product.title);
-                card.appendChild(title);
-
-                if (item.product.price) {
-                  var price = document.createElement('span');
-                  price.className = 'autosync-wheel-finder__price';
-                  price.textContent = '\u00A3' + Number(item.product.price).toFixed(2);
-                  card.appendChild(price);
-                }
-
-                grid.appendChild(card);
-              });
-
-              resultsDiv.appendChild(grid);
-            } else {
-              var noResults = document.createElement('p');
-              noResults.textContent = 'No wheels found matching your criteria.';
-              resultsDiv.appendChild(noResults);
-            }
-
-            resultsDiv.classList.remove('autosync-wheel-finder--hidden');
+      proxyFetch(proxyUrl, 'wheel-lookup', lookupParams)
+        .then(function(data) {
+          if (data && data.url) {
+            window.location.href = data.url;
+          } else {
+            // Fallback: search by PCD text
+            window.location.href = '/collections/all?q=' + encodeURIComponent(state.pcd);
           }
         })
-        .catch(function () {
-          searchBtn.disabled = false;
-          searchBtn.textContent = 'Search Wheels';
+        .catch(function() {
+          // Fallback on error
+          window.location.href = '/collections/all?q=' + encodeURIComponent(state.pcd);
         });
     });
   }
@@ -1655,6 +1941,10 @@
     document.querySelectorAll('[data-autosync-wheel-finder]').forEach(initWheelFinder);
     document.querySelectorAll('[data-autosync-vin-decode]').forEach(initVinDecode);
     initConversionTracking();
+
+    // Watermark hiding is now handled at Liquid render time via shop metafield
+    // (shop.metafields['app--334692253697--autosync']['hide_watermark'])
+    // No JS needed — zero flash, works for all widgets
   }
 
   if (document.readyState === 'loading') {
@@ -1662,4 +1952,174 @@
   } else {
     init();
   }
+
+  // ── Expose YMME population for cross-widget use (VIN, Plate) ──
+  // Resolves make/model names to YMME IDs via the proxy, stores the vehicle,
+  // and populates the YMME widget dropdowns.
+  window.__autosyncPopulateYMME = async function(proxyUrl, makeName, modelName, year) {
+    var ymmeEl = document.querySelector('[data-autosync-ymme]');
+    if (!ymmeEl || !proxyUrl) return;
+
+    try {
+      // 1. Fetch makes and find the matching one
+      var makesData = await proxyFetch(proxyUrl, 'makes', {});
+      var makes = makesData.makes || makesData || [];
+      if (!Array.isArray(makes)) makes = [];
+      var matchedMake = makes.find(function(m) {
+        return m.name && m.name.toLowerCase() === (makeName || '').toLowerCase();
+      });
+      if (!matchedMake) return;
+
+      // 2. Fetch models for this make and find the matching one
+      var modelsData = await proxyFetch(proxyUrl, 'models', { make_id: matchedMake.id });
+      var models = modelsData.models || [];
+      var matchedModel = models.find(function(m) {
+        return m.name && m.name.toLowerCase() === (modelName || '').toLowerCase();
+      });
+      if (!matchedModel) return;
+
+      // 3. Build a resolved vehicle object and store it
+      var resolved = {
+        makeId: matchedMake.id,
+        makeName: matchedMake.name,
+        modelId: matchedModel.id,
+        modelName: matchedModel.name,
+        year: String(year || ''),
+        source: 'vin'
+      };
+      storeVehicle(resolved);
+
+      // 4. Save to garage
+      try {
+        var garage = getGarage();
+        var isDup = garage.some(function(g) {
+          return g.makeName === resolved.makeName && g.modelName === resolved.modelName && g.year === resolved.year;
+        });
+        if (!isDup) {
+          garage.unshift(resolved);
+          if (garage.length > GARAGE_MAX) garage = garage.slice(0, GARAGE_MAX);
+          saveGarage(garage);
+        }
+      } catch(e) {}
+
+      // 5. Populate the YMME widget using the same DOM manipulation as plate lookup
+      var makeSelect = ymmeEl.querySelector('[data-autosync-level="make"]');
+      var modelSelect = ymmeEl.querySelector('[data-autosync-level="model"]');
+      var yearSelect = ymmeEl.querySelector('[data-autosync-level="year"]');
+      var engineSelect = ymmeEl.querySelector('[data-autosync-level="engine"]');
+      var searchBtn = ymmeEl.querySelector('[data-autosync-search]');
+
+      // Set make — update custom dropdown display if present
+      var selectDisplay = ymmeEl.querySelector('[data-autosync-select-display]');
+      if (selectDisplay) {
+        selectDisplay.innerHTML = '';
+        var logoUrl = null;
+        var selOpts = ymmeEl.querySelectorAll('[data-autosync-select-options] li');
+        for (var i = 0; i < selOpts.length; i++) {
+          var lid = selOpts[i].getAttribute('data-value');
+          if (String(lid) === String(matchedMake.id)) {
+            selOpts[i].setAttribute('aria-selected', 'true');
+            selOpts[i].classList.add('autosync-ymme__select-option--selected');
+            var lImg = selOpts[i].querySelector('img');
+            if (lImg) logoUrl = lImg.src;
+          } else {
+            selOpts[i].removeAttribute('aria-selected');
+            selOpts[i].classList.remove('autosync-ymme__select-option--selected');
+          }
+        }
+        if (logoUrl) {
+          var lEl = document.createElement('img');
+          lEl.src = logoUrl;
+          lEl.alt = matchedMake.name || '';
+          lEl.width = 20;
+          lEl.height = 20;
+          lEl.style.marginRight = '6px';
+          selectDisplay.appendChild(lEl);
+        }
+        selectDisplay.appendChild(document.createTextNode(matchedMake.name || ''));
+        var trigger = ymmeEl.querySelector('[data-autosync-select-trigger]');
+        if (trigger) trigger.disabled = false;
+      }
+
+      // Set hidden make select
+      if (makeSelect) {
+        var mOpts = makeSelect.querySelectorAll('option');
+        var mFound = false;
+        for (var j = 0; j < mOpts.length; j++) {
+          if (String(mOpts[j].value) === String(matchedMake.id)) { makeSelect.value = String(matchedMake.id); mFound = true; break; }
+        }
+        if (!mFound) {
+          var nOpt = document.createElement('option');
+          nOpt.value = matchedMake.id;
+          nOpt.textContent = matchedMake.name || '';
+          makeSelect.appendChild(nOpt);
+          makeSelect.value = String(matchedMake.id);
+        }
+      }
+
+      // Populate model select
+      if (modelSelect) {
+        while (modelSelect.firstChild) modelSelect.removeChild(modelSelect.firstChild);
+        var defOpt = document.createElement('option');
+        defOpt.value = '';
+        defOpt.textContent = 'Select Model';
+        modelSelect.appendChild(defOpt);
+        models.forEach(function(m) {
+          var o = document.createElement('option');
+          o.value = m.id;
+          var lb = m.name;
+          if (m.generation && m.generation.indexOf(' | ') === -1 && !m.generation.startsWith(m.name)) lb += ' (' + m.generation + ')';
+          if (m.year_from) lb += ' ' + m.year_from + '-' + (m.year_to || 'present');
+          o.textContent = lb;
+          o.dataset.name = m.name;
+          modelSelect.appendChild(o);
+        });
+        modelSelect.disabled = false;
+        modelSelect.value = String(matchedModel.id);
+      }
+
+      // Populate year select
+      if (yearSelect && year) {
+        var yearsData = await proxyFetch(proxyUrl, 'years', { model_id: matchedModel.id });
+        var years = yearsData.years || [];
+        while (yearSelect.firstChild) yearSelect.removeChild(yearSelect.firstChild);
+        var defY = document.createElement('option');
+        defY.value = '';
+        defY.textContent = 'Select Year';
+        yearSelect.appendChild(defY);
+        years.forEach(function(y) {
+          var o = document.createElement('option');
+          o.value = y;
+          o.textContent = String(y);
+          yearSelect.appendChild(o);
+        });
+        yearSelect.disabled = false;
+        yearSelect.value = String(year);
+        if (searchBtn) searchBtn.disabled = false;
+
+        // Populate engine select
+        if (engineSelect) {
+          var enginesData = await proxyFetch(proxyUrl, 'engines', { model_id: matchedModel.id, year: year });
+          var engines = enginesData.engines || [];
+          while (engineSelect.firstChild) engineSelect.removeChild(engineSelect.firstChild);
+          var defE = document.createElement('option');
+          defE.value = '';
+          defE.textContent = 'Select Engine (optional)';
+          engineSelect.appendChild(defE);
+          engines.forEach(function(e2) {
+            var o = document.createElement('option');
+            o.value = e2.id;
+            var lb = (e2.name || '').replace(/\s*\[[0-9a-f]{8}\]$/, '');
+            if (e2.displacement_cc) lb += ' ' + e2.displacement_cc + 'cc';
+            if (e2.fuel_type) lb += ' ' + e2.fuel_type;
+            o.textContent = lb;
+            engineSelect.appendChild(o);
+          });
+          engineSelect.disabled = false;
+        }
+      }
+    } catch (err) {
+      console.warn('[autosync] __autosyncPopulateYMME error:', err);
+    }
+  };
 })();

@@ -172,12 +172,12 @@ export function OnboardingChecklist({
                         borderRadius: "50%",
                         border: step.complete
                           ? "none"
-                          : isNext
-                            ? "2px solid var(--p-color-border-interactive)"
-                            : "2px solid var(--p-color-border-secondary)",
+                          : "2px solid var(--p-color-border-interactive)",
                         background: step.complete
                           ? "var(--p-color-bg-fill-success)"
-                          : "transparent",
+                          : isNext
+                            ? "var(--p-color-bg-fill-info)"
+                            : "transparent",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -185,8 +185,8 @@ export function OnboardingChecklist({
                         color: step.complete
                           ? "var(--p-color-text-success-on-bg-fill)"
                           : isNext
-                            ? "var(--p-color-text-interactive)"
-                            : "var(--p-color-text-secondary)",
+                            ? "var(--p-color-text-info-on-bg-fill)"
+                            : "var(--p-color-text-interactive)",
                         fontSize: "12px",
                         fontWeight: 600,
                       }}

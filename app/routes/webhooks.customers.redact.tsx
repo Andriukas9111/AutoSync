@@ -11,7 +11,7 @@ import { authenticate } from "../shopify.server";
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic } = await authenticate.webhook(request);
 
-  console.log(`[webhook] ${topic}: ${shop} — No customer PII to redact`);
+  console.log(`[webhook] ${topic} — No customer PII to redact`);
 
   // AutoSync stores zero customer data. Nothing to redact.
   return new Response(JSON.stringify({ message: "No customer data to redact" }), {

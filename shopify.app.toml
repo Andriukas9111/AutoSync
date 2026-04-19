@@ -25,6 +25,14 @@ topics = ["app_subscriptions/update"]
 uri = "/webhooks/app/subscriptions-update"
 
 [[webhooks.subscriptions]]
+topics = ["app/scopes_update"]
+uri = "/webhooks/app/scopes_update"
+
+[[webhooks.subscriptions]]
+topics = ["shop/update"]
+uri = "/webhooks/shop/update"
+
+[[webhooks.subscriptions]]
 topics = ["products/create", "products/update", "products/delete"]
 uri = "/webhooks/products"
 

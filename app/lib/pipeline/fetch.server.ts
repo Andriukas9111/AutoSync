@@ -1,4 +1,5 @@
 import db from "../db.server";
+import { detectWheelProduct } from "../wheel-detect";
 
 const PRODUCTS_QUERY = `
   query FetchProducts($first: Int!, $after: String) {
@@ -46,6 +47,8 @@ interface FetchProductsOptions {
   shopId: string;
   jobId: string;
   onProgress?: (processed: number, total: number) => void;
+  signal?: AbortSignal; // AbortController signal for timeout cancellation
+  maxProducts?: number; // Plan limit — stop fetching after this many products
 }
 
 export async function fetchProductsFromShopify({
@@ -53,7 +56,9 @@ export async function fetchProductsFromShopify({
   shopId,
   jobId,
   onProgress,
-}: FetchProductsOptions): Promise<{ fetched: number; errors: string[] }> {
+  signal,
+  maxProducts,
+}: FetchProductsOptions): Promise<{ fetched: number; errors: string[]; limitReached?: boolean }> {
   let cursor: string | null = null;
   let hasNextPage = true;
   let fetched = 0;
@@ -61,13 +66,24 @@ export async function fetchProductsFromShopify({
   const pageSize = 250; // Max allowed by Shopify
 
   // Update job status to running
-  await db
+  const { error: startErr } = await db
     .from("sync_jobs")
     .update({ status: "running", started_at: new Date().toISOString() })
     .eq("id", jobId);
+  if (startErr) console.error(`[fetch] Failed to mark job ${jobId} as running: ${startErr.message}`);
+
+  let limitReached = false;
 
   try {
     while (hasNextPage) {
+      // Check if the operation was aborted (timeout)
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
+
+      // Check plan product limit
+      if (maxProducts && fetched >= maxProducts) {
+        limitReached = true;
+        break;
+      }
       const response: Response = await admin.graphql(PRODUCTS_QUERY, {
         variables: {
           first: pageSize,
@@ -84,17 +100,27 @@ export async function fetchProductsFromShopify({
 
       const { edges, pageInfo }: { edges: Array<{ node: Record<string, any> }>; pageInfo: { hasNextPage: boolean; endCursor: string | null } } = gqlData.products;
 
-      // Upsert each product into our database
-      for (const { node: product } of edges) {
-        // Extract numeric Shopify ID from GID
-        const shopifyId = parseInt(
-          product.id.replace("gid://shopify/Product/", ""),
-          10,
-        );
+      // Batch upsert entire page at once (250 products per DB call instead of 3 per product)
+      // Trim batch to plan limit if needed
+      const remaining = maxProducts ? maxProducts - fetched : Infinity;
+      const trimmedEdges = remaining < edges.length ? edges.slice(0, remaining) : edges;
+      const now = new Date().toISOString();
+      const batchRows = trimmedEdges.map(({ node: product }: { node: Record<string, any> }) => {
+        const shopifyId = parseInt(product.id.replace("gid://shopify/Product/", ""), 10);
 
-        const productData = {
+        // ── Auto-detect wheel products ──
+        // Checks product_type, title, tags for wheel indicators
+        const titleLower = (product.title || "").toLowerCase();
+        const typeLower = (product.productType || "").toLowerCase();
+        const tagsLower = (product.tags || []).map((t: string) => t.toLowerCase());
+        const allTextLower = `${titleLower} ${typeLower} ${tagsLower.join(" ")}`;
+
+        const isWheel = detectWheelProduct(titleLower, typeLower, tagsLower);
+
+        return {
           shop_id: shopId,
           shopify_product_id: shopifyId,
+          shopify_gid: product.id,
           title: product.title,
           description: product.descriptionHtml,
           handle: product.handle,
@@ -106,31 +132,34 @@ export async function fetchProductsFromShopify({
           product_type: product.productType,
           tags: product.tags ?? [],
           variants:
-            product.variants?.edges?.map((e: any) => ({
+            product.variants?.edges?.map((e: { node: Record<string, string> }) => ({
               id: e.node.id,
               title: e.node.title,
               price: e.node.price,
               sku: e.node.sku,
             })) ?? [],
           source: "shopify",
-          fitment_status: "unmapped",
-          synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          product_category: isWheel ? "wheels" : "vehicle_parts",
+          updated_at: now,
         };
+      });
 
-        // Upsert — update if product already exists
-        const { error } = await db.from("products").upsert(productData, {
+      // Single upsert for the entire page — ON CONFLICT preserves fitment_status
+      const { error: upsertError } = await db
+        .from("products")
+        .upsert(batchRows, {
           onConflict: "shop_id,shopify_product_id",
+          ignoreDuplicates: false,
         });
 
-        if (error) {
-          errors.push(
-            `Failed to upsert product ${shopifyId}: ${error.message}`,
-          );
-        } else {
-          fetched++;
-        }
+      if (upsertError) {
+        errors.push(`Batch upsert failed: ${upsertError.message}`);
+      } else {
+        fetched += batchRows.length;
       }
+
+      // Check abort before progress update
+      if (signal?.aborted) throw new DOMException("Fetch aborted", "AbortError");
 
       // Update progress
       await db
@@ -155,10 +184,11 @@ export async function fetchProductsFromShopify({
     }
 
     // Update tenant product count
-    await db
+    const { error: pcErr } = await db
       .from("tenants")
       .update({ product_count: fetched })
       .eq("shop_id", shopId);
+    if (pcErr) console.error(`[fetch] tenants.product_count update failed for ${shopId}: ${pcErr.message}`);
 
     // Mark job as completed
     await db
@@ -173,7 +203,7 @@ export async function fetchProductsFromShopify({
       })
       .eq("id", jobId);
 
-    return { fetched, errors };
+    return { fetched, errors, limitReached };
   } catch (err: unknown) {
     // Mark job as failed
     await db

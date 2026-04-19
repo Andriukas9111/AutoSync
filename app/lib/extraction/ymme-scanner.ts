@@ -18,6 +18,48 @@ import type {
   YmmeIndexEngine,
 } from "./ymme-index"
 
+// ── Trim-aware Regex Builder ─────────────────────────────────
+//
+// The YMME database stores base model names (e.g., "i30", "Kona", "Golf"), but
+// product titles often use trim/variant names (e.g., "Hyundai i30N", "Kona N",
+// "Golf R", "Focus ST"). A plain `\b<model>\b` regex FAILS for two cases:
+//
+//   1. Models ending in a digit + trim letter fused with no space:
+//      "i30N" -- `\bi30\b` fails because '0' and 'N' are both word chars (no \b).
+//
+//   2. Models ending in a letter + space + trim suffix: the `\b<model>\b` part
+//      DOES match here, but we want to be more lenient to support broader matching.
+//
+// This helper returns a tolerant regex that matches the base name plus any
+// standard OEM trim/variant suffix. It is SAFE because:
+//   - We match LONGEST MODEL FIRST at index-build time (Golf R before Golf).
+//   - Trim suffixes are bounded (1-4 chars or an allowlist of known trims).
+//   - False positives are minimal because the suffix must appear immediately.
+//
+// Known trim/variant suffixes (used when model ends in a letter):
+//   N, R, S, RS, GT, GTI, GTD, GTE, TSI, TDI, AMG, Line, Plus, Sport, Cross,
+//   Coupe, Cabrio, Quattro, TDV6, TDV8, AWD, 4x4, d, i, e, T, x, xDrive.
+const TRIM_SUFFIXES =
+  "n|r|s|rs|gt|gti|gtd|gte|tsi|tdi|amg|line|plus|sport|cross|coupe|cabrio|quattro|tdv6|tdv8|awd|4x4|xdrive"
+
+function buildTrimAwareModelPattern(modelName: string): string {
+  const escaped = modelName.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const endsInDigit = /[0-9]$/.test(modelName)
+
+  if (endsInDigit) {
+    // "i30" matches "i30", "i30N", "i30d", "i30i", "i30GT", "i30 N".
+    // After the digit, allow optional 1-3 alphabetic chars (fused trim), then
+    // require a terminator: whitespace, punctuation, end of string, or non-alphanumeric.
+    return `\\b${escaped}(?:[a-z]{1,3})?(?=[\\s,.\\-/()]|$|[^a-z0-9])`
+  }
+
+  // Alphabetic-ending models ("Kona", "Golf", "Focus"). \b already matches
+  // before a space/comma, so the base name works. We add optional " + trim"
+  // so that match results report the fuller matched text (useful for
+  // diagnostics and year-window extraction), e.g., "Kona N" not just "Kona".
+  return `\\b${escaped}(?:[\\s-](?:${TRIM_SUFFIXES})\\b)?`
+}
+
 // ── Public Types ─────────────────────────────────────────────
 
 export interface VehicleMention {
@@ -198,9 +240,9 @@ export function scanTextForVehicles(
     let modelFound = false
 
     for (const model of models) {
-      const modelNameLower = model.name.toLowerCase()
-      const escapedModel = modelNameLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      const modelRegex = new RegExp(`\\b${escapedModel}\\b`, "i")
+      // Trim-aware regex: matches "i30" in "i30N", "Kona" in "Kona N", etc.
+      // See buildTrimAwareModelPattern() for details on the tolerance rules.
+      const modelRegex = new RegExp(buildTrimAwareModelPattern(model.name), "i")
 
       if (modelRegex.test(windowLower)) {
         const key = `${make.id}|${model.id}`

@@ -5,6 +5,7 @@
  */
 
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Card,
   BlockStack,
@@ -44,6 +45,7 @@ export function HowItWorks({
   steps,
   defaultCollapsed = true,
 }: HowItWorksProps) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(!defaultCollapsed);
 
   // Auto-generate subtitle from step titles if not provided
@@ -96,7 +98,7 @@ export function HowItWorks({
                     {step.linkText && step.linkUrl && (
                       <Button
                         variant="plain"
-                        url={step.linkUrl}
+                        onClick={() => navigate(step.linkUrl!)}
                         icon={ArrowRightIcon}
                         size="slim"
                       >

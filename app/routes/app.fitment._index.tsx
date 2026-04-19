@@ -1,6 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigate, useFetcher, useNavigation } from "react-router";
+import { useLoaderData, useNavigate, useFetcher } from "react-router";
 import {
   Page,
   Layout,
@@ -25,20 +25,26 @@ import {
   ConnectIcon,
   WandIcon,
   TargetIcon,
-  AlertTriangleIcon,
   AlertCircleIcon,
   GaugeIcon,
   SearchIcon,
   ChartVerticalIcon,
+  MinusCircleIcon,
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getTenant, getPlanLimits, getMinimumPlanForFeature } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getTenant, getPlanLimits, getMinimumPlanForFeature, getSerializedPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
+import { CoverageBar } from "../components/CoverageBar";
 import { HowItWorks } from "../components/HowItWorks";
-import { SkeletonCard } from "../components/SkeletonCard";
-import type { PlanTier, FitmentStatus } from "../lib/types";
+import { PlanGate } from "../components/PlanGate";
+import type { PlanTier, PlanLimits, FitmentStatus } from "../lib/types";
+import { countFitmentCoverage, getBrandGroupBySlug, formatFitmentStructured } from "../lib/fitment-display";
+import { equalHeightGridStyle, listRowStyle, autoFitGridStyle } from "../lib/design";
+import { useAppData, computeFromStats } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
+import { ActiveJobsPanel } from "../components/ActiveJobsPanel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,6 +65,12 @@ interface FitmentRow {
   fuel_type: string | null;
   extraction_method: string | null;
   confidence_score: number | null;
+  // Group-universal fields — when is_group_universal=true the row stands in
+  // for every vehicle in the OEM group (VAG, BMW, Stellantis…) with the given
+  // shared engine. See app/lib/brand-groups.ts + app/lib/fitment-display.ts.
+  is_group_universal?: boolean | null;
+  group_slug?: string | null;
+  group_engine_slug?: string | null;
 }
 
 interface ProductFitmentGroup {
@@ -82,44 +94,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = session.shop;
 
-  // ── Data integrity repair ──
-  // 1. Fix products with NULL fitment_status → set to "unmapped"
-  await db.from("products")
+  // Fix NULL fitment_status → "unmapped" (fire-and-forget, non-blocking)
+  db.from("products")
     .update({ fitment_status: "unmapped" })
     .eq("shop_id", shopId)
-    .is("fitment_status", null);
+    .is("fitment_status", null)
+    .then(() => {}).catch(() => {});
 
-  // 2. Fix products with fitments still marked "unmapped"
-  {
-    const { data: fitmentProductIds } = await db
-      .from("vehicle_fitments")
-      .select("product_id, extraction_method")
-      .eq("shop_id", shopId);
-    if (fitmentProductIds && fitmentProductIds.length > 0) {
-      const pidSet = [...new Set(fitmentProductIds.map((f: { product_id: string }) => f.product_id))];
-      const { data: stillUnmapped } = await db
-        .from("products")
-        .select("id")
-        .eq("shop_id", shopId)
-        .eq("fitment_status", "unmapped")
-        .in("id", pidSet);
-      if (stillUnmapped && stillUnmapped.length > 0) {
-        for (const prod of stillUnmapped) {
-          const methods = fitmentProductIds
-            .filter((f: { product_id: string }) => f.product_id === prod.id)
-            .map((f: { extraction_method: string | null }) => f.extraction_method);
-          const newStatus = methods.includes("smart") ? "smart_mapped"
-            : methods.includes("manual") ? "manual_mapped"
-            : "auto_mapped";
-          await db.from("products")
-            .update({ fitment_status: newStatus, updated_at: new Date().toISOString() })
-            .eq("id", prod.id).eq("shop_id", shopId);
-        }
-      }
-    }
-  }
-
-  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged"];
+  const statuses: FitmentStatus[] = ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "partial", "flagged", "no_match"];
 
   const [
     totalCountResult,
@@ -129,25 +111,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     topMakesResult,
     ...statusCountResults
   ] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
     db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    // Get recently mapped products (last 20 products that have fitments)
+    // Get recently-mapped products (those with at least one real fitment) —
+    // vehicle parts only.
+    //
+    // PRIOR BUG: We filtered with `.not("fitment_status", "eq", "unmapped")`,
+    // which let `no_match` and zero-fitment rows into "Recent Fitment Activity"
+    // — customers saw a stream of "0 fitments · 0 makes · 0 models" items at
+    // the top, which looks broken. The real intent is "products the extraction
+    // actually mapped," which equals `auto_mapped` + `flagged` that also have
+    // at least one fitment row.
     db.from("products")
       .select("id, title, fitment_status, updated_at")
       .eq("shop_id", shopId)
-      .not("fitment_status", "eq", "unmapped")
+      .neq("status", "staged")
+      .neq("product_category", "wheels")
+      .in("fitment_status", ["auto_mapped", "flagged", "smart_mapped", "manual_mapped", "partial"])
       .order("updated_at", { ascending: false })
-      .limit(20),
+      .limit(200),
     getTenant(shopId),
-    // Top makes by fitment count
-    db.from("vehicle_fitments")
-      .select("make, model")
-      .eq("shop_id", shopId)
-      .not("make", "is", null),
+    // Top makes by fitment count — cap at 50K rows to prevent OOM
+    db.from("vehicle_fitments").select("make, model")
+      .eq("shop_id", shopId).not("make", "is", null).limit(50000),
     ...statuses.map((s) =>
       db.from("products")
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
+        .neq("status", "staged")
+        .neq("product_category", "wheels")
         .eq("fitment_status", s)
     ),
   ]);
@@ -164,7 +156,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const makeModelSet: Record<string, Set<string>> = {};
   const makeCounts: Record<string, number> = {};
   if (topMakesResult.data) {
-    for (const row of topMakesResult.data as any[]) {
+    for (const row of topMakesResult.data as { make: string; model: string }[]) {
       if (row.make) {
         makeCounts[row.make] = (makeCounts[row.make] || 0) + 1;
         if (!makeModelSet[row.make]) makeModelSet[row.make] = new Set();
@@ -189,7 +181,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const productIds = recentProducts.map((p: any) => p.id);
     const { data: fitments } = await db
       .from("vehicle_fitments")
-      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, extraction_method, confidence_score")
+      .select("product_id, make, model, year_from, year_to, engine, engine_code, fuel_type, extraction_method, confidence_score, is_group_universal, group_slug, group_engine_slug")
       .eq("shop_id", shopId)
       .in("product_id", productIds);
 
@@ -207,6 +199,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         fuel_type: f.fuel_type,
         extraction_method: f.extraction_method,
         confidence_score: f.confidence_score,
+        is_group_universal: f.is_group_universal,
+        group_slug: f.group_slug,
+        group_engine_slug: f.group_engine_slug,
       });
       fitmentsByProduct.set(f.product_id, list);
     }
@@ -222,7 +217,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = tenantResult;
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   return {
@@ -232,6 +227,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     productFitmentGroups,
     topMakes,
     plan,
+    limits,
+    allLimits: getSerializedPlanLimits(),
     autoExtractionAllowed: !!limits.features.autoExtraction,
     requiredPlanForAutoExtract: getMinimumPlanForFeature("autoExtraction"),
   };
@@ -260,7 +257,7 @@ function formatYearRange(from: number | null, to: number | null): string {
 
 const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | undefined> = {
   unmapped: undefined,
-  auto_mapped: "info",
+  auto_mapped: "success",
   smart_mapped: "success",
   manual_mapped: "success",
   partial: "warning",
@@ -289,47 +286,134 @@ export default function Fitment() {
     productFitmentGroups,
     topMakes,
     plan,
+    limits,
+    allLimits,
     autoExtractionAllowed,
     requiredPlanForAutoExtract,
   } = useLoaderData<typeof loader>();
 
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
   const extractFetcher = useFetcher();
   const [extractDismissed, setExtractDismissed] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
-  const ACTIVITY_PAGE_SIZE = 10;
+  const ACTIVITY_PAGE_SIZE = 20;
+
+  // Live polling — use polled data with loader fallback
+  const {
+    stats,
+    activeJobs,
+    topMakes: polledTopMakes,
+    recentActivity: polledRecentActivity,
+  } = useAppData({
+    total: totalProducts,
+    unmapped: getCount(statusCounts, "unmapped"),
+    autoMapped: getCount(statusCounts, "auto_mapped"),
+    smartMapped: getCount(statusCounts, "smart_mapped"),
+    manualMapped: getCount(statusCounts, "manual_mapped"),
+    flagged: getCount(statusCounts, "flagged"),
+    noMatch: getCount(statusCounts, "no_match"),
+    fitments: totalFitments,
+    vehicleCoverage: Math.round(totalFitments * 8),
+  });
+
+  // Swap loader values for polled values once the first poll arrives.
+  // Loader data still renders pre-hydration to avoid a 0-flash.
+  const liveTopMakes: TopMakeStat[] =
+    polledTopMakes.length > 0
+      ? polledTopMakes.map((m) => ({ make: m.make, count: m.count, models: m.models }))
+      : topMakes;
+
+  const liveProductFitmentGroups: ProductFitmentGroup[] =
+    polledRecentActivity.length > 0
+      ? polledRecentActivity.map((r) => ({
+          product_id: r.product_id,
+          product_title: r.product_title,
+          fitment_status: r.fitment_status,
+          fitments: (r.fitments as FitmentRow[]) ?? [],
+        }))
+      : productFitmentGroups;
 
   const isExtracting = extractFetcher.state !== "idle";
   const extractResult = extractFetcher.data as
-    | { success: true; processed: number; autoMapped: number; flagged: number; unmapped: number }
+    | { started: true; jobId: string; totalItems: number }
+    | { chunk: true; done: boolean; processed: number; autoMapped: number; flagged: number; unmapped: number; newFitments: number; remaining: number }
+    | { done: true; reason: string }
     | { error: string; requiredPlan?: string }
     | undefined;
 
+  // Track the active extraction job ID for chunk polling
+  const [extractJobId, setExtractJobId] = useState<string | null>(null);
+  const chunkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleRunExtract = useCallback(() => {
+    const fd = new FormData();
+    fd.set("_action", "start");
     extractFetcher.submit(
-      {},
+      fd,
       { method: "POST", action: "/app/api/auto-extract" },
     );
     setExtractDismissed(false);
   }, [extractFetcher]);
 
-  const autoMapped = getCount(statusCounts, "auto_mapped");
-  const smartMapped = getCount(statusCounts, "smart_mapped");
-  const manualMapped = getCount(statusCounts, "manual_mapped");
-  const flagged = getCount(statusCounts, "flagged");
-  const partial = getCount(statusCounts, "partial");
-  const unmapped = getCount(statusCounts, "unmapped");
-  const totalMapped = autoMapped + smartMapped + manualMapped;
-  const coveragePercent = totalProducts > 0 ? Math.round((totalMapped / totalProducts) * 100) : 0;
+  // When the start action returns a jobId, begin chunk polling
+  useEffect(() => {
+    if (extractResult && "started" in extractResult && extractResult.started && extractResult.jobId) {
+      setExtractJobId(extractResult.jobId);
+    }
+  }, [extractResult]);
+
+  // Chunk polling — automatically process next batch when job is running
+  useEffect(() => {
+    if (!extractJobId) return;
+
+    const pollChunk = () => {
+      if (extractFetcher.state !== "idle") return; // Wait for current request to finish
+      const fd = new FormData();
+      fd.set("_action", "chunk");
+      fd.set("jobId", extractJobId);
+      extractFetcher.submit(fd, { method: "POST", action: "/app/api/auto-extract" });
+    };
+
+    // Check if extraction is done
+    if (extractResult && "done" in extractResult && extractResult.done) {
+      setExtractJobId(null);
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+      return;
+    }
+    if (extractResult && "error" in extractResult) {
+      setExtractJobId(null);
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+      return;
+    }
+
+    // Schedule next chunk after a brief delay (let UI breathe)
+    chunkTimerRef.current = setTimeout(pollChunk, 500);
+
+    return () => {
+      if (chunkTimerRef.current) clearTimeout(chunkTimerRef.current);
+    };
+  }, [extractJobId, extractResult, extractFetcher]);
+
+  // Use vehicle-only stats (exclude wheel products from fitment page)
+  const computed = computeFromStats(stats);
+  // autoMapped is already vehicle-only from the API (wheels excluded by .neq filter)
+  const autoMapped = stats.autoMapped;
+  const smartMapped = stats.smartMapped;
+  const manualMapped = stats.manualMapped;
+  const flagged = stats.flagged;
+  const partial = getCount(statusCounts, "partial"); // partial not in AppStats, keep from loader
+  const unmapped = stats.unmapped;
+  const liveTotal = computed.vehicleTotal;
+  const liveFitments = stats.fitments;
+  const totalMapped = computed.vehicleMapped;
+  const coveragePercent = computed.vehicleCoverage;
 
   return (
     <Page
       fullWidth
       title="Fitment Overview"
-      subtitle={`${totalFitments.toLocaleString()} fitments across ${totalProducts.toLocaleString()} products`}
+      subtitle={`${liveFitments.toLocaleString()} fitments across ${liveTotal.toLocaleString()} products`}
       primaryAction={{
         content: "Manual Mapping",
         onAction: () => navigate("/app/fitment/manual"),
@@ -351,27 +435,30 @@ export default function Fitment() {
           ]}
         />
 
+        {/* Active Operations — mirrors dashboard progress panel */}
+        <ActiveJobsPanel navigate={navigate} jobs={activeJobs} stats={stats} />
+
         {/* Stats Overview — single card, consistent grid */}
-        {pageLoading ? <SkeletonCard variant="stat" count={6} cols={6} /> : (
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {([
-              { icon: ProductIcon, label: "Total", count: totalProducts },
-              { icon: ConnectIcon, label: "Fitments", count: totalFitments },
-              { icon: AlertCircleIcon, label: "Needs Review", count: unmapped + flagged + partial, critical: true as boolean },
-              { icon: WandIcon, label: "Auto", count: autoMapped },
-              { icon: WandIcon, label: "Smart", count: smartMapped },
+              { icon: ProductIcon, label: "Vehicle Parts", count: liveTotal },
+              { icon: ConnectIcon, label: "Fitments", count: liveFitments },
+              { icon: ConnectIcon, label: "Coverage", count: stats.vehicleCoverage ?? Math.round(liveFitments * 8) },
+              { icon: WandIcon, label: "Auto Mapped", count: autoMapped },
+              { icon: SearchIcon, label: "Smart", count: stats.smartMapped ?? 0 },
               { icon: TargetIcon, label: "Manual", count: manualMapped },
+              { icon: AlertCircleIcon, label: "Flagged", count: flagged, critical: true as boolean },
+              { icon: MinusCircleIcon, label: "No Match", count: stats.noMatch ?? 0, critical: false as boolean },
             ]).map((item, i) => (
               <div
                 key={item.label}
                 style={{
                   padding: "var(--p-space-400)",
-                  borderRight: i < 6 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  borderRight: i < 7 ? "1px solid var(--p-color-border-secondary)" : "none",
                   textAlign: "center",
                 }}
               >
@@ -388,93 +475,75 @@ export default function Fitment() {
             ))}
           </div>
         </Card>
-        )}
 
-        {/* Coverage Progress */}
-        <Card>
-          <BlockStack gap="300">
-            <InlineStack align="space-between">
+        {/* Coverage Progress — shared component */}
+        <CoverageBar
+          title="Fitment Coverage"
+          percent={coveragePercent}
+          description={`${totalMapped.toLocaleString()} of ${liveTotal.toLocaleString()} products have fitment data · Average ${totalMapped > 0 ? (liveFitments / totalMapped).toFixed(1) : "0"} fitments per product`}
+        />
+
+        {/* CTA Cards — CSS grid for equal-height columns */}
+        <div style={equalHeightGridStyle(2)}>
+          <Box background="bg-surface" borderRadius="300" shadow="100" padding="400" minHeight="100%">
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "var(--p-space-400)" }}>
               <InlineStack gap="200" blockAlign="center">
-                <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
-                <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Auto Extraction</Text>
               </InlineStack>
-              <Text as="p" variant="headingMd" fontWeight="bold">
-                {coveragePercent}%
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Automatically extract vehicle fitment data from product titles,
+                descriptions, and tags using pattern matching.
               </Text>
-            </InlineStack>
-            <ProgressBar progress={coveragePercent} size="medium" />
-            <Text as="p" variant="bodySm" tone="subdued">
-              {totalMapped.toLocaleString()} of {totalProducts.toLocaleString()} products have
-              fitment data · Average {totalMapped > 0 ? (totalFitments / totalMapped).toFixed(1) : "0"} fitments per product
-            </Text>
-          </BlockStack>
-        </Card>
-
-        {/* CTA Cards */}
-        <Layout>
-          <Layout.Section variant="oneHalf">
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={WandIcon} color="var(--p-color-icon-emphasis)" />
-                  <Text as="h2" variant="headingMd">Auto Extraction</Text>
-                </InlineStack>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Automatically extract vehicle fitment data from product titles,
-                  descriptions, and tags using pattern matching.
-                </Text>
-                {extractResult && !extractDismissed && "success" in extractResult && (
-                  <Banner title="Extraction complete" tone="success" onDismiss={() => setExtractDismissed(true)}>
-                    <p>
-                      Processed {extractResult.processed} products —{" "}
-                      {extractResult.autoMapped} auto-mapped,{" "}
-                      {extractResult.flagged} flagged,{" "}
-                      {extractResult.unmapped} unmapped.
-                    </p>
-                  </Banner>
-                )}
-                {extractResult && !extractDismissed && "error" in extractResult && (
-                  <Banner title="Extraction failed" tone="critical" onDismiss={() => setExtractDismissed(true)}>
-                    <p>{extractResult.error}</p>
-                  </Banner>
-                )}
-                {autoExtractionAllowed ? (
+              {extractResult && !extractDismissed && "success" in extractResult && (
+                <Banner title="Extraction complete" tone="success" onDismiss={() => setExtractDismissed(true)}>
+                  <p>
+                    Processed {extractResult.processed} products —{" "}
+                    {extractResult.autoMapped} auto-mapped,{" "}
+                    {extractResult.flagged} flagged,{" "}
+                    {extractResult.unmapped} unmapped.
+                  </p>
+                </Banner>
+              )}
+              {extractResult && !extractDismissed && "error" in extractResult && (
+                <Banner title="Extraction failed" tone="critical" onDismiss={() => setExtractDismissed(true)}>
+                  <p>{extractResult.error}</p>
+                </Banner>
+              )}
+              <div style={{ marginTop: "auto" }}>
+                <PlanGate feature="autoExtraction" currentPlan={plan} limits={limits as PlanLimits} allLimits={allLimits}>
                   <Button variant="primary" fullWidth onClick={handleRunExtract} loading={isExtracting}>
                     {isExtracting ? "Extracting..." : "Run Auto Extract"}
                   </Button>
-                ) : (
-                  <Banner title="Plan upgrade required" tone="warning">
-                    <p>
-                      Auto extraction requires {requiredPlanForAutoExtract} plan or above.
-                      You are on {plan}.
-                    </p>
-                  </Banner>
-                )}
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+                </PlanGate>
+              </div>
+            </div>
+          </Box>
 
-          <Layout.Section variant="oneHalf">
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                  <Text as="h2" variant="headingMd">Manual Mapping</Text>
-                </InlineStack>
-                <Text as="p" variant="bodyMd" tone="subdued">
-                  Manually assign vehicles to products with full control. Search
-                  make, model, year, and engine — then link to products one by one.
-                </Text>
+          <Box background="bg-surface" borderRadius="300" shadow="100" padding="400" minHeight="100%">
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: "var(--p-space-400)" }}>
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Manual Mapping</Text>
+              </InlineStack>
+              <Text as="p" variant="bodyMd" tone="subdued">
+                Manually assign vehicles to products with full control. Search
+                make, model, year, and engine — then link to products one by one.
+              </Text>
+              <Text as="p" variant="bodySm" tone="subdued">
+                Available on all plans including Free. No limits on manual mapping.
+              </Text>
+              <div style={{ marginTop: "auto" }}>
                 <Button variant="primary" fullWidth onClick={() => navigate("/app/fitment/manual")}>
                   Start Mapping
                 </Button>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
+              </div>
+            </div>
+          </Box>
+        </div>
 
         {/* Top Makes by Fitment */}
-        {topMakes.length > 0 && (
+        {liveTopMakes.length > 0 && (
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
@@ -484,15 +553,15 @@ export default function Fitment() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                    <th style={{ textAlign: "left", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Make</Text></th>
-                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
-                    <th style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
+                    <th style={{ textAlign: "left", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Make</Text></th>
+                    <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Fitments</Text></th>
+                    <th style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">Models</Text></th>
                   </tr></thead>
-                  <tbody>{topMakes.map((m) => (
+                  <tbody>{liveTopMakes.map((m) => (
                     <tr key={m.make} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                      <td style={{ padding: "8px" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
-                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
-                      <td style={{ textAlign: "right", padding: "8px" }}><Text as="span" variant="bodyMd">{m.models.toLocaleString()}</Text></td>
+                      <td style={{ padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.make}</Text></td>
+                      <td style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.count.toLocaleString()}</Text></td>
+                      <td style={{ textAlign: "right", padding: "var(--p-space-200)" }}><Text as="span" variant="bodyMd">{m.models.toLocaleString()}</Text></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -512,85 +581,76 @@ export default function Fitment() {
                 </Text>
               </InlineStack>
               <Text as="p" variant="bodySm" tone="subdued">
-                {productFitmentGroups.length} recently mapped products
+                {liveProductFitmentGroups.length} recently mapped products
               </Text>
             </InlineStack>
 
-            {productFitmentGroups.length === 0 ? (
+            {liveProductFitmentGroups.length === 0 ? (
               <Text as="p" variant="bodySm" tone="subdued">
                 No fitment activity yet. Start by running auto extraction or mapping
                 products manually.
               </Text>
             ) : (
               <BlockStack gap="0">
-                {productFitmentGroups
+                {liveProductFitmentGroups
                   .slice((activityPage - 1) * ACTIVITY_PAGE_SIZE, activityPage * ACTIVITY_PAGE_SIZE)
-                  .map((group) => {
+                  .map((group, idx, arr) => {
                   const isExpanded = expandedProduct === group.product_id;
-                  const uniqueMakes = [...new Set(group.fitments.map((f) => f.make).filter(Boolean))];
-                  const uniqueModels = [...new Set(group.fitments.map((f) => f.model).filter(Boolean))];
+                  // Derive both per-vehicle makes/models AND group-universal
+                  // coverage so the summary line reflects reality. A
+                  // group-universal row expands to "every make in that OEM
+                  // group" for counting purposes (see
+                  // app/lib/fitment-display.ts:countFitmentCoverage).
+                  const coverage = countFitmentCoverage(group.fitments);
+                  const uniqueMakeLabels = [...new Set(
+                    group.fitments.map((f) =>
+                      f.is_group_universal
+                        ? (getBrandGroupBySlug(f.group_slug ?? "")?.displayName ?? "Group")
+                        : (f.make as string | null)
+                    ).filter(Boolean)
+                  )] as string[];
+                  const groupCount = coverage.groupUniversal;
+                  const isLast = idx === arr.length - 1;
 
                   return (
                     <div key={group.product_id}>
                       <div
                         role="button"
                         tabIndex={0}
-                        onClick={() =>
-                          setExpandedProduct(isExpanded ? null : group.product_id)
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            setExpandedProduct(isExpanded ? null : group.product_id);
-                        }}
+                        onClick={() => setExpandedProduct(isExpanded ? null : group.product_id)}
+                        onKeyDown={(e) => { if (e.key === "Enter") setExpandedProduct(isExpanded ? null : group.product_id); }}
                         style={{
-                          padding: "12px 16px",
+                          ...listRowStyle(isLast && !isExpanded),
                           cursor: "pointer",
-                          backgroundColor: isExpanded
-                            ? "var(--p-color-bg-surface-hover)"
-                            : "transparent",
-                          transition: "background-color 0.15s",
-                          borderBottom: "1px solid var(--p-color-border-secondary)",
+                          backgroundColor: isExpanded ? "var(--p-color-bg-surface-hover)" : "var(--p-color-bg-surface)",
+                          flexWrap: "wrap",
                         }}
                       >
-                        <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                        <div style={{ flex: "1 1 0", minWidth: 0 }}>
                           <BlockStack gap="100">
-                            <InlineStack gap="200" blockAlign="center">
-                              <Text as="span" variant="bodyMd" fontWeight="semibold">
-                                {group.product_title.length > 60
-                                  ? group.product_title.slice(0, 60) + "\u2026"
-                                  : group.product_title}
-                              </Text>
-                              <Badge tone={STATUS_TONE[group.fitment_status]}>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold" breakWord>
+                              {group.product_title}
+                            </Text>
+                            <InlineStack gap="200" blockAlign="center" wrap>
+                              <Badge tone={STATUS_TONE[group.fitment_status]} size="small">
                                 {STATUS_LABEL[group.fitment_status] ?? group.fitment_status}
                               </Badge>
-                            </InlineStack>
-                            <InlineStack gap="200" wrap>
                               <Text as="span" variant="bodySm" tone="subdued">
-                                {group.fitments.length} fitment{group.fitments.length !== 1 ? "s" : ""}
+                                {groupCount > 0
+                                  ? `${groupCount} group universal · covers ${coverage.makes} make${coverage.makes !== 1 ? "s" : ""}`
+                                  : `${group.fitments.length} fitment${group.fitments.length !== 1 ? "s" : ""} · ${coverage.makes} make${coverage.makes !== 1 ? "s" : ""} · ${coverage.models} model${coverage.models !== 1 ? "s" : ""}`}
                               </Text>
-                              {uniqueMakes.length > 0 && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  · {uniqueMakes.length} make{uniqueMakes.length !== 1 ? "s" : ""}
-                                </Text>
-                              )}
-                              {uniqueModels.length > 0 && (
-                                <Text as="span" variant="bodySm" tone="subdued">
-                                  · {uniqueModels.length} model{uniqueModels.length !== 1 ? "s" : ""}
-                                </Text>
-                              )}
                             </InlineStack>
                           </BlockStack>
-                          <InlineStack gap="200" blockAlign="center">
-                            <InlineStack gap="100" wrap>
-                              {uniqueMakes.slice(0, 4).map((m) => (
-                                <Badge key={m} tone="info">{m as string}</Badge>
-                              ))}
-                              {uniqueMakes.length > 4 && (
-                                <Badge>{`+${uniqueMakes.length - 4}`}</Badge>
-                              )}
-                            </InlineStack>
-                            <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
-                          </InlineStack>
+                        </div>
+                        <InlineStack gap="200" blockAlign="center">
+                          {uniqueMakeLabels.slice(0, 3).map((m) => (
+                            <Badge key={m} tone={groupCount > 0 ? "success" : "info"} size="small">{m}</Badge>
+                          ))}
+                          {uniqueMakeLabels.length > 3 && (
+                            <Badge size="small">{`+${uniqueMakeLabels.length - 3}`}</Badge>
+                          )}
+                          <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
                         </InlineStack>
                       </div>
 
@@ -616,19 +676,41 @@ export default function Fitment() {
                               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                 <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
                                   {["Make","Model","Years","Engine","Fuel","Method"].map(h => (
-                                    <th key={h} style={{ textAlign: "left", padding: "6px 8px" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
+                                    <th key={h} style={{ textAlign: "left", padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text></th>
                                   ))}
                                 </tr></thead>
-                                <tbody>{group.fitments.map((f, fi) => (
-                                  <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
-                                    <td style={{ padding: "6px 8px" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
-                                  </tr>
-                                ))}</tbody>
+                                <tbody>{group.fitments.map((f, fi) => {
+                                  const formatted = formatFitmentStructured(f);
+                                  if (f.is_group_universal) {
+                                    // Group-universal row spans the whole
+                                    // Make/Model/Years/Engine row with a
+                                    // group-aware label instead of nulls.
+                                    return (
+                                      <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                        <td colSpan={5} style={{ padding: "var(--p-space-100) var(--p-space-200)" }}>
+                                          <InlineStack gap="200" blockAlign="center" wrap>
+                                            <Badge tone="success" size="small">{`Group: ${formatted.primary}`}</Badge>
+                                            {formatted.secondary && <Text as="span" variant="bodySm" fontWeight="semibold">{formatted.secondary}</Text>}
+                                            {formatted.coverage && (
+                                              <Text as="span" variant="bodySm" tone="subdued">{`fits ${formatted.coverage}`}</Text>
+                                            )}
+                                          </InlineStack>
+                                        </td>
+                                        <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">Universal</Text></td>
+                                      </tr>
+                                    );
+                                  }
+                                  return (
+                                    <tr key={fi} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.make || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.model || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{formatYearRange(f.year_from, f.year_to)}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.engine || f.engine_code || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.fuel_type || "-"}</Text></td>
+                                      <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}><Text as="span" variant="bodySm">{f.extraction_method === "smart" ? "Smart" : f.extraction_method === "manual" ? "Manual" : f.extraction_method === "auto" ? "Auto" : f.extraction_method || "-"}</Text></td>
+                                    </tr>
+                                  );
+                                })}</tbody>
                               </table>
                             </div>
                           </BlockStack>
@@ -640,14 +722,14 @@ export default function Fitment() {
               </BlockStack>
             )}
 
-            {productFitmentGroups.length > ACTIVITY_PAGE_SIZE && (
+            {liveProductFitmentGroups.length > ACTIVITY_PAGE_SIZE && (
               <InlineStack align="center" blockAlign="center">
                 <Pagination
                   hasPrevious={activityPage > 1}
-                  hasNext={activityPage * ACTIVITY_PAGE_SIZE < productFitmentGroups.length}
+                  hasNext={activityPage * ACTIVITY_PAGE_SIZE < liveProductFitmentGroups.length}
                   onPrevious={() => setActivityPage((p) => p - 1)}
                   onNext={() => setActivityPage((p) => p + 1)}
-                  label={`${activityPage} of ${Math.ceil(productFitmentGroups.length / ACTIVITY_PAGE_SIZE)}`}
+                  label={`${activityPage} of ${Math.ceil(liveProductFitmentGroups.length / ACTIVITY_PAGE_SIZE)}`}
                 />
               </InlineStack>
             )}
@@ -656,4 +738,9 @@ export default function Fitment() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Fitment" />;
 }

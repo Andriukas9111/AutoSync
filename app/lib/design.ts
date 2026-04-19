@@ -59,21 +59,14 @@ export const listRowStyle = (isLast: boolean): CSSProperties => ({
   borderBottom: isLast ? "none" : "1px solid var(--p-color-border-secondary)",
 });
 
-// ─── Status Dot (small colored circle for status indicators) ───────
-export const statusDotStyle = (status: string): CSSProperties => ({
-  width: "8px",
-  height: "8px",
-  borderRadius: "50%",
-  flexShrink: 0,
-  background:
-    status === "completed"
-      ? "var(--p-color-bg-fill-success)"
-      : status === "failed"
-        ? "var(--p-color-bg-fill-critical)"
-        : status === "running"
-          ? "var(--p-color-bg-fill-info)"
-          : "var(--p-color-bg-fill-secondary)",
-});
+// ─── Data Table Styles ────────────────────────────────────────────
+// Used in: DataTable component
+export const dataTableWrapStyle: CSSProperties = { overflowX: "auto" };
+export const dataTableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse" };
+export const dataTableHeaderRowStyle: CSSProperties = { borderBottom: "2px solid var(--p-color-border-secondary)" };
+export const dataTableCellStyle: CSSProperties = { padding: "8px 12px", textAlign: "left", fontSize: "13px" };
+export const dataTableFooterRowStyle: CSSProperties = { borderTop: "2px solid var(--p-color-border-secondary)", fontWeight: 600 };
+export const dataTableFooterStyle: CSSProperties = { padding: "8px 12px" };
 
 // ─── Collapsible Transition ────────────────────────────────────────
 // Used in: HowItWorks, any collapsible section
@@ -102,73 +95,6 @@ export const cardRowStyle: CSSProperties = {
   background: "var(--p-color-bg-surface-secondary)",
 };
 
-// ─── Flex helpers ────────────────────────────────────────────────
-export const flexRowStyle = (gap = "12px"): CSSProperties => ({
-  display: "flex",
-  alignItems: "center",
-  gap,
-  flexWrap: "wrap" as const,
-});
-
-export const flexColumnStyle = (gap = 6): CSSProperties => ({
-  display: "flex",
-  flexDirection: "column",
-  gap: `${gap}px`,
-});
-
-export const flexWrapStyle = (gap = 16): CSSProperties => ({
-  display: "flex",
-  flexWrap: "wrap",
-  gap: `${gap}px`,
-});
-
-// ─── Horizontal Bar Chart (Analytics) ─────────────────────────────
-// Used in: Analytics page for Popular Makes, Popular Models, any bar visualization
-export const barChartRowStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-};
-
-export const barChartLabelStyle = (width: number): CSSProperties => ({
-  width: `${width}px`,
-  flexShrink: 0,
-  textAlign: "right" as const,
-});
-
-export const barChartTrackStyle: CSSProperties = {
-  flex: 1,
-  background: "var(--p-color-bg-surface-secondary)",
-  borderRadius: "var(--p-border-radius-100)",
-  height: "24px",
-  overflow: "hidden",
-};
-
-export const barChartFillStyle = (percent: number): CSSProperties => ({
-  width: `${percent}%`,
-  height: "100%",
-  background: "var(--p-color-bg-fill-emphasis)",
-  borderRadius: "var(--p-border-radius-100)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "flex-end",
-  paddingRight: "8px",
-  minWidth: "40px",
-  transition: "width 0.3s ease",
-});
-
-export const barChartValueStyle: CSSProperties = {
-  color: "var(--p-color-text-inverse)",
-  fontSize: "12px",
-  fontWeight: 600,
-};
-
-export const barChartSuffixStyle: CSSProperties = {
-  width: "60px",
-  textAlign: "right" as const,
-  flexShrink: 0,
-};
-
 // ─── Badge Tone Mappings ───────────────────────────────────────────
 // Use these instead of hardcoding tone strings
 export const STATUS_TONES: Record<string, "success" | "warning" | "critical" | "info" | undefined> = {
@@ -195,64 +121,30 @@ export const STATUS_TONES: Record<string, "success" | "warning" | "critical" | "
 export const JOB_TYPE_LABELS: Record<string, string> = {
   extract: "Auto Extraction",
   push: "Push to Shopify",
+  bulk_push: "Push to Shopify",
+  bulk_publish: "Publishing Products",
   collections: "Creating Collections",
   vehicle_pages: "Vehicle Pages",
   sync: "Product Sync",
+  fetch: "Fetching Products",
   provider_import: "Provider Import",
-};
-
-// ─── Fitment Status Labels ─────────────────────────────────────────
-// "Needs Review" = unmapped + flagged (user-facing, unified across app)
-export const FITMENT_STATUS_LABELS: Record<string, string> = {
-  unmapped: "Unmapped",
-  flagged: "Flagged",
-  auto_mapped: "Auto Mapped",
-  smart_mapped: "Smart Mapped",
-  manual_mapped: "Manual Mapped",
-  needs_review: "Needs Review", // Combined unmapped + flagged
-};
-
-// ─── Icon Mapping ──────────────────────────────────────────────────
-// One icon per data type — consistent across ALL pages
-// Import these icons from @shopify/polaris-icons where needed
-export const ICON_MAP = {
-  products: "ProductIcon",
-  fitments: "ConnectIcon",
-  collections: "CollectionIcon",
-  vehicles: "SearchIcon",
-  vehiclePages: "PageIcon",
-  providers: "PackageIcon",
-  analytics: "ChartVerticalIcon",
-  settings: "SettingsIcon",
-  plan: "StarFilledIcon",
-  coverage: "GaugeIcon",
-  makes: "TargetIcon",
-  database: "DatabaseIcon",
-  clock: "ClockIcon",
-  info: "InfoIcon",
-  export: "ExportIcon",
-  import: "ImportIcon",
-  check: "CheckCircleIcon",
-  alert: "AlertCircleIcon",
-  warning: "AlertTriangleIcon",
-  wand: "WandIcon",
-} as const;
-
-// ─── Fuel Badge Tones ──────────────────────────────────────────────
-export const FUEL_BADGE_TONES: Record<string, "success" | "warning" | "info" | "critical" | undefined> = {
-  Petrol: "warning",
-  Diesel: "info",
-  Electric: "success",
-  Hybrid: "success",
-  "Plug-in Hybrid": "success",
-  CNG: undefined,
-  LPG: undefined,
+  provider_refresh: "Refreshing Products",
+  cleanup: "Cleanup",
+  cleanup_tags: "Removing Tags",
+  cleanup_metafields: "Removing Metafields",
+  cleanup_collections: "Removing Collections",
+  sync_after_delete: "Syncing After Delete",
+  delete_vehicle_pages: "Deleting Vehicle Pages",
+  wheel_extract: "Extracting Wheel Specs",
+  wheel_push: "Pushing Wheels",
+  provider_auto_fetch: "Auto-Fetching Products",
 };
 
 // ─── Formatting Helpers ────────────────────────────────────────────
 
 export function formatJobType(type: string): string {
-  return JOB_TYPE_LABELS[type] || type.charAt(0).toUpperCase() + type.slice(1);
+  // Known labels first, then auto-format: "cleanup_collections" → "Cleanup Collections"
+  return JOB_TYPE_LABELS[type] || type.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
 export function formatElapsed(startedAt: string | null | undefined): string {
@@ -273,18 +165,24 @@ export interface JobContext {
   processed: number;
   total: number;
   otherRunningJobs?: Array<{ type: string; status: string }>;
+  metadata?: Record<string, unknown> | null;
 }
 
 /** Get the progress label for a running job (shown next to progress bar) */
 export function getJobProgressLabel(ctx: JobContext): string {
-  const { type, processed, total } = ctx;
+  const { type, metadata } = ctx;
+  // Use real-time phase label from Edge Function if available
+  const meta = typeof metadata === "string" ? JSON.parse(metadata) : metadata;
+  if (meta?.phaseLabel) return meta.phaseLabel as string;
+
   switch (type) {
-    case "push": return "Pushing tags & metafields — processing in background";
+    case "push": return "Creating products on Shopify — processing in background";
     case "collections": return "Creating smart collections — processing in background";
     case "extract": return "Auto-extracting vehicle fitments";
     case "vehicle_pages": return "Creating vehicle specification pages";
-    case "bulk_push": return "Bulk pushing via Shopify Operations API";
+    case "bulk_push": return "Pushing tags & metafields via Shopify Operations API";
     case "provider_import": return "Importing products from provider";
+    case "provider_refresh": return "Re-fetching and updating products from provider";
     default: return `Processing ${formatJobType(type)}`;
   }
 }
@@ -310,6 +208,17 @@ export function getJobWaitingMessage(ctx: JobContext): string {
     return "Preparing vehicle specification pages...";
   }
 
+  // Use real-time phase label from Edge Function if available
+  const meta = typeof ctx.metadata === "string" ? JSON.parse(ctx.metadata) : ctx.metadata;
+  if (meta?.phaseLabel) return meta.phaseLabel as string;
+
+  if (type === "push" || type === "bulk_push") {
+    return "Starting push — scanning products and connecting to Shopify...";
+  }
+  if (type === "provider_refresh") {
+    return "Connecting to provider and downloading latest products...";
+  }
+
   return "Preparing...";
 }
 
@@ -323,6 +232,158 @@ export function getJobCompletionMessage(ctx: JobContext): string {
     case "vehicle_pages": return `${processed.toLocaleString()} vehicle pages created`;
     case "bulk_push": return `${processed.toLocaleString()} products pushed via bulk operations`;
     case "provider_import": return `${processed.toLocaleString()} products imported`;
+    case "provider_refresh": return `${processed.toLocaleString()} products refreshed from provider`;
     default: return `${processed.toLocaleString()} items processed`;
   }
 }
+
+// ─── Banner Dismiss Persistence (sessionStorage) ────────────────────
+// Banners dismissed within a browser session stay dismissed.
+// Banners reappear in a new session (next day, new tab).
+
+/** Check if a banner was dismissed (persists across sessions via localStorage) */
+export function isBannerDismissed(key: string): boolean {
+  try { return localStorage.getItem(`autosync_banner_${key}`) === "1"; } catch { return false; }
+}
+
+/** Mark a banner as dismissed (persists until explicitly cleared) */
+export function dismissBanner(key: string): void {
+  try { localStorage.setItem(`autosync_banner_${key}`, "1"); } catch { /* SSR-safe */ }
+}
+
+/** CSS grid that forces all children (Cards) to stretch to equal height */
+export const equalHeightGridStyle = (cols: number, gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(${cols}, 1fr)`,
+  gap,
+  alignItems: "stretch",
+});
+
+// ── Plan Gate Data ───────────────────────────────────────────────────────────
+
+/** Plan pricing for display in the gate component */
+export const PLAN_PRICING: Record<string, string> = {
+  free: "$0/mo",
+  starter: "$19/mo",
+  growth: "$49/mo",
+  professional: "$99/mo",
+  business: "$179/mo",
+  enterprise: "$299/mo",
+  custom: "From $299/mo",
+};
+
+/** Key highlights for each plan tier (used in PlanGate upgrade prompt) */
+/** Format a date string for display (e.g., "26 Mar, 23:15") */
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "\u2014";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "\u2014";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ─── Selectable Card (clickable option card with selected/disabled states) ──
+// Used in: Provider type selection, plan selection, any card-based picker
+export const selectableCardStyle = (selected: boolean, disabled = false): CSSProperties => ({
+  cursor: disabled ? "not-allowed" : "pointer",
+  borderRadius: "var(--p-border-radius-300)",
+  border: selected
+    ? "2px solid var(--p-color-border-emphasis)"
+    : "1px solid var(--p-color-border)",
+  padding: "var(--p-space-400)",
+  background: selected
+    ? "var(--p-color-bg-surface-secondary)"
+    : "var(--p-color-bg-surface)",
+  opacity: disabled ? 0.6 : 1,
+  transition: "box-shadow 120ms ease, border-color 120ms ease",
+  position: "relative" as const,
+});
+
+// ─── Auto-fit Grid (responsive grid that wraps naturally) ──────────────────
+export const autoFitGridStyle = (minWidth = "250px", gap = "16px"): CSSProperties => ({
+  display: "grid",
+  gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}, 1fr))`,
+  gap,
+});
+
+export const PLAN_HIGHLIGHTS: Record<string, string[]> = {
+  starter: [
+    "Up to 250 products & 1,000 fitments",
+    "Push tags & metafields to Shopify",
+    "YMME search widget & fitment badge",
+  ],
+  growth: [
+    "Up to 1,000 products & 5,000 fitments",
+    "Auto fitment extraction from titles",
+    "Smart collections by make",
+    "Compatibility table widget",
+  ],
+  professional: [
+    "Up to 3,000 products & 15,000 fitments",
+    "API integration & custom vehicles",
+    "Collections by make & model",
+    "Smart suggestions engine",
+  ],
+  business: [
+    "Up to 10,000 products & 50,000 fitments",
+    "FTP import & Wheel Finder widget",
+    "Collection SEO & images",
+    "Priority support",
+  ],
+  enterprise: [
+    "Up to 50,000 products & 250,000 fitments",
+    "DVLA plate lookup & VIN decode",
+    "Full CSS widget customisation",
+    "Vehicle specification pages",
+  ],
+};
+
+// ─── Pill/Badge Style (feature pills, status indicators) ──────────────
+
+export const featurePillStyle: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "4px",
+  padding: "var(--p-space-050) var(--p-space-200)",
+  borderRadius: "var(--p-border-radius-200)",
+  background: "var(--p-color-bg-surface-secondary)",
+  color: "var(--p-color-text-secondary)",
+  fontSize: "12px",
+  fontWeight: 500,
+  lineHeight: "16px",
+  whiteSpace: "nowrap",
+};
+
+// ─── Status Dot (small colored circle for job status in activity lists) ────
+export const statusDotStyle = (status: string): CSSProperties => ({
+  width: "8px",
+  height: "8px",
+  borderRadius: "50%",
+  flexShrink: 0,
+  background:
+    status === "completed"
+      ? "var(--p-color-bg-fill-success)"
+      : status === "failed"
+        ? "var(--p-color-bg-fill-critical)"
+        : status === "running"
+          ? "var(--p-color-bg-fill-info)"
+          : "var(--p-color-bg-fill-secondary)",
+});
+
+// ─── Horizontal Bar Chart (admin overview) ─────────────────────────────
+export const barChartRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+};
+
+// ─── Format Badge (small pill for file format indicators) ──────────────
+export const formatBadgeStyle: CSSProperties = {
+  display: "inline-block",
+  padding: "2px 8px",
+  borderRadius: "var(--p-border-radius-100)",
+  background: "var(--p-color-bg-surface-secondary)",
+  fontSize: "11px",
+  fontWeight: 500,
+  color: "var(--p-color-text-secondary)",
+  lineHeight: "18px",
+};

@@ -21,9 +21,10 @@ import {
   Checkbox,
   Modal,
   FormLayout,
-  SkeletonBodyText,
+  Spinner,
   Tooltip,
 } from "@shopify/polaris";
+import { HowItWorks } from "../components/HowItWorks";
 import {
   CashDollarIcon,
   ChartVerticalIcon,
@@ -40,7 +41,7 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import { getTenant, getPlanLimits, getEffectivePlan } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import {
@@ -57,6 +58,8 @@ import {
 } from "../lib/pipeline/pricing.server";
 import type { PlanTier } from "../lib/types";
 import { formatPrice } from "../lib/types";
+import { autoFitGridStyle } from "../lib/design";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -67,7 +70,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   // If plan doesn't support pricing engine, return minimal data
@@ -161,10 +164,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function PricingPage() {
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ preview?: { total_affected: number; avg_markup_percent: number; total_revenue_change: number; changes: Array<{ product_id: string; title: string; old_price: number; new_price: number; rule_name: string }> } }>();
 
   const { plan, hasPricing, limits, rules, stats, alerts, history } = loaderData;
 
@@ -262,20 +266,23 @@ export default function PricingPage() {
         },
       ]}
     >
+      <BlockStack gap="600">
+      <HowItWorks steps={[
+        { number: 1, title: "Create Rules", description: "Define pricing rules by type (markup, margin, fixed, MAP) and scope them to vendors, product types, or specific providers." },
+        { number: 2, title: "Preview Changes", description: "See how your rules affect product prices before applying. Review the price changes across your catalog." },
+        { number: 3, title: "Apply & Sync", description: "Activate rules to automatically calculate prices. Push updated prices to Shopify with your next sync." },
+      ]} />
+
       {/* Success/Error banners */}
       {actionData && "message" in actionData && (
-        <Box paddingBlockEnd="400">
           <Banner tone="success" onDismiss={() => {}}>
-            <p>{(actionData as any).message}</p>
+            <p>{actionData?.message}</p>
           </Banner>
-        </Box>
       )}
       {actionData && "error" in actionData && (
-        <Box paddingBlockEnd="400">
           <Banner tone="critical" onDismiss={() => {}}>
-            <p>{(actionData as any).error}</p>
+            <p>{actionData?.error}</p>
           </Banner>
-        </Box>
       )}
 
       <Layout>
@@ -283,8 +290,7 @@ export default function PricingPage() {
         <Layout.Section>
           <Card padding="0">
             <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+              ...autoFitGridStyle("100px", "0px"),
               borderBottom: "1px solid var(--p-color-border-secondary)",
             }}>
               {[
@@ -706,19 +712,19 @@ export default function PricingPage() {
       >
         <Modal.Section>
           {fetcher.state === "submitting" || fetcher.state === "loading" ? (
-            <SkeletonBodyText lines={6} />
-          ) : fetcher.data && "preview" in fetcher.data ? (
+            <div style={{ textAlign: "center", padding: "var(--p-space-800)" }}><Spinner size="large" /></div>
+          ) : fetcher.data?.preview ? (
             <BlockStack gap="400">
               <InlineStack gap="400">
-                <Badge tone="info">{`${(fetcher.data as any).preview.total_affected} products affected`}</Badge>
-                <Badge tone="success">{`Avg markup: ${(fetcher.data as any).preview.avg_markup_percent}%`}</Badge>
-                <Badge>{`Revenue change: ${formatPrice((fetcher.data as any).preview.total_revenue_change)}`}</Badge>
+                <Badge tone="info">{`${fetcher.data.preview.total_affected} products affected`}</Badge>
+                <Badge tone="success">{`Avg markup: ${fetcher.data.preview.avg_markup_percent}%`}</Badge>
+                <Badge>{`Revenue change: ${formatPrice(fetcher.data.preview.total_revenue_change)}`}</Badge>
               </InlineStack>
 
-              {(fetcher.data as any).preview.changes.length > 0 ? (
+              {fetcher.data.preview.changes.length > 0 ? (
                 <IndexTable
                   resourceName={{ singular: "product", plural: "products" }}
-                  itemCount={Math.min((fetcher.data as any).preview.changes.length, 20)}
+                  itemCount={Math.min(fetcher.data.preview.changes.length, 20)}
                   headings={[
                     { title: "Product" },
                     { title: "Current" },
@@ -728,7 +734,7 @@ export default function PricingPage() {
                   ]}
                   selectable={false}
                 >
-                  {(fetcher.data as any).preview.changes.slice(0, 20).map((c: any, i: number) => (
+                  {fetcher.data.preview.changes.slice(0, 20).map((c: any, i: number) => (
                     <IndexTable.Row key={c.product_id} id={c.product_id} position={i}>
                       <IndexTable.Cell>
                         <Text as="span" variant="bodySm">{c.title}</Text>
@@ -757,6 +763,12 @@ export default function PricingPage() {
           )}
         </Modal.Section>
       </Modal>
+      </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Pricing" />;
 }

@@ -829,10 +829,12 @@ export async function fetchModelsForBrand(brandPageUrl: string): Promise<Scraped
       // Extract years from the red div, e.g. "2019 - 2024" or "2019 -"
       const yearText = yearDiv || rawName;
       const yearMatch = yearText.match(/(\d{4})\s*-\s*(\d{4}|present|\.{3})?\)?/i);
-      const yearFrom = yearMatch ? parseInt(yearMatch[1], 10) : 0;
-      const yearTo = yearMatch && yearMatch[2] && /\d{4}/.test(yearMatch[2])
-        ? parseInt(yearMatch[2], 10)
-        : null;
+      const rawYearFrom = yearMatch ? parseInt(yearMatch[1], 10) : null;
+      const rawYearTo = yearMatch && yearMatch[2] && /\d{4}/.test(yearMatch[2])
+        ? parseInt(yearMatch[2], 10) : null;
+      // Validate years are in sane range (1885-2028) — prevents model numbers like "1500", "3008" being stored as years
+      const yearFrom = rawYearFrom && rawYearFrom >= 1885 && rawYearFrom <= new Date().getFullYear() + 2 ? rawYearFrom : null;
+      const yearTo = rawYearTo && rawYearTo >= 1885 && rawYearTo <= new Date().getFullYear() + 2 ? rawYearTo : null;
 
       // Clean the name
       const cleanName = rawName
@@ -1019,8 +1021,10 @@ async function parseEngineVariantsFromPage(
       powerHp: hp ? parseInt(hp[1], 10) : null,
       powerKw: kw ? parseInt(kw[1], 10) : null,
       torqueNm: nm ? parseInt(nm[1], 10) : null,
-      yearFrom: yr ? parseInt(yr[1], 10) : 0,
-      yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) ? parseInt(yr[2], 10) : null,
+      yearFrom: yr && parseInt(yr[1], 10) >= 1885 && parseInt(yr[1], 10) <= new Date().getFullYear() + 2
+        ? parseInt(yr[1], 10) : null,
+      yearTo: yr && yr[2] && /\d{4}/.test(yr[2]) && parseInt(yr[2], 10) >= 1885 && parseInt(yr[2], 10) <= new Date().getFullYear() + 2
+        ? parseInt(yr[2], 10) : null,
       modification: name,
       powertrainType,
       specPageUrl,
@@ -1177,7 +1181,7 @@ export async function upsertMake(brand: ScrapedBrand): Promise<string | null> {
       { onConflict: "name" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert make " + brand.name + ":", error.message);
@@ -1210,7 +1214,7 @@ export async function upsertModel(
       { onConflict: "make_id,name,generation" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert model " + model.name + ":", error.message);
@@ -1245,7 +1249,7 @@ export async function upsertEngine(
       { onConflict: "model_id,name" },
     )
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("[autodata] Upsert engine " + engine.name + ":", error.message);
@@ -1395,7 +1399,7 @@ export async function upsertVehicleSpecs(
 // ── Background Job System ─────────────────────────────────────────────────────
 
 export async function startScrapeJob(config: {
-  type: "autodata_full" | "autodata_brand" | "nhtsa";
+  type: "autodata_full" | "autodata_brand";
   maxBrands?: number;
   delayMs?: number;
   scrapeSpecs?: boolean;
@@ -1416,7 +1420,7 @@ export async function startScrapeJob(config: {
       started_at: new Date().toISOString(),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error || !job) {
     throw new Error("Failed to create scrape job: " + (error?.message ?? "unknown"));
@@ -1702,4 +1706,345 @@ export async function getLastScrapeProgress(): Promise<{
     .select("id", { count: "exact", head: true });
 
   return { lastBrand: null, brandsTotal: count ?? 0 };
+}
+
+// ── Incremental Update ────────────────────────────────────────────────────────
+
+export interface IncrementalUpdateResult {
+  brandsChecked: number;
+  newBrands: number;
+  brandsWithNewModels: number;
+  newModels: number;
+  newEngines: number;
+  newSpecs: number;
+  errors: string[];
+  duration_ms: number;
+}
+
+/**
+ * Incremental scraper — only scrapes NEW content.
+ * 1. Fetches current brand list from auto-data.net
+ * 2. Compares against ymme_makes — identifies new brands
+ * 3. For new brands: full deep scrape (brand → models → engines → specs)
+ * 4. For existing brands: compares model count, scrapes only new models
+ * 5. Logs every addition to scrape_changelog
+ * 6. Updates last_scraped_at on processed records
+ */
+export async function runIncrementalUpdate(options?: {
+  jobId?: string;
+  delayMs?: number;
+  scrapeSpecs?: boolean;
+}): Promise<IncrementalUpdateResult> {
+  const jobId = options?.jobId;
+  const delayMs = options?.delayMs ?? DEFAULT_DELAY_MS;
+  const scrapeSpecs = options?.scrapeSpecs ?? true;
+  const startTime = Date.now();
+  const errors: string[] = [];
+  let brandsChecked = 0;
+  let newBrandsCount = 0;
+  let brandsWithNewModels = 0;
+  let newModelsCount = 0;
+  let newEnginesCount = 0;
+  let newSpecsCount = 0;
+
+  const now = () => new Date().toISOString();
+
+  // Helper: log to scrape_changelog
+  async function logChange(entry: {
+    entity_type: "make" | "model" | "engine" | "spec";
+    entity_id: string;
+    action: "added" | "updated";
+    entity_name: string;
+    parent_name: string | null;
+    details?: Record<string, unknown>;
+  }) {
+    await db.from("scrape_changelog").insert({
+      scrape_job_id: jobId ?? null,
+      entity_type: entry.entity_type,
+      entity_id: entry.entity_id,
+      action: entry.action,
+      entity_name: entry.entity_name,
+      parent_name: entry.parent_name,
+      details: entry.details ?? {},
+    });
+  }
+
+  // Helper: deep scrape a single model (engines + specs)
+  async function deepScrapeModel(
+    modelId: string,
+    model: ScrapedModel,
+    brandName: string,
+  ) {
+    const engines = await fetchEnginesForModel(model.pageUrl);
+    await sleep(delayMs);
+
+    for (const engine of engines) {
+      try {
+        // Check if engine already exists for this model
+        const { data: existingEngine } = await db
+          .from("ymme_engines")
+          .select("id")
+          .eq("model_id", modelId)
+          .eq("name", engine.name)
+          .maybeSingle();
+
+        if (existingEngine) {
+          // Engine exists — skip
+          continue;
+        }
+
+        const engineId = await upsertEngine(modelId, engine);
+        if (!engineId) continue;
+
+        newEnginesCount++;
+        await logChange({
+          entity_type: "engine",
+          entity_id: engineId,
+          action: "added",
+          entity_name: engine.name,
+          parent_name: `${brandName} ${model.name}`,
+        });
+
+        // Level 4: specs
+        if (scrapeSpecs && engine.specPageUrl) {
+          try {
+            const specs = await fetchSpecsForEngine(engine.specPageUrl);
+            await upsertVehicleSpecs(engineId, specs, BASE_URL + engine.specPageUrl);
+            newSpecsCount++;
+            await logChange({
+              entity_type: "spec",
+              entity_id: engineId,
+              action: "added",
+              entity_name: engine.name,
+              parent_name: `${brandName} ${model.name}`,
+            });
+            await sleep(delayMs);
+          } catch (specErr) {
+            errors.push(
+              `Spec error (${engine.name}): ${specErr instanceof Error ? specErr.message : String(specErr)}`,
+            );
+          }
+        }
+
+        // Update last_scraped_at on engine
+        await db.from("ymme_engines").update({ last_scraped_at: now() }).eq("id", engineId);
+      } catch (err) {
+        errors.push(`Engine error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Update last_scraped_at on model
+    await db.from("ymme_models").update({ last_scraped_at: now() }).eq("id", modelId);
+  }
+
+  // ── Step 1: Fetch current brand list from auto-data.net ──
+  console.log("[incremental] Starting incremental update...");
+  const liveBrands = await fetchBrandList();
+  if (liveBrands.length === 0) {
+    errors.push("Failed to fetch brand list from auto-data.net");
+    if (jobId) {
+      await db.from("scrape_jobs").update({
+        status: "failed",
+        error: "Failed to fetch brand list",
+        completed_at: now(),
+      }).eq("id", jobId);
+    }
+    return { brandsChecked: 0, newBrands: 0, brandsWithNewModels: 0, newModels: 0, newEngines: 0, newSpecs: 0, errors, duration_ms: Date.now() - startTime };
+  }
+
+  if (jobId) {
+    await db.from("scrape_jobs").update({ total_items: liveBrands.length }).eq("id", jobId);
+  }
+
+  // ── Step 2: Load all existing makes from DB (slug → id+name) ──
+  const { data: existingMakes } = await db
+    .from("ymme_makes")
+    .select("id, name, slug, autodata_slug");
+
+  const makeBySlug = new Map<string, { id: string; name: string }>();
+  const makeByAutodataSlug = new Map<string, { id: string; name: string }>();
+  for (const m of existingMakes ?? []) {
+    if (m.slug) makeBySlug.set(m.slug, { id: m.id, name: m.name });
+    if (m.autodata_slug) makeByAutodataSlug.set(m.autodata_slug, { id: m.id, name: m.name });
+  }
+
+  // ── Step 3: Process each brand ──
+  for (let i = 0; i < liveBrands.length; i++) {
+    const brand = liveBrands[i];
+    brandsChecked++;
+
+    // Check if job was paused
+    if (jobId && i % 10 === 0) {
+      const { data: jobCheck } = await db
+        .from("scrape_jobs")
+        .select("status")
+        .eq("id", jobId)
+        .maybeSingle();
+
+      if (jobCheck?.status === "paused") {
+        break;
+      }
+    }
+
+    try {
+      // Determine if this brand exists in DB
+      const makeSlug = brand.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+$/, "");
+      const existing = makeByAutodataSlug.get(brand.slug) ?? makeBySlug.get(makeSlug);
+
+      if (!existing) {
+        // ── NEW BRAND: full deep scrape ──
+        console.log(`[incremental] NEW brand: ${brand.name}`);
+        newBrandsCount++;
+
+        const makeId = await upsertMake(brand);
+        if (!makeId) {
+          errors.push(`Failed to upsert new make: ${brand.name}`);
+          continue;
+        }
+
+        await logChange({
+          entity_type: "make",
+          entity_id: makeId,
+          action: "added",
+          entity_name: brand.name,
+          parent_name: null,
+        });
+
+        await sleep(delayMs);
+        const models = await fetchModelsForBrand(brand.pageUrl);
+        await sleep(delayMs);
+
+        for (const model of models) {
+          try {
+            const modelId = await upsertModel(makeId, model);
+            if (!modelId) continue;
+
+            newModelsCount++;
+            await logChange({
+              entity_type: "model",
+              entity_id: modelId,
+              action: "added",
+              entity_name: model.name,
+              parent_name: brand.name,
+            });
+
+            await deepScrapeModel(modelId, model, brand.name);
+          } catch (err) {
+            errors.push(`Model error (${brand.name} ${model.name}): ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+
+        // Update last_scraped_at on make
+        await db.from("ymme_makes").update({ last_scraped_at: now() }).eq("id", makeId);
+      } else {
+        // ── EXISTING BRAND: check for new models ──
+        const makeId = existing.id;
+
+        // Scrape live model list
+        await sleep(delayMs);
+        const liveModels = await fetchModelsForBrand(brand.pageUrl);
+
+        // Load existing model names for comparison — compare by NAME ONLY
+        // (generation can differ between scrape runs, causing false "new" matches)
+        // NOTE: We compare NAME SETS, not counts. This catches new models even when
+        // old ones were removed (count stays the same) or names changed.
+        const { data: existingModels } = await db
+          .from("ymme_models")
+          .select("name")
+          .eq("make_id", makeId);
+
+        const existingModelNames = new Set(
+          (existingModels ?? []).map(
+            (m: { name: string }) => m.name.toLowerCase().trim(),
+          ),
+        );
+
+        const newModels = liveModels.filter(
+          (m) => !existingModelNames.has(m.name.toLowerCase().trim()),
+        );
+
+        if (newModels.length > 0) {
+          console.log(
+            `[incremental] ${brand.name}: ${newModels.length} new model(s) found (live=${liveModels.length}, db=${existingModels?.length ?? 0})`,
+          );
+          brandsWithNewModels++;
+
+          for (const model of newModels) {
+            try {
+              const modelId = await upsertModel(makeId, model);
+              if (!modelId) continue;
+
+              newModelsCount++;
+              console.log(`[incremental]   NEW model: ${brand.name} ${model.name}`);
+
+              await logChange({
+                entity_type: "model",
+                entity_id: modelId,
+                action: "added",
+                entity_name: model.name,
+                parent_name: brand.name,
+              });
+
+              await sleep(delayMs);
+              await deepScrapeModel(modelId, model, brand.name);
+            } catch (err) {
+              errors.push(`Model error (${brand.name} ${model.name}): ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+
+        // Update last_scraped_at on make
+        await db.from("ymme_makes").update({ last_scraped_at: now() }).eq("id", makeId);
+      }
+
+      // Update job progress
+      if (jobId && i % 5 === 0) {
+        const progress = Math.round(((i + 1) / liveBrands.length) * 100);
+        await db.from("scrape_jobs").update({
+          processed_items: brandsChecked,
+          progress,
+          current_item: brand.name,
+          result: {
+            brandsChecked,
+            newBrands: newBrandsCount,
+            brandsWithNewModels,
+            newModels: newModelsCount,
+            newEngines: newEnginesCount,
+            newSpecs: newSpecsCount,
+          },
+          errors: errors.slice(-50),
+        }).eq("id", jobId);
+      }
+    } catch (err) {
+      errors.push(`Brand error (${brand.name}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // ── Finalize ──
+  const result: IncrementalUpdateResult = {
+    brandsChecked,
+    newBrands: newBrandsCount,
+    brandsWithNewModels,
+    newModels: newModelsCount,
+    newEngines: newEnginesCount,
+    newSpecs: newSpecsCount,
+    errors,
+    duration_ms: Date.now() - startTime,
+  };
+
+  console.log(
+    `[incremental] Complete — checked=${brandsChecked} newBrands=${newBrandsCount} newModels=${newModelsCount} newEngines=${newEnginesCount} newSpecs=${newSpecsCount} duration=${result.duration_ms}ms`,
+  );
+
+  if (jobId) {
+    await db.from("scrape_jobs").update({
+      status: errors.length > brandsChecked ? "failed" : "completed",
+      progress: 100,
+      result,
+      errors: errors.slice(-100),
+      completed_at: now(),
+    }).eq("id", jobId);
+  }
+
+  return result;
 }

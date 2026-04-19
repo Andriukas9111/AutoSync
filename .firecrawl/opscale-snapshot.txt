@@ -1,0 +1,922 @@
+- generic
+  - generic
+    - generic
+      - navigation
+        - generic
+          - link "CoreX Homepage" [ref=e2]
+            - image "Opscale Logo"
+          - navigation
+            - paragraph
+              - link "Features" [ref=e40]
+            - paragraph
+              - link "Integrate" [ref=e41]
+            - paragraph
+              - link "Services" [ref=e42]
+            - paragraph
+              - link "Pricing" [ref=e43]
+            - paragraph
+              - link "Reviews" [ref=e44]
+            - paragraph
+              - link "FAQ" [ref=e45]
+          - link "Try Opscale Try Opscale" [ref=e8]
+            - generic
+              - paragraph
+                - StaticText "Try Opscale"
+              - paragraph
+                - StaticText "Try Opscale"
+      - generic
+        - generic
+          - paragraph
+            - StaticText "NEW"
+          - paragraph
+            - StaticText "Latest integration just arrived"
+        - heading "Powering AI-Driven Growth with Opscale" [level=1, ref=e9]
+        - paragraph
+          - StaticText "We provide the tools and insights you need to enhance performance and achieve results."
+        - link "Start for free Start for free" [ref=e3]
+          - generic
+            - paragraph
+              - StaticText "Start for free"
+            - paragraph
+              - StaticText "Start for free"
+      - generic
+        - generic
+          - generic
+            - image "Opscale Logo"
+            - generic
+              - image
+              - paragraph
+                - StaticText "Overview"
+            - generic
+              - image
+              - paragraph
+                - StaticText "Analytics "
+            - generic
+              - image
+              - paragraph
+                - StaticText "AI Insights"
+            - generic
+              - image
+              - paragraph
+                - StaticText "Customers "
+            - generic
+              - image
+              - paragraph
+                - StaticText "Sales "
+            - generic
+              - image
+              - paragraph
+                - StaticText "Reports "
+            - generic
+              - image
+              - paragraph
+                - StaticText "Integrations "
+            - generic
+              - image
+              - paragraph
+                - StaticText "Settings "
+            - generic
+              - image
+              - paragraph
+                - StaticText "Support "
+          - generic
+            - generic
+              - generic
+                - paragraph
+                  - StaticText "Hi, Coco Design 👋"
+                - paragraph
+                  - StaticText "Let’s optimize your business with AI today!"
+              - paragraph
+                - StaticText "11:03:57 AM"
+              - image
+            - generic
+              - generic
+                - paragraph
+                  - StaticText "Your Sales & Analytics"
+                - paragraph
+                  - StaticText "Export as CSV"
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Available payout"
+                  - generic
+                    - paragraph
+                      - StaticText "$90.0K+"
+                    - paragraph
+                      - StaticText "$90.0K+"
+                  - paragraph
+                    - StaticText "Payout of $6K will be available soon"
+                - generic
+                  - paragraph
+                    - StaticText "Today revenue"
+                  - generic
+                    - paragraph
+                      - StaticText "$50.0K+"
+                    - paragraph
+                      - StaticText "$50.0K+"
+                  - paragraph
+                    - StaticText "Payout of $6K will be available soon"
+            - generic
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Sales Funnel"
+                  - paragraph
+                    - StaticText "Total view per month"
+                - image
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Mon"
+                - generic
+                  - paragraph
+                    - StaticText "Tue"
+                - generic
+                  - paragraph
+                    - StaticText "Wed"
+                - generic
+                  - generic
+                    - paragraph
+                      - StaticText "$400K"
+                    - paragraph
+                      - StaticText "$400K"
+                  - paragraph
+                    - StaticText "Thu"
+                - generic
+                  - paragraph
+                    - StaticText "Fri"
+                - generic
+                  - paragraph
+                    - StaticText "Sat"
+          - generic
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Mar 2025"
+                - image
+              - generic
+                - generic [ref=e46] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "S"
+                - generic [ref=e47] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "M"
+                - generic [ref=e48] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "T"
+                - generic [ref=e49] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "W"
+                - generic [ref=e50] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "T"
+                - generic [ref=e51] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "F"
+                - generic [ref=e52] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "S"
+                - generic [ref=e53] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "4"
+                - generic [ref=e54] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "5"
+                - paragraph
+                  - StaticText "6"
+                - generic [ref=e55] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "7"
+                - generic [ref=e56] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "8"
+                - generic [ref=e57] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "9"
+                - generic [ref=e58] clickable [cursor:pointer]
+                  - paragraph
+                    - StaticText "10"
+            - generic
+              - paragraph
+                - StaticText "Visitors"
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Individual Target"
+                  - generic
+                    - paragraph
+                      - StaticText "92%"
+                    - paragraph
+                      - StaticText "92%"
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Corporate Target"
+                  - generic
+                    - paragraph
+                      - StaticText "67%"
+                    - paragraph
+                      - StaticText "67%"
+              - generic
+                - generic
+                  - paragraph
+                    - StaticText "Foundation Target"
+                  - generic
+                    - paragraph
+                      - StaticText "54%"
+                    - paragraph
+                      - StaticText "54%"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Upgrade To Pro"
+              - paragraph
+                - StaticText "Discover the benefits of an upgrade account"
+              - paragraph
+                - StaticText "Upgrade $10"
+      - generic
+        - heading "Trusted and adopted by industry-leading enterprises worldwide." [level=2, ref=e4]
+        - list
+          - listitem [level=1]
+            - generic [ref=e113] clickable [cursor:pointer]
+          - listitem [level=1]
+            - generic [ref=e114] clickable [cursor:pointer]
+          - listitem [level=1]
+            - generic [ref=e115] clickable [cursor:pointer]
+          - listitem [level=1]
+            - generic [ref=e116] clickable [cursor:pointer]
+          - listitem [level=1]
+            - generic [ref=e117] clickable [cursor:pointer]
+      - generic
+        - generic
+          - heading "Stay Ahead with that Drives Success" [level=2, ref=e10]
+          - paragraph
+            - strong
+              - StaticText "Make smarter decisions with AI-powered analytics."
+            - StaticText " Opscale helps you track key metrics, automate workflows, and gain real-time insights to scale your business effortlessly."
+        - generic
+          - generic
+            - generic
+              - generic
+                - heading "Opscale Features" [level=3, ref=e59]
+                - paragraph
+                  - StaticText "Explore powerful capabilities: AI Insights, Automation, Data Security, and more."
+              - generic
+                - list
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "AI-Powered Analytics"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Automated Workflows"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText " Enterprise-Grade Security"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Real-Time Reporting"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Cloud Integration"
+                - list
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Lightning-Fast Processing"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Advanced Data Filtering"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Scalable Infrastructure"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Personalized Recommendations"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Smart Scheduling"
+                - list
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText " Third-Party Integrations"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Performance Optimization"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Intelligent Notifications"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Intuitive UI/UX"
+                  - listitem [level=1]
+                    - paragraph
+                      - StaticText "Cross-Platform Accessibility"
+            - generic
+              - generic
+                - heading "98% Faster Automation" [level=3, ref=e60]
+                - paragraph
+                  - StaticText "Boost efficiency with AI-driven processes that save time and enhance productivity."
+              - SvgRoot
+                - heading "98" [level=1, ref=e27]
+          - generic
+            - generic
+              - generic
+                - paragraph
+                  - StaticText "Total market value"
+                - heading "193.373$" [level=2, ref=e93]
+                - paragraph
+                  - StaticText "+71.37$ total return"
+              - generic
+                - generic [ref=e94] clickable [cursor:pointer, tabindex]
+                  - paragraph
+                    - StaticText "1D"
+                - generic [ref=e95] clickable [cursor:pointer, tabindex]
+                  - paragraph
+                    - StaticText "1W"
+                - generic [ref=e96] clickable [cursor:pointer, tabindex]
+                  - paragraph
+                    - StaticText "1M"
+                - generic [ref=e97] clickable [cursor:pointer, tabindex]
+                  - paragraph
+                    - StaticText "6M"
+                - generic [ref=e98] clickable [cursor:pointer, tabindex]
+                  - paragraph
+                    - StaticText "1Y"
+            - generic
+              - generic
+                - heading "Download Reports" [level=3, ref=e61]
+                - paragraph
+                  - StaticText "Access key insights with just one click."
+              - generic
+                - generic
+                  - generic
+                    - paragraph
+                      - StaticText "Revenue Summary.docs"
+                  - image
+                - generic
+                  - generic
+                    - paragraph
+                      - StaticText "Performance Report.pdf"
+                  - image
+                - generic
+                  - generic
+                    - paragraph
+                      - StaticText "Customer Insights 2024.excel"
+                  - image
+            - generic
+              - generic
+                - heading "Real-Time Sales Insights" [level=3, ref=e62]
+                - paragraph
+                  - StaticText "Monitor revenue growth for each team member."
+              - list
+                - listitem [level=1]
+                  - generic
+                    - generic
+                      - paragraph
+                        - StaticText "Full Name"
+                      - paragraph
+                        - StaticText "Month/ Year"
+                    - paragraph
+                      - StaticText "$X,XXX"
+                - listitem [level=1]
+                  - generic
+                    - generic
+                      - paragraph
+                        - StaticText "Olivia Reed"
+                      - paragraph
+                        - StaticText "Summer 2025"
+                    - paragraph
+                      - StaticText "$5,980"
+                - listitem [level=1]
+                  - generic
+                    - generic
+                      - paragraph
+                        - StaticText "Liam Walke"
+                      - paragraph
+                        - StaticText "Autumn 2025"
+                    - paragraph
+                      - StaticText "$8,210"
+                - listitem [level=1]
+                  - generic
+                    - generic
+                      - paragraph
+                        - StaticText "Sophia Martinez"
+                      - paragraph
+                        - StaticText "Winter 2025"
+                    - paragraph
+                      - StaticText "$9,875"
+      - generic
+        - generic
+          - heading "Integrate. Automate. Elevate." [level=2, ref=e11]
+          - paragraph
+            - StaticText "Opscale connects with the tools you love, making your workflow smoother than ever."
+        - generic
+          - generic
+            - image
+            - image
+            - image
+            - image
+            - image
+            - image
+          - generic
+            - image
+            - image
+            - image
+            - image
+            - image
+            - image
+          - generic
+            - image
+        - generic
+          - generic
+            - image
+            - paragraph
+              - StaticText "Effortless Automation"
+          - generic
+            - image
+            - paragraph
+              - StaticText "Real-Time Data Sync"
+          - generic
+            - image
+            - paragraph
+              - StaticText "Fully Customizable"
+      - generic
+        - generic
+          - heading "AI-Powered Features for Smarter Growth" [level=2, ref=e12]
+          - paragraph
+            - StaticText "Opscale harnesses AI and automation to streamline operations and drive efficiency."
+        - generic
+          - generic
+            - image
+            - generic
+              - heading "AI-Powered Insights" [level=3, ref=e63]
+              - paragraph
+                - StaticText "Use AI analytics to gain business insights and improve decision-making."
+          - generic
+            - image
+            - generic
+              - heading "Task Automation" [level=3, ref=e64]
+              - paragraph
+                - StaticText "Save time with intelligent automation that handles repetitive tasks effortlessly."
+          - generic
+            - image
+            - generic
+              - heading "Predictive Sales Analytics" [level=3, ref=e65]
+              - paragraph
+                - StaticText "Track sales trends and predict future revenue with AI-powered forecasting."
+          - generic
+            - image
+            - generic
+              - heading "Smart CRM Integration" [level=3, ref=e66]
+              - paragraph
+                - StaticText "Seamlessly connect your customer data with AI-powered CRM suggestions."
+          - generic
+            - image
+            - generic
+              - heading "Live Performance" [level=3, ref=e67]
+              - paragraph
+                - StaticText "Monitor KPIs, sales performance, and operational efficiency in real-time."
+          - generic
+            - image
+            - generic
+              - heading "Secure Cloud Storage" [level=3, ref=e68]
+              - paragraph
+                - StaticText "Store and access business-critical data with top-tier security and encryption."
+      - generic
+        - generic
+          - generic
+            - generic
+              - image
+              - image
+              - image
+              - image
+              - image
+            - paragraph
+              - StaticText "Rated 4.97/5 from over 600 reviews."
+          - heading "Smart Pricing for Every Plans" [level=2, ref=e13]
+          - paragraph
+            - StaticText "Opscale offers flexible plans designed to scale with your needs. Choose the right plan and unlock the power of AI-driven efficiency."
+        - generic
+          - generic
+            - generic
+              - paragraph
+                - strong
+                  - StaticText "Starter "
+              - heading "$19.99" [level=2, ref=e69]
+              - paragraph
+                - StaticText "/month"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText " Essential tools & features"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "10GB secure storage"
+              - generic
+                - image
+                - paragraph
+                  - StaticText " Email support"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Community access"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Basic analytics"
+            - link "Get Started Get Started" [ref=e28]
+              - generic
+                - paragraph
+                  - StaticText "Get Started"
+                - paragraph
+                  - StaticText "Get Started"
+          - generic
+            - generic
+              - paragraph
+                - strong
+                  - StaticText "Pro"
+              - heading "$49.99" [level=2, ref=e70]
+              - paragraph
+                - StaticText "/month"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Everything in Starter"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Unlimited storage"
+              - generic
+                - image
+                - paragraph
+                  - StaticText " Priority support (email & chat)"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Custom branding"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Advanced analytics"
+            - link "Upgrade to Pro Upgrade to Pro" [ref=e29]
+              - generic
+                - paragraph
+                  - StaticText "Upgrade to Pro"
+                - paragraph
+                  - StaticText "Upgrade to Pro"
+          - generic
+            - generic
+              - paragraph
+                - strong
+                  - StaticText "Enterprise"
+              - heading "Custom" [level=2, ref=e71]
+              - paragraph
+                - StaticText "/month"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "All Pro features"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Dedicated account manager"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "API access & integrations"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "24/7 priority support"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Custom AI solutions for your business"
+            - link "Contact Sales Contact Sales" [ref=e30]
+              - generic
+                - paragraph
+                  - StaticText "Contact Sales"
+                - paragraph
+                  - StaticText "Contact Sales"
+      - generic
+        - generic
+          - heading "Trusted by Industry Leaders" [level=2, ref=e14]
+          - paragraph
+            - StaticText "Opscale delivers AI-driven efficiency and automation that businesses love. See what our users say."
+        - generic
+          - generic
+            - generic
+              - generic
+                - image
+                - image
+                - image
+                - image
+                - image
+              - paragraph
+                - StaticText "\"Opscale transformed our workflow, making operations seamless.\""
+            - generic
+              - generic
+                - paragraph
+                  - strong
+                    - StaticText "Emma Carter"
+                - paragraph
+                  - StaticText "CTO at NexaTech"
+          - generic
+            - generic
+              - generic
+                - image
+                - image
+                - image
+                - image
+                - image
+              - paragraph
+                - StaticText "\"The automation features saved us hours every week. A game-changer!\""
+            - generic
+              - generic
+                - paragraph
+                  - strong
+                    - StaticText "David Reynolds"
+                - paragraph
+                  - StaticText "Founder at ScaleUp"
+          - generic
+            - generic
+              - generic
+                - image
+                - image
+                - image
+                - image
+                - image
+              - paragraph
+                - StaticText "\"Smart insights and real-time analytics helped us scale faster than ever.\""
+            - generic
+              - generic
+                - paragraph
+                  - strong
+                    - StaticText "Sophia Patel"
+                - paragraph
+                  - StaticText "Growth Lead at InnovateX"
+          - generic
+            - generic
+              - generic
+                - image
+                - image
+                - image
+                - image
+                - image
+              - paragraph
+                - StaticText "\"Opscale simplifies everything. From data to automation, it's flawless!\""
+            - generic
+              - generic
+                - paragraph
+                  - strong
+                    - StaticText "James Walker"
+                - paragraph
+                  - StaticText "CEO at BrightData"
+      - generic
+        - generic
+          - heading "Your Opscale Queries, Solved" [level=2, ref=e15]
+          - paragraph
+            - StaticText "Need help? Our support team is here for you 24/7."
+        - generic
+          - generic [ref=e16] clickable [cursor:pointer, tabindex]
+            - heading "What solutions does Opscale offer?" [level=3, ref=e72]
+            - image
+          - generic [ref=e17] clickable [cursor:pointer, tabindex]
+            - heading "How quickly can I get started?" [level=3, ref=e73]
+            - image
+          - generic [ref=e18] clickable [cursor:pointer, tabindex]
+            - heading "Can I customize Opscale for my needs?" [level=3, ref=e74]
+            - image
+          - generic [ref=e19] clickable [cursor:pointer, tabindex]
+            - heading "Do you provide support & updates?" [level=3, ref=e75]
+            - image
+          - generic [ref=e20] clickable [cursor:pointer, tabindex]
+            - heading "What are the pricing options?" [level=3, ref=e76]
+            - image
+      - generic
+        - generic
+          - heading "Why Opscale for Stands Out" [level=2, ref=e21]
+          - paragraph
+            - StaticText "Discover how Opscale outperforms traditional platforms in efficiency, automation, and intelligence."
+        - generic
+          - generic
+            - image "Opscale Logo"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "AI-driven automation for seamless workflows"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Scalable solutions tailored for growth"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Advanced dashboard with real-time insights"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Built-in security & compliance features"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Intuitive interface designed for ease of use"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Customizable analytics for your goals"
+          - generic
+            - paragraph
+              - StaticText "Other"
+            - generic
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Limited automation, requiring manual effort"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Rigid structures that hinder scalabilityions tailored for growth"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Basic dashboards with minimal insights"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Security risks & lack of compliance tools"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Complicated and outdated user experience"
+              - generic
+                - image
+                - paragraph
+                  - StaticText "Generic tools with no flexibility"
+      - generic
+        - generic
+          - heading "Meet the Team" [level=2, ref=e22]
+          - paragraph
+            - StaticText "Collaboration, innovation, and growth—all in one place."
+        - generic
+          - generic
+            - generic
+              - paragraph
+                - StaticText "Your Role Here"
+              - heading "Michael Carter" [level=3, ref=e77]
+              - link "Linkedin" [ref=e31]
+                - paragraph
+                  - StaticText "Linkedin"
+                - image
+          - generic
+            - generic
+              - paragraph
+                - StaticText "COO"
+              - heading "Sophia Patel" [level=3, ref=e78]
+              - link "Linkedin" [ref=e32]
+                - paragraph
+                  - StaticText "Linkedin"
+                - image
+          - generic
+            - generic
+              - paragraph
+                - StaticText "CTO"
+              - heading "Emma Carter" [level=3, ref=e79]
+              - link "Linkedin" [ref=e33]
+                - paragraph
+                  - StaticText "Linkedin"
+                - image
+          - generic
+            - generic
+              - paragraph
+                - StaticText "CTO"
+              - heading "Jake Ford" [level=3, ref=e80]
+              - link "Linkedin" [ref=e34]
+                - paragraph
+                  - StaticText "Linkedin"
+                - image
+      - generic
+        - generic
+          - generic
+            - heading "Get in Touch" [level=2, ref=e23]
+            - paragraph
+              - StaticText "Get in touch with by filling out the form or via the contact details below."
+          - generic
+            - generic
+              - image
+              - paragraph
+                - StaticText "123 Business Street, New York, NY"
+            - generic
+              - image
+              - paragraph
+                - link "info@example.com" [ref=e81]
+            - generic
+              - image
+              - paragraph
+                - link "+1 987 654 3210" [ref=e82]
+        - generic
+          - generic
+            - LabelText
+              - paragraph
+                - StaticText "Name"
+              - textbox "Name" [required, ref=e35]
+            - LabelText
+              - paragraph
+                - StaticText "Email"
+              - textbox "Email" [required, ref=e36]
+          - generic
+            - LabelText
+              - paragraph
+                - StaticText "Company"
+              - textbox "Company" [required, ref=e37]
+            - LabelText
+              - paragraph
+                - StaticText "Budget Range"
+              - combobox "Budget Range" [expanded=false, ref=e38]: Select your budget range
+                - MenuListPopup
+                  - option "Select your budget range" [disabled, ref=e99]
+                  - option "Less than $5,000" [ref=e100]
+                  - option "$5,000 - $10,000" [ref=e101]
+                  - option "$10,000 - $25,000" [ref=e102]
+                  - option "$25,000 - $50,000" [ref=e103]
+                  - option "$50,000+" [ref=e104]
+          - LabelText
+            - paragraph
+              - StaticText "How can we help?"
+            - textbox "How can we help?" [required, ref=e24]
+          - button "Get in touch" [ref=e5]
+            - paragraph
+              - StaticText "Get in touch"
+      - generic
+        - heading "Unlock the Future of AI Growth with Opscale" [level=2, ref=e25]
+        - paragraph
+          - StaticText "Empower your business with cutting-edge automation and intelligence for limitless possibilities."
+        - link "Get Started Get Started" [ref=e6]
+          - generic
+            - paragraph
+              - StaticText "Get Started"
+            - paragraph
+              - StaticText "Get Started"
+        - heading "Cocodesign60@gmail.com" [level=6, ref=e7]
+          - link "Cocodesign60@gmail.com" [ref=e26]
+      - contentinfo
+        - generic
+          - generic
+            - generic
+              - heading "Quick Links" [level=3, ref=e39]
+              - navigation
+                - paragraph
+                  - link "Features" [ref=e105]
+                - paragraph
+                  - link "Integrate" [ref=e106]
+                - paragraph
+                  - link "Services" [ref=e107]
+                - paragraph
+                  - link "Pricing" [ref=e108]
+                - paragraph
+                  - link "Reviews" [ref=e109]
+                - paragraph
+                  - link "FAQ" [ref=e110]
+                - paragraph
+                  - link "Team" [ref=e111]
+              - generic
+                - link "Twitter" [ref=e83]
+                  - image
+                - link "Twitter" [ref=e84]
+                  - image
+                - link "Twitter" [ref=e85]
+                  - image
+                - link "Twitter" [ref=e86]
+                  - image
+                - link "Twitter" [ref=e87]
+                  - image
+            - generic
+              - generic
+                - heading "Join Our Newsletter" [level=3, ref=e88]
+                - paragraph
+                  - StaticText "Get the latest AI insights, business strategies, and exclusive updates straight to your inbox. Stay ahead in the digital game with Opscale!"
+              - generic
+                - textbox "name@email.com" [ref=e112]
+                - button "Subscribe" [ref=e118]
+          - generic
+            - paragraph
+              - StaticText "© 2025 Opscale. All rights reserved."
+            - generic
+              - paragraph
+                - link "Terms Condition" [ref=e89]
+              - paragraph
+                - link "Privacy Policy" [ref=e90]
+              - paragraph
+                - link "Contact" [ref=e91]
+            - paragraph
+              - link "Made by Coco Design" [ref=e92]
+  - link "Create a free website with Framer, the website builder loved by startups, designers and agencies." [ref=e1]
+    - generic
+      - paragraph
+        - StaticText "Create a free website with Framer, the website builder loved by startups, designers and agencies."

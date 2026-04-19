@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { useLoaderData, useActionData, useFetcher, useNavigate, useNavigation } from "react-router";
+import { useLoaderData, useActionData, useFetcher, useNavigate } from "react-router";
 import { data } from "react-router";
 import {
   Page,
@@ -42,21 +42,22 @@ import {
 } from "@shopify/polaris-icons";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
+import db, { paginatedSelect, batchedIn, triggerEdgeFunction } from "../lib/db.server";
 import {
   getPlanLimits,
   getTenant,
   assertFeature,
   BillingGateError,
-  PLAN_LIMITS,
+  getSerializedPlanLimits,
+  getEffectivePlan,
 } from "../lib/billing.server";
 import { PlanGate } from "../components/PlanGate";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
 import { useAppData } from "../lib/use-app-data";
-import { SkeletonCard } from "../components/SkeletonCard";
-import { statMiniStyle, statGridStyle, STATUS_TONES } from "../lib/design";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
 import type { PlanTier } from "../lib/types";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -107,24 +108,7 @@ function formatPower(hp: number | null): string {
   return `${hp} HP`;
 }
 
-const stepNumberStyle = (active: boolean) =>
-  ({
-    width: "28px",
-    height: "28px",
-    borderRadius: "var(--p-border-radius-full)",
-    background: active
-      ? "var(--p-color-bg-fill-emphasis)"
-      : "var(--p-color-bg-surface-secondary)",
-    color: active
-      ? "var(--p-color-text-inverse)"
-      : "var(--p-color-text-secondary)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: 600,
-    fontSize: "13px",
-    flexShrink: 0,
-  }) as const;
+// stepNumberStyle imported from design.ts (no local duplicate)
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -140,14 +124,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (err: unknown) {
     if (err instanceof BillingGateError) {
       const tenant = await getTenant(shopId);
-      const plan: PlanTier = tenant?.plan ?? "free";
+      const plan: PlanTier = getEffectivePlan(tenant);
       const limits = getPlanLimits(plan);
       return data(
         {
           gated: true as const,
           plan,
           limits,
-          allLimits: PLAN_LIMITS,
+          allLimits: getSerializedPlanLimits(),
           syncStats: { synced: 0, pending: 0, failed: 0 },
           availableVehicles: 0,
           vehicles: [] as VehicleRow[],
@@ -162,7 +146,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const tenant = await getTenant(shopId);
-  const plan: PlanTier = tenant?.plan ?? "free";
+  const plan: PlanTier = getEffectivePlan(tenant);
   const limits = getPlanLimits(plan);
 
   // Run all queries in parallel
@@ -173,19 +157,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     syncedResult,
     settingsResult,
   ] = await Promise.all([
-    // 1. Count by sync_status
-    db
-      .from("vehicle_page_sync")
-      .select("sync_status")
-      .eq("shop_id", shopId),
+    // 1. Count by sync_status — use head-only count queries (NOT row fetch)
+    Promise.all([
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "synced"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "pending"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "failed"),
+      db.from("vehicle_page_sync").select("id", { count: "exact", head: true }).eq("shop_id", shopId).eq("sync_status", "skipped"),
+    ]),
 
-    // 2. Count ALL fitments (not just ones with engine IDs)
+    // 2. Count unique engine IDs from fitments (for "Total Available")
+    // Uses head:true to avoid fetching all rows (Supabase 1000-row limit)
     db
       .from("vehicle_fitments")
-      .select("id, ymme_engine_id, make, model, engine")
-      .eq("shop_id", shopId),
+      .select("ymme_engine_id")
+      .eq("shop_id", shopId)
+      .not("ymme_engine_id", "is", null),
 
-    // 3. Fetch vehicles — both with and without ymme_engine_id
+    // 3. Fetch fitments — paginated to handle >1000 rows
+    // We fetch ALL fitments with engine IDs for the vehicle browser
     db
       .from("vehicle_fitments")
       .select(
@@ -204,14 +193,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       `,
       )
       .eq("shop_id", shopId)
-      .limit(5000),
+      .not("ymme_engine_id", "is", null)
+      .limit(1000),
 
-    // 4. Fetch synced engine IDs
-    db
-      .from("vehicle_page_sync")
-      .select("engine_id, linked_product_count")
-      .eq("shop_id", shopId)
-      .eq("sync_status", "synced"),
+    // 4. Fetch synced engine IDs — paginated to handle >1000
+    paginatedSelect("vehicle_page_sync", "engine_id, linked_product_count", (q) =>
+      q.eq("shop_id", shopId).eq("sync_status", "synced"),
+    ).then((rows) => ({ data: rows, error: null })),
 
     // 5. Fetch app_settings
     db
@@ -221,67 +209,97 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .maybeSingle(),
   ]);
 
-  // Aggregate sync stats
-  const syncStats = { synced: 0, pending: 0, failed: 0 };
-  if (syncStatsResult.data) {
-    for (const row of syncStatsResult.data) {
-      if (row.sync_status === "synced") syncStats.synced++;
-      else if (row.sync_status === "pending") syncStats.pending++;
-      else if (row.sync_status === "failed") syncStats.failed++;
+  // Aggregate sync stats from head-only count queries
+  const [syncedCount, pendingCount, failedCount, skippedCount] = syncStatsResult as unknown as [
+    { count: number | null }, { count: number | null }, { count: number | null }, { count: number | null }
+  ];
+  const syncStats = {
+    synced: syncedCount.count ?? 0,
+    pending: pendingCount.count ?? 0,
+    failed: failedCount.count ?? 0,
+    skipped: skippedCount?.count ?? 0,
+  };
+
+  // Count unique vehicles — use the engine IDs from availableResult
+  // Since Supabase caps at 1000 rows, we need to paginate for the count
+  const availEngineIds = new Set<string>();
+  for (const f of (availableResult.data ?? []) as Record<string, unknown>[]) {
+    if (f.ymme_engine_id) availEngineIds.add(f.ymme_engine_id as string);
+  }
+  // If we got exactly 1000, there are more — fetch remaining pages
+  if ((availableResult.data?.length ?? 0) >= 1000) {
+    let offset = 1000;
+    while (true) {
+      const { data: moreFitments } = await db
+        .from("vehicle_fitments")
+        .select("ymme_engine_id")
+        .eq("shop_id", shopId)
+        .not("ymme_engine_id", "is", null)
+        .range(offset, offset + 999);
+      if (!moreFitments || moreFitments.length === 0) break;
+      for (const f of moreFitments) {
+        if (f.ymme_engine_id) availEngineIds.add(f.ymme_engine_id);
+      }
+      offset += moreFitments.length;
+      if (moreFitments.length < 1000) break;
     }
   }
+  const uniqueVehicleKeys = availEngineIds;
 
-  // Count unique vehicles — use engine_id if available, else make+model+engine combo
-  const allFitments = availableResult.data ?? [];
-  const uniqueVehicleKeys = new Set<string>();
-  for (const f of allFitments as any[]) {
-    if (f.ymme_engine_id) {
-      uniqueVehicleKeys.add(`engine:${f.ymme_engine_id}`);
-    } else if (f.make && f.model) {
-      uniqueVehicleKeys.add(`text:${f.make}|${f.model}|${f.engine ?? ""}`);
+  // Also paginate the vehicle browser fitments if needed
+  let allVehicleFitments = vehiclesResult.data ?? [];
+  if (allVehicleFitments.length >= 1000) {
+    let offset = 1000;
+    while (true) {
+      const { data: moreVehicles } = await db
+        .from("vehicle_fitments")
+        .select("id, ymme_engine_id, make, model, engine, engine_code, fuel_type, year_from, year_to, variant, product_id")
+        .eq("shop_id", shopId)
+        .not("ymme_engine_id", "is", null)
+        .range(offset, offset + 999);
+      if (!moreVehicles || moreVehicles.length === 0) break;
+      allVehicleFitments = [...allVehicleFitments, ...moreVehicles];
+      offset += moreVehicles.length;
+      if (moreVehicles.length < 1000) break;
     }
   }
 
   // Look up YMME engine data for fitments that have ymme_engine_id
-  const engineIdsFromFitments = (vehiclesResult.data ?? [])
+  const engineIdsFromFitments = allVehicleFitments
     .map((r: any) => r.ymme_engine_id)
     .filter(Boolean) as string[];
   const uniqueEngineIds = [...new Set(engineIdsFromFitments)];
 
   let ymmeEngineData: Record<string, any> = {};
   if (uniqueEngineIds.length > 0) {
-    const { data: engines } = await db
-      .from("ymme_engines")
-      .select(`
-        id, name, code, displacement_cc, power_hp, power_kw, torque_nm,
+    // Batched .in() to handle >500 unique engine IDs
+    const engines = await batchedIn(
+      "ymme_engines",
+      `id, name, code, displacement_cc, power_hp, power_kw, torque_nm,
         fuel_type, year_from, year_to, body_type, aspiration,
         cylinders, cylinder_config, modification,
         model:ymme_models!model_id (
           name, generation,
           make:ymme_makes!make_id ( name )
-        )
-      `)
-      .in("id", uniqueEngineIds);
+        )`,
+      "id",
+      uniqueEngineIds,
+    );
     if (engines) {
-      for (const e of engines) {
+      for (const e of engines as any[]) {
         ymmeEngineData[e.id] = e;
       }
     }
   }
 
-  // Build vehicle rows — group by engine_id or make+model+engine combo
+  // Build vehicle rows — ONLY vehicles with ymme_engine_id
+  // Fitments without engine IDs are product categories (e.g. "Brake Lines") not real vehicles
   const vehicleMap = new Map<string, VehicleRow>();
-  if (vehiclesResult.data) {
-    for (const row of vehiclesResult.data as any[]) {
-      // Determine unique key
-      let key: string;
-      if (row.ymme_engine_id) {
-        key = `engine:${row.ymme_engine_id}`;
-      } else if (row.make && row.model) {
-        key = `text:${row.make}|${row.model}|${row.engine ?? ""}`;
-      } else {
-        continue;
-      }
+  if (allVehicleFitments.length > 0) {
+    for (const row of allVehicleFitments as Record<string, unknown>[]) {
+      // Only include fitments with engine IDs — skip text-only entries
+      if (!row.ymme_engine_id) continue;
+      const key = `engine:${row.ymme_engine_id}`;
 
       if (vehicleMap.has(key)) {
         vehicleMap.get(key)!.productCount++;
@@ -290,8 +308,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       // Try YMME enrichment first
       const ymme = row.ymme_engine_id ? ymmeEngineData[row.ymme_engine_id] : null;
-      const ymmeModel = ymme?.model as any;
-      const ymmeMake = ymmeModel?.make as any;
+      const ymmeModel = ymme?.model as Record<string, unknown> | undefined;
+      const ymmeMake = ymmeModel?.make as Record<string, unknown> | undefined;
 
       vehicleMap.set(key, {
         engineId: row.ymme_engine_id || key,
@@ -319,7 +337,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const engineMap = vehicleMap;
 
   // Sort by make, then model, then engine name — take first 50
-  const vehicles = Array.from(engineMap.values())
+  let vehicles = Array.from(engineMap.values())
     .sort((a, b) => {
       const makeCompare = a.makeName.localeCompare(b.makeName);
       if (makeCompare !== 0) return makeCompare;
@@ -334,10 +352,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     (r: any) => r.engine_id as string,
   );
 
+  // Exclude skipped vehicles from the browser (handle collisions, duplicates)
+  // Query is cheap (head-only was already counted, now fetch the IDs)
+  const { data: skippedRows } = await db
+    .from("vehicle_page_sync")
+    .select("engine_id")
+    .eq("shop_id", shopId)
+    .eq("sync_status", "skipped");
+  const skippedEngineIdSet = new Set((skippedRows ?? []).map((r: any) => r.engine_id as string));
+  // Remove skipped from the vehicles array
+  vehicles = vehicles.filter((v: VehicleRow) => !skippedEngineIdSet.has(v.engineId));
+
   // Total linked products: count distinct products with fitments linked to synced vehicle pages
   const syncedEngineIdSet = new Set(syncedEngineIds);
   const linkedProductIds = new Set<string>();
-  for (const f of (vehiclesResult.data ?? []) as any[]) {
+  for (const f of allVehicleFitments as Record<string, unknown>[]) {
     if (f.product_id && f.ymme_engine_id && syncedEngineIdSet.has(f.ymme_engine_id)) {
       linkedProductIds.add(f.product_id);
     }
@@ -348,9 +377,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     gated: false as const,
     plan,
     limits,
-    allLimits: PLAN_LIMITS,
+    allLimits: getSerializedPlanLimits(),
     syncStats,
-    availableVehicles: uniqueVehicleKeys.size,
+    availableVehicles: Math.max(0, uniqueVehicleKeys.size - syncStats.skipped),
     vehicles,
     syncedEngineIds,
     vehiclePagesEnabled: settingsResult.data?.vehicle_pages_enabled ?? false,
@@ -379,8 +408,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "push_all") {
-    // Job-based: create job and return instantly — Edge Function does the work
-    const { error: jobError } = await db
+    // Duplicate job prevention
+    const { data: existingVpJob } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("type", "vehicle_pages")
+      .in("status", ["pending", "running"])
+      .maybeSingle();
+    if (existingVpJob) {
+      return data({ error: "Vehicle pages job is already running. Please wait for it to complete." }, { status: 409 });
+    }
+
+    const { data: vpJob, error: jobError } = await db
       .from("sync_jobs")
       .insert({
         shop_id: shopId,
@@ -390,11 +430,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         total_items: 0,
         processed_items: 0,
         started_at: new Date().toISOString(),
-      });
+      })
+      .select("id")
+      .maybeSingle();
 
-    if (jobError) {
+    if (jobError || !vpJob) {
       return data({ error: "Failed to create vehicle pages job" }, { status: 500 });
     }
+
+    // Fire-and-forget: invoke Edge Function directly (no pg_cron dependency)
+    triggerEdgeFunction(vpJob.id, shopId);
 
     return data({
       success: true,
@@ -404,20 +449,46 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "delete_all") {
-    try {
-      const { deleteVehiclePages } = await import(
-        "../lib/pipeline/vehicle-pages.server"
-      );
-      const result = await deleteVehiclePages(admin, shopId);
-      return data({
-        success: true,
-        message: `Deleted ${result.deleted} vehicle pages.`,
-      });
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete vehicle pages";
-      return data({ error: message }, { status: 500 });
+    // Duplicate job prevention
+    const { data: existingDelJob } = await db
+      .from("sync_jobs")
+      .select("id")
+      .eq("shop_id", shopId)
+      .in("type", ["delete_vehicle_pages", "vehicle_pages"])
+      .in("status", ["pending", "running"])
+      .maybeSingle();
+    if (existingDelJob) {
+      return data({ error: "A vehicle pages job is already running. Please wait for it to complete." }, { status: 409 });
     }
+
+    // Create a delete job — processed by Edge Function (NOT Vercel)
+    // This ensures delete continues even if the user closes the browser
+    const { data: deleteJob, error: deleteJobError } = await db
+      .from("sync_jobs")
+      .insert({
+        shop_id: shopId,
+        type: "delete_vehicle_pages",
+        status: "running",
+        progress: 0,
+        total_items: 0,
+        processed_items: 0,
+        started_at: new Date().toISOString(),
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (deleteJobError || !deleteJob) {
+      return data({ error: "Failed to create delete job" }, { status: 500 });
+    }
+
+    // Fire-and-forget: invoke Edge Function
+    triggerEdgeFunction(deleteJob.id, shopId);
+
+    return data({
+      success: true,
+      jobCreated: true,
+      message: "Vehicle pages delete started. Processing in background...",
+    });
   }
 
   if (intent === "sync_status") {
@@ -461,11 +532,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function VehiclePages() {
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const fetcher = useFetcher();
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
+  const fetcher = useFetcher<{ success?: boolean; hasMore?: boolean; created?: number; failed?: number; error?: string; message?: string }>();
   const navigate = useNavigate();
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   // howItWorksOpen state moved to shared HowItWorks component
@@ -483,11 +553,11 @@ export default function VehiclePages() {
   const showError =
     (actionData && "error" in actionData) || fetcherData?.error;
   const errorMessage =
-    (actionData && "error" in actionData ? (actionData as any).error : null) ||
+    (actionData && "error" in actionData ? actionData?.error : null) ||
     fetcherData?.error;
   const successMessage =
     (actionData && "message" in actionData
-      ? (actionData as any).message
+      ? actionData?.message
       : null) || fetcherData?.message;
 
   // Plan-gated view
@@ -495,7 +565,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise — SEO-optimized vehicle specification pages"
+        subtitle="Professional+ — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
         fullWidth
       >
@@ -524,7 +594,11 @@ export default function VehiclePages() {
   } = loaderData;
 
   // Live stats polling — updates vehicle page counts every 5 seconds
-  const { stats: polledStats } = useAppData();
+  const { stats: polledStats } = useAppData({
+    vehiclePagesSynced: loaderSyncStats.synced,
+    vehiclePagesPending: loaderSyncStats.pending,
+    vehiclePagesFailed: loaderSyncStats.failed,
+  });
 
   // Use polled stats when available, fall back to loader data
   const syncStats = {
@@ -593,18 +667,17 @@ export default function VehiclePages() {
   // Auto-continue pushing when there are more pages
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
-      const d = fetcher.data as any;
-      if (d.hasMore && d.success) {
+      if (fetcher.data.hasMore && fetcher.data.success) {
         setPushProgress((prev) => ({
           running: true,
-          created: prev.created + (d.created || 0),
-          failed: prev.failed + (d.failed || 0),
+          created: prev.created + (fetcher.data?.created || 0),
+          failed: prev.failed + (fetcher.data?.failed || 0),
         }));
         // Auto-trigger next batch after a short delay
         setTimeout(() => {
           fetcher.submit({ intent: "push_all" }, { method: "post" });
         }, 500);
-      } else if (d.success && !d.hasMore) {
+      } else if (fetcher.data.success && !fetcher.data.hasMore) {
         setPushProgress((prev) => ({ ...prev, running: false }));
       } else {
         setPushProgress((prev) => ({ ...prev, running: false }));
@@ -630,7 +703,7 @@ export default function VehiclePages() {
     return (
       <Page
         title="Vehicle Pages"
-        subtitle="Enterprise — SEO-optimized vehicle specification pages"
+        subtitle="Professional+ — SEO-optimized vehicle specification pages"
         backAction={{ url: "/app" }}
         fullWidth
       >
@@ -665,7 +738,7 @@ export default function VehiclePages() {
   return (
     <Page
       title="Vehicle Pages"
-      subtitle="Enterprise — SEO-optimized vehicle specification pages"
+      subtitle="Professional+ — SEO-optimized vehicle specification pages"
       backAction={{ url: "/app" }}
       fullWidth
       primaryAction={{
@@ -712,10 +785,12 @@ export default function VehiclePages() {
         {/* ── Section 1: How It Works (Collapsible) ── */}
         <HowItWorks
           title="How Vehicle Pages Work"
+          subtitle="Map Fitments → Push Pages → Set Up Template → Go Live"
           steps={[
             { number: 1, title: "Map Fitments", description: "Link your products to specific vehicles using the fitment mapping tool. Each product-vehicle link becomes a potential vehicle page.", linkText: "Go to Fitment Mapping", linkUrl: "/app/fitment/manual" },
-            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs and linked products." },
-            { number: 3, title: "SEO Pages Go Live", description: "Auto-generated URLs appear on your storefront with rich vehicle data, helping you rank for long-tail automotive search terms." },
+            { number: 2, title: "Push Vehicle Pages", description: "Click \"Push All Vehicle Pages\" to create Shopify metaobjects for every unique vehicle in your fitments. Pages include full engine specs, power, displacement, and linked products." },
+            { number: 3, title: "Set Up Metaobject Template", description: "In your Shopify admin, go to Online Store → Themes → Customize. Create a new template for the \"Vehicle Specification\" metaobject type. Add the AutoSync \"Vehicle Spec Detail\" widget block to display vehicle data beautifully.", linkText: "Open Theme Editor", linkUrl: "/app/settings" },
+            { number: 4, title: "SEO Pages Go Live", description: "Each vehicle gets its own URL (e.g. /pages/vehicle-specs/audi-rs3-2-5-tfsi). Rich specs, linked products, and structured data help you rank for long-tail automotive searches like \"Audi RS3 exhaust upgrade\"." },
           ]}
         />
 
@@ -737,11 +812,9 @@ export default function VehiclePages() {
         )}
 
         {/* ── Section 2: Stats Dashboard ── */}
-        {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
         <Card padding="0">
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            ...autoFitGridStyle("100px", "0px"),
             borderBottom: "1px solid var(--p-color-border-secondary)",
           }}>
             {[
@@ -768,7 +841,6 @@ export default function VehiclePages() {
             ))}
           </div>
         </Card>
-        )}
 
         {/* ── Section 3: Vehicle Browser ── */}
         <Card>
@@ -842,7 +914,15 @@ export default function VehiclePages() {
                     .filter(Boolean)
                     .join(" ");
 
-                  const engineLabel = vehicle.engineName || "Unknown Engine";
+                  // Build a useful engine label from available data
+                  const engineLabel = vehicle.engineName
+                    || [
+                        vehicle.displacementCc ? formatDisplacement(vehicle.displacementCc) : null,
+                        vehicle.fuelType,
+                        vehicle.powerHp ? `${vehicle.powerHp} HP` : null,
+                        vehicle.engineCode,
+                      ].filter(Boolean).join(" · ")
+                    || "All engines";
 
                   const displacement = formatDisplacement(
                     vehicle.displacementCc,
@@ -858,77 +938,55 @@ export default function VehiclePages() {
                       style={{
                         borderRadius: "var(--p-border-radius-300)",
                         border: "var(--p-border-width-025) solid var(--p-color-border)",
-                        padding: "var(--p-space-400)",
+                        padding: "var(--p-space-300)",
                         background: "var(--p-color-bg-surface)",
-                        transition:
-                          "box-shadow var(--p-motion-duration-200) var(--p-motion-ease-in-out)",
+                        display: "flex",
+                        flexDirection: "column",
+                        minHeight: "160px",
+                        minWidth: 0,
                       }}
                     >
-                      <BlockStack gap="200">
-                        {/* Header row: heading + status */}
-                        <InlineStack
-                          align="space-between"
-                          blockAlign="start"
-                          wrap={false}
-                        >
-                          <BlockStack gap="050">
-                            <Text
-                              as="h3"
-                              variant="headingSm"
-                              truncate
-                            >
-                              {heading}
-                            </Text>
-                            <Text
-                              as="p"
-                              variant="bodySm"
-                              tone="subdued"
-                              truncate
-                            >
-                              {engineLabel}
-                            </Text>
-                          </BlockStack>
-                          {isSynced && (
+                      {/* Header: Make Model + Published badge */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "var(--p-space-200)", marginBottom: "var(--p-space-100)" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <Text as="h3" variant="headingSm" truncate>{heading}</Text>
+                        </div>
+                        {isSynced && (
+                          <div style={{ flexShrink: 0 }}>
                             <Badge tone="success">{`Published`}</Badge>
-                          )}
-                        </InlineStack>
+                          </div>
+                        )}
+                      </div>
 
-                        {/* Spec badges row */}
-                        <InlineStack gap="100" wrap>
-                          {vehicle.engineCode && (
-                            <Badge tone="info">
-                              {`${vehicle.engineCode}`}
-                            </Badge>
-                          )}
-                          {displacement && (
-                            <Badge>{displacement}</Badge>
-                          )}
-                          {vehicle.fuelType && (
-                            <Badge>{`${vehicle.fuelType}`}</Badge>
-                          )}
-                          {vehicle.aspiration &&
-                            vehicle.aspiration !== "NA" && (
-                              <Badge>{`${vehicle.aspiration}`}</Badge>
-                            )}
-                          {vehicle.bodyType && (
-                            <Badge>{`${vehicle.bodyType}`}</Badge>
-                          )}
-                        </InlineStack>
+                      {/* Engine variant — single line truncated */}
+                      <div style={{ marginBottom: "var(--p-space-200)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <Text as="p" variant="bodySm" tone="subdued" truncate>{engineLabel}</Text>
+                      </div>
 
-                        {/* Footer row: years + product count */}
-                        <Divider />
-                        <InlineStack
-                          align="space-between"
-                          blockAlign="center"
-                        >
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`Years: ${years}`}
-                          </Text>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""} linked`}
-                          </Text>
-                        </InlineStack>
-                      </BlockStack>
+                      {/* Spec badges — max 2 rows with overflow hidden */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--p-space-100)", marginBottom: "var(--p-space-200)", maxHeight: "54px", overflow: "hidden" }}>
+                        {vehicle.engineCode && (
+                          <Badge tone="info">{`${vehicle.engineCode}`}</Badge>
+                        )}
+                        {displacement && (
+                          <Badge>{displacement}</Badge>
+                        )}
+                        {vehicle.fuelType && (
+                          <Badge>{`${vehicle.fuelType}`}</Badge>
+                        )}
+                        {vehicle.aspiration && vehicle.aspiration !== "NA" && (
+                          <Badge>{`${vehicle.aspiration}`}</Badge>
+                        )}
+                        {vehicle.bodyType && (
+                          <Badge>{`${vehicle.bodyType}`}</Badge>
+                        )}
+                      </div>
+
+                      {/* Footer: years + product count — pushed to bottom */}
+                      <div style={{ marginTop: "auto", borderTop: "1px solid var(--p-color-border-secondary)", paddingTop: "var(--p-space-200)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Text as="span" variant="bodySm" tone="subdued">{`${years}`}</Text>
+                        <Text as="span" variant="bodySm" tone="subdued">{`${vehicle.productCount} product${vehicle.productCount !== 1 ? "s" : ""}`}</Text>
+                      </div>
                     </div>
                   );
                 })}
@@ -1029,4 +1087,9 @@ export default function VehiclePages() {
       </Modal>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Vehicle Pages" />;
 }

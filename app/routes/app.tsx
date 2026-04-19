@@ -1,79 +1,121 @@
+import { useState, useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useNavigation, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { AppProvider as PolarisAppProvider, Frame } from "@shopify/polaris";
+import { AppProvider as PolarisAppProvider, Frame, Banner } from "@shopify/polaris";
 import "@shopify/polaris/build/esm/styles.css";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
-import { getPlanLimits, loadPlanConfigsFromDB } from "../lib/billing.server";
+import { getPlanLimits, getEffectivePlan, loadPlanConfigsFromDB } from "../lib/billing.server";
 import { isAdminShop } from "../lib/admin.server";
 import { PageFooter } from "../components/PageFooter";
-import type { PlanTier } from "../lib/types";
+import type { PlanTier, Tenant } from "../lib/types";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  // Internal Edge Function bypass — skip full auth for API-only calls with a valid
+  // service key. Accept multiple candidates so rotated / new-format secrets still match.
+  const internalKey = request.headers.get("X-Internal-Key") ?? "";
+  if (internalKey.length > 0) {
+    const candidates = [
+      process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+      process.env.SUPABASE_SECRET_KEY ?? "",
+      process.env.INTERNAL_API_SECRET ?? "",
+    ].filter(k => k.length > 0);
+    try {
+      const crypto = await import("crypto");
+      const isValid = candidates.some((expected) => {
+        if (expected.length !== internalKey.length) return false;
+        try { return crypto.timingSafeEqual(Buffer.from(internalKey), Buffer.from(expected)); }
+        catch { return false; }
+      });
+      if (isValid) {
+        return { apiKey: process.env.SHOPIFY_API_KEY || "", isAdmin: false, plan: "enterprise" as PlanTier, tenant: null as Tenant | null };
+      }
+    } catch { /* fall through to normal auth */ }
+  }
+
+  const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
   const isAdmin = isAdminShop(shopId);
 
-  // Get the offline Shopify access token for background API calls (Edge Functions)
-  // authenticate.admin() returns online session — we need the offline token from Prisma
+  // Get the Shopify access token for background API calls (Edge Functions)
+  // With expiringOfflineAccessTokens, we need the REFRESHED offline token from Prisma
   let offlineToken: string | null = null;
   try {
     const prisma = (await import("../db.server")).default;
+    // The Shopify library auto-refreshes the offline token during authenticate.admin()
+    // Read it AFTER authentication to get the fresh token
     const offlineSession = await prisma.session.findFirst({
       where: { shop: shopId, isOnline: false },
       select: { accessToken: true },
     });
     offlineToken = offlineSession?.accessToken ?? null;
-    if (!offlineToken) {
-      // Fallback: try online session token
-      offlineToken = session.accessToken ?? null;
-    }
-    console.log("[app.tsx] Token:", offlineToken ? `found (${offlineToken.length} chars)` : "not found");
-  } catch (tokenErr) {
-    console.error("[app.tsx] Token fetch error:", tokenErr instanceof Error ? tokenErr.message : tokenErr);
-    offlineToken = session.accessToken ?? null;
+  } catch {
+    // Prisma may fail — fall back to session token
   }
+  // Fall back to session.accessToken from authenticate.admin() token exchange.
+  // In Shopify's managed installation flow, this IS the valid offline access token.
+  if (!offlineToken && session.accessToken) {
+    offlineToken = session.accessToken;
+  }
+  // Token status check (values never logged for security)
+  const hasOfflineToken = !!offlineToken;
+  const hasSessionToken = !!session.accessToken;
+  const tokensMatch = offlineToken === session.accessToken;
 
   // Ensure tenant record exists (upsert on every load)
   const { data: tenant, error: tenantError } = await db
     .from("tenants")
     .select("*")
     .eq("shop_id", shopId)
-    .single();
+    .maybeSingle();
 
   if (!tenant) {
     // First-time install — admin shops get enterprise, others get free
-    const { error: upsertError } = await db.from("tenants").upsert({
+    const newTenant: Record<string, unknown> = {
       shop_id: shopId,
       shop_domain: shopId,
       plan: (isAdmin ? "enterprise" : "free") as PlanTier,
       plan_status: "active",
       installed_at: new Date().toISOString(),
-      shopify_access_token: offlineToken,
-    });
+    };
+    if (offlineToken) newTenant.shopify_access_token = offlineToken;
+    const { error: upsertError } = await db.from("tenants").upsert(newTenant);
     if (upsertError) {
       console.error("[app.tsx] Tenant upsert failed:", upsertError.message);
     }
   } else {
-    // Always update the access token (it can change on re-auth)
-    const updates: Record<string, unknown> = {
-      shopify_access_token: offlineToken,
-    };
-    if (isAdmin && tenant.plan !== "enterprise") {
-      updates.plan = "enterprise" as PlanTier;
+    // Always update the access token + clear uninstalled state on re-install
+    // NEVER overwrite a valid token with null — only update if we have a new one
+    const updates: Record<string, unknown> = {};
+    if (offlineToken) {
+      updates.shopify_access_token = offlineToken;
     }
-    await db
-      .from("tenants")
-      .update(updates)
-      .eq("shop_id", shopId);
+    // Double-check: if tenants token differs from Session token, force sync
+    // This catches cases where the token was rotated but not synced
+    if (offlineToken && tenant.shopify_access_token && offlineToken !== tenant.shopify_access_token) {
+      console.log(`[app.tsx] Token mismatch detected for ${shopId} — syncing fresh token`);
+      updates.shopify_access_token = offlineToken;
+    }
+    // Only clear uninstall state if previously uninstalled (don't reset plan_status on every visit)
+    if (tenant.uninstalled_at) {
+      updates.uninstalled_at = null;
+      updates.plan_status = "active"; // Re-activate on re-install only
+    }
+    // Note: Admin shops get enterprise features via getEffectivePlan() — no need to force DB
+    if (Object.keys(updates).length > 0) {
+      await db
+        .from("tenants")
+        .update(updates)
+        .eq("shop_id", shopId);
+    }
   }
 
   // Auto-discover publication IDs for multi-tenant (runs once per tenant)
-  const currentTenant = tenant ?? (await db.from("tenants").select("online_store_publication_id").eq("shop_id", shopId).single()).data;
+  const currentTenant = tenant;
   if (currentTenant && !currentTenant.online_store_publication_id) {
     try {
       const pubRes = await admin.graphql(`{ publications(first: 10) { nodes { id name } } }`);
@@ -83,21 +125,166 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       );
       if (onlineStore?.id) {
         await db.from("tenants").update({ online_store_publication_id: onlineStore.id }).eq("shop_id", shopId);
-        console.log(`[app.tsx] Publication ID discovered: ${onlineStore.id}`);
+        if (process.env.NODE_ENV !== "production") console.log(`[app.tsx] Publication ID discovered: ${onlineStore.id}`);
       }
     } catch (pubErr) {
       console.error("[app.tsx] Publication discovery failed:", pubErr instanceof Error ? pubErr.message : pubErr);
     }
   }
 
+  // Ensure SHOP-level metafield definitions exist (runs once per tenant)
+  // Required for Liquid to read $app:autosync.* metafields.
+  //
+  // IMPORTANT: Uses `shop_metafield_defs_created` (migration 031), NOT
+  // `metafield_definitions_created`. The latter tracks PRODUCT-level definitions
+  // created by app/lib/pipeline/metafield-definitions.server.ts — sharing one flag
+  // caused whichever path ran first to skip the other path's definitions.
+  const freshTenantCheck = tenant;
+  if (!freshTenantCheck?.shop_metafield_defs_created) {
+    const shopMetaDefs = [
+      { name: "Plan Tier", key: "plan_tier", type: "single_line_text_field", description: "Current plan tier" },
+      { name: "Allowed Widgets", key: "allowed_widgets", type: "json", description: "Widget permissions by plan" },
+      { name: "Hide Watermark", key: "hide_watermark", type: "boolean", description: "Whether to hide AutoSync watermark" },
+    ];
+    let allCreated = true;
+    for (const def of shopMetaDefs) {
+      try {
+        const defRes = await admin.graphql(`
+          mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
+            metafieldDefinitionCreate(definition: $definition) {
+              createdDefinition { id }
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: {
+            definition: {
+              name: def.name,
+              namespace: "$app:autosync",
+              key: def.key,
+              type: def.type,
+              ownerType: "SHOP",
+              description: def.description,
+              access: { storefront: "PUBLIC_READ" },
+            },
+          },
+        });
+        const defJson = await defRes.json();
+        const ue = defJson?.data?.metafieldDefinitionCreate?.userErrors ?? [];
+        // "Already exists" in Shopify's API takes multiple forms — all are OK for our purposes:
+        //   - "Key is in use for Shop metafields on the '...' namespace." (exact string when re-run)
+        //   - "taken"
+        //   - "already exists"
+        // Treat any of these as success so we can flip the flag and stop re-trying.
+        const isBenign = (msg: string) => {
+          const m = msg.toLowerCase();
+          return m.includes("taken") || m.includes("already") || m.includes("in use") || m.includes("exists");
+        };
+        if (ue.length && !ue.every((e: { message: string }) => isBenign(e.message))) {
+          console.error("[app.tsx] Metafield def error:", def.key, ue);
+          allCreated = false;
+        }
+      } catch (defErr) {
+        console.warn("[app.tsx] Metafield def exception:", def.key, defErr instanceof Error ? defErr.message : defErr);
+        allCreated = false;
+      }
+    }
+    // Flip the flag even if every error was "already exists" — the definitions are confirmed
+    // present, so there's no reason to hammer Shopify with 3 GraphQL calls on every page load.
+    if (allCreated) {
+      const { error: flagErr } = await db
+        .from("tenants")
+        .update({ shop_metafield_defs_created: true })
+        .eq("shop_id", shopId);
+      if (flagErr) {
+        console.warn("[app.tsx] Failed to persist shop_metafield_defs_created flag:", flagErr.message);
+      }
+    }
+  }
+
+  // Sync plan_tier + allowed_widgets metafields to shop
+  // ONLY runs when plan changes (tracked via last_synced_plan on tenant)
+  // This saves 2-3 Shopify GraphQL calls (~500-1500ms) on every page load
+  const effectivePlan = getEffectivePlan(tenant as Tenant | null);
+  const lastSyncedPlan = tenant?.last_synced_plan as string | null;
+  // Re-sync if plan changed (catches lost metafields from DB crashes, theme reinstalls, etc.)
+  if (lastSyncedPlan !== effectivePlan) {
+    try {
+      const effectiveLimits = getPlanLimits(effectivePlan);
+      const shopGidRes = await admin.graphql(`{ shop { id } }`);
+      const shopGidJson = await shopGidRes.json();
+      const shopGid = shopGidJson?.data?.shop?.id;
+      if (shopGid) {
+        const allowedWidgets = JSON.stringify({
+          ymme: effectiveLimits.features.ymmeWidget,
+          badge: effectiveLimits.features.fitmentBadge,
+          compat: effectiveLimits.features.compatibilityTable,
+          garage: effectiveLimits.features.myGarage,
+          wheel: effectiveLimits.features.wheelFinder,
+          plate: effectiveLimits.features.plateLookup,
+          vin: effectiveLimits.features.vinDecode,
+          pages: effectiveLimits.features.vehiclePages,
+        });
+        const canHideWatermark = effectiveLimits.features.widgetCustomisation === "full" || effectiveLimits.features.widgetCustomisation === "full_css";
+        let hideWatermark = false;
+        if (canHideWatermark) {
+          const { data: settings } = await db.from("app_settings").select("hide_watermark").eq("shop_id", shopId).maybeSingle();
+          hideWatermark = settings?.hide_watermark === true;
+        }
+        await admin.graphql(`
+          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              metafields { id }
+              userErrors { field message }
+            }
+          }
+        `, {
+          variables: {
+            metafields: [
+              { namespace: "$app:autosync", key: "plan_tier", type: "single_line_text_field", value: effectivePlan, ownerId: shopGid },
+              { namespace: "$app:autosync", key: "allowed_widgets", type: "json", value: allowedWidgets, ownerId: shopGid },
+              { namespace: "$app:autosync", key: "hide_watermark", type: "boolean", value: String(hideWatermark), ownerId: shopGid },
+            ],
+          },
+        });
+        // Mark plan as synced so we don't repeat this on every page load
+        await db.from("tenants").update({ last_synced_plan: effectivePlan }).eq("shop_id", shopId);
+      }
+    } catch (e) {
+      // Non-critical — widgets fall back to widget-check JS endpoint
+      console.warn("[app.tsx] Plan metafield sync failed:", e);
+    }
+  }
+
   // Prime the plan config cache from DB (warm for all child loaders)
   await loadPlanConfigsFromDB();
 
-  // For admin shops, always use enterprise regardless of current DB state
-  const plan = isAdmin
-    ? ("enterprise" as PlanTier)
-    : ((tenant?.plan ?? "free") as PlanTier);
+  // Use the DB plan as-is — admin panel controls the plan for testing
+  const plan = getEffectivePlan(tenant as Tenant | null);
   const limits = getPlanLimits(plan);
+
+  // Load active announcements for this tenant
+  let announcements: Array<{ id: string; title: string; description: string | null; tone: string; cta_text: string | null; cta_url: string | null; dismissible: boolean }> = [];
+  try {
+    const now = new Date().toISOString();
+    const { data: anns } = await db
+      .from("announcements")
+      .select("id, title, description, tone, cta_text, cta_url, dismissible")
+      .eq("active", true)
+      .lte("starts_at", now)
+      .or(`ends_at.is.null,ends_at.gte.${now}`)
+      .limit(20);
+    if (anns) {
+      // Filter by target_plans and target_shops (NULL means all)
+      announcements = anns.filter((a: Record<string, unknown>) => {
+        const targetPlans = a.target_plans as string[] | null;
+        const targetShops = a.target_shops as string[] | null;
+        if (targetPlans && !targetPlans.includes(plan)) return false;
+        if (targetShops && !targetShops.includes(shopId)) return false;
+        return true;
+      });
+    }
+  } catch (_e) { /* announcements table may not exist yet */ }
 
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
@@ -108,13 +295,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fitmentCount: tenant?.fitment_count ?? 0,
     isFirstTime: !tenant,
     isAdmin,
+    announcements,
   };
 };
 
 export default function App() {
-  const { apiKey, isAdmin } = useLoaderData<typeof loader>();
+  const { apiKey, isAdmin, announcements } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isNavigating = navigation.state === "loading";
+  const [dismissedAnnouncements, setDismissedAnnouncements] = useState<Set<string>>(new Set());
+  // Load dismissed announcements from localStorage on client only (SSR-safe)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("autosync_dismissed_announcements");
+      if (saved) setDismissedAnnouncements(new Set(JSON.parse(saved)));
+    } catch {}
+  }, []);
+  const dismissAnnouncement = (id: string) => {
+    setDismissedAnnouncements(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      try { localStorage.setItem("autosync_dismissed_announcements", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+  const visibleAnnouncements = (announcements ?? []).filter(a => !dismissedAnnouncements.has(a.id));
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -124,6 +329,7 @@ export default function App() {
             <s-link href="/app">Dashboard</s-link>
             <s-link href="/app/products">Products</s-link>
             <s-link href="/app/fitment">Fitment</s-link>
+            <s-link href="/app/wheels">Wheels</s-link>
             <s-link href="/app/providers">Providers</s-link>
             <s-link href="/app/push">Push to Shopify</s-link>
             <s-link href="/app/collections">Collections</s-link>
@@ -158,6 +364,14 @@ export default function App() {
               50.1% { transform: scaleX(1); transform-origin: right; }
               100% { transform: scaleX(0); transform-origin: right; }
             }
+            /* Indeterminate progress bar for jobs with no known total
+               (bulk tag/metafield cleanup). Slides a short segment back and
+               forth so the Active Operations card doesn't look frozen. */
+            @keyframes activeJobIndeterminate {
+              0%   { transform: translateX(-100%); }
+              50%  { transform: translateX(250%); }
+              100% { transform: translateX(-100%); }
+            }
             /* ── Global App Layout ── */
             .as-app-container {
               max-width: 1200px !important;
@@ -172,8 +386,54 @@ export default function App() {
               max-width: 1200px !important;
               box-sizing: border-box !important;
             }
+            /* ── Unified filter bar ──
+               Forces every Polaris Select, TextField, and Button inside a
+               .as-filter-bar to share the same 36px height so the search
+               button lines up with its field AND with adjacent dropdowns.
+               Also restores a visible border on the native <select> picker
+               inside the Polaris trigger (Polaris only styles the trigger;
+               on some Chromium builds the focus ring only renders on one
+               side, which is what users were seeing). */
+            .as-filter-bar .Polaris-Select__Backdrop,
+            .as-filter-bar .Polaris-TextField__Backdrop {
+              border-radius: var(--p-border-radius-200);
+            }
+            .as-filter-bar select,
+            .as-filter-bar input[type="text"],
+            .as-filter-bar input[type="search"] {
+              min-height: 36px !important;
+            }
+            /* When the trigger gets focus, give the full dropdown backdrop a
+               consistent border so it never renders as a bare list. */
+            .as-filter-bar .Polaris-Select__Content:focus-within + .Polaris-Select__Backdrop,
+            .as-filter-bar select:focus {
+              outline: 2px solid var(--p-color-border-focus);
+              outline-offset: 1px;
+            }
+            /* Search button in a filter bar — match sibling TextField height */
+            .as-filter-bar .Polaris-Button {
+              min-height: 36px;
+            }
+            /* Opened <select> option list — add a visible border so it never
+               looks floating/unstyled. Only applies inside .as-filter-bar. */
+            .as-filter-bar select[size],
+            .as-filter-bar select:focus-visible {
+              box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            }
           `}</style>
           <div className="as-app-container">
+            {/* Global announcements from admin — uses Polaris Banner */}
+            {visibleAnnouncements.map(a => (
+              <Banner
+                key={a.id}
+                title={a.title}
+                tone={a.tone === "critical" ? "critical" : a.tone === "warning" ? "warning" : a.tone === "promotion" ? "success" : "info"}
+                onDismiss={a.dismissible ? () => dismissAnnouncement(a.id) : undefined}
+                action={a.cta_text && a.cta_url ? { content: a.cta_text, url: a.cta_url } : undefined}
+              >
+                {a.description && <p>{a.description}</p>}
+              </Banner>
+            ))}
             <Outlet />
             <PageFooter />
           </div>

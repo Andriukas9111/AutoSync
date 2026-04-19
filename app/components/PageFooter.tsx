@@ -1,4 +1,4 @@
-import { InlineStack, Text } from "@shopify/polaris";
+import { InlineStack, Text, Link } from "@shopify/polaris";
 import { AutoSyncLogo } from "./AutoSyncLogo";
 
 /**
@@ -19,12 +19,16 @@ export function PageFooter() {
           </Text>
         </InlineStack>
         <InlineStack gap="300">
-          <Text variant="bodySm" as="p" tone="subdued">
-            Privacy Policy
-          </Text>
-          <Text variant="bodySm" as="p" tone="subdued">
-            Terms of Service
-          </Text>
+          <Link url="/legal/privacy" target="_blank" monochrome removeUnderline>
+            <Text variant="bodySm" as="span" tone="subdued">
+              Privacy Policy
+            </Text>
+          </Link>
+          <Link url="/legal/terms" target="_blank" monochrome removeUnderline>
+            <Text variant="bodySm" as="span" tone="subdued">
+              Terms of Service
+            </Text>
+          </Link>
           <Text variant="bodySm" as="p" tone="subdued">
             v3.0
           </Text>

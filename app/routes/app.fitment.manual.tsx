@@ -15,6 +15,7 @@ import {
 
 import { authenticate } from "../shopify.server";
 import db from "../lib/db.server";
+import { RouteError } from "../components/RouteError";
 
 // ── Loader ───────────────────────────────────────────────────────────────────
 
@@ -30,16 +31,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return redirect(`/app/products/${specificProductId}?from=fitment`);
   }
 
-  // Find the next product needing review (unmapped OR flagged) + stats
-  const [totalResult, needsReviewResult, nextUnmappedResult, nextFlaggedResult] = await Promise.all([
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
-    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).in("fitment_status", ["unmapped", "flagged"]),
-    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
-    db.from("products").select("id").eq("shop_id", shopId).eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+  // Find the next product needing mapping (unmapped, flagged, OR no_match) + stats
+  // ALL non-mapped products should be accessible via manual mapping:
+  //   - unmapped: never processed by extraction
+  //   - flagged: extraction found partial matches, needs human review
+  //   - no_match: extraction found no vehicle data, but human might know the vehicle
+  // Manual mapping is for VEHICLE PARTS only — wheels use the Wheel Finder system
+  const [totalResult, notMappedResult, nextFlaggedResult, nextNoMatchResult, nextUnmappedResult] = await Promise.all([
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels"),
+    db.from("products").select("id", { count: "exact", head: true }).eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").in("fitment_status", ["unmapped", "flagged", "no_match"]),
+    // Priority order: flagged first (has suggestions), then no_match, then unmapped
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "flagged").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "no_match").order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    db.from("products").select("id").eq("shop_id", shopId).neq("status", "staged").neq("product_category", "wheels").eq("fitment_status", "unmapped").order("created_at", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
-  // Prioritize unmapped, then flagged
-  const nextProduct = nextUnmappedResult.data ?? nextFlaggedResult.data;
+  // Prioritize flagged (has suggestions to review), then no_match, then unmapped
+  const nextProduct = nextFlaggedResult.data ?? nextNoMatchResult.data ?? nextUnmappedResult.data;
 
   // If there's a product needing review, redirect to it in queue mode
   if (nextProduct) {
@@ -48,10 +56,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // All mapped — show completion state
   const total = totalResult.count ?? 0;
-  const needsReview = needsReviewResult.count ?? 0;
+  const notMapped = notMappedResult.count ?? 0;
   return {
     totalProducts: total,
-    mappedCount: total - needsReview,
+    mappedCount: total - notMapped,
   };
 };
 
@@ -99,4 +107,9 @@ export default function FitmentManualRedirector() {
       </Layout>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Manual Mapping" />;
 }

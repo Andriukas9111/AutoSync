@@ -90,6 +90,8 @@ export async function ensureMetafieldDefinitions(
             type: "list.single_line_text_field",
             ownerType: "PRODUCT",
             description: def.description,
+            pin: true,
+            useAsCollectionCondition: true,
             access: {
               storefront: "PUBLIC_READ",
             },
@@ -129,6 +131,7 @@ export async function ensureMetafieldDefinitions(
           type: "json",
           ownerType: "PRODUCT",
           description: "Full vehicle fitment compatibility data",
+          pin: true,
           access: {
             storefront: "PUBLIC_READ",
           },
@@ -141,10 +144,14 @@ export async function ensureMetafieldDefinitions(
 
   // Mark as created in tenant record
   if (result.errors.length === 0) {
-    await db
+    const { error: flagErr } = await db
       .from("tenants")
       .update({ metafield_definitions_created: true })
       .eq("shop_id", shopId);
+    if (flagErr) {
+      // Don't fail the push — but log so we know the flag isn't sticking.
+      console.error(`[ensureMetafieldDefinitions] Failed to persist metafield_definitions_created for ${shopId}: ${flagErr.message}`);
+    }
   }
 
   return result;

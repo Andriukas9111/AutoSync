@@ -28,6 +28,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw err;
   }
 
+  // Duplicate job prevention
+  const { data: existingBulkJob } = await db
+    .from("sync_jobs")
+    .select("id")
+    .eq("shop_id", shopId)
+    .eq("type", "bulk_push")
+    .in("status", ["running", "pending"])
+    .limit(1)
+    .maybeSingle();
+
+  if (existingBulkJob) {
+    return data({ error: "A bulk push operation is already in progress" }, { status: 409 });
+  }
+
   // Ensure metafield definitions exist
   await ensureMetafieldDefinitions(shopId, admin);
 
@@ -56,31 +70,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       metadata: JSON.stringify({ method: "bulk_operations" }),
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   try {
-    // Run bulk push (generates JSONL, uploads, starts operations)
+    // Run bulk push (generates JSONL, uploads, starts operations).
+    // Previously passed pushTags + pushMetafields, but BulkPushOptions only
+    // exposes shopId + accessToken — the extra options were silently dropped
+    // and caused a TS compile warning. Settings are read from app_settings
+    // inside the pipeline itself, so removing them changes nothing at runtime.
     const result = await runBulkPush({
       shopId,
       accessToken: tenant.shopify_access_token,
-      pushTags: true,
-      pushMetafields: true,
     });
 
-    if (result.error) {
+    if (result.errors && result.errors.length > 0) {
+      const errorMsg = result.errors.join(", ");
       await db.from("sync_jobs").update({
         status: "failed",
-        error: result.error,
+        error: errorMsg,
+        completed_at: new Date().toISOString(),
       }).eq("id", job?.id);
-      return data({ error: result.error }, { status: 500 });
+      return data({ error: errorMsg }, { status: 500 });
     }
 
     // Update job with bulk operation IDs for polling
     await db.from("sync_jobs").update({
-      total_items: result.totalProducts,
+      total_items: result.productCount,
       metadata: JSON.stringify({
         method: "bulk_operations",
-        metafieldsOperationId: result.metafieldsOperationId,
+        metafieldOperationId: result.metafieldOperationId,
         tagsOperationId: result.tagsOperationId,
       }),
     }).eq("id", job?.id);
@@ -88,8 +106,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data({
       success: true,
       jobId: job?.id,
-      totalProducts: result.totalProducts,
-      metafieldsOperationId: result.metafieldsOperationId,
+      productCount: result.productCount,
+      metafieldOperationId: result.metafieldOperationId,
       tagsOperationId: result.tagsOperationId,
     });
   } catch (err) {

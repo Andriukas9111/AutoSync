@@ -5,9 +5,9 @@
  * and inventory gap analysis. Gated by dashboardAnalytics plan feature.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useNavigation } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import {
   Page,
   Layout,
@@ -20,6 +20,9 @@ import {
   Banner,
   ProgressBar,
   Button,
+  Collapsible,
+  Box,
+  Icon,
 } from "@shopify/polaris";
 import {
   GaugeIcon,
@@ -33,17 +36,22 @@ import {
   CartIcon,
   ViewIcon,
   OrderIcon,
+  ConnectIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
 } from "@shopify/polaris-icons";
 import { DataTable } from "../components/DataTable";
 
 import { authenticate } from "../shopify.server";
-import db from "../lib/db.server";
-import { getTenant, getPlanLimits } from "../lib/billing.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getTenant, getPlanLimits, assertFeature, getEffectivePlan } from "../lib/billing.server";
 import { IconBadge } from "../components/IconBadge";
 import { HowItWorks } from "../components/HowItWorks";
-import { SkeletonCard } from "../components/SkeletonCard";
-import { statGridStyle, statMiniStyle } from "../lib/design";
-import type { PlanTier } from "../lib/types";
+import { PlanGate } from "../components/PlanGate";
+import { statGridStyle, statMiniStyle, formatJobType, autoFitGridStyle, listRowStyle } from "../lib/design";
+import type { PlanTier, PlanLimits } from "../lib/types";
+import { useAppData } from "../lib/use-app-data";
+import { RouteError } from "../components/RouteError";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +132,7 @@ interface ConversionByVehicle {
 
 interface AnalyticsData {
   plan: PlanTier;
+  limits: PlanLimits;
   analyticsLevel: string;
   fitmentCoverage: FitmentCoverage;
   statusBreakdown: StatusBreakdown[];
@@ -141,6 +150,17 @@ interface AnalyticsData {
   recentPlateLookups: Array<{ plate: string; make: string | null; model: string | null; year: number | null; fuel_type: string | null; colour: string | null; created_at: string }>;
   totalPlateLookups: number;
   topPlateMakes: Array<{ make: string; count: number }>;
+  searchCount: number;
+  demandGaps: Array<{ make: string; model: string; searches: number }>;
+  // Shopify platform limits tracker — shows how close the store is to
+  // caps like 5,000 collections, 250 tags/product, etc.
+  shopifyLimits: {
+    collections: { used: number; limit: number; label: string; description: string };
+    tagsPerProduct: { used: number; limit: number; label: string; description: string };
+    products: { used: number; limit: number; label: string; description: string };
+    vehiclePages: { used: number; limit: number; label: string; description: string };
+    metaobjectDefs: { used: number; limit: number; label: string; description: string };
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -152,14 +172,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const shopId = session.shop;
 
   const tenant = await getTenant(shopId);
-  const plan = (tenant?.plan ?? "free") as PlanTier;
+  const plan = getEffectivePlan(tenant) as PlanTier;
   const limits = getPlanLimits(plan);
   const analyticsLevel = limits.features.dashboardAnalytics;
 
-  // Gate: "none" means no analytics at all
-  if (analyticsLevel === "none") {
+  // Plan gate: dashboardAnalytics feature required
+  try {
+    await assertFeature(shopId, "dashboardAnalytics");
+  } catch {
     return {
+      gated: true,
       plan,
+      limits,
       analyticsLevel,
       fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
       statusBreakdown: [],
@@ -177,6 +201,49 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       recentPlateLookups: [],
       totalPlateLookups: 0,
       topPlateMakes: [],
+      searchCount: 0,
+      demandGaps: [],
+      shopifyLimits: {
+        collections: { used: 0, limit: 5000, label: "Smart Collections", description: "" },
+        tagsPerProduct: { used: 0, limit: 250, label: "Tags per Product", description: "" },
+        products: { used: 0, limit: 2000000, label: "Products", description: "" },
+        vehiclePages: { used: 0, limit: 10000000, label: "Vehicle Spec Pages", description: "" },
+        metaobjectDefs: { used: 0, limit: 1000, label: "Metaobject Definitions", description: "" },
+      },
+    } satisfies AnalyticsData & { gated: boolean };
+  }
+
+  // Gate: "none" means no analytics at all
+  if (analyticsLevel === "none") {
+    return {
+      plan,
+      limits,
+      analyticsLevel,
+      fitmentCoverage: { total: 0, withFitments: 0, withoutFitments: 0, coveragePercent: 0 },
+      statusBreakdown: [],
+      popularMakes: [],
+      popularModels: [],
+      providerMetrics: [],
+      syncJobSummary: [],
+      inventoryGaps: { makesWithoutProducts: 0, productsPerMakeAvg: 0 },
+      totalMakes: 0,
+      totalModels: 0,
+      popularSearches: [],
+      conversionFunnel: { searches: 0, productViews: 0, addToCarts: 0, purchases: 0, searchToViewRate: 0, viewToCartRate: 0, cartToPurchaseRate: 0, overallRate: 0 },
+      conversionBySource: [],
+      conversionByVehicle: [],
+      recentPlateLookups: [],
+      totalPlateLookups: 0,
+      topPlateMakes: [],
+      searchCount: 0,
+      demandGaps: [],
+      shopifyLimits: {
+        collections: { used: 0, limit: 5000, label: "Smart Collections", description: "" },
+        tagsPerProduct: { used: 0, limit: 250, label: "Tags per Product", description: "" },
+        products: { used: 0, limit: 2000000, label: "Products", description: "" },
+        vehiclePages: { used: 0, limit: 10000000, label: "Vehicle Spec Pages", description: "" },
+        metaobjectDefs: { used: 0, limit: 1000, label: "Metaobject Definitions", description: "" },
+      },
     } satisfies AnalyticsData;
   }
 
@@ -194,32 +261,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     searchEventsRes,
     conversionEventsRes,
   ] = await Promise.all([
-    // Total products for this tenant
-    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Total vehicle products for this tenant (exclude wheels AND staged)
+    db.from("products").select("*", { count: "exact", head: true }).eq("shop_id", shopId).neq("product_category", "wheels").neq("status", "staged"),
 
-    // Products that have at least one fitment
-    db.from("vehicle_fitments")
-      .select("product_id")
-      .eq("shop_id", shopId),
+    // Products that have at least one fitment — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("product_id")
+      .eq("shop_id", shopId).limit(50000),
 
-    // Product fitment status breakdown — server-side counts (no row limit)
+    // Product fitment status breakdown — vehicle parts only, exclude staged
     Promise.all(
-      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "partial"].map((s) =>
+      ["unmapped", "auto_mapped", "smart_mapped", "manual_mapped", "flagged", "no_match", "partial"].map((s) =>
         db.from("products").select("id", { count: "exact", head: true })
           .eq("shop_id", shopId).eq("fitment_status", s)
+          .neq("product_category", "wheels").neq("status", "staged")
           .then((r) => ({ status: s, count: r.count ?? 0 })),
       ),
     ),
 
-    // Fitments grouped by make (top 15)
-    db.from("vehicle_fitments")
-      .select("make, product_id")
-      .eq("shop_id", shopId),
+    // Fitments grouped by make (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
-    // Fitments grouped by model (top 15)
-    db.from("vehicle_fitments")
-      .select("make, model, product_id")
-      .eq("shop_id", shopId),
+    // Fitments grouped by model (top 15) — cap at 50K to prevent OOM
+    db.from("vehicle_fitments").select("make, model, product_id")
+      .eq("shop_id", shopId).limit(50000),
 
     // Provider metrics
     db.from("providers")
@@ -230,25 +295,168 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Sync jobs summary
     db.from("sync_jobs")
       .select("type, status")
-      .eq("shop_id", shopId),
+      .eq("shop_id", shopId)
+      .limit(1000),
 
-    // Global YMME counts
-    db.from("ymme_makes").select("id, name", { count: "exact" }),
+    // Global YMME counts (head-only for count)
+    db.from("ymme_makes").select("id, name", { count: "exact" }).limit(1000),
     db.from("ymme_models").select("*", { count: "exact", head: true }),
 
-    // Search events (last 30 days — silently returns empty if table doesn't exist)
+    // Search events (last 30 days) — include result_count for demand gap analysis
     db.from("search_events")
-      .select("search_make, search_model")
+      .select("search_make, search_model, result_count")
       .eq("shop_id", shopId)
       .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      .not("search_make", "is", null),
+      .not("search_make", "is", null)
+      .limit(5000),
 
     // Conversion events (last 30 days)
     db.from("conversion_events")
       .select("event_type, source, vehicle_make, vehicle_model")
       .eq("shop_id", shopId)
-      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      .gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(5000),
   ]);
+
+  // ── Shopify Platform Limits tracker ─────────────────────────
+  // Show merchants how close they are to Shopify-imposed caps so they can
+  // upgrade the store plan (Plus/Enterprise raise these) or prune data
+  // before creates silently start failing. Collections is the most common
+  // wall because we create make/make_model/year combinations.
+  const [
+    collectionsCountRes,
+    productsCountRes,
+    vehiclePagesCountRes,
+    metaobjectDefsCountRes,
+  ] = await Promise.all([
+    db.from("collection_mappings").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).not("shopify_collection_id", "is", null),
+    db.from("products").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).neq("status", "staged"),
+    db.from("vehicle_page_sync").select("id", { count: "exact", head: true })
+      .eq("shop_id", shopId).eq("sync_status", "synced"),
+    // Metaobject definitions are 1 for vehicle-spec (shared by all vehicle_pages)
+    // so we count them as a constant.
+    Promise.resolve({ count: 1 }),
+  ]);
+
+  // Product with MOST PROJECTED TAGS — ranks tag usage against Shopify's 250 cap.
+  //
+  // AutoSync pushes auto-generated tags when products sync to Shopify:
+  //   _autosync_{Make}, _autosync_{Make_Model}, _autosync_{Make_Model_Year} for each year in range.
+  // PLUS any base tags the merchant/provider already set on the product.
+  //
+  // A product with many fitments (e.g., a universal VAG engine part that fits 6 makes, 40 models,
+  // across 20 years) can silently exceed Shopify's 250 tags/product cap — Shopify will reject the
+  // push. Merchants need to know WHICH products are hitting the cap so they can prune fitments
+  // or split the product. That's why we show the peak product with its projected tag total.
+  //
+  // We compute this via a single JOIN query (base tags + distinct make/model tags + year range
+  // totals) instead of fetching rows and iterating in JS — the JS approach capped at limit(50)
+  // and missed the real peak products which have the most fitments.
+  const { data: topTagProducts } = await db.rpc("get_top_tag_products", {
+    p_shop_id: shopId,
+    p_limit: 5,
+  }).select();
+
+  // Fallback: if RPC doesn't exist yet, compute manually via SQL-ish approach on client.
+  // We ask Supabase for top-10 products by fitment count, then compute projected tags.
+  let maxTagsProduct: { title: string; tagCount: number; handle: string } | null = null;
+  if (topTagProducts && Array.isArray(topTagProducts) && topTagProducts.length > 0) {
+    const top = topTagProducts[0] as { title: string; handle: string; total_tags: number };
+    maxTagsProduct = { title: top.title, tagCount: top.total_tags, handle: top.handle };
+  } else {
+    // RPC not deployed — fall back to a direct SQL-ish computation.
+    // Fetch top 200 products with most fitments (those are most likely candidates for tag peak)
+    // then compute projected tag count per product.
+    const { data: fitmentAgg } = await db
+      .from("vehicle_fitments")
+      .select("product_id, make, model, year_from, year_to")
+      .eq("shop_id", shopId)
+      .limit(50000);
+
+    // Build per-product stats in memory: distinct makes, distinct (make,model), year-range total
+    const perProduct: Record<string, { makes: Set<string>; models: Set<string>; years: number }> = {};
+    for (const f of fitmentAgg ?? []) {
+      const rec = f as { product_id: string; make: string | null; model: string | null; year_from: number | null; year_to: number | null };
+      if (!perProduct[rec.product_id]) {
+        perProduct[rec.product_id] = { makes: new Set(), models: new Set(), years: 0 };
+      }
+      if (rec.make) perProduct[rec.product_id].makes.add(rec.make);
+      if (rec.make && rec.model) perProduct[rec.product_id].models.add(`${rec.make}|${rec.model}`);
+      if (rec.year_from && rec.year_to) perProduct[rec.product_id].years += (rec.year_to - rec.year_from + 1);
+      else if (rec.year_from) perProduct[rec.product_id].years += 1;
+    }
+
+    // Find the top-5 product_ids by projected tag count
+    const scored = Object.entries(perProduct)
+      .map(([pid, s]) => ({ pid, tagCount: s.makes.size + s.models.size + s.years }))
+      .sort((a, b) => b.tagCount - a.tagCount)
+      .slice(0, 5);
+
+    if (scored.length > 0) {
+      // Fetch titles/handles for those IDs — plus base tag count
+      const topIds = scored.map((s) => s.pid);
+      const { data: productRows } = await db
+        .from("products")
+        .select("id, title, handle, tags")
+        .in("id", topIds);
+
+      // Merge: base_tags + projected from fitments → find the true peak.
+      const enriched = scored.map((s) => {
+        const pr = (productRows ?? []).find((p) => String(p.id) === s.pid) as
+          | { title: string; handle: string; tags: unknown }
+          | undefined;
+        const baseTags = Array.isArray(pr?.tags) ? pr!.tags.length : 0;
+        return {
+          title: pr?.title ?? "Unknown",
+          handle: pr?.handle ?? "",
+          tagCount: s.tagCount + baseTags,
+        };
+      }).sort((a, b) => b.tagCount - a.tagCount);
+
+      maxTagsProduct = enriched[0] ?? null;
+    }
+  }
+
+  // Shopify limits. These are public Shopify API limits as of 2026.
+  // Plus/Enterprise stores get higher caps; we assume standard cap so the
+  // warning is pessimistic and safe. If merchant is on Plus, they'll see
+  // "cap reached" later than they actually would.
+  const shopifyLimits = {
+    collections: {
+      used: collectionsCountRes.count ?? 0,
+      limit: 5000,          // Standard store max
+      label: "Smart Collections",
+      description: "Shopify caps stores at 5,000 collections. Plus/Enterprise raises this to 50,000.",
+    },
+    tagsPerProduct: {
+      used: maxTagsProduct?.tagCount ?? 0,
+      limit: 250,
+      label: maxTagsProduct
+        ? `Projected Tags on "${maxTagsProduct.title.length > 48 ? maxTagsProduct.title.slice(0, 48) + "…" : maxTagsProduct.title}"`
+        : "Projected Tags per Product",
+      description: "Shopify caps each product at 250 tags. AutoSync pushes _autosync_{Make}, _autosync_{Make_Model}, _autosync_{Make_Model_Year} tags based on fitments — plus your base tags. Products with many fitments (universal parts spanning multiple makes/years) can silently exceed 250 and fail to push. The product shown has the highest projected tag count in your catalog.",
+    },
+    products: {
+      used: productsCountRes.count ?? 0,
+      limit: 2_000_000,     // Standard Shopify cap; Plus is unlimited
+      label: "Products",
+      description: "Standard Shopify plans cap at 2M products per store.",
+    },
+    vehiclePages: {
+      used: vehiclePagesCountRes.count ?? 0,
+      limit: 10_000_000,    // Metaobject entries per type — very high
+      label: "Vehicle Spec Pages",
+      description: "Metaobjects per type: 10M. Essentially unlimited for automotive use.",
+    },
+    metaobjectDefs: {
+      used: (metaobjectDefsCountRes.count ?? 0),
+      limit: 1000,
+      label: "Metaobject Definitions",
+      description: "Max 1,000 metaobject definitions per store.",
+    },
+  };
 
   // ── Plate lookup analytics ──────────────────────────────────
   const [plateLookupRes, plateLookupCountRes] = await Promise.all([
@@ -322,11 +530,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .slice(0, 15);
 
   // ── Popular models (by fitment count) ──────────────────────
+  //
+  // IMPORTANT: We return ALL models across ALL makes in `popularMakes` (not a global top-15).
+  // The drilldown in Fitment Coverage by Make filters popularModels by make on the client,
+  // so if we only returned the top-15 global models, makes like Renault (whose top model
+  // Megane has 72 fitments, losing to the Big 3 German makes) would show "0 models" in the
+  // drilldown even though the make has dozens of models with fitments. That was the bug.
+  //
+  // To keep payload small we:
+  //   - Include all models for each make in the top-15 makes list (popularMakes)
+  //   - Skip all other makes
+  // For a typical store this is ~15 makes × ~30 models = ~450 rows. Fits well in payload.
+  const topMakeSet = new Set<string>();
+  // We need to know which makes are in popularMakes; compute that first.
+  const interimPopularMakes = Object.entries(makeFitmentCounts)
+    .map(([make, data]) => ({ make, fitmentCount: data.fitments, productCount: data.products.size }))
+    .sort((a, b) => b.fitmentCount - a.fitmentCount)
+    .slice(0, 15);
+  for (const m of interimPopularMakes) topMakeSet.add(m.make);
+
   const modelFitmentCounts: Record<string, number> = {};
   const modelMakes: Record<string, string> = {};
   for (const f of fitmentsByModelRes.data ?? []) {
     const rec = f as { make: string; model: string };
-    if (!rec.model) continue;
+    if (!rec.model || !rec.make) continue;
+    // Only track models for the top 15 makes — keeps payload small while giving the drilldown full detail.
+    if (!topMakeSet.has(rec.make)) continue;
     const key = `${rec.make}|||${rec.model}`;
     modelFitmentCounts[key] = (modelFitmentCounts[key] ?? 0) + 1;
     modelMakes[key] = rec.make;
@@ -336,8 +565,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const [make, model] = key.split("|||");
       return { make, model, fitmentCount };
     })
-    .sort((a, b) => b.fitmentCount - a.fitmentCount)
-    .slice(0, 15);
+    .sort((a, b) => b.fitmentCount - a.fitmentCount);
 
   // ── Provider metrics ───────────────────────────────────────
   const providerMetrics: ProviderMetric[] = (providersRes.data ?? []).map(
@@ -388,9 +616,25 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         )
       : 0;
 
+  // ── Demand gaps — vehicles searched with 0 results ──────
+  const demandGapCounts: Record<string, { searches: number; resultsFound: number }> = {};
+  for (const s of (searchEventsRes.data ?? []) as Array<{ search_make: string; search_model: string; result_count: number | null }>) {
+    const key = `${s.search_make}|||${s.search_model || "(any model)"}`;
+    if (!demandGapCounts[key]) demandGapCounts[key] = { searches: 0, resultsFound: 0 };
+    demandGapCounts[key].searches++;
+    demandGapCounts[key].resultsFound = Math.max(demandGapCounts[key].resultsFound, s.result_count ?? 0);
+  }
+  const demandGaps = Object.entries(demandGapCounts)
+    .filter(([, data]) => data.resultsFound === 0)
+    .map(([key, data]) => {
+      const [make, model] = key.split("|||");
+      return { make, model, searches: data.searches };
+    })
+    .sort((a, b) => b.searches - a.searches);
+
   // ── Popular storefront searches (last 30 days) ──────────
   const searchCounts: Record<string, number> = {};
-  for (const s of (searchEventsRes.data ?? []) as Array<{ search_make: string; search_model: string }>) {
+  for (const s of (searchEventsRes.data ?? []) as Array<{ search_make: string; search_model: string; result_count: number | null }>) {
     const key = `${s.search_make}|||${s.search_model || "(any model)"}`;
     searchCounts[key] = (searchCounts[key] ?? 0) + 1;
   }
@@ -466,6 +710,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
@@ -483,6 +728,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     recentPlateLookups,
     totalPlateLookups,
     topPlateMakes,
+    searchCount: (searchEventsRes.data ?? []).length,
+    demandGaps,
+    shopifyLimits,
   } satisfies AnalyticsData;
 };
 
@@ -501,124 +749,64 @@ const STATUS_TONE: Record<string, "success" | "warning" | "critical" | "info" | 
 };
 
 export default function AnalyticsPage() {
+  const loaderData = useLoaderData<typeof loader>();
   const {
     plan,
+    limits,
     analyticsLevel,
     fitmentCoverage,
     statusBreakdown,
     popularMakes,
     popularModels,
-    providerMetrics,
     syncJobSummary,
-    inventoryGaps,
-    totalMakes,
-    totalModels,
     popularSearches,
     conversionFunnel,
-    conversionBySource,
-    conversionByVehicle,
+    searchCount,
+    demandGaps,
     recentPlateLookups,
     totalPlateLookups,
-    topPlateMakes,
-  } = useLoaderData<typeof loader>();
+    conversionBySource,
+    conversionByVehicle,
+    providerMetrics,
+    shopifyLimits,
+  } = loaderData;
+  const gated = "gated" in loaderData && (loaderData as Record<string, unknown>).gated === true;
 
-  const navigation = useNavigation();
-  const pageLoading = navigation.state === "loading";
-  const [showExport, setShowExport] = useState(false);
+  const navigate = useNavigate();
 
-  // Live stats polling
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [liveCoverage, setLiveCoverage] = useState<{ total: number; mapped: number; fitments: number } | null>(null);
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const res = await fetch("/app/api/job-status?type=all");
-        if (res.ok) {
-          const r = await res.json();
-          if (r.stats) {
-            setLiveCoverage({
-              total: r.stats.total,
-              mapped: r.stats.autoMapped + r.stats.smartMapped + r.stats.manualMapped,
-              fitments: r.stats.fitments,
-            });
-          }
-        }
-      } catch {}
-    };
-    pollRef.current = setInterval(poll, 5000);
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  // Live stats polling via unified hook
+  const { stats: liveStats } = useAppData({
+    total: fitmentCoverage.total,
+    fitments: fitmentCoverage.withFitments,
+    vehicleCoverage: Math.round(fitmentCoverage.withFitments * 8),
+  });
+
+  // Expandable make drilldown
+  const [expandedMake, setExpandedMake] = useState<string | null>(null);
 
   // ── Plan gate ──────────────────────────────────────────────
-  if (analyticsLevel === "none") {
+  if (gated || analyticsLevel === "none") {
     return (
       <Page title="Analytics" fullWidth>
-        <Banner title="Analytics requires the Starter plan or higher" tone="warning">
-          <p>
-            Upgrade your plan to access fitment coverage reports, popular vehicle
-            searches, supplier performance metrics, and inventory gap analysis.
-          </p>
-        </Banner>
+        <PlanGate feature="dashboardAnalytics" currentPlan={plan} limits={limits as PlanLimits}>
+          <></>
+        </PlanGate>
       </Page>
     );
   }
 
   const isBasic = analyticsLevel === "basic";
-  const canExport = analyticsLevel === "full_export";
 
-  // ── Export handler ─────────────────────────────────────────
-  const handleExport = (format: "csv" | "json") => {
-    const exportData = {
-      fitmentCoverage,
-      statusBreakdown,
-      popularMakes,
-      popularModels,
-      providerMetrics,
-      syncJobSummary,
-      inventoryGaps,
-      exportedAt: new Date().toISOString(),
-    };
+  // Models for drilldown
+  const modelsForMake = (make: string) =>
+    popularModels.filter((m) => m.make === make);
 
-    if (format === "json") {
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `autosync-analytics-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } else {
-      // CSV: export popular makes as a table
-      const csvRows = [
-        ["Make", "Fitments", "Products"],
-        ...popularMakes.map((m) => [m.make, String(m.fitmentCount), String(m.productCount)]),
-      ];
-      const csv = csvRows.map((r) => r.join(",")).join("\n");
-      const blob = new Blob([csv], { type: "text/csv" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `autosync-popular-makes-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
+  // Export handler removed — add back when proper CSV report is implemented
   return (
     <Page
       fullWidth
       title="Analytics"
-      subtitle="Fitment coverage, popular vehicles, and supplier performance"
-      primaryAction={
-        canExport
-          ? {
-              content: "Export Data",
-              onAction: () => setShowExport(!showExport),
-            }
-          : undefined
-      }
+      subtitle="Fitment coverage, demand insights, and conversion tracking"
     >
       <BlockStack gap="600">
         {/* How It Works */}
@@ -630,53 +818,119 @@ export default function AnalyticsPage() {
           ]}
         />
 
-        {/* Export buttons */}
-        {showExport && canExport && (
-          <Banner title="Export Analytics" tone="info" onDismiss={() => setShowExport(false)}>
-            <InlineStack gap="300">
-              <Button onClick={() => handleExport("json")}>Export JSON</Button>
-              <Button onClick={() => handleExport("csv")}>Export CSV (Makes)</Button>
-            </InlineStack>
-          </Banner>
-        )}
-
-        {/* ── Fitment Coverage ──────────────────────────────── */}
+        {/* ── Key Metrics — unified stat bar ──────────────── */}
         <Layout>
           <Layout.Section>
-            {pageLoading ? <SkeletonCard variant="stat" count={4} cols={4} /> : (
+            <Card padding="0">
+              <div style={{ ...autoFitGridStyle("100px", "0px"), borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                {[
+                  { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Products" },
+                  { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "Mapped" },
+                  { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
+                  { icon: SearchIcon, count: searchCount.toLocaleString(), label: "Searches (30d)" },
+                  { icon: ViewIcon, count: conversionFunnel.productViews.toLocaleString(), label: "Views (30d)" },
+                ].map((item, i) => (
+                  <div key={item.label} style={{ padding: "var(--p-space-400)", borderRight: i < 4 ? "1px solid var(--p-color-border-secondary)" : "none", textAlign: "center" }}>
+                    <BlockStack gap="200" inlineAlign="center">
+                      <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="p" variant="headingLg" fontWeight="bold">{item.count}</Text>
+                      <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
+                    </BlockStack>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Layout.Section>
+
+          {/* ── Shopify Platform Limits ────────────────────── */}
+          {/* Shows how close this store is to Shopify caps (5K collections, */}
+          {/* 250 tags/product, etc.) so merchants can upgrade store plan or */}
+          {/* prune data before Shopify silently starts rejecting creates. */}
+          <Layout.Section>
             <Card>
               <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={GaugeIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
-                  <Text as="h2" variant="headingMd">Fitment Coverage</Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={GaugeIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Shopify Platform Limits</Text>
+                  </InlineStack>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    Live usage vs Shopify-imposed caps
+                  </Text>
                 </InlineStack>
-                <div style={statGridStyle(4)}>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Shopify enforces hard caps on collections, tags, and metafields per store. When you hit them, new creates silently fail. Monitor these numbers so you can upgrade to Shopify Plus or prune unused data before they block AutoSync.
+                </Text>
+                <BlockStack gap="300">
                   {[
-                    { icon: ProductIcon, count: fitmentCoverage.total.toLocaleString(), label: "Total Products" },
-                    { icon: GaugeIcon, count: fitmentCoverage.withFitments.toLocaleString(), label: "With Fitments" },
-                    { icon: AlertTriangleIcon, count: fitmentCoverage.withoutFitments.toLocaleString(), label: "Without Fitments" },
-                    { icon: ChartVerticalIcon, count: `${fitmentCoverage.coveragePercent}%`, label: "Coverage" },
-                  ].map((item) => (
-                    <div key={item.label} style={statMiniStyle}>
-                      <BlockStack gap="200" inlineAlign="center">
-                        <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
-                        <Text as="p" variant="headingLg" fontWeight="bold">
-                          {item.count}
-                        </Text>
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          {item.label}
-                        </Text>
-                      </BlockStack>
-                    </div>
-                  ))}
-                </div>
-                {fitmentCoverage.coveragePercent > 0 && (
-                  <ProgressBar progress={Math.min(fitmentCoverage.coveragePercent, 100)} size="small" />
-                )}
+                    shopifyLimits.collections,
+                    shopifyLimits.tagsPerProduct,
+                    shopifyLimits.products,
+                    shopifyLimits.vehiclePages,
+                    shopifyLimits.metaobjectDefs,
+                  ].map((limit) => {
+                    const pct = Math.min(100, Math.round((limit.used / limit.limit) * 100));
+                    const tone: "success" | "warning" | "critical" =
+                      pct >= 90 ? "critical" : pct >= 75 ? "warning" : "success";
+                    return (
+                      <Card key={limit.label} padding="400" background="bg-surface-secondary">
+                        <BlockStack gap="200">
+                          <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                            <InlineStack gap="200" blockAlign="center">
+                              <Text as="p" variant="bodyMd" fontWeight="medium">{limit.label}</Text>
+                              <Badge tone={tone}>{`${pct}% used`}</Badge>
+                            </InlineStack>
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">
+                              {`${limit.used.toLocaleString()} / ${limit.limit.toLocaleString()}`}
+                            </Text>
+                          </InlineStack>
+                          <ProgressBar progress={pct} tone={tone === "success" ? undefined : tone === "warning" ? "highlight" : "critical"} size="small" />
+                          <Text as="p" variant="bodySm" tone="subdued">
+                            {limit.description}
+                          </Text>
+                        </BlockStack>
+                      </Card>
+                    );
+                  })}
+                </BlockStack>
               </BlockStack>
             </Card>
-            )}
           </Layout.Section>
+
+          {/* ── Demand Gaps — vehicles searched with 0 matching products ── */}
+          {demandGaps && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={AlertTriangleIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Inventory Gaps</Text>
+                    </InlineStack>
+                    <Badge tone={demandGaps.length > 0 ? "warning" : "success"}>
+                      {demandGaps.length > 0 ? `${demandGaps.length} gaps` : "No gaps"}
+                    </Badge>
+                  </InlineStack>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Vehicles customers searched for but found 0 matching products. Fill these gaps to capture missed sales.
+                  </Text>
+                  {demandGaps.length > 0 ? (
+                    <DataTable
+                      columnContentTypes={["text", "text", "numeric"]}
+                      headings={["Make", "Model", "Searches"]}
+                      rows={demandGaps.map((g) => [g.make, g.model, g.searches.toLocaleString()])}
+                    />
+                  ) : (
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      No demand gaps detected yet. As customers use your YMME search widget, vehicles with no matching products will appear here.
+                    </Text>
+                  )}
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
+          {/* Coverage by Make — see Fitment page for detailed drilldown */}
 
           {/* ── Product Status Breakdown ───────────────────── */}
           <Layout.Section>
@@ -684,7 +938,7 @@ export default function AnalyticsPage() {
               <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={ProductIcon} bg="var(--p-color-bg-fill-success-secondary)" color="var(--p-color-icon-success)" />
+                    <IconBadge icon={ProductIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">Product Status Breakdown</Text>
                   </InlineStack>
                   <Text as="span" variant="bodySm" tone="subdued">
@@ -718,203 +972,167 @@ export default function AnalyticsPage() {
             </Card>
           </Layout.Section>
 
-          {/* ── Popular Makes & Models (side by side) ──── */}
-          {!isBasic && (
-            <Layout.Section>
-              <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
-                {/* Popular Makes */}
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="200" blockAlign="center">
-                        <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                        <Text as="h2" variant="headingMd">Popular Makes</Text>
-                      </InlineStack>
-                      <Badge>{`${popularMakes.length} makes`}</Badge>
-                    </InlineStack>
-                    <DataTable
-                      columnContentTypes={["text", "numeric", "numeric"]}
-                      headings={["Make", "Fitments", "Products"]}
-                      rows={popularMakes.map((m) => [
-                        m.make,
-                        m.fitmentCount.toLocaleString(),
-                        m.productCount.toLocaleString(),
-                      ])}
-                    />
-                  </BlockStack>
-                </Card>
-
-                {/* Popular Models */}
-                <Card>
-                  <BlockStack gap="400">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <InlineStack gap="200" blockAlign="center">
-                        <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                        <Text as="h2" variant="headingMd">Popular Models</Text>
-                      </InlineStack>
-                      <Badge>{`${popularModels.length} models`}</Badge>
-                    </InlineStack>
-                    <DataTable
-                      columnContentTypes={["text", "text", "numeric"]}
-                      headings={["Make", "Model", "Fitments"]}
-                      rows={popularModels.map((m) => [
-                        m.make,
-                        m.model,
-                        m.fitmentCount.toLocaleString(),
-                      ])}
-                    />
-                  </BlockStack>
-                </Card>
-              </InlineGrid>
-            </Layout.Section>
-          )}
-
-          {/* ── Supplier Performance ──────────────────────── */}
-          {!isBasic && (
+          {/* ── Fitment Coverage by Make — expandable drilldown (same pattern as Recent Fitment Activity) ── */}
+          {!isBasic && popularMakes.length > 0 && (
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={PackageIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Supplier Performance
-                    </Text>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">Fitment Coverage by Make</Text>
+                    </InlineStack>
+                    <Text as="p" variant="bodySm" tone="subdued">{`${popularMakes.length} makes · ${popularModels.length} models`}</Text>
                   </InlineStack>
-                  {providerMetrics.length === 0 ? (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      No providers configured. Add a provider to see supplier metrics.
-                    </Text>
-                  ) : (
-                    <DataTable
-                      columnContentTypes={[
-                        "text",
-                        "text",
-                        "text",
-                        "numeric",
-                        "text",
-                      ]}
-                      headings={["Provider", "Type", "Status", "Products", "Last Fetch"]}
-                      rows={providerMetrics.map((p) => [
-                        p.name,
-                        p.type.toUpperCase(),
-                        p.status,
-                        p.productCount.toLocaleString(),
-                        p.lastFetchAt
-                          ? new Date(p.lastFetchAt).toLocaleDateString("en-GB", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
-                          : "Never",
-                      ])}
-                    />
-                  )}
+
+                  <BlockStack gap="0">
+                    {popularMakes.map((m, idx) => {
+                      const isExpanded = expandedMake === m.make;
+                      const models = modelsForMake(m.make);
+                      const isLast = idx === popularMakes.length - 1;
+
+                      return (
+                        <div key={m.make}>
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setExpandedMake(isExpanded ? null : m.make)}
+                            onKeyDown={(e) => { if (e.key === "Enter") setExpandedMake(isExpanded ? null : m.make); }}
+                            style={{
+                              ...listRowStyle(isLast && !isExpanded),
+                              cursor: "pointer",
+                              backgroundColor: isExpanded ? "var(--p-color-bg-surface-hover)" : "var(--p-color-bg-surface)",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                              <BlockStack gap="100">
+                                <Text as="span" variant="bodyMd" fontWeight="semibold">{m.make}</Text>
+                                <InlineStack gap="200" blockAlign="center" wrap>
+                                  <Badge tone="info" size="small">{`${m.fitmentCount} fitments`}</Badge>
+                                  <Text as="span" variant="bodySm" tone="subdued">{`${m.productCount} product${m.productCount !== 1 ? "s" : ""} · ${models.length} model${models.length !== 1 ? "s" : ""}`}</Text>
+                                </InlineStack>
+                              </BlockStack>
+                            </div>
+                            <InlineStack gap="200" blockAlign="center">
+                              {models.slice(0, 3).map((mod) => (
+                                <Badge key={mod.model} size="small">{mod.model}</Badge>
+                              ))}
+                              {models.length > 3 && <Badge size="small">{`+${models.length - 3}`}</Badge>}
+                              <Icon source={isExpanded ? ChevronUpIcon : ChevronDownIcon} />
+                            </InlineStack>
+                          </div>
+
+                          <Collapsible open={isExpanded} id={`make-${m.make}`} transition={{ duration: "200ms", timingFunction: "ease-in-out" }}>
+                            <Box padding="400" background="bg-surface-secondary">
+                              <BlockStack gap="200">
+                                <Text as="p" variant="bodySm" fontWeight="semibold">Models ({models.length})</Text>
+                                <div style={{ overflowX: "auto" }}>
+                                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                    <thead><tr style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                      {["Model", "Fitments"].map((h) => (
+                                        <th key={h} style={{ textAlign: h === "Fitments" ? "right" : "left", padding: "var(--p-space-100) var(--p-space-200)" }}>
+                                          <Text as="span" variant="bodySm" fontWeight="semibold">{h}</Text>
+                                        </th>
+                                      ))}
+                                    </tr></thead>
+                                    <tbody>{models.map((mod) => (
+                                      <tr key={mod.model} style={{ borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                                        <td style={{ padding: "var(--p-space-100) var(--p-space-200)" }}>
+                                          <Text as="span" variant="bodySm">{mod.model}</Text>
+                                        </td>
+                                        <td style={{ textAlign: "right", padding: "var(--p-space-100) var(--p-space-200)" }}>
+                                          <Text as="span" variant="bodySm">{mod.fitmentCount.toLocaleString()}</Text>
+                                        </td>
+                                      </tr>
+                                    ))}</tbody>
+                                  </table>
+                                </div>
+                              </BlockStack>
+                            </Box>
+                          </Collapsible>
+                        </div>
+                      );
+                    })}
+                  </BlockStack>
                 </BlockStack>
               </Card>
             </Layout.Section>
           )}
 
-          {/* ── Sync Job Summary ──────────────────────────── */}
-          {!isBasic && (
+          {/* ── Storefront Widget Usage — YMME + REG Plate side by side ── */}
+          <Layout.Section>
+            <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">YMME Searches</Text>
+                    </InlineStack>
+                    <Badge>{`${searchCount} total`}</Badge>
+                  </InlineStack>
+                  {popularSearches.length === 0 ? (
+                    <Text as="p" variant="bodySm" tone="subdued">No searches recorded yet. Data will appear as customers use the vehicle search widget.</Text>
+                  ) : (
+                    <DataTable
+                      columnContentTypes={["text", "text", "numeric"]}
+                      headings={["Make", "Model", "Searches"]}
+                      rows={popularSearches.slice(0, 10).map((s) => [s.make, s.model, s.count.toLocaleString()])}
+                    />
+                  )}
+                </BlockStack>
+              </Card>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <InlineStack gap="200" blockAlign="center">
+                      <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
+                      <Text as="h2" variant="headingMd">REG Plate Lookups</Text>
+                    </InlineStack>
+                    <Badge>{`${totalPlateLookups} total`}</Badge>
+                  </InlineStack>
+                  {recentPlateLookups.length === 0 ? (
+                    <Text as="p" variant="bodySm" tone="subdued">No lookups recorded yet. Data will appear as customers use the registration lookup widget.</Text>
+                  ) : (
+                    <DataTable
+                      columnContentTypes={["text", "text", "text", "text"]}
+                      headings={["Plate", "Make", "Model", "Date"]}
+                      rows={recentPlateLookups.slice(0, 10).map((pl) => [
+                        pl.plate, pl.make ?? "—", pl.model ?? "—",
+                        new Date(pl.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+                      ])}
+                    />
+                  )}
+                </BlockStack>
+              </Card>
+            </InlineGrid>
+          </Layout.Section>
+
+          {/* ── Sync Job History — full width ── */}
+          {!isBasic && syncJobSummary.length > 0 && (
             <Layout.Section>
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
                     <IconBadge icon={ChartVerticalIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Sync Job History
-                    </Text>
-                  </InlineStack>
-                  {syncJobSummary.length === 0 ? (
-                    <Text as="p" variant="bodySm" tone="subdued">
-                      No sync jobs have been run yet.
-                    </Text>
-                  ) : (
-                    <DataTable
-                      columnContentTypes={[
-                        "text",
-                        "numeric",
-                        "numeric",
-                        "numeric",
-                        "text",
-                      ]}
-                      headings={["Job Type", "Total Runs", "Completed", "Failed", "Success Rate"]}
-                      rows={syncJobSummary.map((j) => [
-                        j.type.replace(/_/g, " "),
-                        j.total.toLocaleString(),
-                        j.completed.toLocaleString(),
-                        j.failed.toLocaleString(),
-                        `${j.successRate}%`,
-                      ])}
-                    />
-                  )}
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
-
-          {/* ── Popular Storefront Searches ────────────────── */}
-          {!isBasic && popularSearches.length > 0 && (
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Popular Storefront Searches (Last 30 Days)
-                      </Text>
-                    </InlineStack>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      From YMME widget usage
-                    </Text>
+                    <Text as="h2" variant="headingMd">Sync Job History</Text>
                   </InlineStack>
                   <DataTable
-                    columnContentTypes={["text", "text", "numeric"]}
-                    headings={["Make", "Model", "Searches"]}
-                    rows={popularSearches.map((s) => [
-                      s.make,
-                      s.model,
-                      s.count.toLocaleString(),
+                    columnContentTypes={["text", "numeric", "numeric", "numeric", "text"]}
+                    headings={["Job Type", "Total Runs", "Completed", "Failed", "Success Rate"]}
+                    rows={syncJobSummary.map((j) => [
+                      formatJobType(j.type),
+                      j.total.toLocaleString(),
+                      j.completed.toLocaleString(),
+                      j.failed.toLocaleString(),
+                      `${j.successRate}%`,
                     ])}
                   />
                 </BlockStack>
               </Card>
             </Layout.Section>
           )}
-
-          {/* ── REG Plate Lookups ─────────────────────────── */}
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={SearchIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">REG Plate Lookups</Text>
-                  </InlineStack>
-                  <Badge>{`${totalPlateLookups} total`}</Badge>
-                </InlineStack>
-                {recentPlateLookups.length === 0 ? (
-                  <Banner tone="info">
-                    <p>No plate lookups recorded yet. Plate lookup tracking is now active — data will appear here as customers use the registration lookup widget on your storefront.</p>
-                  </Banner>
-                ) : (
-                  <DataTable
-                    columnContentTypes={["text", "text", "text", "numeric", "text", "text"]}
-                    headings={["Plate", "Make", "Model", "Year", "Fuel", "Date"]}
-                    rows={recentPlateLookups.map((pl) => [
-                      pl.plate,
-                      pl.make ?? "—",
-                      pl.model ?? "—",
-                      pl.year ? String(pl.year) : "—",
-                      pl.fuel_type ?? "—",
-                      new Date(pl.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
-                    ])}
-                  />
-                )}
-              </BlockStack>
-            </Card>
-          </Layout.Section>
 
           {/* ── Conversion Funnel ─────────────────────────── */}
           {!isBasic && (
@@ -922,7 +1140,7 @@ export default function AnalyticsPage() {
               <Card>
                 <BlockStack gap="400">
                   <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={CartIcon} bg="var(--p-color-bg-fill-warning-secondary)" color="var(--p-color-icon-warning)" />
+                    <IconBadge icon={CartIcon} color="var(--p-color-icon-emphasis)" />
                     <Text as="h2" variant="headingMd">
                       Conversion Funnel (Last 30 Days)
                     </Text>
@@ -938,57 +1156,25 @@ export default function AnalyticsPage() {
                     </Banner>
                   ) : (
                     <BlockStack gap="400">
-                      {/* Funnel stats row */}
-                      <div style={statGridStyle(4)}>
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="100" blockAlign="center">
-                              <IconBadge icon={SearchIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                              <Text as="p" variant="bodySm" tone="subdued">Searches</Text>
-                            </InlineStack>
-                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.searches.toLocaleString()}</Text>
-                          </BlockStack>
+                      {/* Funnel stats — unified stat bar pattern */}
+                      <Card padding="0">
+                        <div style={{ ...autoFitGridStyle("100px", "0px"), borderBottom: "1px solid var(--p-color-border-secondary)" }}>
+                          {[
+                            { icon: SearchIcon, count: conversionFunnel.searches, label: "Searches" },
+                            { icon: ViewIcon, count: conversionFunnel.productViews, label: "Product Views" },
+                            { icon: CartIcon, count: conversionFunnel.addToCarts, label: "Add to Cart" },
+                            { icon: OrderIcon, count: conversionFunnel.purchases, label: "Purchases" },
+                          ].map((item, i) => (
+                            <div key={item.label} style={{ padding: "var(--p-space-400)", borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none", textAlign: "center" }}>
+                              <BlockStack gap="200" inlineAlign="center">
+                                <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                                <Text as="p" variant="headingLg" fontWeight="bold">{item.count.toLocaleString()}</Text>
+                                <Text as="p" variant="bodySm" tone="subdued">{item.label}</Text>
+                              </BlockStack>
+                            </div>
+                          ))}
                         </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="100" blockAlign="center">
-                              <IconBadge icon={ViewIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                              <Text as="p" variant="bodySm" tone="subdued">Product Views</Text>
-                            </InlineStack>
-                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.productViews.toLocaleString()}</Text>
-                            {conversionFunnel.searchToViewRate > 0 && (
-                              <Badge tone="info">{`${conversionFunnel.searchToViewRate}% from search`}</Badge>
-                            )}
-                          </BlockStack>
-                        </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="100" blockAlign="center">
-                              <IconBadge icon={CartIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                              <Text as="p" variant="bodySm" tone="subdued">Add to Cart</Text>
-                            </InlineStack>
-                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.addToCarts.toLocaleString()}</Text>
-                            {conversionFunnel.viewToCartRate > 0 && (
-                              <Badge tone="success">{`${conversionFunnel.viewToCartRate}% of views`}</Badge>
-                            )}
-                          </BlockStack>
-                        </div>
-
-                        <div style={statMiniStyle}>
-                          <BlockStack gap="100">
-                            <InlineStack gap="100" blockAlign="center">
-                              <IconBadge icon={OrderIcon} size={20} color="var(--p-color-icon-emphasis)" />
-                              <Text as="p" variant="bodySm" tone="subdued">Purchases</Text>
-                            </InlineStack>
-                            <Text as="p" variant="headingLg" fontWeight="bold">{conversionFunnel.purchases.toLocaleString()}</Text>
-                            {conversionFunnel.overallRate > 0 && (
-                              <Badge tone="success">{`${conversionFunnel.overallRate}% overall`}</Badge>
-                            )}
-                          </BlockStack>
-                        </div>
-                      </div>
+                      </Card>
 
                       {/* Funnel progress bars */}
                       <BlockStack gap="200">
@@ -1017,147 +1203,77 @@ export default function AnalyticsPage() {
             </Layout.Section>
           )}
 
-          {/* ── Conversions by Source ──────────────────────── */}
-          {!isBasic && conversionBySource.length > 0 && (
+          {/* ── Conversions by Source + Vehicle Type ─────── */}
+          {!isBasic && (conversionBySource.length > 0 || conversionByVehicle.length > 0) && (
             <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
-                    <Text as="h2" variant="headingMd">
-                      Conversions by Source
-                    </Text>
-                  </InlineStack>
-                  <DataTable
-                    columnContentTypes={["text", "numeric", "numeric", "numeric"]}
-                    headings={["Source", "Views", "Add to Cart", "Purchases"]}
-                    rows={conversionBySource.map((s) => [
-                      s.source.replace(/_/g, " "),
-                      s.views.toLocaleString(),
-                      s.carts.toLocaleString(),
-                      s.purchases.toLocaleString(),
-                    ])}
-                  />
-                </BlockStack>
-              </Card>
+              <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
+                {conversionBySource.length > 0 && (
+                  <Card>
+                    <BlockStack gap="400">
+                      <InlineStack gap="200" blockAlign="center">
+                        <IconBadge icon={TargetIcon} color="var(--p-color-icon-emphasis)" />
+                        <Text as="h2" variant="headingMd">Conversions by Source</Text>
+                      </InlineStack>
+                      <DataTable
+                        columnContentTypes={["text", "numeric", "numeric", "numeric"]}
+                        headings={["Source", "Views", "Add to Cart", "Purchases"]}
+                        rows={conversionBySource.map((s) => [s.source.replace(/_/g, " "), s.views.toLocaleString(), s.carts.toLocaleString(), s.purchases.toLocaleString()])}
+                      />
+                    </BlockStack>
+                  </Card>
+                )}
+                {conversionByVehicle.length > 0 && (
+                  <Card>
+                    <BlockStack gap="400">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <InlineStack gap="200" blockAlign="center">
+                          <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
+                          <Text as="h2" variant="headingMd">Conversions by Vehicle</Text>
+                        </InlineStack>
+                        <Text as="span" variant="bodySm" tone="subdued">Last 30 days</Text>
+                      </InlineStack>
+                      <DataTable
+                        columnContentTypes={["text", "text", "numeric", "numeric", "numeric"]}
+                        headings={["Make", "Model", "Views", "Carts", "Purchases"]}
+                        rows={conversionByVehicle.map((v) => [v.make, v.model, v.views.toLocaleString(), v.carts.toLocaleString(), v.purchases.toLocaleString()])}
+                      />
+                    </BlockStack>
+                  </Card>
+                )}
+              </InlineGrid>
             </Layout.Section>
           )}
 
-          {/* ── Conversions by Vehicle ─────────────────────── */}
-          {!isBasic && conversionByVehicle.length > 0 && (
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between">
-                    <InlineStack gap="200" blockAlign="center">
-                      <IconBadge icon={DatabaseIcon} color="var(--p-color-icon-emphasis)" />
-                      <Text as="h2" variant="headingMd">
-                        Conversions by Vehicle Type (Top 15)
-                      </Text>
-                    </InlineStack>
-                    <Text as="span" variant="bodySm" tone="subdued">
-                      Last 30 days
-                    </Text>
-                  </InlineStack>
-                  <DataTable
-                    columnContentTypes={["text", "text", "numeric", "numeric", "numeric"]}
-                    headings={["Make", "Model", "Views", "Carts", "Purchases"]}
-                    rows={conversionByVehicle.map((v) => [
-                      v.make,
-                      v.model,
-                      v.views.toLocaleString(),
-                      v.carts.toLocaleString(),
-                      v.purchases.toLocaleString(),
-                    ])}
-                  />
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
+          {/* Inventory Gap Analysis removed — confusing for users, not actionable */}
 
-          {/* ── Inventory Gap Analysis ────────────────────── */}
-          {!isBasic && (
-            <Layout.Section>
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="200" blockAlign="center">
-                    <IconBadge icon={AlertTriangleIcon} bg="var(--p-color-bg-fill-caution-secondary)" color="var(--p-color-icon-caution)" />
-                    <Text as="h2" variant="headingMd">
-                      Inventory Gap Analysis
-                    </Text>
-                  </InlineStack>
-                  <div style={statGridStyle(4)}>
-                    <div style={statMiniStyle}>
-                      <BlockStack gap="100" inlineAlign="center">
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Total Makes in DB
-                        </Text>
-                        <Text as="p" variant="headingLg" fontWeight="bold">
-                          {totalMakes.toLocaleString()}
-                        </Text>
-                      </BlockStack>
-                    </div>
-                    <div style={statMiniStyle}>
-                      <BlockStack gap="100" inlineAlign="center">
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Total Models in DB
-                        </Text>
-                        <Text as="p" variant="headingLg" fontWeight="bold">
-                          {totalModels.toLocaleString()}
-                        </Text>
-                      </BlockStack>
-                    </div>
-                    <div style={statMiniStyle}>
-                      <BlockStack gap="100" inlineAlign="center">
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Makes Without Products
-                        </Text>
-                        <Text as="p" variant="headingLg" fontWeight="bold">
-                          {inventoryGaps.makesWithoutProducts.toLocaleString()}
-                        </Text>
-                        {inventoryGaps.makesWithoutProducts > 0 && (
-                          <Badge tone="warning">Opportunity</Badge>
-                        )}
-                      </BlockStack>
-                    </div>
-                    <div style={statMiniStyle}>
-                      <BlockStack gap="100" inlineAlign="center">
-                        <Text as="p" variant="bodySm" tone="subdued">
-                          Avg Products per Make
-                        </Text>
-                        <Text as="p" variant="headingLg" fontWeight="bold">
-                          {inventoryGaps.productsPerMakeAvg.toLocaleString()}
-                        </Text>
-                      </BlockStack>
-                    </div>
-                  </div>
-                </BlockStack>
-              </Card>
-            </Layout.Section>
-          )}
-
-          {/* ── YMME Search Analytics ─────────────────────── */}
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack gap="200" blockAlign="center">
-                  <IconBadge icon={DatabaseIcon} bg="var(--p-color-bg-fill-info-secondary)" color="var(--p-color-icon-info)" />
-                  <Text as="h2" variant="headingMd">
-                    YMME Search Analytics
-                  </Text>
-                </InlineStack>
-                <Banner tone="info">
-                  <p>
-                    Coming soon — widget search tracking will be available when search
-                    event tracking is enabled. This will show which Year/Make/Model/Engine
-                    combinations your customers search for most.
-                  </p>
-                </Banner>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+          {/* YMME Search Analytics removed — duplicate of Popular Storefront Searches above */}
 
           {/* ── Basic plan upsell ─────────────────────────── */}
+          {/* ── Supplier Performance — full width ── */}
+          {!isBasic && providerMetrics.length > 0 && (
+            <Layout.Section>
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack gap="200" blockAlign="center">
+                    <IconBadge icon={PackageIcon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="h2" variant="headingMd">Supplier Performance</Text>
+                  </InlineStack>
+                  <DataTable
+                    columnContentTypes={["text", "text", "text", "numeric", "text"]}
+                    headings={["Provider", "Type", "Status", "Products", "Last Fetch"]}
+                    rows={providerMetrics.map((p) => [
+                      p.name,
+                      p.type.toUpperCase(),
+                      p.status,
+                      p.productCount.toLocaleString(),
+                      p.lastFetchAt ? new Date(p.lastFetchAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Never",
+                    ])}
+                  />
+                </BlockStack>
+              </Card>
+            </Layout.Section>
+          )}
+
           {isBasic && (
             <Layout.Section>
               <Banner title="Unlock full analytics" tone="info">
@@ -1173,4 +1289,9 @@ export default function AnalyticsPage() {
       </BlockStack>
     </Page>
   );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Analytics" />;
 }
