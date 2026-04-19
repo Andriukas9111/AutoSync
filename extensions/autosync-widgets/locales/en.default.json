@@ -1,0 +1,41 @@
+{
+  "autosync": {
+    "ymme_search": {
+      "title": "Find Parts for Your Vehicle",
+      "select_year": "Select Year",
+      "select_make": "Select Make",
+      "select_model": "Select Model",
+      "select_engine": "Select Engine",
+      "search": "Search",
+      "clear": "Clear"
+    },
+    "fitment_badge": {
+      "fits": "Fits Your Vehicle",
+      "does_not_fit": "Does Not Fit Your Vehicle",
+      "select_vehicle": "Select a vehicle to check fitment"
+    },
+    "compatibility": {
+      "title": "Vehicle Compatibility",
+      "compatible_vehicles": "Compatible Vehicles",
+      "no_data": "No fitment data available"
+    },
+    "vehicle_bar": {
+      "your_vehicle": "Your Vehicle",
+      "change": "Change",
+      "clear": "Clear"
+    },
+    "plate_lookup": {
+      "title": "Number Plate Lookup",
+      "placeholder": "Enter reg number",
+      "search": "Look Up",
+      "not_found": "Vehicle not found"
+    },
+    "wheel_finder": {
+      "title": "Wheel Finder",
+      "pcd": "PCD",
+      "offset": "Offset",
+      "bore": "Centre Bore",
+      "search": "Find Wheels"
+    }
+  }
+}

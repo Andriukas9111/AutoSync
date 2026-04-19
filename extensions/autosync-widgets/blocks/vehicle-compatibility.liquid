@@ -1,0 +1,279 @@
+{% comment %}
+  AutoSync Vehicle Compatibility Table
+  Displays all vehicles a product fits
+{% endcomment %}
+{% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign compat_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.compat == true
+      assign compat_allowed = true
+    endif
+  endif
+%}
+{% if compat_allowed == false %}
+<!-- Vehicle Compatibility: requires Starter plan -->
+{% else %}
+<div
+  class="autosync-compat-table"
+  data-autosync-compat-table
+  data-proxy-url="{{ shop.url }}/apps/autosync"
+  data-product-id="{{ product.id }}"
+  {%- comment -%}
+    Read from the app-owned $app:vehicle_fitment.data metafield that the push
+    pipeline actually writes. Previously this read product.metafields.autosync_fitment.vehicles
+    — a completely different namespace/key that no code writes — so the widget
+    always showed "No vehicles listed" even for products with hundreds of fitments.
+  {%- endcomment -%}
+  data-metafield-vehicles='{{ product.metafields["$app:vehicle_fitment"].data.value | json }}'
+  data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
+  id="autosync-compat-{{ block.id }}"
+  style="
+--act-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+--act-bg: {{ block.settings.background_color | default: '#ffffff' }};
+--act-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+--act-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+--act-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+--act-radius: {{ block.settings.border_radius | default: 8 }}px;
+--as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+--as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+--as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+--as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+--as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+--as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+--as-radius: {{ block.settings.border_radius | default: 8 }}px;
+--as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
+--as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
+    --as-section-gap-top: {{ block.settings.section_gap_top | default: 0 }}px;
+--as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}18px{% when 'large' %}28px{% else %}22px{% endcase %};
+max-width: {% case block.settings.container_width %}{% when 'full' %}100%{% when '1400' %}1400px{% when '1200' %}1200px{% when '1000' %}1000px{% when '800' %}800px{% else %}1200px{% endcase %};
+margin: 0 auto;
+padding: {{ block.settings.container_padding | default: 24 }}px;
+padding-top: {{ block.settings.padding_top }}px;
+padding-bottom: {{ block.settings.padding_bottom }}px;
+  "
+>
+  {% if block.settings.heading != blank %}
+<h3 class="autosync-compat-table__heading" style="text-align: {{ block.settings.heading_alignment | default: 'left' }};">{{ block.settings.heading }}</h3>
+  {% endif %}
+
+  <div class="autosync-compat-table__wrapper">
+<table class="autosync-compat-table__table" aria-label="Vehicle compatibility list">
+<thead>
+<tr>
+<th scope="col">Make</th>
+<th scope="col">Model</th>
+{% if block.settings.show_years %}
+<th scope="col">Years</th>
+{% endif %}
+{% if block.settings.show_engine %}
+<th scope="col">Engine</th>
+{% endif %}
+</tr>
+</thead>
+<tbody data-autosync-compat-body data-show-years="{{ block.settings.show_years | default: true }}" data-show-engine="{{ block.settings.show_engine | default: true }}">
+<tr>
+<td colspan="{% assign cols = 2 %}{% if block.settings.show_years %}{% assign cols = cols | plus: 1 %}{% endif %}{% if block.settings.show_engine %}{% assign cols = cols | plus: 1 %}{% endif %}{{ cols }}">
+Loading compatibility data...
+</td>
+</tr>
+</tbody>
+</table>
+  </div>
+  {% unless shop.metafields['$app:autosync']['hide_watermark'].value == true %}
+<div class="autosync-widget-footer">
+<img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
+<span>Powered by <strong>AutoSync</strong></span>
+</div>
+  {% endunless %}
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+"name": "Vehicle Compatibility",
+"target": "section",
+"settings": [
+{
+"type": "header",
+"content": "Content"
+},
+{
+"type": "text",
+"id": "heading",
+"label": "Heading",
+"default": "Vehicle Compatibility"
+},
+{
+"type": "select",
+"id": "heading_alignment",
+"label": "Heading Alignment",
+"default": "left",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" }
+]
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
+},
+{
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Alternate Row Color",
+"default": "#f9fafb"
+},
+{
+"type": "color",
+"id": "button_color",
+"label": "Button Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "button_text_color",
+"label": "Button Text Color",
+"default": "#ffffff"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Contained (1200px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "800", "label": "Narrow (800px)" }
+],
+"default": "1200"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap",
+"label": "Bottom Margin (Gap Between Sections)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 16,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap_top",
+"label": "Top Margin (Gap Above Section)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
+"type": "checkbox",
+"id": "show_engine",
+"label": "Show Engine Column",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_years",
+"label": "Show Year Range",
+"default": true
+}
+]
+}
+{% endschema %}

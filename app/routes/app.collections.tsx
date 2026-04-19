@@ -1,0 +1,602 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { useLoaderData, useActionData, useNavigation, useRevalidator, Form } from "react-router";
+import { data } from "react-router";
+import {
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  InlineStack,
+  Badge,
+  Checkbox,
+  Select,
+  Button,
+  Banner,
+  Box,
+  Divider,
+  IndexTable,
+  EmptyState,
+  Pagination,
+} from "@shopify/polaris";
+import {
+  CollectionIcon,
+  ChartVerticalIcon,
+  CollectionFilledIcon,
+  HashtagIcon,
+  LinkIcon,
+  TargetIcon,
+} from "@shopify/polaris-icons";
+
+import { authenticate } from "../shopify.server";
+import db, { paginatedSelect } from "../lib/db.server";
+import { getPlanLimits, getTenant, getSerializedPlanLimits, assertFeature, BillingGateError, getEffectivePlan } from "../lib/billing.server";
+import { PlanGate } from "../components/PlanGate";
+import { IconBadge } from "../components/IconBadge";
+import { HowItWorks } from "../components/HowItWorks";
+import { useAppData } from "../lib/use-app-data";
+import { OperationProgress } from "../components/OperationProgress";
+import { statMiniStyle, statGridStyle, STATUS_TONES, autoFitGridStyle } from "../lib/design";
+import type { PlanTier, CollectionStrategy } from "../lib/types";
+import { RouteError } from "../components/RouteError";
+
+// ---------------------------------------------------------------------------
+// Loader
+// ---------------------------------------------------------------------------
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+
+  // Run ALL queries in parallel — including tenant lookup
+  // ALL queries in single Promise.all for maximum parallelism
+  const [tenant, collectionsResult, appSettingsResult, makesResult, makeModelResult, fitmentCountResult, wheelFitmentsResult] = await Promise.all([
+    getTenant(shopId),
+    paginatedSelect("collection_mappings", "*", (q) =>
+      q.eq("shop_id", shopId).order("created_at", { ascending: false })
+    ).then((rows) => ({ data: rows, error: null })),
+    db.from("app_settings").select("*").eq("shop_id", shopId).maybeSingle(),
+    // Make/model counts — run in parallel instead of sequential
+    db.from("vehicle_fitments").select("make").eq("shop_id", shopId).not("make", "is", null).limit(50000),
+    // Include year_from + year_to so the Expected count for the "By Make, Model
+    // & Year" strategy reflects actual year combos, not just make+model pairs.
+    // Previously year_combos = make_model count because year fields weren't
+    // selected, so the UI's Expected stat under-counted by ~400 year collections.
+    db.from("vehicle_fitments").select("make, model, year_from, year_to").eq("shop_id", shopId).not("make", "is", null).not("model", "is", null).limit(50000),
+    // Fitment count for the stat bar — prevents flash-of-zero before first poll.
+    db.from("vehicle_fitments").select("id", { count: "exact", head: true }).eq("shop_id", shopId),
+    // Wheel fitment specs — used to compute wheel collection count so the
+    // "Expected" stat matches "Existing" (which includes wheel collections).
+    // Previously Expected = make + make_model + year combos only, so for any
+    // shop that sold wheels, Existing > Expected and users thought something
+    // was over-creating.
+    db.from("wheel_fitments").select("pcd, diameter, width, offset_min").eq("shop_id", shopId).limit(50000),
+  ]);
+
+  const plan: PlanTier = getEffectivePlan(tenant);
+  const limits = getPlanLimits(plan);
+
+  if (collectionsResult.error) {
+    console.error("Collection mappings query error:", collectionsResult.error);
+  }
+
+  const makesData = (makesResult.data ?? []) as { make: string }[];
+  const uniqueMakes = [...new Set(makesData.map((f) => f.make))];
+
+  const makeModelData = (makeModelResult.data ?? []) as { make: string; model: string; year_from: number | null; year_to: number | null }[];
+  const uniqueMakeModels = [...new Set(makeModelData.map((f) => `${f.make}|${f.model}`))];
+  // Year combos: include the actual year_from/year_to so we count distinct
+  // model+year_range collections (matches the make_model_year collection
+  // type written by the Edge Function). Previously keyed only on make|model
+  // so this count equalled uniqueMakeModelCount, making Expected under-count.
+  const uniqueMakeModelYears = [...new Set(
+    makeModelData
+      .filter((f) => f.make && f.model && (f.year_from != null || f.year_to != null))
+      .map((f) => `${f.make}|${f.model}|${f.year_from ?? ""}|${f.year_to ?? ""}`)
+  )];
+
+  // Wheel fitment counts drive wheel_pcd / wheel_diameter / wheel_width /
+  // wheel_offset collections (one each per distinct value).
+  const wheelData = (wheelFitmentsResult.data ?? []) as { pcd: string | null; diameter: number | null; width: string | number | null; offset_min: number | null }[];
+  const uniquePcds = new Set<string>();
+  const uniqueDiameters = new Set<number>();
+  const uniqueWidths = new Set<string>();
+  const uniqueOffsets = new Set<number>();
+  for (const wf of wheelData) {
+    if (wf.pcd) uniquePcds.add(wf.pcd);
+    if (wf.diameter != null) uniqueDiameters.add(wf.diameter);
+    if (wf.width != null) uniqueWidths.add(String(wf.width));
+    if (wf.offset_min != null) uniqueOffsets.add(wf.offset_min);
+  }
+  const wheelCollectionCount = uniquePcds.size + uniqueDiameters.size + uniqueWidths.size + uniqueOffsets.size;
+
+  return {
+    plan,
+    limits,
+    allLimits: getSerializedPlanLimits(),
+    collections: collectionsResult.data ?? [],
+    appSettings: appSettingsResult.data,
+    uniqueMakes,
+    uniqueMakeModelCount: uniqueMakeModels.length,
+    uniqueMakeModelYearCount: uniqueMakeModelYears.length,
+    wheelCollectionCount,
+    fitmentCount: fitmentCountResult.count ?? 0,
+    loaderError: collectionsResult.error?.message ?? null,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Action
+// ---------------------------------------------------------------------------
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = session.shop;
+
+  // Plan gate: smartCollections feature required
+  try {
+    await assertFeature(shopId, "smartCollections");
+  } catch (err: unknown) {
+    if (err instanceof BillingGateError) {
+      return data({ error: err.message }, { status: 403 });
+    }
+    throw err;
+  }
+
+  const formData = await request.formData();
+  const _action = formData.get("_action");
+
+  if (_action === "save_collection_settings") {
+    const collectionStrategy = formData.get("collection_strategy") as string || "make";
+    // auto_create_collections is managed on the Push page — not here
+    const seoEnabled = formData.get("seo_enabled") === "true";
+
+    // Enforce collection strategy level based on plan
+    const tenant = await getTenant(shopId);
+    const limits = getPlanLimits(getEffectivePlan(tenant));
+    const allowedLevel = limits.features.smartCollections; // false | "make" | "make_model" | "full"
+    const strategyLevels: Record<string, number> = { make: 1, make_model: 2, make_model_year: 3 };
+    const allowedLevels: Record<string, number> = { make: 1, make_model: 2, full: 3 };
+    const requestedLevel = strategyLevels[collectionStrategy] ?? 1;
+    const maxLevel = typeof allowedLevel === "string" ? (allowedLevels[allowedLevel] ?? 0) : 0;
+    if (requestedLevel > maxLevel) {
+      return data({ error: `Your ${getEffectivePlan(tenant)} plan allows "${allowedLevel}" collection strategy. "${collectionStrategy}" requires a higher plan.` }, { status: 403 });
+    }
+
+    // Upsert app_settings
+    const { data: existing } = await db
+      .from("app_settings")
+      .select("id")
+      .eq("shop_id", shopId)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await db
+        .from("app_settings")
+        .update({
+          collection_strategy: collectionStrategy,
+
+          seo_enabled: seoEnabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("shop_id", shopId);
+
+      if (error) {
+        return data({ error: "Failed to save settings: " + error.message }, { status: 500 });
+      }
+    } else {
+      const { error } = await db
+        .from("app_settings")
+        .insert({
+          shop_id: shopId,
+          collection_strategy: collectionStrategy,
+
+          seo_enabled: seoEnabled,
+        });
+
+      if (error) {
+        return data({ error: "Failed to save settings: " + error.message }, { status: 500 });
+      }
+    }
+
+    return data({ success: true, message: "Collection settings saved" });
+  }
+
+  return data({ error: "Unknown action" }, { status: 400 });
+};
+
+// ---------------------------------------------------------------------------
+// Strategy labels
+// ---------------------------------------------------------------------------
+
+const STRATEGY_OPTIONS = [
+  { label: "By Make (e.g. BMW, Audi)", value: "make" },
+  { label: "By Make & Model (e.g. BMW 3 Series)", value: "make_model" },
+  { label: "By Make, Model & Year (e.g. BMW 3 Series 2020)", value: "make_model_year" },
+];
+
+const STRATEGY_LABELS: Record<string, string> = {
+  make: "By Make",
+  make_model: "By Make & Model",
+  make_model_year: "By Make, Model & Year",
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export default function Collections() {
+  const {
+    plan,
+    limits,
+    allLimits,
+    collections,
+    appSettings,
+    uniqueMakes,
+    uniqueMakeModelCount,
+    uniqueMakeModelYearCount,
+    wheelCollectionCount,
+    fitmentCount,
+    loaderError,
+  } = useLoaderData<typeof loader>();
+
+  const rawActionData = useActionData<typeof action>();
+  const actionData = rawActionData as { error?: string; message?: string; success?: boolean } | undefined;
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  const [strategy, setStrategy] = useState<string>(
+    appSettings?.collection_strategy ?? "make"
+  );
+  // auto_create_collections is managed on the Push page (Create Collections checkbox)
+  const [seoEnabled, setSeoEnabled] = useState<boolean>(
+    appSettings?.seo_enabled ?? false
+  );
+
+  // Live stats + active jobs polling — pass initial loader data to prevent flash-of-wrong-data.
+  // MUST seed both `collections` and `fitments` because the UI reads both before polling returns.
+  const { stats: polledStats, activeJobs } = useAppData({
+    collections: collections.length,
+    fitments: fitmentCount,
+  });
+  const liveCollectionCount = polledStats.collections;
+  const liveFitmentCount = polledStats.fitments;
+
+  // Find active collection job for progress bar
+  const collectionJob = (activeJobs || []).find((j: any) => j.type === "collections");
+  const isCreating = !!collectionJob;
+
+  // Revalidate loader data periodically while a collections job is active
+  const revalidator = useRevalidator();
+  useEffect(() => {
+    if (!isCreating) return;
+    const interval = setInterval(() => {
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [isCreating, revalidator]);
+
+  // Also revalidate once when a collection job completes
+  const prevCreating = useRef(isCreating);
+  useEffect(() => {
+    if (prevCreating.current && !isCreating) {
+      if (revalidator.state === "idle") revalidator.revalidate();
+    }
+    prevCreating.current = isCreating;
+  }, [isCreating, revalidator]);
+
+  // Detect duplicates in the collection list
+  const duplicateTitles = new Set<string>();
+  const seenTitles = new Set<string>();
+  for (const c of collections) {
+    if (seenTitles.has(c.title)) duplicateTitles.add(c.title);
+    else seenTitles.add(c.title);
+  }
+  const hasDuplicates = duplicateTitles.size > 0;
+
+  // Pagination for existing collections
+  const COLLECTIONS_PER_PAGE = 25;
+  const [collPage, setCollPage] = useState(1);
+  const totalCollPages = Math.max(1, Math.ceil(collections.length / COLLECTIONS_PER_PAGE));
+  const pagedCollections = collections.slice(
+    (collPage - 1) * COLLECTIONS_PER_PAGE,
+    collPage * COLLECTIONS_PER_PAGE,
+  );
+
+  const showSuccess = actionData && "success" in actionData && actionData.success;
+  const showError = actionData && "error" in actionData;
+
+  // Calculate TOTAL expected collections (all levels combined for the strategy)
+  const previewCount =
+    (strategy === "make"
+      ? uniqueMakes.length
+      : strategy === "make_model"
+        ? uniqueMakes.length + uniqueMakeModelCount
+        : uniqueMakes.length + uniqueMakeModelCount + uniqueMakeModelYearCount)
+    + wheelCollectionCount;  // Wheel collections are always created regardless of vehicle strategy
+
+  return (
+    <Page fullWidth title="Collections">
+      <BlockStack gap="600">
+      <Layout>
+        {/* How It Works */}
+        <Layout.Section>
+          <HowItWorks
+            steps={[
+              { number: 1, title: "Map Products First", description: "Collections are auto-generated from your fitment data. Map products to vehicles using auto-extraction or manual mapping before creating collections.", linkText: "Go to Fitment", linkUrl: "/app/fitment" },
+              { number: 2, title: "Choose Strategy", description: "Select how collections are organized: by Make only (e.g. 'BMW Parts'), by Make & Model (e.g. 'BMW 3 Series Parts'), or by Make, Model & Year range." },
+              { number: 3, title: "Auto-Create", description: "Collections are created with brand logos, SEO titles and descriptions, smart tag-based rules, and published to your Online Store automatically." },
+            ]}
+          />
+        </Layout.Section>
+
+        {/* Active collection creation progress */}
+        {isCreating && collectionJob && (
+          <Layout.Section>
+            <OperationProgress
+              label="Creating collections"
+              status="running"
+              processed={liveCollectionCount}
+              total={previewCount}
+              startedAt={collectionJob.started_at}
+              badges={{
+                "created": { count: liveCollectionCount, tone: "success" },
+                "target": { count: previewCount, tone: "info" },
+              }}
+            />
+          </Layout.Section>
+        )}
+
+        {/* Duplicate warning */}
+        {hasDuplicates && (
+          <Layout.Section>
+            <Banner tone="warning" title={`${duplicateTitles.size} duplicate collections detected`}>
+              <p>The following collections have duplicates: {[...duplicateTitles].slice(0, 5).join(", ")}{duplicateTitles.size > 5 ? ` and ${duplicateTitles.size - 5} more` : ""}. Delete duplicates from Shopify admin to clean up.</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {/* Banners */}
+        {showError && (
+          <Layout.Section>
+            <Banner tone="critical">
+              <p>{actionData?.error}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {loaderError && (
+          <Layout.Section>
+            <Banner tone="warning">
+              <p>Failed to load collection data: {loaderError}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {showSuccess && (
+          <Layout.Section>
+            <Banner tone="success">
+              <p>{actionData?.message}</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        {/* Collection Strategy */}
+        <Layout.Section>
+          <PlanGate
+            feature="smartCollections"
+            currentPlan={plan}
+            limits={limits}
+            allLimits={allLimits}
+          >
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <IconBadge icon={CollectionIcon} color="var(--p-color-icon-emphasis)" />
+                  <Text as="h2" variant="headingMd">Collection Strategy</Text>
+                </InlineStack>
+                <Text as="p" variant="bodyMd" tone="subdued">
+                  Choose how AutoSync creates smart collections from your vehicle
+                  fitment data. Collections group products by vehicle compatibility.
+                </Text>
+
+                <Select
+                  label="Strategy"
+                  options={STRATEGY_OPTIONS}
+                  value={strategy}
+                  onChange={setStrategy}
+                />
+
+                <Divider />
+
+                {/* SEO option — the only collection-specific setting */}
+                <Box background="bg-surface-secondary" borderRadius="200" padding="300">
+                  <PlanGate
+                    feature="collectionSeoImages"
+                    currentPlan={plan}
+                    limits={limits}
+                    allLimits={allLimits}
+                  >
+                    <Checkbox
+                      label="Include SEO"
+                      helpText="Add SEO titles, descriptions, and make logos to collections"
+                      checked={seoEnabled}
+                      onChange={setSeoEnabled}
+                    />
+                  </PlanGate>
+                </Box>
+
+                <Divider />
+                <Text as="p" variant="bodySm" tone="subdued">
+                  To create collections, go to Push to Shopify and enable "Create Collections". Wheel collections (PCD, diameter, width, offset) are automatically created from your wheel fitment data.
+                </Text>
+              </BlockStack>
+            </Card>
+          </PlanGate>
+        </Layout.Section>
+
+        {/* Collection Preview stat bar */}
+        <Layout.Section>
+          <Card padding="0">
+            <div style={{
+              ...autoFitGridStyle("100px", "0px"),
+              borderBottom: "1px solid var(--p-color-border-secondary)",
+            }}>
+              {[
+                { icon: HashtagIcon, count: `${uniqueMakes.length}`, label: "Unique makes in fitments" },
+                { icon: LinkIcon, count: `${uniqueMakeModelCount}`, label: "Unique make + model combos" },
+                { icon: TargetIcon, count: String(previewCount), label: `Expected (${STRATEGY_LABELS[strategy]})` },
+                { icon: CollectionFilledIcon, count: `${liveCollectionCount}`, label: "Existing collections" },
+              ].map((item, i) => (
+                <div key={item.label} style={{
+                  padding: "var(--p-space-400)",
+                  borderRight: i < 3 ? "1px solid var(--p-color-border-secondary)" : "none",
+                  textAlign: "center",
+                }}>
+                  <BlockStack gap="200" inlineAlign="center">
+                    <IconBadge icon={item.icon} color="var(--p-color-icon-emphasis)" />
+                    <Text as="p" variant="headingLg" fontWeight="bold">
+                      {item.count}
+                    </Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      {item.label}
+                    </Text>
+                  </BlockStack>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </Layout.Section>
+
+
+        {/* Make badges preview */}
+        {strategy === "make" && uniqueMakes.length > 0 && (
+          <Layout.Section>
+            <Card>
+              <InlineStack gap="200" wrap>
+                {uniqueMakes.slice(0, 20).map((make) => (
+                  <Badge key={make as string} tone="info">
+                    {make as string}
+                  </Badge>
+                ))}
+                {uniqueMakes.length > 20 && (
+                  <Badge>{`+${uniqueMakes.length - 20} more`}</Badge>
+                )}
+              </InlineStack>
+            </Card>
+          </Layout.Section>
+        )}
+
+        {/* Save Button — only shown when smartCollections is unlocked */}
+        {limits.features.smartCollections && (
+          <Layout.Section>
+            <Form method="post">
+              <input type="hidden" name="_action" value="save_collection_settings" />
+              <input type="hidden" name="collection_strategy" value={strategy} />
+              <input type="hidden" name="seo_enabled" value={String(seoEnabled)} />
+              <Button variant="primary" submit loading={isSubmitting}>
+                Save Collection Settings
+              </Button>
+            </Form>
+          </Layout.Section>
+        )}
+
+        {/* Existing Collections */}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack gap="200" blockAlign="center">
+                <IconBadge icon={CollectionFilledIcon} color="var(--p-color-icon-emphasis)" />
+                <Text as="h2" variant="headingMd">Existing Collections</Text>
+              </InlineStack>
+
+              {collections.length === 0 ? (
+                <EmptyState
+                  heading="No collections yet"
+                  image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+                >
+                  <p>
+                    Collections will appear here once you push fitment data with
+                    collection creation enabled, or use the Push page.
+                  </p>
+                </EmptyState>
+              ) : (
+                <BlockStack gap="300">
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    {`Showing ${(collPage - 1) * COLLECTIONS_PER_PAGE + 1}–${Math.min(collPage * COLLECTIONS_PER_PAGE, collections.length)} of ${collections.length} collections`}
+                  </Text>
+                  <IndexTable
+                    resourceName={{
+                      singular: "collection",
+                      plural: "collections",
+                    }}
+                    itemCount={pagedCollections.length}
+                    headings={[
+                      { title: "Title" },
+                      { title: "Handle" },
+                      { title: "Strategy" },
+                      { title: "Make" },
+                      { title: "Model" },
+                    ]}
+                    selectable={false}
+                  >
+                    {pagedCollections.map((col: any, index: number) => (
+                      <IndexTable.Row
+                        id={col.id}
+                        key={col.id}
+                        position={index}
+                      >
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd" fontWeight="semibold">
+                            {col.title || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.handle || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Badge tone={col.type === "make" ? "info" : col.type === "make_model_year" ? "warning" : col.type === "wheel_pcd" ? "attention" : col.type === "wheel_diameter" ? "attention" : "success"}>
+                            {col.type === "make" ? "Make" : col.type === "make_model" ? "Make + Model" : col.type === "make_model_year" ? "Year Range" : col.type === "wheel_pcd" ? "Wheel PCD" : col.type === "wheel_diameter" ? "Wheel Size" : col.type || "—"}
+                          </Badge>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.make || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                        <IndexTable.Cell>
+                          <Text as="span" variant="bodyMd">
+                            {col.model || "—"}
+                          </Text>
+                        </IndexTable.Cell>
+                      </IndexTable.Row>
+                    ))}
+                  </IndexTable>
+                  {totalCollPages > 1 && (
+                    <InlineStack align="center">
+                      <Pagination
+                        hasPrevious={collPage > 1}
+                        hasNext={collPage < totalCollPages}
+                        onPrevious={() => setCollPage((p) => Math.max(1, p - 1))}
+                        onNext={() => setCollPage((p) => Math.min(totalCollPages, p + 1))}
+                        label={`Page ${collPage} of ${totalCollPages}`}
+                      />
+                    </InlineStack>
+                  )}
+                </BlockStack>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+      </BlockStack>
+    </Page>
+  );
+}
+
+
+export function ErrorBoundary() {
+  return <RouteError pageName="Collections" />;
+}

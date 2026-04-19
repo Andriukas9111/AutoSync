@@ -1,0 +1,421 @@
+{% comment %}
+  AutoSync YMME Search Widget
+  Cascading dropdowns: Make → Model → Year → Engine → Search
+  Features: Brand logos, My Garage, searchable make dropdown
+{% endcomment %}
+
+{% liquid
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign ymme_allowed = false
+  assign garage_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.ymme == true
+      assign ymme_allowed = true
+    endif
+    if allowed_widgets_raw.garage == true
+      assign garage_allowed = true
+    endif
+  endif
+  assign container_class = 'autosync-ymme-search'
+  assign layout_class = 'autosync-ymme--' | append: block.settings.layout
+  assign style_class = 'autosync-ymme--style-' | append: block.settings.style
+  assign width_class = 'autosync-ymme--width-' | append: block.settings.container_width
+  assign align_class = 'autosync-ymme--align-' | append: block.settings.alignment
+%}
+{% if ymme_allowed == false %}
+<!-- widget not available on current plan -->
+{% else %}
+<div
+  class="{{ container_class }} {{ layout_class }} {{ style_class }} {{ width_class }} {{ align_class }}"
+  data-autosync-ymme
+  data-proxy-url="{{ shop.url }}/apps/autosync"
+  data-show-engine="{{ block.settings.show_engine }}"
+  data-show-garage="{{ block.settings.show_garage }}"
+  data-show-logos="{{ block.settings.show_logos }}"
+  id="autosync-ymme-{{ block.id }}"
+  style="
+    --autosync-primary: {{ block.settings.primary_color }};
+    --autosync-bg: {{ block.settings.background_color }};
+    --autosync-text: {{ block.settings.text_color }};
+    --autosync-border-radius: {{ block.settings.border_radius }}px;
+    --autosync-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --autosync-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --autosync-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --autosync-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    --autosync-radius: {{ block.settings.border_radius }}px;
+    --autosync-container-padding: {{ block.settings.container_padding }}px;
+    --as-primary: {{ block.settings.primary_color }};
+    --as-bg: {{ block.settings.background_color }};
+    --as-text: {{ block.settings.text_color }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius }}px;
+    --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color }};
+    --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
+    --as-section-gap-top: {{ block.settings.section_gap_top | default: 0 }}px;
+    --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}18px{% when 'large' %}28px{% else %}22px{% endcase %};
+    max-width: {% case block.settings.container_width %}{% when 'full' %}100%{% when 'contained' %}1200px{% when 'narrow' %}800px{% when '1400' %}1400px{% when '1200' %}1200px{% when '1000' %}1000px{% when '800' %}800px{% else %}1200px{% endcase %};
+    margin: 0 auto;
+    padding-top: {{ block.settings.padding_top }}px;
+    padding-bottom: {{ block.settings.padding_bottom }}px;
+  "
+>
+  {% if block.settings.heading != blank %}
+    <h2 class="autosync-ymme__heading" style="text-align: {{ block.settings.heading_alignment | default: 'center' }};">{{ block.settings.heading }}</h2>
+  {% endif %}
+
+  {% if block.settings.subheading != blank %}
+    <p class="autosync-ymme__subheading">{{ block.settings.subheading }}</p>
+  {% endif %}
+
+  <div class="autosync-ymme__fields">
+    {%- comment -%} Make — custom dropdown with logos {%- endcomment -%}
+    <div class="autosync-ymme__field autosync-ymme__field--make">
+      <label for="autosync-make-{{ block.id }}">Make</label>
+      <div class="autosync-ymme__custom-select" data-autosync-custom-select="make">
+        <button type="button" class="autosync-ymme__select-trigger" data-autosync-select-trigger disabled>
+          <span class="autosync-ymme__select-value" data-autosync-select-display>
+            <span class="autosync-ymme__spinner autosync-ymme__spinner--inline"></span>
+            <span>Loading...</span>
+          </span>
+          <svg class="autosync-ymme__select-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="autosync-ymme__select-dropdown" data-autosync-select-dropdown>
+          <div class="autosync-ymme__select-search-wrap">
+            <input type="text" class="autosync-ymme__select-search" placeholder="Search makes..." data-autosync-select-search autocomplete="off" />
+          </div>
+          <ul class="autosync-ymme__select-options" data-autosync-select-options role="listbox">
+          </ul>
+        </div>
+      </div>
+      {%- comment -%} Hidden native select for form submission fallback {%- endcomment -%}
+      <select id="autosync-make-{{ block.id }}" data-autosync-level="make" class="autosync-ymme__hidden-select" aria-hidden="true" tabindex="-1" disabled>
+        <option value="">Select Make</option>
+      </select>
+    </div>
+
+    <div class="autosync-ymme__field">
+      <label for="autosync-model-{{ block.id }}">Model</label>
+      <div class="autosync-ymme__select-wrap">
+        <select id="autosync-model-{{ block.id }}" data-autosync-level="model" disabled>
+          <option value="">Select Model</option>
+        </select>
+        <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="model"></div>
+      </div>
+    </div>
+
+    <div class="autosync-ymme__field">
+      <label for="autosync-year-{{ block.id }}">Year</label>
+      <div class="autosync-ymme__select-wrap">
+        <select id="autosync-year-{{ block.id }}" data-autosync-level="year" disabled>
+          <option value="">Select Year</option>
+        </select>
+        <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="year"></div>
+      </div>
+    </div>
+
+    {% if block.settings.show_engine %}
+      <div class="autosync-ymme__field" data-autosync-engine-field>
+        <label for="autosync-engine-{{ block.id }}">Engine</label>
+        <div class="autosync-ymme__select-wrap">
+          <select id="autosync-engine-{{ block.id }}" data-autosync-level="engine" disabled>
+            <option value="">Select Engine (optional)</option>
+          </select>
+          <div class="autosync-ymme__field-spinner" data-autosync-field-spinner="engine"></div>
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="autosync-ymme__field autosync-ymme__field--button">
+      <button type="button" class="autosync-ymme__search-btn" data-autosync-search disabled>
+        <svg class="autosync-ymme__btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path d="M7.333 12.667A5.333 5.333 0 1 0 7.333 2a5.333 5.333 0 0 0 0 10.667ZM14 14l-2.9-2.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        {{ block.settings.button_text | default: "Find Parts" }}
+      </button>
+
+      {% if block.settings.show_garage and garage_allowed %}
+        {%- comment -%} Compact garage icon button — only visible if plan allows My Garage {%- endcomment -%}
+        <div class="autosync-ymme__garage-trigger-wrap">
+          <button type="button" class="autosync-ymme__garage-trigger" data-autosync-garage-trigger title="My Garage">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M2.25 8.25l6.75-5.625L15.75 8.25v6.75a1.125 1.125 0 01-1.125 1.125H3.375A1.125 1.125 0 012.25 15V8.25z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6.75 16.125V9h4.5v7.125" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="autosync-ymme__garage-badge" data-autosync-garage-badge style="display:none;">0</span>
+          </button>
+
+          {%- comment -%} Garage popover {%- endcomment -%}
+          <div class="autosync-ymme__garage-popover" data-autosync-garage-popover style="display:none;">
+            <div class="autosync-ymme__garage-popover-header">
+              <h3 class="autosync-ymme__garage-title">My Garage</h3>
+              <button type="button" class="autosync-ymme__garage-clear" data-autosync-garage-clear title="Clear all vehicles">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M1.75 3.5h10.5M4.667 3.5V2.333a1.167 1.167 0 011.166-1.166h2.334a1.167 1.167 0 011.166 1.166V3.5m1.75 0v8.167a1.167 1.167 0 01-1.166 1.166H4.083a1.167 1.167 0 01-1.166-1.166V3.5h8.166z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="autosync-ymme__garage-vehicles" data-autosync-garage-vehicles></div>
+            <p class="autosync-ymme__garage-empty" data-autosync-garage-empty>No saved vehicles yet.</p>
+          </div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {%- comment -%} Hidden save-garage data attr for JS (no visible button needed — auto-saves) {%- endcomment -%}
+  {% if block.settings.show_garage and garage_allowed %}
+    <div data-autosync-save-garage style="display:none;">
+      <button type="button" data-autosync-save-garage-btn style="display:none;"></button>
+    </div>
+    <div data-autosync-garage style="display:none;"></div>
+  {% endif %}
+  {% unless shop.metafields['$app:autosync']['hide_watermark'].value == true %}
+    <div class="autosync-widget-footer">
+      <img src="{{ 'autosync-logo.svg' | asset_url }}" alt="AutoSync" width="14" height="14">
+      <span>Powered by <strong>AutoSync</strong></span>
+    </div>
+  {% endunless %}
+</div>
+
+{{ 'autosync-widgets.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'autosync-widgets.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+"name": "YMME Vehicle Search",
+"target": "section",
+"settings": [
+{
+"type": "header",
+"content": "Content"
+},
+{
+"type": "text",
+"id": "heading",
+"label": "Heading",
+"default": "Find Parts for Your Vehicle"
+},
+{
+"type": "text",
+"id": "subheading",
+"label": "Subheading"
+},
+{
+"type": "text",
+"id": "button_text",
+"label": "Button Text",
+"default": "Find Parts"
+},
+{
+"type": "select",
+"id": "heading_alignment",
+"label": "Heading Alignment",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" }
+],
+"default": "center"
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "layout",
+"label": "Layout",
+"options": [
+{ "value": "horizontal", "label": "Horizontal" },
+{ "value": "vertical", "label": "Vertical" }
+],
+"default": "horizontal"
+},
+{
+"type": "select",
+"id": "style",
+"label": "Visual Style",
+"options": [
+{ "value": "default", "label": "Default" },
+{ "value": "minimal", "label": "Minimal" },
+{ "value": "card", "label": "Card" }
+],
+"default": "default"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "contained", "label": "Contained (1200px)" },
+{ "value": "1000", "label": "Medium (1000px)" },
+{ "value": "narrow", "label": "Narrow (800px)" }
+],
+"default": "contained"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 20,
+"unit": "px"
+},
+{
+"type": "select",
+"id": "alignment",
+"label": "Horizontal Alignment",
+"options": [
+{ "value": "left", "label": "Left" },
+{ "value": "center", "label": "Center" },
+{ "value": "right", "label": "Right" }
+],
+"default": "center"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap",
+"label": "Bottom Margin (Gap Between Sections)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 16,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap_top",
+"label": "Top Margin (Gap Above Section)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Dropdown Background",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "button_color",
+"label": "Button Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "button_text_color",
+"label": "Button Text Color",
+"default": "#ffffff"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
+"type": "checkbox",
+"id": "show_engine",
+"label": "Show Engine Dropdown",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_garage",
+"label": "Show My Garage",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_logos",
+"label": "Show Brand Logos",
+"default": true
+}
+]
+}
+{% endschema %}

@@ -1,0 +1,289 @@
+{% comment %}
+  AutoSync Vehicle Spec Detail — Premium Edition
+  Renders full vehicle specification data on metaobject vehicle spec pages.
+  Fetches data from the App Proxy by extracting the handle from the current URL.
+  Place this block on the Vehicle Specification (default) metaobject template.
+{% endcomment %}
+
+{% liquid
+  assign proxy_url = shop.url | append: '/apps/autosync'
+  assign logo_url = 'autosync-logo.svg' | asset_url
+  assign allowed_widgets_raw = shop.metafields['$app:autosync']['allowed_widgets'].value
+  assign pages_allowed = false
+  if allowed_widgets_raw != blank
+    if allowed_widgets_raw.pages == true
+      assign pages_allowed = true
+    endif
+  endif
+%}
+{% if pages_allowed == false %}
+<!-- widget not available on current plan -->
+{% else %}
+<div
+  class="avsd-root"
+  data-avsd-root
+  data-proxy-url="{{ proxy_url }}"
+  data-hide-watermark="{{ shop.metafields['$app:autosync']['hide_watermark'].value | default: false }}"
+  data-logo-url="{{ 'autosync-logo.svg' | asset_url }}"
+  data-hero-style="{{ block.settings.hero_style | default: 'dark' }}"
+  data-show-image="{{ block.settings.show_hero_image | default: true }}"
+  data-show-stats="{{ block.settings.show_quick_stats | default: true }}"
+  data-show-overview="{{ block.settings.show_overview | default: true }}"
+  data-show-products="{{ block.settings.show_products | default: true }}"
+  id="avsd-{{ block.id }}"
+  style="
+    --avsd-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --avsd-hero-start: {{ block.settings.hero_bg_color | default: '#0a0f1e' }};
+    --avsd-hero-text: {{ block.settings.hero_text_color | default: '#ffffff' }};
+    --avsd-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --avsd-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --avsd-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --avsd-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --avsd-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --avsd-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-primary: {{ block.settings.primary_color | default: '#005bd2' }};
+    --as-bg: {{ block.settings.background_color | default: '#ffffff' }};
+    --as-text: {{ block.settings.text_color | default: '#1a1a2e' }};
+    --as-muted: {{ block.settings.muted_color | default: '#6b7280' }};
+    --as-border: {{ block.settings.border_color | default: '#e5e7eb' }};
+    --as-card-bg: {{ block.settings.card_bg | default: '#f9fafb' }};
+    --as-radius: {{ block.settings.border_radius | default: 8 }}px;
+    --as-btn-bg: {{ block.settings.button_color | default: block.settings.primary_color | default: '#005bd2' }};
+    --as-btn-text: {{ block.settings.button_text_color | default: '#ffffff' }};
+    --as-section-gap: {{ block.settings.section_gap | default: 16 }}px;
+    --as-section-gap-top: {{ block.settings.section_gap_top | default: 0 }}px;
+    --as-heading-size: {% case block.settings.heading_size %}{% when 'small' %}18px{% when 'large' %}28px{% else %}22px{% endcase %};
+    padding-top: {{ block.settings.padding_top | default: 0 }}px;
+    padding-bottom: {{ block.settings.padding_bottom | default: 40 }}px;
+    padding-left: {{ block.settings.container_padding | default: 24 }}px;
+    padding-right: {{ block.settings.container_padding | default: 24 }}px;
+    max-width: {% if block.settings.container_width == 'full' %}100%{% else %}{{ block.settings.container_width | default: '1200' }}px{% endif %};
+    margin-left: auto;
+    margin-right: auto;
+  "
+>
+  <!-- Loading State -->
+  <div class="avsd-loading" data-avsd-loading>
+    <div class="avsd-spinner"></div>
+    <p>Loading vehicle specifications...</p>
+  </div>
+
+  <!-- Error State -->
+  <div class="avsd-error" data-avsd-error style="display:none;">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <p>Unable to load vehicle specifications.</p>
+    <button class="avsd-retry-btn" data-avsd-retry>Try Again</button>
+  </div>
+
+  <!-- Content (populated by JS using safe DOM methods) -->
+  <div class="avsd-content" data-avsd-content style="display:none;"></div>
+</div>
+
+{{ 'autosync-vehicle-detail.css' | asset_url | stylesheet_tag }}
+
+<script src="{{ "autosync-vehicle-detail.js" | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+{
+"name": "Vehicle Spec Detail",
+"target": "section",
+"templates": ["metaobject"],
+"settings": [
+{
+"type": "header",
+"content": "Content"
+},
+{
+"type": "select",
+"id": "hero_style",
+"label": "Hero Style",
+"options": [
+{ "value": "dark", "label": "Dark Gradient" },
+{ "value": "light", "label": "Light" },
+{ "value": "minimal", "label": "Minimal" }
+],
+"default": "dark"
+},
+{
+"type": "select",
+"id": "heading_size",
+"label": "Heading Size",
+"options": [
+{ "value": "small", "label": "Small" },
+{ "value": "medium", "label": "Medium" },
+{ "value": "large", "label": "Large" }
+],
+"default": "medium"
+},
+{
+"type": "header",
+"content": "Layout"
+},
+{
+"type": "select",
+"id": "container_width",
+"label": "Container Width",
+"options": [
+{ "value": "full", "label": "Full Width" },
+{ "value": "1400", "label": "Extra Wide (1400px)" },
+{ "value": "1200", "label": "Standard (1200px)" },
+{ "value": "1000", "label": "Narrow (1000px)" }
+],
+"default": "1200"
+},
+{
+"type": "range",
+"id": "container_padding",
+"label": "Container Padding",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 24,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_top",
+"label": "Top Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "padding_bottom",
+"label": "Bottom Padding",
+"min": 0,
+"max": 100,
+"step": 4,
+"default": 40,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap",
+"label": "Bottom Margin (Gap Between Sections)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 16,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "section_gap_top",
+"label": "Top Margin (Gap Above Section)",
+"min": 0,
+"max": 60,
+"step": 4,
+"default": 0,
+"unit": "px"
+},
+{
+"type": "range",
+"id": "border_radius",
+"label": "Border Radius",
+"min": 0,
+"max": 24,
+"step": 2,
+"default": 8,
+"unit": "px"
+},
+{
+"type": "header",
+"content": "Colors"
+},
+{
+"type": "color",
+"id": "hero_bg_color",
+"label": "Hero Background",
+"default": "#0a0f1e"
+},
+{
+"type": "color",
+"id": "hero_text_color",
+"label": "Hero Text Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "primary_color",
+"label": "Primary Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "background_color",
+"label": "Background Color",
+"default": "#ffffff"
+},
+{
+"type": "color",
+"id": "text_color",
+"label": "Text Color",
+"default": "#1a1a2e"
+},
+{
+"type": "color",
+"id": "muted_color",
+"label": "Muted Text Color",
+"default": "#6b7280"
+},
+{
+"type": "color",
+"id": "border_color",
+"label": "Border Color",
+"default": "#e5e7eb"
+},
+{
+"type": "color",
+"id": "card_bg",
+"label": "Card Background",
+"default": "#f9fafb"
+},
+{
+"type": "color",
+"id": "button_color",
+"label": "Button Color",
+"default": "#005bd2"
+},
+{
+"type": "color",
+"id": "button_text_color",
+"label": "Button Text Color",
+"default": "#ffffff"
+},
+{
+"type": "header",
+"content": "Features"
+},
+{
+"type": "checkbox",
+"id": "show_hero_image",
+"label": "Show Vehicle Image",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_quick_stats",
+"label": "Show Quick Stats Strip",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_overview",
+"label": "Show Overview Text",
+"default": true
+},
+{
+"type": "checkbox",
+"id": "show_products",
+"label": "Show Compatible Products",
+"default": true
+}
+]
+}
+{% endschema %}

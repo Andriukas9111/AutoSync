@@ -1,0 +1,49 @@
+{
+  "url": "https://dub.co",
+  "scraped": "2026-04-09",
+  "bodyBg": "rgb(250, 250, 250)",
+  "bodyColor": "rgb(10, 10, 10)",
+  "bodyFont": "Inter, Inter Fallback, system-ui",
+  "headingFont": "satoshi, satoshi Fallback, system-ui",
+  "nav": {
+    "bg": "rgb(255, 255, 255)",
+    "backdrop": "none",
+    "position": "relative"
+  },
+  "h1": {
+    "text": "Turn clicks into revenue",
+    "fontSize": "48px",
+    "fontWeight": "500",
+    "lineHeight": "55.2px",
+    "letterSpacing": "normal",
+    "fontFamily": "satoshi"
+  },
+  "animation": {
+    "primary": "slide-up-fade",
+    "easing": "cubic-bezier(0.16, 1, 0.3, 1)",
+    "durations": "1s hero, 0.4-0.5s cards",
+    "stagger": "0ms, 100ms, 200ms, 300ms, 400ms, 450ms, 500ms",
+    "offset_var": "[--offset:20px/10px/5px]"
+  },
+  "sections": [
+    {"name": "hero", "top": 56, "height": 418},
+    {"name": "product_tabs", "top": 474, "height": 669, "bg": "rgb(245,245,245)"},
+    {"name": "logos", "top": 1143, "height": 193},
+    {"name": "manifesto", "top": 1335, "height": 797},
+    {"name": "links", "top": 2132, "height": 1312, "heading": "It starts with a link"},
+    {"name": "analytics", "top": 3444, "height": 1292, "heading": "Measure what matters"},
+    {"name": "integrations", "top": 4736, "height": 441, "bg": "rgb(250,250,250)"},
+    {"name": "partners", "top": 5177, "height": 1328, "heading": "Grow with partnerships"},
+    {"name": "scale", "top": 6505, "height": 759, "bg": "rgb(250,250,250)"},
+    {"name": "api", "top": 7264, "height": 1360, "heading": "Enterprise-grade link infrastructure"},
+    {"name": "social_proof", "top": 8624, "height": 1658, "heading": "Trusted by startups and enterprises"},
+    {"name": "changelog", "top": 10282, "height": 721, "heading": "We ship fast"},
+    {"name": "cta", "top": 11050, "heading": "Supercharge your marketing efforts"}
+  ],
+  "gradients": [
+    "hero_glow: conic-gradient(red, yellow 99deg, green 162deg, cyan 216deg, blue 288deg, purple) at 0.04 opacity",
+    "accent_dots: radial-gradient(closest-side, orange/green/purple, black) with mix-blend-mode",
+    "card_bg: linear-gradient(to top, neutral-100, transparent)"
+  ],
+  "totalHeight": 12202
+}
